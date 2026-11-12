@@ -399,8 +399,9 @@ timestamp as both `scheduled_for` and `fired_at`, despite the writer contract
 already naming `scheduled_for` as the intended calendar boundary.
 
 R8 preserves both clock contracts without weakening current identity. Exact
-equality remains sufficient for every durable/current row. A row may use the
-legacy compatibility arm only when the candidate predates this process boot,
+equality is sufficient for a durable occurrence row, or for a scheduled audit
+row that carries its occurrence identity. A row may use the legacy
+compatibility arm only when the candidate predates this process boot,
 the evidence is a successful audit row with `trigger_source=cron` and no
 `occurrence_id`, and its callback timestamp lies in the half-open calendar
 partition `[candidate, next candidate)`. The strict upper bound means a success
@@ -580,6 +581,37 @@ The independent package check matched 29,113 bytes and SHA-256
 `b185456e0a483a6500b6e8cde4b49a1f162975f76f3feca418fc7716c2b3870b`.
 Coltrane confirmed there is no affected UI contract and rendered the existing
 System Alerts surface successfully.
+
+## 11. STEP 11 FRESH-READER SEND-BACK — exact legacy-shaped bypass closed
+
+The required claim-only completion reader found that exact equality sat outside
+the provenance checks. An audit row at the exact candidate timestamp could
+therefore certify a current candidate even when it had no occurrence identity,
+or when it came from a non-scheduled source. Re-derivation at the deployed code
+confirmed both bypasses.
+
+The repair now treats exact current evidence as valid only when it is either a
+succeeded durable occurrence or a successful audit row carrying an occurrence
+identity from a scheduled or missed-catch-up run. The pre-boot compatibility
+arm remains separately limited to a successful legacy cron row without an
+occurrence identity inside the strict candidate partition. The real-database
+fence now distinguishes twelve states, adding exact legacy-shaped refusal,
+exact non-scheduled refusal, and exact missed-catch-up acceptance.
+
+The reader also correctly identified the limit of historical evidence: an
+in-partition pre-ledger row is proxy evidence for one successful callback in
+that calendar partition, not proof of the exact historical occurrence. The
+batch keeps that approved compatibility design and narrows its closing claim;
+the observed 2026-05-30 miss remains false because its partition contains no
+accepted proxy, but the mechanism does not claim to distinguish all alternate
+histories inside a populated old partition.
+
+`REVIEWER: claim-only · asked which objects settle whether legacy-shaped or later rows can certify current or genuinely missing candidates, and what alternate states fit those objects · HIT — exact legacy/non-scheduled audit rows bypassed the current provenance gate, and populated pre-ledger partitions remain proxy evidence rather than exact historical identity · re-derived y`
+
+**Bug taxonomy:** outcome 1, real defect in the R8 current-identity predicate;
+root cause fixed at the shared evidence classifier. The historical ambiguity is
+working as the explicitly approved compatibility design and is reported as a
+limit, not “fixed” into false certainty.
 
 ## Judgement calls to attack
 

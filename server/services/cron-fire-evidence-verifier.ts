@@ -80,7 +80,9 @@ type FireEvidence = {
  * failure-safe audit write is unavailable. Pre-B-CRON-MISSED-CATCHUP audit
  * rows stored callback start in scheduled_for and had no occurrence_id; for a
  * candidate before this process boot, that legacy shape is mapped only within
- * its own [candidate, next candidate) calendar partition. The strict upper
+ * its own [candidate, next candidate) calendar partition. Exact audit evidence
+ * must carry a durable occurrence identity and a scheduled trigger source;
+ * an exact-timestamp legacy/manual row is not current proof. The strict upper
  * bound prevents a later occurrence from certifying an earlier miss.
  *
  * RUNNING_ISSUES #167 fix (2026-05-31): previously used
@@ -150,7 +152,17 @@ async function queryFireEvidence(
              COALESCE(BOOL_OR(
                candidates.candidate_scheduled_for IS NOT NULL
                AND (
-                 successful_boundaries.scheduled_for = candidates.candidate_scheduled_for
+                 (
+                   successful_boundaries.scheduled_for = candidates.candidate_scheduled_for
+                   AND (
+                     successful_boundaries.evidence_source = 'occurrence'
+                     OR (
+                       successful_boundaries.evidence_source = 'audit'
+                       AND successful_boundaries.occurrence_id IS NOT NULL
+                       AND successful_boundaries.trigger_source IN ('cron', 'missed_catchup')
+                     )
+                   )
+                 )
                  OR (
                    candidates.allow_legacy_window
                    AND candidates.candidate_next_scheduled_for IS NOT NULL

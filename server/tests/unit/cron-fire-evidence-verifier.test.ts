@@ -136,6 +136,8 @@ describe('B-NEW-51 cadence-aware cron-fire-evidence verifier', () => {
     expect(source).toMatch(/successful_boundaries\.evidence_source = 'audit'/);
     expect(source).toMatch(/successful_boundaries\.occurrence_id IS NULL/);
     expect(source).toMatch(/successful_boundaries\.trigger_source = 'cron'/);
+    expect(source).toMatch(/successful_boundaries\.scheduled_for = candidates\.candidate_scheduled_for[\s\S]*?successful_boundaries\.evidence_source = 'occurrence'/);
+    expect(source).toMatch(/successful_boundaries\.evidence_source = 'audit'[\s\S]*?successful_boundaries\.occurrence_id IS NOT NULL[\s\S]*?successful_boundaries\.trigger_source IN \('cron', 'missed_catchup'\)/);
     expect(source).toMatch(/successful_boundaries\.scheduled_for >= candidates\.candidate_scheduled_for/);
     expect(source).toMatch(/successful_boundaries\.scheduled_for < candidates\.candidate_next_scheduled_for/);
     expect(source).not.toMatch(/successful_boundaries\.scheduled_for <= candidates\.candidate_next_scheduled_for/);
