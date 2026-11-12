@@ -246,3 +246,23 @@ Not every missed job should be replayed. A formula check can still be useful a f
 | P10 | Step 10 updates the scheduler architecture, component map, lifecycle records and issue/risk registers; `#691` remains open until the Step 11 completion report is confirmed. |
 
 Coltrane independently confirmed Step 8 at exact evidence ref `bc945a098edb5a6d807c6696a6ef20678b4ed11e`, and Step 9 found every approved objective GREEN against deployed runtime `4e66ea904edf690e144035c959cbd335241f7651`. The deterministic harness is the pre-registered close mechanism, so no observation window or deployment hold remains. The known limits are the intended fail-closed boundaries: no fabricated Q-D history, no backlog burst, no work without durable admission, and no automatic replay after a core may have started.
+
+## 12. Step-11 repair reconciliation (2026-11-12)
+
+The completion read reopened P6 only: exact current identity was correct, but
+pre-ledger audit rows had historically stored callback start rather than the
+calendar second. The repaired consumer makes compatibility available only when
+the candidate boundary predates the current process; the row must then be
+successful, source `cron`, carry no occurrence ID and fall strictly inside
+that candidate's calendar partition. Both production verifier reads derive the
+rule independently. Current and durable candidates require exact identity.
+
+The production-path proof mutation-reversed both process-start comparisons and
+made the pre-boot initial and locked cases stale while making the post-boot
+case falsely healthy. Restoring the comparisons passed 24/24 verifier tests
+and 123/123 across the six focused files. Deployed repair
+`cd2b794dec63bea0771e32b733263b7ae516e6b8` then produced six healthy live
+decisions, and Coltrane returned PROCEED at corrected evidence ref
+`3a2097653165c240d80644886a7a1ef80a09426c`. P1-P5 and P7-P10 were unchanged;
+P6 is green after repair. The deterministic close mechanism remains complete,
+with no observation window.

@@ -242,3 +242,24 @@ All seven approved objectives are implemented and GREEN against deployed runtime
 The implementation kept `scheduled_tasks_audit` as completed fire evidence for Formula Health and the cadence verifier, while `scheduled_job_occurrences` carries admission, policy decisions and crash truth. New rows preserve the true scheduled boundary separately from the actual start time. The exact-ref staging harness exercised 11 identities with the registered 6 succeeded / 3 skipped / 1 failed / 1 indeterminate distribution, seven executed-only audit rows and one core call for the natural/missed race; Coltrane independently reproduced that proof and the real six-job registration/arm census at evidence ref `bc945a098edb5a6d807c6696a6ef20678b4ed11e`.
 
 No observation period remains. The scope deliberately chose deterministic exact-ref proof instead of changing the host clock or waiting for a natural multi-day miss; Step 9 passed all seven objectives and 70/70 focused tests. Known limits remain explicit: recovery is bounded current-state work, Q-D historical replay is refused, database admission failure runs no core, and after-start uncertainty requires a manual decision rather than automatic retry.
+
+## 6. Step-11 repair reconciliation (2026-11-12)
+
+The first Step-11 completion read found that OBJ-6's legacy-readability arm was
+not fully met: valid pre-ledger rows stored callback start milliseconds after
+the scheduled second, so exact-only verification falsely marked three slower
+jobs stale. Repair `cd2b794dec63bea0771e32b733263b7ae516e6b8` keeps exact
+identity for durable/current evidence. Only a candidate boundary before the
+current process booted may use a successful legacy cron row with no occurrence
+ID inside that candidate's strict `[candidate,next-candidate)` calendar
+partition. The initial read and locked
+recheck enforce the same boundary; post-boot legacy-shaped, next-boundary,
+later-success, non-cron and error rows remain refusals.
+
+The same live verifier instrument moved from three stale rows at `11:13Z` and
+two at `12:13Z` to six healthy registered jobs after deployment, including the
+two real callback-start clocks and current exact awareness evidence. Coltrane
+independently reproduced those populations, zero post-deploy verifier alerts,
+resolved alert state and the negative controls at corrected evidence ref
+`3a2097653165c240d80644886a7a1ef80a09426c`. Step 9 re-evaluated all seven
+objectives as green. No observation period or deployment hold was introduced.
