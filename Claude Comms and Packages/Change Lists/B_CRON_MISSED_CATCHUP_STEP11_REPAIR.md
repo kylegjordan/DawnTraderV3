@@ -446,6 +446,57 @@ initial and locked pre-boot cases became stale, while the post-boot case became
 healthy. Restoring the production comparison returned the verifier file to
 24/24 and the six focused files to 123/123.
 
+## 9. STEP 7 LIVE VERIFICATION — legacy and current clocks both pass
+
+The landed ref `cd2b794dec63bea0771e32b733263b7ae516e6b8` passed CI run
+`43215462342` in all four jobs and was deployed by `codex-c` at
+`2026-11-12T12:15:34Z` (restart 697). The deploy record asserted that exact
+running identity and `ENGINE RESUMED`. The verifier's own startup line followed
+at `2026-11-12T12:15:32Z` with its registered 900-second interval.
+
+The same runtime log instrument provides the before/after discriminator. The
+last pre-deploy pass at `12:13:00Z` judged the three valid rows stale:
+
+- `formula_audit_cron`: mature `03:00:00.000Z`, success `03:00:00.023Z`;
+- `xstock_universe_discovery_cron`: mature `06:00:00.000Z`, success
+  `06:00:00.018Z`;
+- `awareness_reflection_cron`: mature `06:00:00.000Z`, success
+  `06:00:00.020Z`.
+
+The durable-row read independently confirmed those legacy audit shapes. It
+also found the post-repair current awareness occurrence at exactly
+`12:00:00.000Z` in both the audit and occurrence ledgers, with an occurrence ID
+and scheduled provenance.
+
+The first automatic post-restart verifier pass at `12:30:33Z` judged all six
+registered jobs healthy. Its three load-bearing rows were:
+
+- universe discovery: success `06:00:00.018Z` certified mature
+  `06:00:00.000Z` through the pre-boot legacy partition;
+- Formula Health: success `03:00:00.023Z` certified mature
+  `03:00:00.000Z` through the pre-boot legacy partition;
+- awareness reflection: current exact success `12:00:00.000Z` certified exact
+  mature `12:00:00.000Z`, without legacy compatibility.
+
+The same pass logged six healthy decisions and no verifier skip or unhandled
+error. This proves the running process, not merely the deployed file, accepts
+the two real legacy shapes while retaining exact current identity.
+
+Alerts `7e07b671-159d-49b1-879e-ecfea53a50ef`,
+`475e1e6e-b133-4d2b-8a22-84028520ff86` and
+`faf3be74-940e-4187-9026-2632db6ed0b2` were then resolved by `codex-c` at
+`12:30:59Z`–`12:31:00Z`, each with the landed SHA as evidence. The direct
+readback showed all three `resolved`; the due-queue re-read still found 16
+other due rows (positive control) and found none of these three.
+
+**UI judgement:** this repair changes only the background verifier's evidence
+classification and alert state; it adds or changes no page, panel, field,
+layout or interactive behavior. The existing alert presentation consumes the
+same alert records without a changed rendering contract, so there is no
+affected UI surface to navigate for this repair. The checkable surface is the
+running verifier log plus the durable audit, occurrence and alert records read
+above.
+
 ## Judgement calls to attack
 
 1. Can any transient alert-store failure, marker-write failure or verifier/resolve
