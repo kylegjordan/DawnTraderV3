@@ -736,6 +736,7 @@ describe('B-CRON-MISSED-CATCHUP occurrence runner', () => {
 
     expect(scheduledContender.run).not.toHaveBeenCalled();
     expect(auxiliaryRun).not.toHaveBeenCalled();
+    expect(store.rows.has(`${creator.job.name}:${nextBoundary.toISOString()}`)).toBe(false);
     expect(store.rows.get(`${creator.job.name}:${prior.scheduledFor.toISOString()}`)?.metadata)
       .toMatchObject({ decision_alert_pending: true });
 
@@ -759,6 +760,68 @@ describe('B-CRON-MISSED-CATCHUP occurrence runner', () => {
       'auxiliary-ok',
     ]);
     expect(scheduledContender.addAlert).toHaveBeenCalledWith(expect.objectContaining({
+      dedupe_key: `cron_recovery:indeterminate:${creator.job.name}:${prior.scheduledFor.toISOString()}`,
+      metadata: expect.objectContaining({ occurrence_id: prior.id, status: 'indeterminate' }),
+    }));
+    expect(store.rows.get(`${creator.job.name}:${prior.scheduledFor.toISOString()}`)?.metadata)
+      .not.toHaveProperty('decision_alert_pending');
+
+    releaseCreator();
+    await expect(creatorResult).resolves.toMatchObject({ status: 'indeterminate', occurrenceId: prior.id });
+  });
+
+  it('makes an auxiliary overtaking lock holder persist the pending alert before its callback', async () => {
+    const store = new MemoryOccurrenceStore();
+    const creator = fixture({ store, now: '2026-11-12T12:01:10.000Z' });
+    const auxiliaryContender = fixture({ store, now: '2026-11-12T12:01:20.000Z' });
+    await creator.runner.prepareJob(creator.job.name);
+    await auxiliaryContender.runner.prepareJob(auxiliaryContender.job.name);
+    const prior = row({
+      id: UUID(919),
+      status: 'running',
+      startedAt: new Date('2026-11-12T11:59:00.000Z'),
+      ownerInstanceId: UUID(920),
+    });
+    store.seed(prior);
+
+    let releaseCreator!: () => void;
+    let announceWindow!: () => void;
+    const creatorGate = new Promise<void>((resolveCreator) => { releaseCreator = resolveCreator; });
+    const windowOpen = new Promise<void>((resolveWindow) => { announceWindow = resolveWindow; });
+    store.afterUnlockOnce = async () => {
+      announceWindow();
+      await creatorGate;
+    };
+    const creatorResult = creator.runner.runNatural(creator.job.name, prior.scheduledFor);
+    await windowOpen;
+    expect(store.rows.get(`${creator.job.name}:${prior.scheduledFor.toISOString()}`)?.metadata)
+      .toMatchObject({ decision_alert_pending: true });
+
+    let releaseAlert!: () => void;
+    const alertGate = new Promise<void>((resolveAlert) => { releaseAlert = resolveAlert; });
+    auxiliaryContender.addAlert.mockImplementationOnce(async () => alertGate);
+    const auxiliaryRun = vi.fn(async () => 'auxiliary-ok');
+    const auxiliary = auxiliaryContender.runner.runAuxiliary(auxiliaryContender.job.name, 'manual', auxiliaryRun);
+    await vi.waitFor(() => expect(auxiliaryContender.addAlert).toHaveBeenCalledTimes(1));
+    expect(auxiliaryRun).not.toHaveBeenCalled();
+
+    let releaseMarker!: () => void;
+    let announceMarkerBlocked!: () => void;
+    const markerGate = new Promise<void>((resolveMarker) => { releaseMarker = resolveMarker; });
+    const markerBlocked = new Promise<void>((resolveBlocked) => { announceMarkerBlocked = resolveBlocked; });
+    store.beforeDecisionAlertPersistedOnce = async () => {
+      announceMarkerBlocked();
+      await markerGate;
+    };
+    releaseAlert();
+    await markerBlocked;
+    expect(auxiliaryRun).not.toHaveBeenCalled();
+    expect(store.rows.get(`${creator.job.name}:${prior.scheduledFor.toISOString()}`)?.metadata)
+      .toMatchObject({ decision_alert_pending: true });
+
+    releaseMarker();
+    await expect(auxiliary).resolves.toBe('auxiliary-ok');
+    expect(auxiliaryContender.addAlert).toHaveBeenCalledWith(expect.objectContaining({
       dedupe_key: `cron_recovery:indeterminate:${creator.job.name}:${prior.scheduledFor.toISOString()}`,
       metadata: expect.objectContaining({ occurrence_id: prior.id, status: 'indeterminate' }),
     }));
