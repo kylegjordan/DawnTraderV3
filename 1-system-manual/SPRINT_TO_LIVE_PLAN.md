@@ -35,7 +35,7 @@
 | CC-B list | 4 | B-PLAN-PRICE-BASIS | CC-B (New Claude) | none | #1223, #1221 | Kyle 2026-10-20 (locked) | QUEUED (absorbs B-STRATEGY-INPUT-FIXES) | nothing |
 | CC-B list | 5 | B-BOOK-TRUST-FLEET-GUARD | CC-B (New Claude) | none | #1226 | Kyle 2026-10-20 (delegated slot) | QUEUED | nothing |
 | CC-A list | 1 | B-MUTATING-ROUTES-AUTH | CC-A (Old Claude) | none | #1228 | Kyle 2026-10-21 (option 2) | ✅ DONE 2026-10-21 (verified on staging, d307debe5) | nothing |
-| CC-A list | 2 | B-STATUS-BOARD | CC-A (Old Claude) | none | #1227 | Kyle 2026-10-20/21 | STEP 10-11 of 11 — RETIREMENT COMPLETE (Kyle KD-35, 2026-11-05: the phone status board is not kept). App half, checker half and the board file all done; Step 7 re-read 2026-11-13 (`a081e6a03`, `fffe62a40`) and Step 8 PROCEED by Langston 2026-11-13 (msg `1570803607404679300`); governance and the completion report in flight | Langston — the Step-11 confirmation |
+| CC-A list | 2 | B-STATUS-BOARD | CC-A (Old Claude) | none | #1227 | Kyle 2026-10-20/21 | CLOSED 2026-11-13 — RETIRED under Kyle KD-35 (the phone status board is not kept); Step 11 CONFIRMED by Langston; report `Claude Comms and Packages/Batch Completion/B_STATUS_BOARD_COMPLETION_REPORT.md` | none |
 | P1b — entry | 1 | B-ENTRY-CONSUMPTION-FRESHNESS | CC-C (Analyst Claude) | 40 |  | Kyle 2026-10-07 | row | nothing |
 | P1c — fill mode | 1 | B-CLASS-LEG-FILL-MODE | CC-C (Analyst Claude) | none | #1170 | Kyle 2026-10-07 | ✅ CLOSED 2026-10-15 (Coltrane Step 11) | nothing |
 | 2 — exit, in order | 1 | P-8e split (the extrapolated-fill field) | CC-C (Analyst Claude) | none |  | Kyle 2026-10-07 | QUEUED (lands with or before row 2's verification; carrier: the B-PRICE-SIDE-BY-JOB pre-audit) | nothing |

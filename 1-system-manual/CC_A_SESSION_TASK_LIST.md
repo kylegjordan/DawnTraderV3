@@ -17,7 +17,7 @@
 |---|---|---|---|
 | 1 | `B-DB-POOL-GUARD` (`#1239`, absorbs `#1062`) — guard the app's 10 shared database connections | IN FLIGHT, Step 7 (2026-11-13: increments 1-3b and P5 live; the weekday qd-probe leg done, the archival-scheduler leg withdrawn — `02830e875`; only the UI leg is left, held on row 119 / `#1037`) | KD-2 order 3 |
 | 2 | `B-DISK-FILE-TIERING` (`#1233`) with the price-feed debug-log trim (`#1240`) folded in | IN FLIGHT, Step 9 (trim deployed + verified; trace archived; cold-path memory fix + H-1..H-3 in Step-2 amendment 1 with Langston; log compression held until after 2026-11-18) | KD-2 order 5 |
-| 3 | `B-STATUS-BOARD` (`#1227`) — RETIRED under Kyle's KD-35 (the phone board is not kept) | IN FLIGHT, Step 10-11 (2026-11-13: Step 7 re-read, Step 8 PROCEED by Langston; governance landing, then the completion report) | already agreed |
+| 3 | `B-STATUS-BOARD` (`#1227`) — RETIRED under Kyle's KD-35 (the phone board is not kept) | ✅ CLOSED 2026-11-13 (Step 11 CONFIRMED by Langston; report `Claude Comms and Packages/Batch Completion/B_STATUS_BOARD_COMPLETION_REPORT.md`) | already agreed |
 | 4 | `#527` — the xStock VTS records carry their cost split (fee, slippage, spread) | ✅ CLOSED 2026-11-05: already done 2026-07-17, measured complete since 2026-09-03 | KD-13 |
 | 5 | Roadmap `25-9` — start collecting xStock pair-correlation data (collection only) | QUEUED, before live, after items 1-2 | KD-14 |
 | 6 | Dead or one-time code removals (sprint rows 79, 82, 84, 84a) | after live ONLY if the reachability census (row 78, Infra Claude) shows each cannot affect paper or live trading; anything it cannot isolate comes out before live | KD-16 |

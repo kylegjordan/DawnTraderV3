@@ -1,5 +1,6 @@
 # B-STATUS-BOARD — COMPLETION REPORT
 
+**✅ CLOSED 2026-11-13 — Step 11 CONFIRMED by Langston (Discord `1570808861726736480`).**
 **Batch:** `B-STATUS-BOARD` (`#1227`, closes `#1200`) · **owner** CC-A (OLD Claude) · **change-class** `non_architecture` · **plan line** `SPRINT_TO_LIVE_PLAN.md` §0a, CC-A list item 2
 **Outcome in one line:** the board was built and verified, then RETIRED by Kyle's decision KD-35 (2026-11-05: the phone status board is not kept); what survives is the one pre-sprint table and the weekly census that reads it (the `#1200` fix).
 **Records:** scope `Claude Comms and Packages/Scope Files/B_STATUS_BOARD_SCOPE.md` · pre-audit + amendments r1-r8 + Step-7 records `B_STATUS_BOARD_PRE_AUDIT.md` · migration draft `B_STATUS_BOARD_MIGRATION_DRAFT.md` · change lists under `Claude Comms and Packages/Change Lists/`.
@@ -10,7 +11,7 @@
 ## Objectives
 | objective | result | evidence |
 |---|---|---|
-| **OBJ-1** one readable pre-sprint table in §0a, read by both checker readers | **YES — survives the retirement** | §0a is the one table (the old tables kept verbatim under its history heading); `census.mjs` reads it via `presprintRows` / `mapStatus` / `STATUS_PREFIXES`, pinned by `plan-table.test.mjs` (LIVE1/2/4/6/7, against the real plan); since the retirement it is the table's ONLY reader (`SYSTEM_IMPACT_MAP.md` status-board section). |
+| **OBJ-1** one readable pre-sprint table in §0a, read by both checker readers | **YES — survives the retirement** | §0a is the one table (the old tables kept verbatim under its history heading); `census.mjs` reads it via `presprintRows` / `mapStatus` / `STATUS_PREFIXES`, pinned by `plan-table.test.mjs` (LIVE1/2/4/6/7, against the real plan); since the retirement it has TWO live non-test readers: the census and PM Claude's slot check (`scripts/pm/slot-check.mjs:16`/`:126`, which fails loudly with `UNPARSEABLE`, never silently) — Langston's Step-11 correction; the `SYSTEM_IMPACT_MAP.md` status-board section says the same. |
 | **OBJ-2** a plain description per item, by its owner | **YES, then RETIRED (KD-35)** | `STATUS_BOARD_DESCRIPTIONS.md` built; archived `1-system-manual/_archive/deleted-code/STATUS_BOARD_DESCRIPTIONS.md.20261107-B-STATUS-BOARD-RETIRE.removed` (`572329e66`). |
 | **OBJ-3** each item's status derived from the repo every 30 min | **YES, then RETIRED** | Board rebuilt independently by Langston from the checker's own code at the ref, identical counts (Step 8, 2026-11-05, Discord `1567890615553884191`); writer unwired `c073979af`, deleted `572329e66`. |
 | **OBJ-4** the `/status-board` page | **PARTIAL by design, then RETIRED** | Absent-file and stale-banner renders verified in Claude-in-Chrome; the phone-width check withdrawn by KD-35 before it ran; page removed `5b9a8191e`. |
@@ -35,7 +36,7 @@ CHANGE-CLASS: non_architecture
 | T1 | SPRINT_TO_LIVE_PLAN.md (§0a line) | ✅ | Step 10: STEP 10-11, retirement complete; Step-11 close commit: CLOSED 2026-11-13 with this report linked |
 | T1 | PHASE_19_PLAN.md | N/A | no row there - the batch's only plan line is SPRINT_TO_LIVE_PLAN §0a CC-A list item 2 |
 | T1 | shared MEMORY.md + MEMORY_CC_A.md | ✅ | mine: position moved to Step 10 done / Step 11 next, with the close order; shared: N/A - no board fact in it (0 mentions, 10 batch ids as control) |
-| T1 | the batch SCOPE | N/A | unchanged since Step 1; the KD-35 retirement is carried in the pre-audit's retirement plan |
+| T1 | the batch SCOPE | ✅ | present since Step 1, unchanged; KD-35's OBJ-10 carried in the pre-audit (r5) — a required row never reads N/A (Langston's Step-11 correction) |
 | T1 | the batch PRE_AUDIT | ✅ | Step-7 section added earlier today (a081e6a03, fffe62a40): browser leg, server legs, PREVIOUSLY/NOW on the not-found expectation |
 | T1 | COMPLETION_REPORT | ✅ | this file (Step 11) |
 | T1 | Observation column | N/A | nothing to observe: KD-35 withdrew the phone check, and the scope's other renders went with it |

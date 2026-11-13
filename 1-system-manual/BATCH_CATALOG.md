@@ -1472,7 +1472,7 @@ Kyle decided the retention windows: **2026-09-23** none change, because August's
 
 **THE FIX.** All thirteen now require a login; the read-only addresses stay with Infra Claude at the end of the sprint (row 197a).
 
-## B-STATUS-BOARD (CC-A, Kyle-directed 2026-10-19/20; `#1227`, closes `#1200`) — change-class `non_architecture` — ⏳ **RETIRED, closing at Step 11** (Kyle KD-35 2026-11-05: the phone board is not kept; retirement Step 8 PROCEED by Langston 2026-11-13, msg `1570803607404679300`; report `Batch Completion/B_STATUS_BOARD_COMPLETION_REPORT.md`)
+## B-STATUS-BOARD (CC-A, Kyle-directed 2026-10-19/20; `#1227`, closes `#1200`) — change-class `non_architecture` — ✅ **CLOSED 2026-11-13, RETIRED** (Kyle KD-35 2026-11-05: the phone board is not kept; Step 8 PROCEED by Langston msg `1570803607404679300`; Step 11 CONFIRMED by Langston msg `1570808861726736480`; report `Batch Completion/B_STATUS_BOARD_COMPLETION_REPORT.md`)
 
 **WHAT IT IS.** One page on Kyle's phone that shows the agreed pre-sprint and sprint plan: every item, who holds it, where it has got to and what it is waiting on — derived from the plan every 30 minutes by the governance checker, never typed into a second place.
 
