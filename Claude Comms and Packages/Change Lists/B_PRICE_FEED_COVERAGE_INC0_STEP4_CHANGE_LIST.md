@@ -104,3 +104,28 @@ The signed-in staging UI was positively reached as `kylegjordan` at `/analytics`
 - **Runtime object check:** authenticated GET returned HTTP 200, `Cache-Control: no-store, max-age=0`, schema `xstock-active-dispatch/v1`, server `observedAt=2026-11-11T19:20:31.246Z`, PID `1806371`, uptime `52.891986886`, and the complete getter snapshot (`dispatched=0`, every other counter 0 at that instant). PM2 independently returned PID `1806371`, restart count `693`, status online. This is a deployment check, not the Nov. 12 boundary baseline.
 - **Successor-carrier check:** the complete current error-stream slice from deploy time through 19:22:14Z contained 1,595 rows but 0 xStock depth blocks and 0 inc-0 dispatch-refusal rows. It supplies no cold carrier; presence remains owed. Step 7 remains incomplete and Step 8 remains forbidden.
 - **Successor deployment before the registered window:** ANALYST Codex later deployed shared ref `fbbe0b5e4af86be3a87fa0d6c2362f3e7bc899e4` at 19:26:33Z, advancing the process to restart count `694` and PID `1810230`. That ref descends from the approved instrument, and an authenticated 19:32:54Z read returned HTTP 200 with the same schema and `dispatched=2`; this is an instrument positive control before, not a boundary of, the Nov. 12 session. A complete re-read through 19:32:12Z covered 368,163 error-stream rows after the inc-0 deploy and still found exactly 2 xStock depth blocks: 0 `cold_tick`, 2 `stale_book`; the post-instrument slice contained 8,721 rows and 0 depth blocks. Presence remains owed, while the later restart does not affect the prospective session because its continuity controls begin immediately before the Nov. 12 open.
+## r10 — the registered session, Friday 2026-11-13 (NEW Claude, back on duty)
+
+**START boundary, captured 2026-11-13T14:25:01.878Z (server `observedAt`), raw and unedited below.** The script (`pfc_capture.sh`, session scratchpad) was dry-run at 13:13Z against the same instrument; the depth-block pattern was positive-controlled the same minute (today's error.log held 2 `crypto_spot` `DEPTH_GATE_BLOCK` rows; the 2026-11-12 file held 15 `xstock_spot` rows), so today's empty xStock depth line is a measured zero, not a blind one. No deploy or restart is to land inside 14:30–21:00Z: posted to the crew 13:13Z, and ANALYST Claude agreed at ~13:2xZ to hold B-CRON-MISSED-CATCHUP until the END post.
+
+```
+=== PFC STEP-7 CAPTURE: START ===
+local_utc_before: 2026-11-13T14:25:00.761Z
+--- endpoint (raw, server no-store) ---
+{"schema":"xstock-active-dispatch/v1","observedAt":"2026-11-13T14:25:01.878Z","processPid":2307433,"processUptimeSeconds":94177.372106774,"stats":{"dormantSkips":0,"noOrchSkips":0,"dispatched":330,"dispatchErrors":0,"configClosedSkips":0,"staleSkips":31,"coldSkips":0,"classDormantSkips":0}}dt-api: HTTP 200 GET /api/active-engine/diagnostics/xstock-dispatch
+
+--- pm2 ---
+name=dawntrader pid=2307433 restart_time=697 status=online pm_uptime_ms=1794485724498
+name=pm2-logrotate pid=407311 restart_time=5 status=online pm_uptime_ms=1783967599164
+--- staging checkout head ---
+cd2b794dec63bea0771e32b733263b7ae516e6b8
+--- error.log boundary ---
+587987 /var/log/dawntrader/error.log
+2026-11-13 14:25:01 +00:00: [B-XSTOCK-BI
+--- xStock depth-gate blocks so far in error.log (all, by reason) ---
+--- inc-0 dispatch refusals so far in error.log (by arm) ---
+     20 stale
+local_utc_after: 2026-11-13T14:25:02.272Z
+```
+
+**Qualifying test at END (registered, r8/r9; restated, not changed):** same `processPid` (2307433), `processUptimeSeconds` strictly greater, PM2 `restart_time` delta 0 (697), `stats.dispatched` delta > 0 (from 330), and a natural `cold_tick` depth-gate carrier inside the window. Any restart or missing boundary voids the session. Step 8 stays forbidden until both continuity and depth presence pass.
