@@ -133,6 +133,26 @@ Row 2 makes xStock trades open and close only where a real trade could (Kyle 202
 - **Deployed:** `0abfd710241aefde87725f02d99515747ec3efa9` 2026-11-05 09:17:49Z by CC-C (dt-deploy OK, restart 676; CI `42000659230` 4/4; rollback `c0214c973`). The built code contains the predicate, the new counters and the moonbag line; the first sweep line after the restart prints `joinsTooWide=0 joinsTooOld=0 joinsOther=0`.
 - **Step 7:** the five complete US regular sessions from 2026-11-05, read against §3 r3 of the plan (crossing pages in [25,45) after the open: PASS ≤ 10 over five and ≤ 5 per session; FAIL ≥ 15 in a session or ≥ 40 over five; the doorbell family's own FAIL bar), cut at the deploy boundary — so the published 19 of 19 `basis=bid` (§3e) is a pre-deploy figure and the moonbag line joins the `mark=` population only from here (Langston's record item).
 
+- **Step 7 RESULT (CC-C, read 2026-11-13 ~18:20Z, staging) — PASS on the pre-registered §3 r2 criteria.** Window: the five complete US regular sessions 2026-11-05, 11-06, 11-09, 11-10, 11-11 (deploy 11-05 09:17:49Z, before the 14:30Z open; every later build descends from `0abfd7102`). Object: `/var/log/dawntrader/system-alerts.jsonl`, the WHOLE file, rows merged by `id`, keys `no-trigger-vts-*` whose trade id carries `xstock` (positive control: 452 such rows all-time, the baseline's 374 among them), binned by minutes after 14:30Z (EST). **The unit is the alert ROW, as in the baseline: each page is two rows when the trade has a maker/taker twin** (e.g. 11-06 14:56:57Z, keys `…lhyuixj` and `…lhyuixj_twin`).
+
+  | session | crossing rows [0,25) | crossing rows [25,45) | doorbell rows [0,15) / [15,45) | member-clock rows [30,45) / ≥45 |
+  |---|---|---|---|---|
+  | 11-05 | 0 | **2** (STRK + twin, min 36.9) | 0 / 0 | 0 / 0 |
+  | 11-06 | 0 | **2** (STRK + twin, min 27.0) | 0 / 1 (VIA, min 37.0) | 0 / 0 |
+  | 11-09 | 0 | 0 | 0 / 2 (STRK + twin, min 27.7) | 0 / 1 (VIA "30 min", min 45.7) |
+  | 11-10 | 0 | 0 | 0 / 0 | 0 / 0 |
+  | 11-11 | 0 | 0 | 0 / 0 | 0 / 0 |
+  | **total** | **0** | **4** | **0 / 3** | **0 / 1** |
+
+  - **Deployment check:** zero crossing rows in [0,25) and zero doorbell or member-clock rows in [0,15) — met; the earliest xStock page in the window is minute 27.0.
+  - **PASS:** crossing rows in [25,45) = **4 over five (≤ 10) and at most 2 in any session (≤ 5)**; the one member-clock row landed at minute 45.7, none in [30,45). **FAIL not met** (≥ 15 in a session or ≥ 40 over five).
+  - **Named prediction:** about 0.67 crossing pages per session at the open, on slow sessions. Observed: 2 page events (4 rows) over five sessions, both STRK, the trade already standing in the record — consistent with "pages only for trades still undecided 10 min after the venue's regular book opens".
+  - **Doorbell family (FAIL only, ≥ 10 per session on average):** 3 rows over five = 0.6 per session — not met. Non-expected reasons still page (VIA `too_old` 11-06, STRK 11-09), so that family did not go silent; whether every reason class that paged in the baseline still pages is not separately tested — stated, not claimed.
+  - **P2 join split (reported), from `[VTS_RAIL][SWEEP]` in `out__*`, first-to-last line inside 14:30–21:00Z:** 11-09 joins 5 = tooWide 5; 11-10 9 = 9; 11-12 7 = 7; 11-13 (to 18:05Z) 4 = 4; `joinsTooOld` 0, `joinsOther` 0 and `dedupeHits` 0 in every one. **11-05 and 11-06 are UNMEASURED** (their `out__` files have rotated away; the cp5 harvest keeps `VENUE_PAUSE`/`XS_FRAME` only); **11-11 is UNMEASURED** (the cumulative counters reset inside the session, a process restart).
+  - **Moonbag basis line (reported):** `type=moonbag_timeout` lines = **0, NOT OBSERVED** over the retained `out__` files 11-09 → 11-13, against **185** `EXIT_TRIGGER` lines in the same files (71 `stop_hit`, 114 `target_hit`; positive control for the instrument). 11-05 → 11-08 unmeasured (rotated). P3's line format is therefore fence-verified only.
+  - `NOT RE-READ` by a second reader before Langston.
+  - **STEP: 7 of 11 COMPLETE · NEXT STEP: 8 of 11** (Langston's second pass).
+
 ## 4. PRE-REGISTERED close criteria (written before the data)
 **(4a), objective 11 — WINDOW: the first three full weekday US regular sessions after the deploy (2026-10-19, 10-20, 10-21).** Quoted from the pre-audit (r5e, Langston's reading): *"crossings conserved against A3 · joins taking the too_wide/quiet share · pagesAttempted falling · `dedupeHits == 0` as a SEPARATE tripwire, never a term (non-zero = FAIL)."* Also PASS requires `markMissedRowMarks` near zero and zero `no-trigger-vts-*` rows resolved by `cli`. **FAIL:** any `no_usable_mark` or isolated-staleness crossing that joins instead of paging; minted down with `dedupeHits` up; or `alertFileBytes` growing faster than ~1 MB/day. Source: the `[VTS_RAIL][SWEEP]` lines (cumulative since start).
 **Objective 6 — S6 (the stop-hold cost) — QUANTITY WINDOW: the first `spread_blown` refused tick with the bid at or below the stop.** PASS: `spreadBlownFirstStopRefusedBid` and `spreadBlownStopHeldMs` are populated for that position and its release or close records the bid against the stop. Until then S6 is **UNEXERCISED** and no silence may be cited as a pass (Langston, Step 8).
