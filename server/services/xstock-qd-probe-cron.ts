@@ -3,8 +3,9 @@
  *
  * Mirrors `xstock-universe-cron.ts` (the established same-host node-cron shape):
  *   - cron.schedule(...) + B-NEW-49 observability: cronRegistry.register +
- *     scheduledJobsAudit.writeFireRow (every fire, success AND error) +
- *     logCronArm. A silent arming failure on an always-on telemetry probe is the
+ *     logCronArm. The fire row (every fire, success AND error) is written by
+ *     the occurrence runner, not by this job; the job returns only its own meta
+ *     (corrected in B-CRON-MISSED-CATCHUP Step 9). A silent arming failure on an always-on telemetry probe is the
  *     worst case (looks healthy, collects nothing) — the registry + boot
  *     smoke-test + 15-min fire-evidence verifier close that gap.
  *   - cadence is module_constants-resolved (qd_probe.cadence_minutes): the cron

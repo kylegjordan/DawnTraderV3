@@ -54,10 +54,13 @@ export interface CronScheduledRunContext {
  * measurements (`duration_ms`, `lag_ms`, `policy_version`). The runner writes
  * them LAST into `scheduled_tasks_audit.meta`, after a job's own meta, so a
  * job's value for one of these names is always overwritten. They are reserved
- * here, on the interface a job author reads, so returning one is a type error
- * rather than a silent override: the fire-evidence verifier accepts an exact
- * audit row only when its identity is the runner's (B-CRON-MISSED-CATCHUP
- * Step 9, Langston Step-4 carry).
+ * here, on the interface a job author reads, so a reserved key written as an
+ * object LITERAL is a type error rather than a silent override. The type does
+ * NOT catch a key arriving through a wider value (a spread or assignment of a
+ * `Record<string, unknown>`); the runner's write-last ordering is what holds
+ * at runtime, and the unit suite ties this list to the runner's trailing keys.
+ * The fire-evidence verifier accepts an exact audit row only when its identity
+ * is the runner's (B-CRON-MISSED-CATCHUP Step 9, Langston Step-4 carry).
  */
 export const RUNNER_AUTHORED_FIRE_META_KEYS = [
   'trigger_source',

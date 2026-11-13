@@ -19,6 +19,7 @@ import {
   type LockedOccurrenceStore,
   type OccurrenceStore,
 } from '../../services/cron-occurrence-runner.js';
+import { RUNNER_AUTHORED_FIRE_META_KEYS } from '../../services/cron-registry.js';
 import type {
   CronJobRunResult,
   CronRecoveryPolicyKey,
@@ -382,6 +383,30 @@ describe('B-CRON-MISSED-CATCHUP occurrence runner', () => {
     expect(meta.lag_ms).toBeGreaterThanOrEqual(0);
     expect(meta.policy_version).toBe(CRON_RECOVERY_POLICY_VERSION);
     expect(meta.proof).toBe(true);
+  });
+
+  it('every reserved fire-meta key is runner-authored: forged values never survive, and the list matches the runner', async () => {
+    const forged = Object.fromEntries(RUNNER_AUTHORED_FIRE_META_KEYS.map((key) => [key, '__forged__']));
+    const f = fixture({
+      run: async () => ({ meta: { ...forged, proof: true } }) as unknown as CronJobRunResult,
+      beforeRun: (async () => ({ ...forged })) as unknown as NonNullable<RegisteredCronJob['recovery']>['beforeRun'],
+    });
+    const result = await f.runner.runNatural(f.job.name, new Date('2026-11-12T12:01:00.000Z'));
+    expect(result.status).toBe('succeeded');
+    const meta = f.writeFireRow.mock.calls[0][0].meta as Record<string, unknown>;
+    for (const key of RUNNER_AUTHORED_FIRE_META_KEYS) {
+      expect(meta[key], key).toBeDefined();
+      expect(meta[key], key).not.toBe('__forged__');
+    }
+    expect(meta.proof).toBe(true);
+
+    // Source tie: the keys the runner writes AFTER the job's spreads are
+    // exactly this list, so adding or dropping one on either side fails here.
+    const source = readFileSync(resolve('server/services/cron-occurrence-runner.ts'), 'utf8').replace(/\r\n/g, '\n');
+    const call = source.slice(source.indexOf('await this.deps.writeFireRow({'));
+    const tail = call.slice(call.indexOf('...resultMeta,') + '...resultMeta,'.length, call.indexOf('},'));
+    const trailing = [...tail.matchAll(/^\s*([a-z_]+):/gm)].map((m) => m[1]);
+    expect([...trailing].sort()).toEqual([...RUNNER_AUTHORED_FIRE_META_KEYS].sort());
   });
 
   it('reconstructs the missed boundary before node-cron\'s advanced event date', async () => {
@@ -1285,9 +1310,12 @@ describe('B-CRON-MISSED-CATCHUP source and registration fences', () => {
     const program = ts.createProgram([virtualPath], options, host);
     const virtual = program.getSourceFiles().find((sf) => isVirtual(sf.fileName));
     expect(virtual).toBeDefined();
-    const errorLines = ts.getPreEmitDiagnostics(program, virtual)
-      .filter((d) => d.category === ts.DiagnosticCategory.Error && d.file && d.start !== undefined)
-      .map((d) => d.file!.getLineAndCharacterOfPosition(d.start!).line);
+    const errors = ts.getPreEmitDiagnostics(program, virtual)
+      .filter((d) => d.category === ts.DiagnosticCategory.Error && d.file && d.start !== undefined);
+    const errorLines = errors.map((d) => d.file!.getLineAndCharacterOfPosition(d.start!).line);
+    // Pinned to TS2322 (not assignable): an unrelated error on those lines
+    // must not read as the reservation firing.
+    expect(errors.filter((d) => d.code !== 2322).map((d) => d.code)).toEqual([]);
     // Line 0 is the import: it must resolve (a missing module would also be an
     // error, which would read as a false pass on the reserved lines).
     expect(errorLines).not.toContain(0);
