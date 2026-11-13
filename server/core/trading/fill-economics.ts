@@ -210,8 +210,14 @@ export function computeFillEconomics(i: FillEconomicsInput): FillEconomics {
  */
 export interface RepriceAtAskInput {
   inputs: FillEconInputs;
-  /** The plan's entry — the maker's limit and the window's anchor. */
+  /** The plan's entry — the taker window's anchor (and the maker's limit for a `'mid'` triple). */
   planEntry: number;
+  /**
+   * The maker arm's resting price. `'mid'` triple: the plan entry. `'sided'` triple (row `8c`): the bid recorded at the
+   * build (`makerEntryOf`) — the same price the refresh's own re-decide and the open's maker limit use. Rebase of increment B
+   * onto row `8c`: the re-price had hard-coded `'mid'` at the plan entry, written before a sided triple could exist.
+   */
+  planEntryMaker: number;
   /** The live ask, read through the exit's own contract by the refresh. */
   ask: number;
   worseSideFrac: number;
@@ -234,14 +240,14 @@ export interface RepriceAtAsk {
 }
 
 export function repriceAtAsk(r: RepriceAtAskInput): RepriceAtAsk {
-  for (const [k, v] of Object.entries({ planEntry: r.planEntry, ask: r.ask, stopPrice: r.inputs.stopPrice, targetPrice: r.inputs.targetPrice })) {
+  for (const [k, v] of Object.entries({ planEntry: r.planEntry, planEntryMaker: r.planEntryMaker, ask: r.ask, stopPrice: r.inputs.stopPrice, targetPrice: r.inputs.targetPrice })) {
     if (!(Number.isFinite(v) && v > 0)) throw new Error(`repriceAtAsk: ${k} must be a positive finite number, got ${String(v)}`);
   }
   const i = r.inputs;
   const d = decideMakerTaker({
     entryPrice: r.planEntry,
-    entryPriceMaker: r.planEntry,
-    levelGeometry: 'mid',
+    entryPriceMaker: r.planEntryMaker,
+    levelGeometry: i.levelGeometry, // row `8c`: the triple's own stamp, as at the open and the refresh re-decide
     stopPrice: i.stopPrice,
     targetPrice: i.targetPrice,
     costs: i.costs,
