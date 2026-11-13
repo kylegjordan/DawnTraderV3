@@ -158,6 +158,46 @@ Row 2 makes xStock trades open and close only where a real trade could (Kyle 202
   - `NOT RE-READ` by a second reader before Langston. **Step 8 PROCEED (Langston, 2026-11-13, Discord `1570869935633080401`), every number re-derived by him.**
   - **(4c): STEP: 8 of 11 COMPLETE (PROCEED) · NEXT STEP: 10 of 11** — no objective failed, so Step 9 has nothing to iterate. The batch stays open on C-P5 (read 2026-11-16).
 
+- **(4c) STEP 10 — governance ledger (CC-C, 2026-11-13; copied from the governance commit):**
+
+CHANGE-CLASS: architecture
+
+| # | document | verdict | one line |
+|---|---|---|---|
+| T1 | `BATCH_CATALOG.md` | ✅ | Row 2 status and OPEN ON: (4c) deployed, Step 7 PASS, Step 8 PROCEED, Step 10. |
+| T1 | `PHASE_HISTORY.md` | ✅ | Dated 2026-11-13 line: the opening alerts wait until 09:45 ET; batch still open on C-P5. |
+| T1 | `SPRINT_TO_LIVE_PLAN.md` (row 2) | ✅ | Both row-2 cells move (4c) from "Step 7 = five sessions" / "Step 2 r2" to done through Step 10. |
+| T1 | `PHASE_19_PLAN.md` | N/A — no row there | Row 2 has no row of its own there. |
+| T1 | shared `MEMORY.md` + `MEMORY_CC_C.md` | ✅ mine / N/A shared | Own file: (4c) at Step 10; no new consensus truth. |
+| T1 | the batch `SCOPE` | N/A | No scope change; (4c) is placed in the existing row-2 scope. |
+| T1 | the batch `PRE_AUDIT` | ✅ | `B_XSTOCK_BID_TRIGGER_RELAND_INC4C_PRE_AUDIT.md` r3 (Step 2); §3 r2 is the read's criterion. |
+| T1 | `COMPLETION_REPORT` | ✅ | This progress report §3f: Step 7 result, Step 8 folds, this ledger; the batch converts at its close. |
+| T1 | the `Observation` column | ✅ | The card stays in Observation, now blocked only on C-P5 (2026-11-16). |
+| T1 | the four session task lists | ✅ mine / N/A ×3 | `CC_C_SESSION_TASK_LIST.md` row 2: (4c) done through Step 10; next C-P5. |
+| T1 | Langston's `MEMORY.md` | ✅ | Row 2 line: (4c) added to his closed increments, a deploy sha dropped; his `MEMORY.md` 74,215 → 74,208 B, loaded set 143,753 B vs ceiling 143,856. |
+| T2 | `SYSTEM_MANUAL.md` | ✅ | The who-is-told section: the rail pages only from 09:45 ET, why, what stays labelled `regular`, and the measured effect. |
+| T2 | `SYSTEM_IMPACT_MAP.md` | ✅ | The rail entry: the new upstream `isXstockRailPagingTime`, its two readers, the join split, the moonbag line, the change-check. |
+| T2 | `RUNNING_ISSUES.md` | N/A | No issue opened or closed; `#392` already names (4c)'s second read-site. |
+| T2 | `CHANGES_AND_FIXES.md` | N/A | Alerting timing, not a bug or risk entry. |
+| T2 | `POST_AUDIT_ROADMAP.md` | N/A | No phase-level change. |
+| T2 | `ADJUSTMENT_FRAMEWORK.md` | N/A | Alerting only: no trade, price or decision changes, so no epoch boundary. |
+| T2 | `AUTHORITY_BASELINE.md` | N/A | No constitutional rule touched. |
+| T2 | `STORAGE_POLICY.md` | N/A | No table or retention change. |
+| T2 | `MULTI_ASSET_VTS_EXPANSION_PLAN.md` | ✅ | Working-list review note: no item A–F change, no epoch boundary. |
+| T2 | `ASSET_CLASS_ONBOARDING_WORKFLOW.md` | N/A | No onboarding learning surfaced. |
+| T2 | `BUILD_METHOD_PLAYBOOK.md` | N/A | The method did not change. |
+| T2 | `LANGSTON_ARCHITECTURE.md` | N/A | The reviewer's build did not change. |
+| T2 | `CLAUDE.md` / `CONDUCT.md` | N/A | No rule changed. |
+| T2 | `_archive/CLAUDE_MD_RULE_HISTORY.md` | N/A | No `CLAUDE.md` rule changed. |
+| T2 | `DELETED_COMPONENTS_LOG.md` | N/A | Nothing removed. |
+| T2 | `MISTAKE_PATTERNS.md` | N/A | No `MISTAKE:` trailer in (4c); the member-clock classifier slip Langston caught is recorded in §3f as a corrected family rule. |
+| T2 | `GOVERNANCE_EXCEPTIONS.md` | ✅ | Row 2's declared-`open` row amended in place: (4c) struck from "still owed", state stays `open`. |
+| T2 | `ALERT_HANDLING_PROTOCOL.md` | N/A | No new alert class or process. |
+| T2 | `DELIVERY_BOARD_PROTOCOL.md` | N/A | Unchanged. |
+| T2 | `CLAUDE_CODE_FEATURE_WATCH.md` | N/A | Not this batch's. |
+
+  **(4c): STEP 10 of 11 COMPLETE · NEXT: the batch's own Step 11 waits on C-P5 (2026-11-16); (4c) needs no separate close.**
+
 ## 4. PRE-REGISTERED close criteria (written before the data)
 **(4a), objective 11 — WINDOW: the first three full weekday US regular sessions after the deploy (2026-10-19, 10-20, 10-21).** Quoted from the pre-audit (r5e, Langston's reading): *"crossings conserved against A3 · joins taking the too_wide/quiet share · pagesAttempted falling · `dedupeHits == 0` as a SEPARATE tripwire, never a term (non-zero = FAIL)."* Also PASS requires `markMissedRowMarks` near zero and zero `no-trigger-vts-*` rows resolved by `cli`. **FAIL:** any `no_usable_mark` or isolated-staleness crossing that joins instead of paging; minted down with `dedupeHits` up; or `alertFileBytes` growing faster than ~1 MB/day. Source: the `[VTS_RAIL][SWEEP]` lines (cumulative since start).
 **Objective 6 — S6 (the stop-hold cost) — QUANTITY WINDOW: the first `spread_blown` refused tick with the bid at or below the stop.** PASS: `spreadBlownFirstStopRefusedBid` and `spreadBlownStopHeldMs` are populated for that position and its release or close records the bid against the stop. Until then S6 is **UNEXERCISED** and no silence may be cited as a pass (Langston, Step 8).
