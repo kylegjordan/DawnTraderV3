@@ -59,7 +59,29 @@ import {
   cutoverForTable,
 } from '../services/data-archive/daily-partition-cutover.js';
 
-const LOG_DIR = '/var/log/dawntrader';
+// Step-7 plants (AP-7 plan item 7): three overrides — a log folder holding planted copies, a planted crontab file
+// instead of `sudo -n crontab -l`, and a dry flag that logs each alert instead of raising it. They take effect ONLY
+// with `--plant` on the command line (Langston, override delta): `dotenv` loads `/home/deploy/dawntrader/.env`, a
+// hand-edited file no review sees, so an env var alone must not be able to disable alerting; the cron line passes no
+// arguments, so the cron run cannot be a plant run.
+const PLANT = process.argv.includes('--plant');
+const LOG_DIR = (PLANT && process.env.ARCHIVAL_HEALTH_LOG_DIR) || '/var/log/dawntrader';
+const CRONTAB_FILE = (PLANT && process.env.ARCHIVAL_HEALTH_CRONTAB_FILE) || '';
+const DRY = PLANT && process.env.ARCHIVAL_HEALTH_DRY === '1';
+const OVERRIDES_IN_ENV = ['ARCHIVAL_HEALTH_LOG_DIR', 'ARCHIVAL_HEALTH_CRONTAB_FILE', 'ARCHIVAL_HEALTH_DRY'].filter((k) => process.env[k]);
+
+/**
+ * Every alert goes through here, so the dry flag cannot miss one. Returns whether an alert was actually raised, so
+ * the caller's log line says ALERT only when one exists (Langston C-1: a DRY run must not print ALERT).
+ */
+async function raise(input: Parameters<typeof addAlert>[0]): Promise<boolean> {
+  if (DRY) {
+    console.log(`[archival-health] DRY — would raise ${input.dedupe_key}: ${input.title}`);
+    return false;
+  }
+  await addAlert(input);
+  return true;
+}
 const HOUR_MS = 3_600_000;
 const DAY_MS = 24 * HOUR_MS;
 
@@ -107,7 +129,8 @@ const CHECKS: CheckSpec[] = [
     label: 'B75 hot→warm retention sweep (daily 02:15 UTC)',
     logFile: 'b75-retention.log',
     schedule: '15 2 * * *',
-    donePattern: /DONE .*\bfailed=(\d+)\b.*\bplain_failed=(\d+)\b/,
+    // three failure counters, all summed (Langston Step 4 F2): partitions, the plain lane, the snapshot lane
+    donePattern: /DONE .*\bfailed=(\d+)\b.*\bplain_failed=(\d+)\b.*\bsnapshot_failed=(\d+)\b/,
     startPattern: /\[B75 sweep\] started at (\S+) run_id=/,
     onMissing: 'alert',
   },
@@ -153,7 +176,7 @@ async function fire(
   detail: string,
 ): Promise<void> {
   try {
-    await addAlert({
+    const raised = await raise({
       triggers_at: new Date(),
       category: 'health_check',
       severity: 'warning',
@@ -170,7 +193,7 @@ async function fire(
       },
       dedupe_key: `archival-health-${spec.name}-${reason}`,
     });
-    console.log(`[archival-health] ALERT ${spec.name}/${reason}: ${detail}`);
+    console.log(`[archival-health] ${raised ? 'ALERT' : 'DRY-ALERT'} ${spec.name}/${reason}: ${detail}`);
   } catch (err) {
     console.error(`[archival-health] failed to raise alert for ${spec.name}:`, err);
   }
@@ -179,7 +202,7 @@ async function fire(
 /** One page for the whole run, on its own key (not per check): this watchdog could not read the root crontab. */
 async function fireUnverified(runs: number, why: string): Promise<void> {
   try {
-    await addAlert({
+    const raised = await raise({
       triggers_at: new Date(),
       category: 'health_check',
       severity: 'warning',
@@ -191,7 +214,7 @@ async function fireUnverified(runs: number, why: string): Promise<void> {
       metadata: { source: 'b-storage-archival-health', batch: 'B-DISK-FILE-TIERING', check: 'crontab', reason: 'schedule_unverified', runs },
       dedupe_key: 'archival-health-crontab-schedule_unverified',
     });
-    console.log(`[archival-health] ALERT crontab/schedule_unverified: ${runs} consecutive runs`);
+    console.log(`[archival-health] ${raised ? 'ALERT' : 'DRY-ALERT'} crontab/schedule_unverified: ${runs} consecutive runs`);
   } catch (err) {
     console.error('[archival-health] failed to raise the schedule_unverified alert:', err);
   }
@@ -200,9 +223,15 @@ async function fireUnverified(runs: number, why: string): Promise<void> {
 /** The root crontab as text, or why it could not be read. */
 function readCrontab(): { text: string } | { text: null; why: string } {
   try {
+    if (CRONTAB_FILE) return { text: fs.readFileSync(CRONTAB_FILE, 'utf-8') };
     return { text: execFileSync('sudo', ['-n', 'crontab', '-l'], { encoding: 'utf-8', timeout: 10_000, stdio: ['ignore', 'pipe', 'pipe'] }) };
   } catch (err) {
-    return { text: null, why: String((err as Error)?.message ?? err).split('\n')[0].slice(0, 200) };
+    // The reason sudo gives is on stderr ("sudo: a password is required"); message's first line only names the
+    // command (Langston Step 4 F1), so the page carries both.
+    const e = err as Error & { stderr?: string | Buffer };
+    const head = String(e?.message ?? err).split('\n')[0];
+    const cause = e?.stderr ? String(e.stderr).trim().split('\n')[0] : '';
+    return { text: null, why: (cause ? `${head} — ${cause}` : head).slice(0, 200) };
   }
 }
 
@@ -350,7 +379,7 @@ async function runCheck(spec: CheckSpec, nowMs: number): Promise<boolean> {
 /** Fire a §10.5 alert for a short/absent daily-partition runway (deduped per table). */
 async function fireRunway(table: string, detail: string): Promise<void> {
   try {
-    await addAlert({
+    const raised = await raise({
       triggers_at: new Date(),
       category: 'health_check',
       severity: 'warning',
@@ -367,7 +396,7 @@ async function fireRunway(table: string, detail: string): Promise<void> {
       },
       dedupe_key: `archival-health-daily-runway-${table}`,
     });
-    console.log(`[archival-health] ALERT daily-runway/${table}: ${detail}`);
+    console.log(`[archival-health] ${raised ? 'ALERT' : 'DRY-ALERT'} daily-runway/${table}: ${detail}`);
   } catch (err) {
     console.error(`[archival-health] failed to raise daily-runway alert for ${table}:`, err);
   }
@@ -450,6 +479,12 @@ async function main(): Promise<void> {
   const nowMs = Date.now();
   const startIso = new Date(nowMs).toISOString();
   console.log(`[archival-health] started at ${startIso}`);
+  // C-2: a plant run must never read as a production run — name every active override on its own line.
+  if (PLANT) {
+    console.log(`[archival-health] PLANT RUN (not production) log_dir=${LOG_DIR} crontab_file=${CRONTAB_FILE || '(sudo crontab -l)'} dry=${DRY}`);
+  } else if (OVERRIDES_IN_ENV.length) {
+    console.log(`[archival-health] override variable(s) set but IGNORED without --plant: ${OVERRIDES_IN_ENV.join(', ')}`);
+  }
   let allOk = true;
   // AP-7: read the root crontab once; every check compares its schedule with the box's line.
   const crontab = readCrontab();

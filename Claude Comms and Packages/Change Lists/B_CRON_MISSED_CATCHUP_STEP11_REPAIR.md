@@ -746,3 +746,87 @@ grep -h 'CRON-FIRE-VERIFIER' /var/log/dawntrader/error__2026-11-13_00-00-00.log 
 ```
 
 **STEP: 7 of 11 COMPLETE · NEXT STEP: 8 of 11** (Langston's second pass on this restart).
+
+## 13. STEP 8 PROCEED, AND STEP 9 — LANGSTON'S TWO CARRIES FOLDED (CC-C, 2026-11-13)
+
+Langston ruled **Step 8 PROCEED** at 21:42Z (Discord `1570916733307461712`),
+re-deriving every number himself: build `77f6fd598`, verifier file
+byte-identical to the graded ref, 548 rows for the six jobs (all `success`, 0
+null `occurrence_id`, `trigger_source` = `cron` only), all six certified
+through the **repaired** exact arm (four had `allowLegacyWindow=true`, but
+today's partitions hold no `occurrence_id IS NULL` row for any registered job),
+and a second clean pass at 21:33:53Z. His silence control was stronger than
+§12's: four non-cron alerts minted inside 21:05→21:19Z, so the store was
+accepting writes while the cron class stayed silent. The refusal arms remain
+fence-only, by design: exercising them live would mean writing fabricated
+evidence into production.
+
+### Carry 1 — the fire row's identity is no longer overridable (code)
+
+`cron-occurrence-runner.ts` spread `...beforeMeta, ...resultMeta` **after**
+`occurrence_id` and `trigger_source`, and `ScheduledJobAuditMeta.trigger_source`
+admitted `'poll' | 'boot'`, which is wider than the verifier's exact-arm accept
+set. No registered recovery emits either key today (latent), but after the
+Step-11 repair a job returning one would silently void its own evidence and
+page STALE.
+
+**BEFORE** (`cron-occurrence-runner.ts`, the audit write):
+
+```ts
+meta: {
+  trigger_source: item.source === 'natural' ? 'cron' : 'missed_catchup',
+  duration_ms: completedAt.getTime() - firedAt.getTime(),
+  occurrence_id: claim.row.id,
+  lag_ms: policy.lagMs,
+  policy_version: CRON_RECOVERY_POLICY_VERSION,
+  ...beforeMeta,
+  ...resultMeta,
+},
+```
+
+**AFTER:**
+
+```ts
+meta: {
+  duration_ms: completedAt.getTime() - firedAt.getTime(),
+  lag_ms: policy.lagMs,
+  policy_version: CRON_RECOVERY_POLICY_VERSION,
+  ...beforeMeta,
+  ...resultMeta,
+  trigger_source: item.source === 'natural' ? 'cron' : 'missed_catchup',
+  occurrence_id: claim.row.id,
+},
+```
+
+`scheduled-jobs-audit.ts`: `trigger_source?: 'cron' | 'missed_catchup'`
+(was `| 'poll' | 'boot'`). **Caller census:** the runner is the only
+production caller of `writeFireRow` (`git grep` at the ref, tests excluded;
+the harness wraps the same function). Poll and boot rows come from
+`session-lifecycle-controller.ts` through its own `AuditMeta` type, untouched.
+`duration_ms`, `lag_ms` and `policy_version` stay before the spreads: no
+consumer reads them as identity, and moving them would change what an
+existing job's own `duration_ms` (if it reports one) means.
+
+**Fence:** a new test in `b-cron-missed-catchup.test.ts` has both
+`beforeRun` and `run` return `trigger_source` (`'boot'`, `'poll'`) and a forged
+`occurrence_id`; the fire row must still carry `cron` and the durable
+occurrence id, and keep the job's own `proof` field. **Mutation-proved:** with
+the old runner restored it fails (`expected 'poll' to be 'cron'`); with the fix
+it passes. Both suites: 59 of 59. `tsc --noEmit`: 324 errors before and after
+(the repo baseline), none in the three touched files.
+
+### Carry 2 — the declared-open row, and the second `#744` instance (governance)
+
+Re-derived before filing: `GOVERNANCE_EXCEPTIONS.md` held 0 rows naming this
+batch (positive control 11 for `B-PRICE-SIDE-BY-JOB`); the alert store's 443
+governance rows (merged by id, non-null fields kept) name it 0 times while the
+open-checker titles name 28 distinct batches (Langston: 26 by his read; same
+conclusion). Filed: the declared-`open` row in `GOVERNANCE_EXCEPTIONS.md`, and
+a ➕ instance on `#744` (owner CC-A) in `RUNNING_ISSUES.md`. The cause is
+recorded as a hypothesis.
+
+**This carry-1 code change needs its own Step 4 (Langston, at the ref), CI,
+and a deploy before Step 10.** It rides the next deliberate deploy; nothing
+restarts for it alone.
+
+**STEP: 9 of 11 — fix landed, NEXT: Langston's Step 4 on the carry-1 diff.**

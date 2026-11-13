@@ -33,9 +33,13 @@ import { sql } from 'drizzle-orm';
 import { db } from '../db.js';
 
 export interface ScheduledJobAuditMeta {
-  /** Distinguishes cron-path / poll-path / boot-path fires.
-   * Match B-NEW-36 poll-reconcile convention. */
-  trigger_source?: 'cron' | 'missed_catchup' | 'poll' | 'boot';
+  /** How the registered-job runner reached this fire: the natural boundary
+   * ('cron') or a recovered missed boundary ('missed_catchup'). These are the
+   * only two the fire-evidence verifier accepts as exact current evidence, and
+   * the runner is this writer's only caller. Poll and boot fires are written by
+   * session-lifecycle-controller.ts with its own type, not through here
+   * (narrowed in B-CRON-MISSED-CATCHUP Step 9). */
+  trigger_source?: 'cron' | 'missed_catchup';
   /** Fire duration in milliseconds (callback start → callback resolve). */
   duration_ms?: number;
   /** Free-form per-job context. */
