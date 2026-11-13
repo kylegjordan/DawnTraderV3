@@ -147,3 +147,23 @@ The only objective not yet green is the live behavioral proof for an unpriced se
 - **No-event rule:** continued absence of the event is neither pass nor fail. Keep the alert active and unacknowledged and continue other sequenced work.
 
 **STEP: 9 of 11 · NEXT STEP: 9 completion on the first qualifying live event.**
+
+## 8. Step-9 completion — the first live unpriced close (ANALYST Claude, 2026-11-13)
+
+Read on staging at 2026-11-13 ~15:40Z against the registered closing condition in §7, predicates unchanged.
+
+**The first qualifying row.** `exit_decision_archive`, `source='vts-runner'`, `mode='vts'`, `exit_price IS NULL`, `captured_at >= 2026-11-07T15:15:11Z`, ordered by `captured_at`:
+`2026-11-11T14:31:08.171Z` · `vts_xstock_spot_1793802632943_82jpuil` · SYY/USD · `xstock_spot` · `time_stop_unpriced` · `state_snapshot ? 'exitWalk'` = **false**.
+
+**Reconciliation to the durable record — the two agree that the close was unpriced:**
+- `vts_open_trades` row: `closed=true`, `state='closed'`, `closed_at=2026-11-11T14:31:08.188Z`, pool `rotational`, no `shadow` or `mtTwin` flag in `context`, no `exitWalk` in `context`.
+- Runner log (`error.log`, warn stream): `[3n.q3][VTS_UNPRICED_CLOSE] SYY/USD trade vts_xstock_spot_1793802632943_82jpuil class=xstock_spot arm=clamp_no_bid held=168h 0m — max-hold reached with no usable sell side; closed with no price`.
+- `logs/virtual_trades/*.json`: the id is **absent**, as designed — `closeVtsTradeUnpriced` (`server/services/vts-runner.ts`, the 3n.q3 P2 block) never calls `persistRealPriceTrade` for an unpriced close. **Positive control:** three priced xStock selected closes archived in the same hour (`…1794401928894_gqhyzw6`, `…1793984324792_uol2dzw`, `…1794240735985_8rtmho9`) are all present in `2026-11-11.json`, so the absence is the instrument reading, not a blind spot.
+- Not a twin: the twin branch of `closeVtsTradeUnpriced` writes no archive row, so an archived unpriced row is the selected lane by construction.
+
+**Population beyond the first row.** All **3** post-deploy selected unpriced rows carry no `exitWalk` (SYY 11-11 `clamp_no_bid`, EPAM 11-12 `clamp_no_bid`, WTW 11-13 `clamp_no_mark`), against **1,637** selected VTS archive rows since the window start (latest 2026-11-13T15:32:30Z), so the archive is live. The `?` operator's positive control is §3: 166/166 priced rows read `true`.
+
+**Verdict against §7:** closing condition MET; failure condition not met. Alert `7e20ed0f-692a-4899-8af3-c3db071bd97a` is resolved with this commit as evidence, no separate acknowledgement.
+REVIEWER: none — NOT RE-READ (an evidence read against a pre-registered predicate, carried to Coltrane/Langston at Step 10/11).
+
+**STEP: 9 of 11 COMPLETE · NEXT STEP: 10 of 11 (KD-19 governance).**
