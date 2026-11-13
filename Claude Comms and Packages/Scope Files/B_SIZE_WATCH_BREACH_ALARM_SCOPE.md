@@ -57,3 +57,20 @@ change-class: non_architecture
 1. **An alert storm.** A breach lasting weeks must stay ONE row. The dedupe key does this structurally; the fixture proves it.
 2. **A failed resolve.** If the resolve fails, the row stays open and the next breach collapses onto it, so nothing is lost; the run row records the failure, the same discipline as the heartbeat (`:241-249`).
 3. **State-shape change under a reader.** `langston-memory-write` reads the state file; a new field must be additive only.
+
+## 6. Step 1 ruling — Langston PROCEED, 2026-11-13T14:01:33Z (Discord `1570800777788657788`), conditions carried into Step 2
+
+He re-derived §0 himself: the installed watch equals the repo blob; every citation lands; the run-log census matches (87 rows, 0 unparseable); and a second instrument, the staging alert store (3,203 rows), holds 75 rows mentioning the tool, **all under the heartbeat key, never a breach subject**. **Floor bound, his:** the retained log starts 2026-09-13T05:41:58Z against the 2026-09-05 seed, so about 8 days of runs are already gone — OBJ-2's motivation, measured.
+
+**Blocking conditions for the pre-audit:**
+- **C-1 — resolve on a STATUS, not an over-test.** `measure()` excludes a missing file from `total` (`:112-123`), so `over <= 0` would resolve a MISSING-FILE row while the file is still missing. Resolve only on `status in (UNDER, AT-CEILING)`; fixture: file missing + total under ceiling → no resolve.
+- **C-2 — MISSING-FILE and BREACH get separate keys.** The add collapses onto a still-open row and returns the old id (`:246-250`), so one key would keep showing "a file is missing" after the file came back with the set still over.
+- **C-3 — persist the alert id at once.** `breach_alert_id` (and the missing-file one) saved immediately after the add, as the heartbeat does (`:267-275`); resolve takes the full uuid.
+
+**Judgement calls ruled:** (a) fire on the first breach run — the ratchet is monotone, so a breach is a landed write, not a transient. (b) the live leg uses a drill-only key (`…-breach-drill`, `info`), never the real key; the run asserts the drill resolve returned 0 and fails otherwise; the drill row id goes in the run row; the drill row is enumerated out of the store at close. The add/resolve transport is already proven live by the heartbeat; only the new keys and bodies are untested. (c) **fold the rules-tamper and archive-size posts now, each with its own key**; the tamper check's assertion (3) stays report-only. (d) **OBJ-3 now**, with two conditions: probe Coltrane's staging `add`/`resolve` under his own key in Step 2 and state the result (a reviewer read is not an alert write; if he cannot write, OBJ-3 is blocked on a key change, which is Kyle's call); and account for the measured divergence — installed `coltrane-size-watch` blob `ac244b69…` vs repo `e7f49690…` (header prose only, the 10-15 update never installed).
+
+**Folded (§9.4 disposition 1): Coltrane has no liveness heartbeat at all** — added for Langston at `9e8bbd69b` and never ported. It joins OBJ-3, on top of the alert path that objective builds.
+
+**Minors:** `SYSTEM_IMPACT_MAP.md` is a document this batch WRITES (new cross-cutting dedupe keys, new state fields); every alert body carries its owner and the action that discharges it, and the per-file sizes name which file grew; the Step-10 ledger names `SPRINT_TO_LIVE_PLAN.md` as the required plan row.
+
+**STEP: 1 of 11 COMPLETE · NEXT STEP: 2 of 11** — the pre-audit and plan, carrying C-1 to C-3, the four rulings and the folded heartbeat.
