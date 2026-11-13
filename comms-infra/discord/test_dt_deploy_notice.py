@@ -76,7 +76,9 @@ def wire(m, w, clock):
 
 
 def line(sha, at, in_window, notice="alerted"):
-    return "attempt_at=%s sha=%s by=cc-infra in_window=%s window_notice=%s register_sha=%s" % (at, sha, in_window, notice, "c" * 40)
+    key = at.replace("-", "").replace(":", "")
+    return "attempt_at=%s attempt_key=%s sha=%s by=cc-infra in_window=%s window_notice=%s register_sha=%s" % (
+        at, key, sha, in_window, notice, "c" * 40)
 
 
 def fresh():
@@ -187,6 +189,15 @@ def suite():
     wire(m, w4, T0 + 460); m.run()
     check("a failed resolve is retried next run without a second outcome post",
           len(w4.posts) == n and json.load(open(m.STATE))["pending"] == {}, (w4.posts, json.load(open(m.STATE))))
+
+    # a line with no attempt_key: outcome posted, nothing resolved, not retried for ever
+    w4.resolves.clear()
+    w4.notice.append(line(OTHER, "2027-01-15T09:00:00Z", "B-X/cc-b/open").replace("attempt_key=20270115T090000Z ", ""))
+    wire(m, w4, T0 + 3600 + 30); m.run()
+    wire(m, w4, T0 + 3600 + 31 * 60); m.run()
+    check("no attempt_key: the outcome is posted, NO resolve is attempted, and it leaves pending",
+          "DID NOT COMPLETE" in w4.posts[-1] and w4.resolves == [] and json.load(open(m.STATE))["pending"] == {},
+          (w4.resolves, json.load(open(m.STATE))))
 
     # staging unreachable: exit 1, nothing changes
     w4.ssh_ok = False

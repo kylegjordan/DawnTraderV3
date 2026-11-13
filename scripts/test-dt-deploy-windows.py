@@ -126,7 +126,8 @@ def push(register_text, msg):
     return sha
 
 
-def case(label, register_text, extra, want_rc, want_text, head_moves=False, notices=0, npm_rc="1", dirty=False):
+def case(label, register_text, extra, want_rc, want_text, head_moves=False, notices=0, npm_rc="1", dirty=False,
+         absent=None):
     sh("git", "reset", "-q", "--hard", BASE, cwd=app)
     for f in ("notice",):
         if os.path.exists(T + "/" + f):
@@ -139,7 +140,8 @@ def case(label, register_text, extra, want_rc, want_text, head_moves=False, noti
     if dirty:
         sh("git", "checkout", "-q", "--", "f.txt", cwd=app)
     moved = head() != before
-    ok = rc == want_rc and want_text in out and moved == head_moves and len(notice_lines()) == notices
+    ok = rc == want_rc and want_text in out and moved == head_moves and len(notice_lines()) == notices \
+        and (absent is None or absent not in out)
     check("%s: exit %d, '%s', HEAD %s, %d notice line(s)" % (label, want_rc, want_text,
           "moves" if head_moves else "unchanged", notices), ok,
           "rc=%s moved=%s notices=%s\n%s" % (rc, moved, notice_lines(), out))
@@ -189,16 +191,42 @@ if os.path.exists(T + "/notice"):
 os.makedirs(T + "/notice")                                # a directory where the file must go: the append fails
 sha = push(H + "\n" + win("B-X", "cc-b") + "\n", "notice unwritable")
 before = head()
+if os.path.exists(T + "/npm.log"):
+    os.unlink(T + "/npm.log")
 rc, out = deploy(sha, "--in-window", "B-X", npm_rc="0")
 check("the notice cannot be appended -> exit 6, HEAD unchanged, the lock released",
-      rc == 6 and head() == before and not os.path.exists(T + "/lock") and "could not append the in-window notice" in out,
+      rc == 6 and head() == before and not os.path.exists(T + "/lock") and "cannot write the in-window notice" in out and "no alert was raised" in out,
       "rc=%s\n%s" % (rc, out))
+check("C-18: ... and NO alert was minted on the exit-6 path (npm.log empty)",
+      not os.path.exists(T + "/npm.log") or open(T + "/npm.log").read() == "",
+      open(T + "/npm.log").read() if os.path.exists(T + "/npm.log") else "")
 os.rmdir(T + "/notice")
 # a stale window does not block, and is still landed in
 stale = json.dumps({"type": "open", "batch": "B-OLD", "owner": "cc-b", "opened_at": "2020-01-01T00:00:00Z",
                     "end": "2020-01-02T00:00:00Z", "review_by": "2020-01-03T00:00:00Z", "disturbs": "x", "detail": "y"})
 case("a STALE window does not block, prints STALE WINDOW, and is noticed", H + "\n" + stale + "\n", [], 1,
      "STALE WINDOW B-OLD", head_moves=True, notices=1, npm_rc="0")
+# C-19: an OPEN window whose free text contains the word 'stale' is not labelled stale
+ev = json.dumps({"type": "open", "batch": "B-OPEN", "owner": "cc-b", "opened_at": "2026-01-01T00:00:00Z",
+                 "until_event": "the stale price fix lands", "expected_by": "2099-01-01T00:00:00Z",
+                 "review_by": "2099-01-02T00:00:00Z", "disturbs": "x", "detail": "y"})
+case("C-19: 'stale' in an open window's text does not print STALE WINDOW", H + "\n" + ev + "\n", ["--in-window", "B-OPEN"],
+     3, "worktree is DIRTY", dirty=True, absent="STALE WINDOW")
+# C-20: holds - a landing sha in the deploy, one on a side branch, and one git cannot resolve
+sh("git", "checkout", "-q", "-b", "side", BASE, cwd=work)
+SIDE = commit(H + "\n", "a side-branch commit")
+sh("git", "push", "-q", bare, "side", cwd=work)
+sh("git", "checkout", "-q", "migration/aws-supabase", cwd=work)
+GHOST = "9" * 40
+hold = json.dumps({"type": "hold", "hold": "H-1", "row": "GE-row", "opened_at": "2026-01-01T00:00:00Z",
+                   "pending": [{"batch": "B-IN", "landing_sha": BASE}, {"batch": "B-SIDE", "landing_sha": SIDE},
+                               {"batch": "B-GHOST", "landing_sha": GHOST}]})
+out = case("C-20: a register with a hold passes the check (holds never refuse)", H + "\n" + hold + "\n", [], 3,
+           "worktree is DIRTY", dirty=True)
+check("C-20: the landing sha inside the deploy -> becomes LIVE", "hold H-1: B-IN becomes LIVE" in out, out)
+check("C-20: the side-branch landing sha -> stays NOT live", "hold H-1: B-SIDE stays NOT live" in out, out)
+check("C-20: an unresolvable landing sha -> CANNOT BE DETERMINED, never 'not live'",
+      "hold H-1: B-GHOST liveness CANNOT BE DETERMINED" in out and "B-GHOST stays NOT live" not in out, out)
 # the helper absent -> exit 4
 os.rename(obs, obs + ".gone")
 case("the parser not installed -> exit 4", H + "\n", [], 4, "is not installed")

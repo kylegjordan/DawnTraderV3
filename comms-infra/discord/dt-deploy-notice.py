@@ -233,8 +233,13 @@ def run():
             ev = ("%s; record sha=%s deployed_at=%s; posts %s,%s" % (
                 "completed" if p["completed"] else "did not complete in %d min" % (OUTCOME_WAIT_S // 60),
                 rec.get("sha", "none"), rec.get("deployed_at", "none"), p["start_post"], p["outcome_post"]))
-            key_t = datetime.datetime.strptime(f["attempt_at"], "%Y-%m-%dT%H:%M:%SZ").strftime("%Y%m%dT%H%M%SZ")
-            if not all([resolve_key("deploy-in-window:%s:%s:%s" % (b, f.get("sha"), key_t), ev) for b, _, _ in windows(f)]):
+            # The key's attempt part is the line's attempt_key FIELD, written by dt-deploy - never rebuilt from
+            # attempt_at (Langston, Step 4 gate A): a reformatting join is a bug waiting to happen.
+            key_t = f.get("attempt_key")
+            if not key_t:
+                # not retried: without the key there is nothing to retry with. The posts went out; say so once.
+                log("NO attempt_key in %s - cannot name its alert; left for a hand resolve" % tag)
+            elif not all([resolve_key("deploy-in-window:%s:%s:%s" % (b, f.get("sha"), key_t), ev) for b, _, _ in windows(f)]):
                 continue                    # retried next run; the posts are not repeated
         del st["pending"][tag]
         log("OUTCOME %s %s" % (tag, "completed" if p["completed"] else "NOT completed"))

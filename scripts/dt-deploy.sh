@@ -262,11 +262,17 @@ esac
 IN_WINDOW=$(printf '%s\n' "$WIN_OUT" | grep -E '^IN_WINDOW ' | cut -d' ' -f2 || true)
 [ -n "$IN_WINDOW" ] || win_refuse 4 "$OBS_WINDOWS printed no IN_WINDOW line - treated as an unusable register."
 printf '%s\n' "$WIN_OUT" | grep -E '^(WINDOW|HOLD) ' | sed 's/^/dt-deploy: register: /' || true
-printf '%s\n' "$WIN_OUT" | grep -E ' stale ' | sed 's/^WINDOW /dt-deploy: STALE WINDOW /' || true
+# C-19 (Langston, Step 4): the state is the 4th FIELD. A bare ' stale ' matched free text ("until the stale price fix
+# lands") and labelled an OPEN window stale.
+printf '%s\n' "$WIN_OUT" | grep -E '^WINDOW [^ ]+ [^ ]+ stale ' | sed 's/^WINDOW /dt-deploy: STALE WINDOW /' || true
 # Holds (Langston C-4): store the fact, derive liveness here - is each pending batch's landing sha inside $SHA?
 while read -r _ HID _ HBATCH HSHA; do
   [ -n "$HSHA" ] || continue
-  if git merge-base --is-ancestor "$HSHA" "$SHA" 2>&1; then echo "dt-deploy: hold $HID: $HBATCH becomes LIVE with this deploy"
+  # C-20 (Langston, Step 4): the parser checks only the SHAPE of landing_sha. A sha git cannot resolve is a
+  # third answer - one wrong hex character must not read as "not live" for ever. Holds never refuse.
+  if ! git rev-parse --verify --quiet "$HSHA^{commit}" >/dev/null; then
+    echo "dt-deploy: hold $HID: $HBATCH liveness CANNOT BE DETERMINED - $HSHA is not an object at origin (check the hold's landing_sha)"
+  elif git merge-base --is-ancestor "$HSHA" "$SHA"; then echo "dt-deploy: hold $HID: $HBATCH becomes LIVE with this deploy"
   else echo "dt-deploy: hold $HID: $HBATCH stays NOT live (its landing sha is not in $SHA)"; fi
 done < <(printf '%s\n' "$WIN_OUT" | grep -E '^HOLD ' || true)
 
@@ -290,10 +296,17 @@ WINDOW_NOTICE=none
 if [ "$IN_WINDOW" != none ]; then
   ATTEMPT_AT=$(date -u +%FT%TZ)
   ATTEMPT_KEY=$(date -u -d "$ATTEMPT_AT" +%Y%m%dT%H%M%SZ)
+  # C-18 (Langston, Step 4): secure the fail-closed leg FIRST. Minting before it left an orphan alert for a deploy
+  # that then refused. A grouped no-op append, because a bare exec redirection is fatal under set -e and never
+  # reaches the ||.
+  { : >> "$NOTICE"; } || win_refuse 6 "cannot write the in-window notice $NOTICE, so no owner would be told. Nothing was touched and no alert was raised. The fix is that file (disk or permission), never a hand reset."
   WINDOW_NOTICE=alerted
+  # The unquoted split is safe ONLY because obs-windows' BATCH regex and OWNERS fix the characters (no space, no
+  # glob). Loosen either and this hands word-splitting a glob (Langston, Step 4).
   for W in ${IN_WINDOW//,/ }; do
     WB=${W%%/*}; WREST=${W#*/}; WO=${WREST%%/*}; WS=${WREST#*/}
-    if ! (cd "$APP_DIR" && npm run -s system-alerts -- add --triggers-at "$ATTEMPT_AT" --category governance \
+    # C-21: a wedged mint must not hold the lock for ever (a live pid blocks the #540 break). Timeout = failure.
+    if ! (cd "$APP_DIR" && timeout 60 npm run -s system-alerts -- add --triggers-at "$ATTEMPT_AT" --category governance \
           --severity warning --dedupe-key "deploy-in-window:$WB:$SHA:$ATTEMPT_KEY" \
           --title "Deploy $SHA is STARTING inside the $WB observation window ($WS)" \
           --body "Owner $WO: a staging deploy of $SHA by $BY started at $ATTEMPT_AT inside your $WB window ($WS). The app restarts. Whether it completed is in /home/deploy/dawntrader-deploy.record (or its absence); the Helsinki deploy-notice watcher posts the outcome and resolves this alert with that evidence. Resolve, never ack. (B-DEPLOY-WINDOW-GUARD, #1249)" \
@@ -303,9 +316,10 @@ if [ "$IN_WINDOW" != none ]; then
       echo "dt-deploy: IN-WINDOW ALERT NOT RAISED for $WB (owner $WO). The notice still goes out; the daily check will raise it." >&2
     fi
   done
-  printf 'attempt_at=%s sha=%s by=%s in_window=%s window_notice=%s register_sha=%s\n' \
-    "$ATTEMPT_AT" "$SHA" "$BY" "$IN_WINDOW" "$WINDOW_NOTICE" "$REGISTER_SHA" >> "$NOTICE" \
-    || win_refuse 6 "could not append the in-window notice to $NOTICE, so no owner would be told. Nothing was touched. The fix is that file (disk or permission), never a hand reset."
+  # attempt_key is a FIELD so the watcher joins on it, never on a reformatted time or a line offset (Langston).
+  printf 'attempt_at=%s attempt_key=%s sha=%s by=%s in_window=%s window_notice=%s register_sha=%s\n' \
+    "$ATTEMPT_AT" "$ATTEMPT_KEY" "$SHA" "$BY" "$IN_WINDOW" "$WINDOW_NOTICE" "$REGISTER_SHA" >> "$NOTICE" \
+    || win_refuse 6 "could not append the in-window notice to $NOTICE although it was writable a moment ago. No deploy step ran, but the alert(s) above may exist: resolve them citing this refusal. The fix is that file (disk or permission), never a hand reset."
   echo "dt-deploy: in-window notice written for $IN_WINDOW (alert: $WINDOW_NOTICE)"
 fi
 
