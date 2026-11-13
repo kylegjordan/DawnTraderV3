@@ -59,7 +59,20 @@ import {
   cutoverForTable,
 } from '../services/data-archive/daily-partition-cutover.js';
 
-const LOG_DIR = '/var/log/dawntrader';
+// Step-7 plants (AP-7 plan item 7): three overrides, all unset in production — a log folder holding planted copies,
+// a planted crontab file instead of `sudo -n crontab -l`, and a dry flag that logs each alert instead of raising it.
+const LOG_DIR = process.env.ARCHIVAL_HEALTH_LOG_DIR || '/var/log/dawntrader';
+const CRONTAB_FILE = process.env.ARCHIVAL_HEALTH_CRONTAB_FILE || '';
+const DRY = process.env.ARCHIVAL_HEALTH_DRY === '1';
+
+/** Every alert goes through here, so the dry flag cannot miss one. */
+async function raise(input: Parameters<typeof addAlert>[0]): Promise<void> {
+  if (DRY) {
+    console.log(`[archival-health] DRY — would raise ${input.dedupe_key}: ${input.title}`);
+    return;
+  }
+  await addAlert(input);
+}
 const HOUR_MS = 3_600_000;
 const DAY_MS = 24 * HOUR_MS;
 
@@ -154,7 +167,7 @@ async function fire(
   detail: string,
 ): Promise<void> {
   try {
-    await addAlert({
+    await raise({
       triggers_at: new Date(),
       category: 'health_check',
       severity: 'warning',
@@ -180,7 +193,7 @@ async function fire(
 /** One page for the whole run, on its own key (not per check): this watchdog could not read the root crontab. */
 async function fireUnverified(runs: number, why: string): Promise<void> {
   try {
-    await addAlert({
+    await raise({
       triggers_at: new Date(),
       category: 'health_check',
       severity: 'warning',
@@ -201,6 +214,7 @@ async function fireUnverified(runs: number, why: string): Promise<void> {
 /** The root crontab as text, or why it could not be read. */
 function readCrontab(): { text: string } | { text: null; why: string } {
   try {
+    if (CRONTAB_FILE) return { text: fs.readFileSync(CRONTAB_FILE, 'utf-8') };
     return { text: execFileSync('sudo', ['-n', 'crontab', '-l'], { encoding: 'utf-8', timeout: 10_000, stdio: ['ignore', 'pipe', 'pipe'] }) };
   } catch (err) {
     // The reason sudo gives is on stderr ("sudo: a password is required"); message's first line only names the
@@ -356,7 +370,7 @@ async function runCheck(spec: CheckSpec, nowMs: number): Promise<boolean> {
 /** Fire a §10.5 alert for a short/absent daily-partition runway (deduped per table). */
 async function fireRunway(table: string, detail: string): Promise<void> {
   try {
-    await addAlert({
+    await raise({
       triggers_at: new Date(),
       category: 'health_check',
       severity: 'warning',

@@ -210,4 +210,13 @@ describe('AP-7 fences — the patterns match what each subject writes (C-5, the 
     expect(checker).toMatch(/'not_started' \| 'schedule_drift' \| 'not_scheduled'/);
     expect(checker).toContain("dedupe_key: 'archival-health-crontab-schedule_unverified'");
   });
+  it('the Step-7 overrides: every alert passes the dry gate, and the overrides default to production', () => {
+    // one addAlert call in the whole script, inside raise(); everything else calls raise()
+    expect((checker.match(/addAlert\(/g) ?? []).length).toBe(1); // the one call, inside raise()
+    expect(checker).toContain('await addAlert(input);');
+    expect(checker).toMatch(/if \(DRY\) \{[\s\S]{0,160}return;\s*\}\s*await addAlert\(input\);/);
+    expect(checker).toContain("const LOG_DIR = process.env.ARCHIVAL_HEALTH_LOG_DIR || '/var/log/dawntrader';");
+    expect(checker).toContain("const DRY = process.env.ARCHIVAL_HEALTH_DRY === '1';");
+    expect(checker).toContain("if (CRONTAB_FILE) return { text: fs.readFileSync(CRONTAB_FILE, 'utf-8') };");
+  });
 });
