@@ -8,5 +8,7 @@ ExecStart=/usr/local/bin/coltrane-size-watch
 # ⛔ NO ExecStartPost heartbeat (B-SIZE-WATCH-BREACH-ALARM, rule 18). The old `--heartbeat` ran here, inside this
 #    same unit straight after the measurement, so it only ever ran when the watch was alive and could never
 #    report a dead one. The watch now arms a staging alert 26 h out on every run; a missed run fires it.
-# ⚠️ A BREACH EXITS 1 BY DESIGN, so the unit must not treat that as a unit failure.
-SuccessExitStatus=0 1
+# ⚠️ A BREACH EXITS 1 AND A MISSING FILE EXITS 4 BY DESIGN - the watch ran and FOUND a fault, which its own alert
+#    row now carries (B-SIZE-WATCH-BREACH-ALARM). Without 4 here the drop-in onfailure.conf would ALSO page
+#    "the watch failed" for a run that worked: two pages for one condition (Langston, Step 4). A crash exits 2.
+SuccessExitStatus=0 1 4

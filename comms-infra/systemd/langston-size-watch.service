@@ -6,7 +6,8 @@ After=network-online.target
 [Service]
 # BREACH EXITS 1 BY DESIGN - the watch ran correctly and FOUND a breach. Without this
 # line systemd marks every breach day FAILED, so a genuine crash and a correct breach
-# read identically in systemctl. Parity with coltrane-size-watch.service. 2026-09-11.
+# read identically in systemctl. (Coltrane's unit also lists 4, his missing-file exit; this watch's missing file
+# exits 1, so 0 1 is the same rule here. Not literal parity - corrected 2026-11-13, B-SIZE-WATCH-BREACH-ALARM.)
 SuccessExitStatus=0 1
 Type=oneshot
 ExecStart=/usr/local/bin/langston-size-watch

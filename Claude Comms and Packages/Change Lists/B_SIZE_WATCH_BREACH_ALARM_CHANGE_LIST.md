@@ -138,3 +138,8 @@ New and changed fixtures:
 - mutations **15/15 caught by an assertion, 0 crashed or unapplied**. The three new mutants are the broad discharge scan, an `lsattr` guard that catches the wrong exception, and the ENOENT branch removed. Each fails on its own fixture.
 
 **STEP: 4 of 11 — r2 for review.**
+
+## Step 4 r2 — PROCEED (Langston, Discord `1570818119545520294`), with one finding folded in before the install
+- **His own positive control:** a real resolve of an unknown id over the production transport → rc 1, empty stdout, stderr exactly `Alert 00000000-0000-0000-0000-000000000000 not found`. He re-ran the tests (75/0) and the mutants (15/15) himself from the ref blobs. The r1→r2 delta is only the four items.
+- **Folded (his §13 disposition 1):** Coltrane's missing-file run exits 4, outside his unit's `SuccessExitStatus=0 1`, so the drop-in `onfailure.conf` would ALSO page "the watch failed" for a run that worked: two pages for one condition. `coltrane-size-watch.service` now says `SuccessExitStatus=0 1 4` (a crash still exits 2 and pages). Langston's unit comment claimed "Parity with coltrane-size-watch.service", which is false for exit 4, so it is corrected in the comment only (his missing file exits 1, so `0 1` is the same rule there).
+- Cosmetic, recorded: the ENOENT line is `:457`, not `:456`.
