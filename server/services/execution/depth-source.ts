@@ -364,8 +364,25 @@ export function getDepthGateBlockStats(): Record<string, { count: number; lastRe
   return Object.fromEntries(_gateBlocks);
 }
 
-/** Test-only reset. */
-export function _testResetDepthGateBlocks(): void { _gateBlocks.clear(); }
+// B-PRICE-FEED-COVERAGE increment 0, Step 7 (Langston 2026-11-13, #661 leg 3): the DENOMINATOR. The block counter above
+// counts refusals only, so a window with zero blocks cannot tell "the gate ran and passed" from "the gate never ran for
+// this class". One count per open-path evaluation, per class, recorded by the sole open-path caller before it asks.
+const _gateEvaluations = new Map<string, { count: number; lastAt: number }>();
+
+/** Record one open-path depth-gate evaluation (the denominator; never throws). */
+export function recordDepthGateEvaluation(assetClass: string): void {
+  const cur = _gateEvaluations.get(assetClass) ?? { count: 0, lastAt: 0 };
+  cur.count += 1; cur.lastAt = Date.now();
+  _gateEvaluations.set(assetClass, cur);
+}
+
+/** Snapshot the depth-gate evaluation counters, keyed by asset class (for diagnostics + tests). */
+export function getDepthGateEvaluationStats(): Record<string, { count: number; lastAt: number }> {
+  return Object.fromEntries(_gateEvaluations);
+}
+
+/** Test-only reset (both the block counter and its denominator). */
+export function _testResetDepthGateBlocks(): void { _gateBlocks.clear(); _gateEvaluations.clear(); }
 
 export interface SufficiencyResult { sufficient: boolean; availableNotional: number; reason: string; }
 

@@ -152,6 +152,51 @@ describe('Step-7 exact dispatch boundary — authenticated, read-only production
   });
 });
 
+describe('Step-7 depth-gate DENOMINATOR (Langston 2026-11-13, #661 leg 3) — evaluations counted beside blocks', () => {
+  it('records one evaluation per call, per class, and the test reset clears it with the blocks', async () => {
+    const ds = await import('../../services/execution/depth-source.js');
+    ds._testResetDepthGateBlocks();
+    expect(ds.getDepthGateEvaluationStats()).toEqual({});
+    ds.recordDepthGateEvaluation('xstock_spot');
+    ds.recordDepthGateEvaluation('xstock_spot');
+    ds.recordDepthGateEvaluation('crypto_spot');
+    const ev = ds.getDepthGateEvaluationStats();
+    expect(ev.xstock_spot.count).toBe(2);
+    expect(ev.crypto_spot.count).toBe(1);
+    ds.recordDepthGateBlock('xstock_spot', 'cold_tick absent');
+    expect(ds.getDepthGateBlockStats()['xstock_spot:cold_tick'].count).toBe(1);
+    ds._testResetDepthGateBlocks();
+    expect(ds.getDepthGateEvaluationStats()).toEqual({});
+    expect(ds.getDepthGateBlockStats()).toEqual({});
+  });
+  const eng = readFileSync(join(__dirname, '../../services/active-execution-engine.ts'), 'utf8');
+  it('the open path counts the evaluation EXACTLY ONCE, on the line immediately before it asks the gate', () => {
+    expect(eng.split('recordDepthGateEvaluation(').length - 1).toBe(1);
+    const call = eng.indexOf('recordDepthGateEvaluation(_openClass);');
+    const gate = eng.indexOf('const _gate = await this._evaluateOpenDepthGate(signal.symbol, _openClass,');
+    expect(call).toBeGreaterThan(0);
+    expect(gate).toBeGreaterThan(call);
+    expect(eng.slice(call, gate).split('\n').length).toBe(2); // adjacent lines: nothing can return between them
+  });
+  const routes = readFileSync(join(__dirname, '../../routes.ts'), 'utf8');
+  const a = routes.indexOf("apiRouter.get('/active-engine/diagnostics/depth-gate'");
+  const end = routes.indexOf('\n  });', a);
+  const body = routes.slice(a, end);
+  it('CONTROL: the depth-gate route body was located', () => {
+    expect(a).toBeGreaterThan(0);
+    expect(end).toBeGreaterThan(a);
+    expect(body.length).toBeGreaterThan(300);
+  });
+  it('is authenticated, reads both getters, and carries the same-process controls', () => {
+    expect(body).toMatch(/depth-gate', authenticateToken/);
+    expect(body).toMatch(/evaluations: getDepthGateEvaluationStats\(\)/);
+    expect(body).toMatch(/blocks: getDepthGateBlockStats\(\)/);
+    expect(body).toMatch(/res\.set\('Cache-Control', 'no-store, max-age=0'\)/);
+    expect(body).toMatch(/processPid: process\.pid/);
+    expect(body).toMatch(/processUptimeSeconds: process\.uptime\(\)/);
+  });
+});
+
 describe('no control characters in increment 0\'s own files (the heredoc-backspace corruption class)', () => {
   // Same detector as b-xstock-feed-sanity-fence.test.ts's F-CTRL, which covers THAT batch's files only (Langston r3 note).
   const CONTROL = /[\x00-\x08\x0B\x0C\x0E-\x1F]/;
