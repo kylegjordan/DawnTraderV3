@@ -158,8 +158,11 @@ describe('P4 — the economic test at the price paid, wired at both arms', () =>
     expect(resolve).toBeGreaterThan(0);
     expect(fill).toBeGreaterThan(resolve);
     expect(src).toMatch(/_ewWorseSide = getCachedNumberRequired\('entry_gate', 'entry_window_worse_side_frac', _ewKey\)/);
-    expect(src).toMatch(/const frictionCoverageK = getCachedNumberRequired\('entry_gate', 'entry_friction_coverage_k', ck\)/);
-    expect(src).toMatch(/if \(frictionCoverageK < 0\) throw new Error/);
+    // Increment B moved the resolver to the shared module (fill-econ-inputs.ts); the engine delegates to it.
+    expect(src).toMatch(/return resolveFillEconInputs\(signal, assetClass\);/);
+    const shared = stripComments(readFileSync(new URL('../../services/fill-econ-inputs.ts', import.meta.url), 'utf8'));
+    expect(shared).toMatch(/const frictionCoverageK = getCachedNumberRequired\('entry_gate', 'entry_friction_coverage_k', ck\)/);
+    expect(shared).toMatch(/if \(frictionCoverageK < 0\) throw new Error/);
     expect(src).toMatch(/catch \(settingsErr\) \{[\s\S]{0,400}recordOpenFailed\(signal\.symbol, signal\.strategy, 'FILL_ECONOMICS', why\)[\s\S]{0,120}return \{ opened: false/);
     // no settings read left between the fill and the window decision
     const seg = src.slice(fill, src.indexOf("stage: 'ENTRY_WINDOW'"));

@@ -17,9 +17,10 @@ const inputs: FillEconInputs = {
   costs: { fee: 0.004, slippage: 0.0005, spread: 0.001 } as any, feeRateMaker: 0.002, feeRateTaker: 0.004,
   DI: 20, sourcePool: undefined, dbsScore: undefined, minPWin: 0.40, maxPWin: 0.60, diPWinFactor: 200,
   signalStrength: 0.3, urgencyClass: 'neutral', haircut, measuredBasePWin: 0.317,
+  frictionCoverageK: 0, levelGeometry: 'mid',
 };
 const at = (ask: number, policy: 'maker_only' | 'maker_preferred', over: Partial<FillEconInputs> = {}) =>
-  repriceAtAsk({ inputs: { ...inputs, ...over }, planEntry: 100, ask, worseSideFrac: 0.25, policy });
+  repriceAtAsk({ inputs: { ...inputs, ...over }, planEntry: 100, planEntryMaker: 100, ask, worseSideFrac: 0.25, policy });
 
 describe('P6 — the taker arm is the open\'s own test at today\'s ask', () => {
   it('takerNetEvAtAsk equals the fill test at that price (same composition as at the open)', () => {
@@ -64,7 +65,23 @@ describe('P6 — the class policy decides, as at birth', () => {
   });
   it('bad prices throw rather than guess', () => {
     expect(() => at(Number.NaN, 'maker_only')).toThrow(/ask/);
-    expect(() => repriceAtAsk({ inputs: { ...inputs, targetPrice: Number.NaN }, planEntry: 100, ask: 100, worseSideFrac: 0.25, policy: 'maker_only' })).toThrow(/targetPrice/);
+    expect(() => repriceAtAsk({ inputs: { ...inputs, targetPrice: Number.NaN }, planEntry: 100, planEntryMaker: 100, ask: 100, worseSideFrac: 0.25, policy: 'maker_only' })).toThrow(/targetPrice/);
+  });
+});
+
+describe('P6 rebased onto row 8c — the maker arm prices the triple it is given', () => {
+  it('a sided triple is priced at its recorded maker entry with sided friction, not as mid at the plan', () => {
+    const mid = repriceAtAsk({ inputs, planEntry: 100, planEntryMaker: 100, ask: 100, worseSideFrac: 0.25, policy: 'maker_preferred' });
+    const sided = repriceAtAsk({ inputs: { ...inputs, levelGeometry: 'sided' }, planEntry: 100, planEntryMaker: 99.95, ask: 100, worseSideFrac: 0.25, policy: 'maker_preferred' });
+    expect(sided.makerNetEVAdjusted).not.toBe(mid.makerNetEVAdjusted);
+  });
+  it('a bad maker entry throws rather than guess', () => {
+    expect(() => repriceAtAsk({ inputs, planEntry: 100, planEntryMaker: Number.NaN, ask: 100, worseSideFrac: 0.25, policy: 'maker_only' })).toThrow(/planEntryMaker/);
+  });
+  it('the refresh reads the maker entry through the one reader; a sided stamp without it is no decision', () => {
+    const src = readFileSync('server/core/rtb/ready_to_buy_service.ts', 'utf-8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+    expect(src).toMatch(/const _rpxMaker = makerEntryOf\(signal\.metadata\);\s*if \(_rpxInputs\.levelGeometry === 'sided' && _rpxMaker === null\) throw new Error/);
+    expect(src).toMatch(/planEntryMaker: _rpxInputs\.levelGeometry === 'sided' \? _rpxMaker as number : Number\(signal\.entryPrice\),/);
   });
 });
 
@@ -75,8 +92,11 @@ describe('P6 — the refresh wiring, proved at the source', () => {
     const rp = src.indexOf('_rpx = repriceAtAsk({');
     expect(retire).toBeGreaterThan(0);
     expect(rp).toBeGreaterThan(retire);
-    expect(src.slice(rp - 120, rp)).toMatch(/if \(_rpAsk\.ok\) \{\s*try \{\s*$/);
-    expect(src).toMatch(/inputs: resolveFillEconInputs\(signal as any, sqeAssetClass\)/);
+    const ri = src.indexOf('const _rpxInputs = resolveFillEconInputs(signal as any, sqeAssetClass);');
+    expect(ri).toBeGreaterThan(retire);
+    expect(rp).toBeGreaterThan(ri);
+    expect(src.slice(ri - 120, ri)).toMatch(/if \(_rpAsk\.ok\) \{\s*try \{\s*$/);
+    expect(src).toMatch(/inputs: _rpxInputs,/);
     expect(src).toMatch(/policy: resolveFillPolicy\(sqeAssetClass, 'entry'\)/);
   });
   it('the re-price feeds the SQE sign check and, when admitted, the stored snapshot', () => {

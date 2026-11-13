@@ -145,7 +145,9 @@ describe('8c P4 (amendment 5) — the spread is counted once at every site that 
     expect(R).not.toMatch(/levelGeometry: 'mid' as const/);
     expect(R).toContain('levelGeometry: levelGeometryOf(meta), // row `8c` P4 (S5)');
     expect(E).toContain('levelGeometry: levelGeometryOf(signal.metadata), // row `8c` P4 (S6)');
-    expect(E).toContain('levelGeometry: levelGeometryOf(signal.metadata), // row `8c` P4 (S7)');
+    // S7 moved with the resolver to the shared module (B-ENTRY-GATE inc B), which the open and the queue re-price both call.
+    expect(E).toContain('return resolveFillEconInputs(signal, assetClass);');
+    expect(src('server/services/fill-econ-inputs.ts')).toContain('levelGeometry: levelGeometryOf(signal.metadata), // row `8c` P4 (S7)');
     expect(F).toContain('levelGeometry: i.levelGeometry,');
     expect(F).not.toMatch(/levelGeometry: 'mid',/);
     expect(F).toContain("? composeAskEntrySidedExitFriction(i.costs.fee, i.costs.slippage)");

@@ -1082,9 +1082,15 @@ class ReadyToBuyService {
                 // A missing setting is LOUD and also no decision — it never invents a value.
                 if (_rpAsk.ok) {
                   try {
+                    const _rpxInputs = resolveFillEconInputs(signal as any, sqeAssetClass);
+                    // Row `8c` (S4): a sided triple's maker arm rests at the bid recorded at the build; a sided stamp without it
+                    // throws → REPRICE_UNRESOLVED below (no decision on price), never a guessed maker entry.
+                    const _rpxMaker = makerEntryOf(signal.metadata);
+                    if (_rpxInputs.levelGeometry === 'sided' && _rpxMaker === null) throw new Error('row 8c: sided triple without a recorded maker entry');
                     _rpx = repriceAtAsk({
-                      inputs: resolveFillEconInputs(signal as any, sqeAssetClass),
+                      inputs: _rpxInputs,
                       planEntry: Number(signal.entryPrice),
+                      planEntryMaker: _rpxInputs.levelGeometry === 'sided' ? _rpxMaker as number : Number(signal.entryPrice),
                       ask: _rpAsk.ask,
                       worseSideFrac: getCachedNumberRequired('entry_gate', 'entry_window_worse_side_frac',
                         { exchange: '*', assetClass: sqeAssetClass, strategy: '*', regime: '*' }),
