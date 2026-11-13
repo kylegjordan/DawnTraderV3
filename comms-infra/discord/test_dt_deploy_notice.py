@@ -48,31 +48,32 @@ class World:
     def __init__(self):
         self.notice = []
         self.record = {"sha": OTHER, "deployed_at": "2027-01-14T08:00:00Z", "deployed_via": "deploy@x via root"}
-        self.posts, self.resolves, self.adds, self.hb = [], [], [], []
+        self.posts, self.resolves, self.adds, self.hb, self.notifies = [], [], [], [], []
         self.post_ok, self.resolve_ok, self.ssh_ok = True, True, True
 
 
 def wire(m, w, clock):
     m.STATE, m.LOG, m.NOW = os.path.join(D, "state.json"), os.path.join(D, "log"), clock
 
-    def ssh(cmd, timeout=120):
+    def request(req, timeout=180):
         if not w.ssh_ok:
             return None, "unreachable"
-        if "resolve-key" in cmd:
-            (w.hb if "heartbeat" in cmd else w.resolves).append(cmd)
-            return ("ok", None) if w.resolve_ok else (None, "exit 1")
-        if " add " in cmd:
-            w.adds.append(cmd)
-            return "ok", None
+        if req["op"] == "resolve":
+            (w.hb if req["key"] == m.HEARTBEAT_KEY else w.resolves).append(req)
+            return ('{"dedupe_key": "%s", "resolved": ["r1"]}' % req["key"], None) if w.resolve_ok else (None, "exit 1")
+        if req["op"] == "heartbeat":
+            w.adds.append(req)
+            return "{}", None
         rec = "\n".join("%s=%s" % kv for kv in w.record.items())
         return "\n".join(w.notice) + ("\n" if w.notice else "") + m.SEP + "\n" + rec + "\n", None
 
-    def post(text):
+    def post(text, notify=False):
         if not w.post_ok:
             return None
         w.posts.append(text)
+        w.notifies.append(notify)
         return str(900 + len(w.posts))
-    m.ssh, m.post = ssh, post
+    m.request, m.post = request, post
 
 
 def line(sha, at, in_window, notice="alerted"):
@@ -117,12 +118,12 @@ def suite():
     m.run()
     check("the record shows the sha after the attempt -> a COMPLETED post to the same owners",
           len(w.posts) == 2 and "COMPLETED" in w.posts[1] and wakes(w.posts[1]) == {"CC-B", "CC-A"}, w.posts)
-    keys = sorted(c.split("resolve-key ")[1].split(" ")[0].strip("'") for c in w.resolves)
+    keys = sorted(r["key"] for r in w.resolves)
     check("... and resolves each window's alert by its exact key, as the machine actor",
           keys == sorted(["deploy-in-window:B-X:%s:20270115T080000Z" % SHA, "deploy-in-window:B-Y:%s:20270115T080000Z" % SHA])
-          and all("--by deploy-notice-watcher" in c for c in w.resolves), w.resolves)
-    check("... the evidence cites the record and both post ids", w.resolves and "deployed_at=2027-01-15T08:04:00Z" in w.resolves[0]
-          and "901,902" in w.resolves[0], w.resolves)
+          and all(r["op"] == "resolve" for r in w.resolves), w.resolves)
+    check("... the evidence cites the record and both post ids", w.resolves and "deployed_at=2027-01-15T08:04:00Z" in w.resolves[0]["evidence"]
+          and "901,902" in w.resolves[0]["evidence"], w.resolves)
     n = len(w.posts)
     wire(m, w, T0 + 720)
     m.run()
@@ -137,7 +138,7 @@ def suite():
     m.run()
     check("no record within 30 min -> DID NOT COMPLETE, to the owner", "DID NOT COMPLETE" in w.posts[-1]
           and wakes(w.posts[-1]) == {"CC-B"}, w.posts[-1])
-    check("... and its alert is resolved citing that", len(w.resolves) == 1 and "did not complete" in w.resolves[0], w.resolves)
+    check("... and its alert is resolved citing that", len(w.resolves) == 1 and "did not complete" in w.resolves[0]["evidence"], w.resolves)
 
     # an OLDER deploy of the same sha is not this attempt's completion
     w.resolves.clear()
@@ -157,8 +158,19 @@ def suite():
     w2.record = {"sha": SHA, "deployed_at": "2027-01-15T08:05:00Z"}
     wire(m, w2, T0 + 400); m.run()
     check("notice-only: the start post says the alert could NOT be raised", "COULD NOT BE RAISED" in w2.posts[0], w2.posts)
-    check("notice-only: completed is posted and NOTHING is resolved (there is no alert)",
-          len(w2.posts) == 2 and w2.resolves == [], (w2.posts, w2.resolves))
+    check("B-1: notice-only: completed is posted AND the resolve is still attempted (a MIXED line may hold a minted row)",
+          len(w2.posts) == 2 and [r["key"] for r in w2.resolves] == ["deploy-in-window:B-X:%s:20270115T080000Z" % SHA],
+          (w2.posts, w2.resolves))
+    fresh(); w8 = World(); w8.notice = []
+    wire(m, w8, T0); m.run()
+    w8.notice.append(line(SHA, ISO0, "B-X/cc-b/open,B-C/codex-b/open", notice="notice-only"))
+    wire(m, w8, T0 + 30); m.run()
+    check("C-2: a notice-only post with a non-session co-owner never claims the alert reached every session",
+          w8.posts and "codex-b" in w8.posts[0] and "reaches every session" not in w8.posts[0]
+          and "could NOT be raised" in w8.posts[0], w8.posts)
+    w8.notice.append(line(SHA, "2027-01-15T08:10:00Z", "B-X/cc-b/open,B-C/codex-b/open"))
+    wire(m, w8, T0 + 700); m.run()
+    check("C-2 control: the same co-owner on an ALERTED line does get the reassurance", "reaches every session" in w8.posts[-1], w8.posts[-1:])
 
     # owners with no session: the post wakes nobody, and says so
     fresh(); w3 = World(); w3.notice = []
@@ -207,11 +219,27 @@ def suite():
     # heartbeat: armed once per UTC day, due 26 h out
     fresh(); w5 = World()
     wire(m, w5, T0); m.run(); m.run()
-    check("heartbeat: armed once per day, not every run", len(w5.adds) == 1 and "--dedupe-key deploy-notice-watcher-heartbeat" in w5.adds[0],
-          w5.adds)
-    check("heartbeat: due 26 h ahead", m.iso(T0 + 26 * 3600) in w5.adds[0], w5.adds)
+    check("heartbeat: armed once per day, not every run", len(w5.adds) == 1 and w5.adds[0]["op"] == "heartbeat", w5.adds)
+    check("heartbeat: due 26 h ahead", w5.adds[0]["due"] == m.iso(T0 + 26 * 3600), w5.adds)
     wire(m, w5, T0 + 86400); m.run()
     check("heartbeat: re-armed the next day", len(w5.adds) == 2, w5.adds)
+    # C-1: a Kyle-owned window puts Kyle IN the opening list and @-mentions him; PM Claude can own a window
+    fresh(); w6 = World(); w6.notice = []
+    wire(m, w6, T0); m.run()
+    w6.notice.append(line(SHA, ISO0, "B-K/kyle/open,B-P/pm-claude/open,B-L/langston/open"))
+    wire(m, w6, T0 + 30); m.run()
+    check("C-1: a kyle-owned window -> Kyle in the opening list and the post @-mentions him (notify)",
+          w6.posts and w6.posts[0].startswith("Kyle, PM Claude") and w6.notifies == [True], (w6.posts, w6.notifies))
+    check("PM Claude owns a window -> the post wakes CC-PM (Kyle is list-only; Langston is named in the tail, not woken)",
+          wakes(w6.posts[0]) == {"CC-PM", "KYLE"} and "langston" in w6.posts[0], w6.posts and wakes(w6.posts[0]))
+    # B-1: a MIXED line - two windows, line says notice-only - resolves BOTH keys
+    fresh(); w7 = World(); w7.notice = []
+    wire(m, w7, T0); m.run()
+    w7.notice.append(line(SHA, ISO0, "B-A/cc-a/open,B-B/cc-b/open", notice="notice-only"))
+    w7.record = {"sha": SHA, "deployed_at": "2027-01-15T08:05:00Z"}
+    wire(m, w7, T0 + 400); m.run()
+    check("B-1: a MIXED two-window notice-only line resolves BOTH windows' keys (the minted one is not orphaned)",
+          sorted(r["key"].split(":")[1] for r in w7.resolves) == ["B-A", "B-B"], w7.resolves)
     print("dt-deploy-notice suite: %d passed, %d failed" % (PASS, FAIL))
     return 1 if FAIL else 0
 
@@ -221,7 +249,9 @@ MUTATIONS = [
     ("an older deploy of the sha counts as completion", "and parse_iso(rec[\"deployed_at\"]) >= started)", ")"),
     ("no 30-min not-completed", "if not done and now() - started < OUTCOME_WAIT_S:", "if not done:"),
     ("a failed post skips the line", "            failed = True\n            break", "            failed = True\n            st[\"seen\"] += 1\n            break"),
-    ("notice-only lines resolve too", '        if f.get("window_notice") == "alerted":', "        if True:"),
+    ("B-1: the resolve is guarded on alerted again", "        if True:\n            ev = (", '        if f.get("window_notice") == "alerted":\n            ev = ('),
+    ("C-1: Kyle is not put in the opening list", 'n = WAKE_NAME.get(o) or ("Kyle" if o == KYLE else None)', "n = WAKE_NAME.get(o)"),
+    ("C-2: the reassurance is unconditional", 'reach = "the alert reaches every session" if alerted else', 'reach = "the alert reaches every session" if True else'),
     ("outcome re-posted on retry", '        if "outcome_post" not in p:', "        if True:"),
     ("first run posts", '        log("INIT %d existing notice line(s), silent" % len(lines))', '        st["seen"] = 0'),
     ("heartbeat every run", '    if st.get("heartbeat_day") == day:\n        return', '    if False:\n        return'),

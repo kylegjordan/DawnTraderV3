@@ -161,7 +161,7 @@ def suite(path):
             fails += 1
             print("FAIL absent    %-40s %r must not appear" % (label, absent))
     if tuple(m.OWNERS) != ("cc-a", "cc-b", "cc-c", "cc-infra", "codex-a", "codex-b", "codex-c", "codex-infra",
-                           "kyle", "langston", "coltrane"):
+                           "kyle", "langston", "coltrane", "pm-claude", "pm-codex"):
         fails += 1
         print("FAIL owners tuple changed - the parity test in server/tests/unit is the authority; update both")
     total = len(BAD) + len(CHECK) + len(NOT_IN) + 1

@@ -8,5 +8,7 @@ User=langston
 Environment=HOME=/home/langston
 # /var/lib/dt-deploy-notice, owned by langston, created by systemd: the watcher's state (lines seen, pending outcomes).
 StateDirectory=dt-deploy-notice
+# B-2 (Langston, gate B): /var/log is root:syslog, so langston cannot create a file there. systemd creates this dir.
+LogsDirectory=dt-deploy-notice
 ExecStart=/usr/bin/python3 /usr/local/bin/dt-deploy-notice
 TimeoutStartSec=600

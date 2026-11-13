@@ -50,9 +50,12 @@ RUNUSER = ["/usr/sbin/runuser", "-u"]
 SYSTEMCTL = "/usr/bin/systemctl"
 # B-DEPLOY-WINDOW-GUARD: how the deploy_windows check raises its own alerts - as deploy, in the app dir, a clean env
 # (runuser keeps root's HOME, and npm would then write root's cache). A test substitutes a recorder.
-ALERT_ADD = ["/usr/bin/env", "-i", "HOME=/home/deploy", "PATH=/usr/bin:/bin", "/usr/bin/npm", "run", "-s",
-             "system-alerts", "--", "add"]
+# B-3 (Langston, gate B): under /usr/bin/timeout -k - subprocess.run's own timeout kills only the direct child, so a
+# wedged npm/node would live on holding the alerts lock (measured). timeout kills the group.
+ALERT_NPM = ["/usr/bin/timeout", "-k", "10", "120", "/usr/bin/env", "-i", "HOME=/home/deploy", "PATH=/usr/bin:/bin",
+             "/usr/bin/npm", "run", "-s", "system-alerts", "--"]
 # ── END CONSTANTS ──
+ALERTS_FILE = "/var/log/dawntrader/system-alerts.jsonl"   # read through P(), like every other path
 
 GIT_ENV = ["/usr/bin/env", "-i", "PATH=/usr/bin:/bin", "HOME=/nonexistent", "GIT_CONFIG_NOSYSTEM=1"]
 INSTALLED_SHA = "/var/lib/dt-install-drift/installed.sha"
@@ -95,8 +98,10 @@ BOXES = {
             # install itself; this is what notices when the installed copy is not the reviewed one.
             ("scripts/dt-deploy.sh", "/usr/local/bin/dt-deploy", 0o755, "root", "root"),
             ("scripts/obs-windows.py", "/usr/local/bin/dt-obs-windows", 0o755, "root", "root"),
+            # the deploy-notice watcher's forced command (Langston gate B attack 1)
+            ("comms-infra/staging/dt-deploy-notice-gate", "/usr/local/bin/dt-deploy-notice-gate", 0o755, "root", "root"),
         ],
-        "pending_days": {"scripts/dt-deploy.sh": 1, "scripts/obs-windows.py": 1},
+        "pending_days": {"scripts/dt-deploy.sh": 1, "scripts/obs-windows.py": 1, "comms-infra/staging/dt-deploy-notice-gate": 1},
         "dirs": [
             ("/etc/dt-api", 0o750, "root", "dtapi"),
             ("/var/lib/dt-api", 0o700, "dtapi", "dtapi"),
@@ -143,8 +148,12 @@ BOXES = {
             ("comms-infra/systemd/dt-deploy-notice.service", "/etc/systemd/system/dt-deploy-notice.service", 0o644, "root", "root"),
             ("comms-infra/systemd/dt-deploy-notice.timer", "/etc/systemd/system/dt-deploy-notice.timer", 0o644, "root", "root"),
         ],
+        # C-3 (Langston, gate B): the delivery leg gets the same 1-day grace as the deploy guard it serves.
+        "pending_days": {"comms-infra/discord/dt-deploy-notice.py": 1},
         "dirs": [("/var/lib/dt-install-drift", 0o755, "root", "root"),
-                 ("/var/lib/dt-deploy-notice", 0o755, "langston", "langston")],
+                 ("/var/lib/dt-deploy-notice", 0o755, "langston", "langston"),
+                 # B-2: the watcher's LogsDirectory - a wrong owner or mode is a daily PERM line
+                 ("/var/log/dt-deploy-notice", 0o755, "langston", "langston")],
         "private": [("/root/.ssh/dtmint_ed25519", 0o600, "root", "root"),
                     ("/var/lib/dt-install-drift/installed.sha", 0o644, "root", "root")],
         "units": {"agent-staging-session.service": (SS + "agent-staging-session.service", [SS + "agent-staging-session.service.d/onfailure.conf"]),
@@ -302,7 +311,7 @@ def check_units(box):
 def raise_alert(key, title, body, meta):
     """One governance alert, as deploy, idempotent on its key while unresolved (system-alerts.ts addAlert dedupe).
     Returns None on success, else a short reason. Never raises."""
-    cmd = RUNUSER + ["deploy", "--"] + ALERT_ADD + [
+    cmd = RUNUSER + ["deploy", "--"] + ALERT_NPM + ["add",
         "--triggers-at", time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "--category", "governance",
         "--severity", "warning", "--dedupe-key", key, "--title", title, "--body", body,
         "--metadata", json.dumps(meta, sort_keys=True)]
@@ -311,6 +320,30 @@ def raise_alert(key, title, body, meta):
     except (subprocess.TimeoutExpired, OSError) as e:
         return type(e).__name__
     return None if r.returncode == 0 else "exit %d" % r.returncode
+
+
+def resolve_alert_key(key, evidence):
+    """Resolve every non-terminal row with this key, as the machine actor dt-install-drift. None, or a reason."""
+    cmd = RUNUSER + ["deploy", "--"] + ALERT_NPM + ["resolve-key", key, "--by", "dt-install-drift", "--evidence", evidence]
+    try:
+        r = subprocess.run(cmd, cwd=P(APP_DIR), capture_output=True, timeout=180)
+    except (subprocess.TimeoutExpired, OSError) as e:
+        return type(e).__name__
+    return None if r.returncode == 0 else "exit %d" % r.returncode
+
+
+def open_alert_keys(prefix):
+    """Dedupe keys with this prefix whose LATEST row (rows merged by id) is not resolved. Root reads the file."""
+    last = {}
+    with open(P(ALERTS_FILE), encoding="utf-8", errors="replace") as fh:
+        for ln in fh:
+            try:
+                d = json.loads(ln)
+            except ValueError:
+                continue
+            if isinstance(d, dict) and str(d.get("dedupe_key") or "").startswith(prefix):
+                last[d.get("id")] = d
+    return {d["dedupe_key"] for d in last.values() if d.get("state") != "resolved"}
 
 
 def deploy_windows(box):
@@ -330,6 +363,7 @@ def deploy_windows(box):
 def _deploy_windows(box):
     text, err = git(box, "show", "%s:%s" % (box["ref"], REGISTER_PATH))
     stale = []
+    census_ok = False
     if text is None:
         out("STATE", "the observation-window register %s is unreadable at the branch head (%s), so every deploy is "
             "now refused (dt-deploy exit 4)" % (REGISTER_PATH, err), "WINDOWS", "deploy-windows-register")
@@ -347,6 +381,7 @@ def _deploy_windows(box):
             out("STATE", "%s could not read the register (%s): %s" % (OBS_WINDOWS, rc, se.strip()[:160]),
                 "WINDOWS", "deploy-windows-alert")
         else:
+            census_ok = True
             stale = [ln.split(" ", 3) for ln in so.splitlines() if ln.startswith("STALE ")]
     failed = []
     for _, batch, owner, why in stale:
@@ -359,6 +394,18 @@ def _deploy_windows(box):
                            {"batch": batch, "owner": owner, "reason": why})
         if why_:
             failed.append("stale %s (%s)" % (batch, why_))
+    # Attack (2) (Langston, gate B): the mirror of the daily re-raise. A window that is NO LONGER stale (its owner
+    # amended review_by, or closed it) leaves its active row with no clearing instrument - so resolve every open
+    # deploy-window-stale:* key that is not in THIS run's stale set, citing the register ref. Only when the census
+    # actually ran (text is not None and rc 0): an unreadable register must never clear an alert.
+    if text is not None and census_ok:
+        now_stale = {"deploy-window-stale:%s" % b for _, b, _, _ in stale}
+        for key in sorted(open_alert_keys("deploy-window-stale:") - now_stale):
+            why_ = resolve_alert_key(key, "no longer stale in %s at %s (dt-install-drift deploy_windows)" % (REGISTER_PATH, box["ref"]))
+            if why_:
+                failed.append("clear %s (%s)" % (key, why_))
+            else:
+                out("OK", "deploy_windows: %s is no longer stale - resolved" % key)
     raised = set()
     try:
         raised = set(open(P(NOTICE_RAISED)).read().split())

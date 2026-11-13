@@ -14,12 +14,16 @@ WHAT IT DOES, per new notice line:
      deploy-in-window:<batch>:<sha>:<attempt> alert, citing the record and the post ids;
   3. if no such record appears within OUTCOME_WAIT_S: posts DID NOT COMPLETE (the tree may be at the new sha while
      the old build runs - the drift line does NOT catch an abort before the build stamp) and resolves, citing that.
-A notice-only line (dt-deploy could not raise the alert) gets both posts; there is no alert to resolve.
+A notice-only line gets both posts and the resolve is STILL attempted: the field is per line while the mint is per
+window, so a mixed line may hold a minted row (Langston B-1). A resolve matching nothing is a no-op; its count is logged.
+IT REACHES STAGING ONLY THROUGH ITS OWN KEY, pinned to dt-deploy-notice-gate (forced command): read, resolve its own
+two keys, arm its own heartbeat - nothing else (Langston gate B attack 1).
 THE FIRST RUN IS SILENT: it records how many lines exist and posts nothing (the dt-push-notice precedent).
 HEARTBEAT (Langston #661 leg 3): once per UTC day it resolves its previous heartbeat alert and arms the next, due
 HEARTBEAT_HOURS ahead. A watcher that stops running stops re-arming, and the armed alert fires.
 EXIT: 0 = ran (a resolve that failed is retried next run and logged) · 1 = could not read staging or post.
 """
+import base64
 import datetime
 import json
 import os
@@ -30,8 +34,12 @@ import time
 
 # ── CONSTANTS (a test harness substitutes ONLY this block) ──
 STATE = "/var/lib/dt-deploy-notice/state.json"
-LOG = "/var/log/dt-deploy-notice.log"
-SSH = ["/usr/bin/ssh", "-n", "-i", "/home/langston/.ssh/id_ed25519", "-o", "BatchMode=yes",
+# B-2 (Langston, gate B): a LogsDirectory= of the unit, langston-owned. /var/log itself is root:syslog and a
+# langston write there fails - silently, before this was fixed.
+LOG = "/var/log/dt-deploy-notice/log"
+# Attack (1): the watcher's OWN key, pinned on staging to dt-deploy-notice-gate (forced command) - never the
+# reviewer's key, which can do anything deploy can.
+SSH = ["/usr/bin/ssh", "-n", "-i", "/home/langston/.ssh/dt_deploy_notice_ed25519", "-o", "BatchMode=yes",
        "-o", "StrictHostKeyChecking=accept-new", "-o", "ConnectTimeout=20", "deploy@188.245.193.8"]
 CC_SEND = ["/usr/local/bin/cc-send", "--sender", "Deploy notice", "--message"]
 NOW = None                     # None = the wall clock; a test pins it
@@ -41,12 +49,14 @@ ACTOR = "deploy-notice-watcher"
 OUTCOME_WAIT_S = 30 * 60
 HEARTBEAT_HOURS = 26
 HEARTBEAT_KEY = "deploy-notice-watcher-heartbeat"
-NOTICE = "/home/deploy/dawntrader-deploy.notice"
-RECORD = "/home/deploy/dawntrader-deploy.record"
-APP = "/home/deploy/dawntrader"
-# Owner (canonical actor) -> the Discord display name that wakes that session. Sessions only: a reviewer in the
-# opening list would invoke the reviewer, and the Codex crew does not wake on this channel's opening list.
-WAKE_NAME = {"cc-a": "OLD Claude", "cc-b": "NEW Claude", "cc-c": "ANALYST Claude", "cc-infra": "Infra Claude"}
+# Owner (canonical actor) -> the Discord display name that wakes that session. A reviewer in the opening list would
+# invoke the reviewer, and the Codex crew does not wake on this channel's opening list, so those are named in the
+# tail. PM Claude's canonical actor is pm-claude (Langston gate B: PM must be able to own a window).
+WAKE_NAME = {"cc-a": "OLD Claude", "cc-b": "NEW Claude", "cc-c": "ANALYST Claude", "cc-infra": "Infra Claude",
+             "pm-claude": "PM Claude"}
+# C-1 (Langston, gate B): Kyle reads neither the alert queue nor an opening list he is not in. He is put IN the
+# opening list (a list-only name: it wakes no session) and the post @-mentions him (--notify, a phone push).
+KYLE = "kyle"
 SEP = "===DT-DEPLOY-NOTICE-SEP==="
 
 
@@ -63,29 +73,29 @@ def parse_iso(s):
 
 
 def log(msg):
+    line = "%s %s\n" % (iso(now()), msg)
     try:
         with open(LOG, "a") as fh:
-            fh.write("%s %s\n" % (iso(now()), msg))
-    except OSError:
-        pass
+            fh.write(line)
+    except OSError as e:          # B-2: never swallowed - the journal keeps it
+        sys.stderr.write("dt-deploy-notice: LOG UNWRITABLE (%s): %s" % (type(e).__name__, line))
 
 
-def ssh(cmd, timeout=120):
+def request(req, timeout=180):
+    """One request to staging's dt-deploy-notice-gate: a base64url JSON token, so no shell parses free text."""
+    token = base64.urlsafe_b64encode(json.dumps(req, sort_keys=True).encode()).decode()
     try:
-        r = subprocess.run(SSH + [cmd], capture_output=True, text=True, timeout=timeout)
+        r = subprocess.run(SSH + [token], capture_output=True, text=True, timeout=timeout)
     except (subprocess.TimeoutExpired, OSError) as e:
         return None, type(e).__name__
     return (r.stdout, None) if r.returncode == 0 else (None, (r.stderr.strip() or "exit %d" % r.returncode)[:200])
 
 
-def q(s):
-    return "'" + s.replace("'", "'\\''") + "'"
-
-
-def post(text):
+def post(text, notify=False):
     """Returns the Discord message id, or None."""
     try:
-        r = subprocess.run(CC_SEND + [text], capture_output=True, text=True, timeout=120)
+        r = subprocess.run(CC_SEND[:-1] + (["--notify"] if notify else []) + CC_SEND[-1:] + [text],
+                           capture_output=True, text=True, timeout=120)
     except (subprocess.TimeoutExpired, OSError) as e:
         log("POST FAILED %s" % type(e).__name__)
         return None
@@ -97,11 +107,17 @@ def post(text):
 
 
 def resolve_key(key, evidence):
-    out, err = ssh("cd %s && npm run --silent system-alerts -- resolve-key %s --by %s --evidence %s"
-                   % (APP, q(key), ACTOR, q(evidence)))
+    """True when the call succeeded. resolve-key exits 0 on ZERO matching rows (scripts/system-alerts.ts cmdResolveKey),
+    so success is not proof anything was resolved: the count is read from its JSON and LOGGED (Langston B-1)."""
+    out, err = request({"op": "resolve", "key": key, "evidence": evidence[:400]})
     if out is None:
         log("RESOLVE FAILED %s: %s" % (key, err))
         return False
+    try:
+        n = len(json.loads(out[out.index("{"):])["resolved"])
+    except (ValueError, KeyError, TypeError):
+        n = "unknown"
+    log("RESOLVED %s rows=%s" % (key, n))
     return True
 
 
@@ -119,21 +135,24 @@ def windows(f):
     return out
 
 
-def opening(owners):
+def opening(owners, alerted=True):
+    """(opening list, tail, notify Kyle?)"""
     names = []
     for o in owners:
-        n = WAKE_NAME.get(o)
+        n = WAKE_NAME.get(o) or ("Kyle" if o == KYLE else None)
         if n and n not in names:
             names.append(n)
-    others = sorted({o for o in owners if o not in WAKE_NAME})
+    others = sorted({o for o in owners if o not in WAKE_NAME and o != KYLE})
     head = ", ".join(names) if names else "Deploy notice (no session owner to wake)"
-    tail = (" Also owned by: %s (not woken from here; the alert reaches every session)." % ", ".join(others)) if others else ""
-    return head, tail
+    # C-2: the reassurance is TRUE only when the alert was raised; on a notice-only line it would contradict the post.
+    reach = "the alert reaches every session" if alerted else "and the alert could NOT be raised, so read this post"
+    tail = (" Also owned by: %s (not woken from here; %s)." % (", ".join(others), reach)) if others else ""
+    return head, tail, KYLE in owners
 
 
 def start_text(f):
     ws = windows(f)
-    head, tail = opening([o for _, o, _ in ws])
+    head, tail, _ = opening([o for _, o, _ in ws], f.get("window_notice") == "alerted")
     wl = ", ".join("%s (%s, owner %s)" % (b, s, o) for b, o, s in ws)
     alert = ("One alert per window was raised" if f.get("window_notice") == "alerted"
              else "The in-window ALERT COULD NOT BE RAISED - this post is the only notice until the daily check raises it")
@@ -143,7 +162,7 @@ def start_text(f):
 
 
 def outcome_text(f, completed, rec):
-    head, tail = opening([o for _, o, _ in windows(f)])
+    head, tail, _ = opening([o for _, o, _ in windows(f)], f.get("window_notice") == "alerted")
     if completed:
         return ("%s — the deploy of `%s` that started at %s in your window COMPLETED (record deployed_at=%s). %s"
                 "(B-DEPLOY-WINDOW-GUARD)" % (head, f.get("sha", "?")[:12], f.get("attempt_at", "?"),
@@ -161,14 +180,7 @@ def heartbeat(st):
         return
     ok = resolve_key(HEARTBEAT_KEY, "dt-deploy-notice ran at %s and re-armed" % iso(now()))
     due = iso(now() + HEARTBEAT_HOURS * 3600)
-    out, err = ssh("cd %s && npm run --silent system-alerts -- add --triggers-at %s --category breakage --severity "
-                   "warning --dedupe-key %s --title %s --body %s" % (
-                       APP, due, HEARTBEAT_KEY,
-                       q("The Helsinki deploy-notice watcher has not run for %d h" % HEARTBEAT_HOURS),
-                       q("dt-deploy-notice (Helsinki, langston, every 2 min) re-arms this alert once a day. It did not, "
-                         "so a staging deploy landing in an observation window would raise its alert but WAKE NO OWNER. "
-                         "Check systemctl status dt-deploy-notice.timer on 204.168.141.77. Resolve, never ack. Owner: "
-                         "Infra Claude. (B-DEPLOY-WINDOW-GUARD, #1249)")))
+    out, err = request({"op": "heartbeat", "due": due})
     if ok and out is not None:
         st["heartbeat_day"] = day
     else:
@@ -183,7 +195,7 @@ def run():
     except ValueError:
         log("STATE UNREADABLE - starting over silently")
         st = None
-    out, err = ssh("if [ -e %s ]; then cat %s; fi; echo %s; cat %s" % (NOTICE, NOTICE, SEP, RECORD))
+    out, err = request({"op": "read"})
     if out is None or SEP not in out:
         log("STAGING UNREADABLE: %s" % (err or "no separator"))
         print("dt-deploy-notice: could not read staging (%s)" % (err or "no separator"), file=sys.stderr)
@@ -205,7 +217,7 @@ def run():
     for ln in lines[st["seen"]:]:
         f = fields(ln)
         tag = "%s@%s" % (f.get("sha", "?"), f.get("attempt_at", "?"))
-        pid = post(start_text(f))
+        pid = post(start_text(f), notify=KYLE in [o for _, o, _ in windows(f)])
         if pid is None:
             failed = True
             break                           # do not advance past a line nobody was told about
@@ -223,13 +235,16 @@ def run():
         if not done and now() - started < OUTCOME_WAIT_S:
             continue
         if "outcome_post" not in p:
-            oid = post(outcome_text(f, done, rec))
+            oid = post(outcome_text(f, done, rec), notify=KYLE in [o for _, o, _ in windows(f)])
             if oid is None:
                 failed = True
                 continue
             p["outcome_post"] = oid
             p["completed"] = done
-        if f.get("window_notice") == "alerted":
+        # B-1 (Langston, gate B): ALWAYS attempt it. window_notice is one field for the whole line while the mint is
+        # per window, so a MIXED deploy (A minted, B failed) reads notice-only - and guarding on it orphaned A's row.
+        # A resolve that matches nothing is a no-op, and its row count is logged.
+        if True:
             ev = ("%s; record sha=%s deployed_at=%s; posts %s,%s" % (
                 "completed" if p["completed"] else "did not complete in %d min" % (OUTCOME_WAIT_S // 60),
                 rec.get("sha", "none"), rec.get("deployed_at", "none"), p["start_post"], p["outcome_post"]))

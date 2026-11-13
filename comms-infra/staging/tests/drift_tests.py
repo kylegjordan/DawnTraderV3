@@ -63,7 +63,7 @@ tested = os.path.join(T, "dt-install-drift")
 
 def write_copy(host):
     consts = {"HOSTNAME": repr(host), "ROOT": repr(T), "RUNUSER": repr([fr]), "SYSTEMCTL": repr(fs),
-              "ALERT_ADD": repr(["/bin/true"])}
+              "ALERT_NPM": repr(["/bin/true"])}
     open(tested, "w").write(src[:a] + "".join("%s = %s\n" % kv for kv in consts.items()) + src[b:])
     return consts
 
@@ -113,6 +113,9 @@ os.chmod(T + "/var/lib/dt-install-drift", 0o755)
 os.makedirs(T + "/var/lib/dt-deploy-notice")      # B-DEPLOY-WINDOW-GUARD: systemd StateDirectory, langston-owned
 os.chmod(T + "/var/lib/dt-deploy-notice", 0o755)
 shutil.chown(T + "/var/lib/dt-deploy-notice", "langston", "langston")
+os.makedirs(T + "/var/log/dt-deploy-notice")         # B-2: the watcher's LogsDirectory, langston-owned
+os.chmod(T + "/var/log/dt-deploy-notice", 0o755)
+shutil.chown(T + "/var/log/dt-deploy-notice", "langston", "langston")
 
 
 def stamp(age=0):
@@ -472,8 +475,21 @@ def _fake_raise(key, title, body, meta):
     return _ALERT_RESULT["v"]
 
 
-_real_git, _real_raise = DM.git, DM.raise_alert
-DM.git, DM.raise_alert = _fake_git, _fake_raise
+_OPEN_KEYS = set()
+_RESOLVED = []
+
+
+def _fake_open(prefix):
+    return {k for k in _OPEN_KEYS if k.startswith(prefix)}
+
+
+def _fake_resolve(key, evidence):
+    _RESOLVED.append((key, evidence))
+    return None
+
+
+_real_git, _real_raise, _real_open, _real_resolve = DM.git, DM.raise_alert, DM.open_alert_keys, DM.resolve_alert_key
+DM.git, DM.raise_alert, DM.open_alert_keys, DM.resolve_alert_key = _fake_git, _fake_raise, _fake_open, _fake_resolve
 _BOX = {"ref": "refs/remotes/origin/migration/aws-supabase"}
 _H = '{"schema":"deploy-windows/1"}'
 _STALE = json.dumps({"type": "open", "batch": "B-OLD", "owner": "cc-b", "opened_at": "2020-01-01T00:00:00Z",
@@ -483,7 +499,7 @@ _OPEN = json.dumps({"type": "open", "batch": "B-NOW", "owner": "cc-a", "opened_a
 
 
 def _win(reg_text, notice=None):
-    DM.PROBLEMS.clear(); DM.CLASSES.clear(); del _ALERTS[:]
+    DM.PROBLEMS.clear(); DM.CLASSES.clear(); del _ALERTS[:]; del _RESOLVED[:]
     _REG["text"] = reg_text
     if notice is not None:
         open(_wr + "/home/deploy/dawntrader-deploy.notice", "w").write(notice)
@@ -525,7 +541,30 @@ check("windows C-12: a notice-only deploy line raises ONE alert; an alerted line
       len(_ALERTS) == 1 and _ALERTS[0][0].startswith("deploy-window-notice-only:") and DM.PROBLEMS == [], str(_ALERTS))
 o = _win(_H + NL, notice=_N1 + NL + _N2 + NL)
 check("windows C-12: ... and the same line is NOT raised again on the next run", _ALERTS == [], str(_ALERTS))
-DM.git, DM.raise_alert = _real_git, _real_raise
+# Langston gate B attack (2): a window that is no longer stale gets its alert RESOLVED; an unreadable register clears nothing
+_OPEN_KEYS.update({"deploy-window-stale:B-OLD", "deploy-window-stale:B-GONE"})
+o = _win(_H + NL + _STALE + NL)
+check("windows: an open stale-alert whose window is NO LONGER stale is resolved; the still-stale one is not",
+      [k for k, _ in _RESOLVED] == ["deploy-window-stale:B-GONE"] and "no longer stale" in _RESOLVED[0][1], str(_RESOLVED))
+o = _win(None)
+check("windows: an UNREADABLE register clears no alert (control)", _RESOLVED == [], str(_RESOLVED))
+o = _win("not a register" + NL)
+check("windows: a MALFORMED register clears no alert (control)", _RESOLVED == [], str(_RESOLVED))
+_OPEN_KEYS.clear()
+DM.git, DM.raise_alert, DM.open_alert_keys, DM.resolve_alert_key = _real_git, _real_raise, _real_open, _real_resolve
+# open_alert_keys reads the store by id, latest row wins - against a real file
+_af = tempfile.mkdtemp(prefix="drift-af-")
+DM.ROOT = _af
+os.makedirs(_af + "/var/log/dawntrader")
+open(_af + "/var/log/dawntrader/system-alerts.jsonl", "w").write(NL.join(json.dumps(r) for r in [
+    {"id": "1", "dedupe_key": "deploy-window-stale:A", "state": "active"},
+    {"id": "2", "dedupe_key": "deploy-window-stale:B", "state": "active"},
+    {"id": "2", "dedupe_key": "deploy-window-stale:B", "state": "resolved"},
+    {"id": "3", "dedupe_key": "other:C", "state": "active"}]) + NL + "not json" + NL)
+check("open_alert_keys: latest row per id; resolved and other prefixes excluded",
+      DM.open_alert_keys("deploy-window-stale:") == {"deploy-window-stale:A"}, str(DM.open_alert_keys("deploy-window-stale:")))
+shutil.rmtree(_af)
+DM.ROOT = _wr
 
 # C-9: the per-file pending grace. A 2-day-old change to dt-deploy pages (grace 1); the same age elsewhere does not.
 _age = {"v": 2 * 86400}

@@ -1,0 +1,80 @@
+#!/usr/bin/env python3
+"""dt-deploy-notice-gate — the ONLY thing the Helsinki deploy-notice watcher's key may run on staging.
+B-DEPLOY-WINDOW-GUARD (#1249), Langston Step 4 gate B attack (1): the watcher gets its OWN keypair, and deploy's
+authorized_keys pins that key to this command:
+    restrict,from="204.168.141.77",command="/usr/local/bin/dt-deploy-notice-gate" ssh-ed25519 <key> dt-deploy-notice@helsinki
+so the key fingerprint attributes the actor, and this file bounds its reach: it can read the notice file and the deploy
+record, resolve ONLY its own two alert keys, and arm ONLY its own heartbeat. Nothing else - not another alert, not a
+shell. Installed /usr/local/bin/dt-deploy-notice-gate, 0755 root; in dt-install-drift's staging manifest.
+
+The request is ONE token in SSH_ORIGINAL_COMMAND: base64url of a JSON object (so no shell ever parses free text):
+    {"op": "read"}
+    {"op": "resolve", "key": "<deploy-in-window:<batch>:<40-hex>:<YYYYMMDDTHHMMSSZ> | deploy-notice-watcher-heartbeat>",
+     "evidence": "<one line, <= 400 chars>"}
+    {"op": "heartbeat", "due": "<YYYY-MM-DDTHH:MM:SSZ>"}
+EXIT: the command's own exit, or 2 = refused (the reason on stderr, never the request's values).
+"""
+import base64
+import json
+import os
+import re
+import subprocess
+import sys
+
+# ── CONSTANTS (a test harness substitutes ONLY this block) ──
+APP = "/home/deploy/dawntrader"
+NOTICE = "/home/deploy/dawntrader-deploy.notice"
+RECORD = "/home/deploy/dawntrader-deploy.record"
+NPM = ["/usr/bin/timeout", "-k", "10", "120", "/usr/bin/npm", "run", "--silent", "system-alerts", "--"]
+# ── END CONSTANTS ──
+
+ACTOR = "deploy-notice-watcher"
+SEP = "===DT-DEPLOY-NOTICE-SEP==="
+HEARTBEAT_KEY = "deploy-notice-watcher-heartbeat"
+KEY_RE = re.compile(r"^deploy-in-window:[A-Za-z0-9][A-Za-z0-9._-]{1,63}:[0-9a-f]{40}:\d{8}T\d{6}Z$")
+DUE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
+HB_TITLE = "The Helsinki deploy-notice watcher has not run for 26 h"
+HB_BODY = ("dt-deploy-notice (Helsinki, langston, every 2 min) re-arms this alert once a day. It did not, so a staging "
+           "deploy landing in an observation window would raise its alert but WAKE NO OWNER. Check systemctl status "
+           "dt-deploy-notice.timer on 204.168.141.77. Resolve, never ack. Owner: Infra Claude. (B-DEPLOY-WINDOW-GUARD, #1249)")
+
+
+def refuse(why):
+    sys.stderr.write("dt-deploy-notice-gate: REFUSED - %s\n" % why)
+    return 2
+
+
+def main(raw):
+    if not raw or len(raw) > 4096 or not re.match(r"^[A-Za-z0-9_-]+=*$", raw):
+        return refuse("the request is not one base64url token (%d chars, not echoed)" % len(raw or ""))
+    try:
+        req = json.loads(base64.urlsafe_b64decode(raw.encode()).decode("utf-8"))
+    except (ValueError, UnicodeDecodeError):
+        return refuse("the request does not decode to JSON")
+    if not isinstance(req, dict):
+        return refuse("the request is not a JSON object")
+    op = req.get("op")
+    if op == "read" and set(req) == {"op"}:
+        for path in (NOTICE,):
+            if os.path.exists(path):
+                sys.stdout.write(open(path, encoding="utf-8", errors="replace").read())
+        sys.stdout.write(SEP + "\n")
+        sys.stdout.write(open(RECORD, encoding="utf-8", errors="replace").read())
+        return 0
+    if op == "resolve" and set(req) == {"op", "key", "evidence"}:
+        key, ev = req["key"], req["evidence"]
+        if not isinstance(key, str) or not (key == HEARTBEAT_KEY or KEY_RE.match(key)):
+            return refuse("resolve is allowed only for this watcher's own keys")
+        if not isinstance(ev, str) or not ev.strip() or len(ev) > 400 or "\n" in ev or "\r" in ev:
+            return refuse("evidence must be one non-empty line of at most 400 characters")
+        return subprocess.run(NPM + ["resolve-key", key, "--by", ACTOR, "--evidence", ev], cwd=APP).returncode
+    if op == "heartbeat" and set(req) == {"op", "due"}:
+        if not isinstance(req["due"], str) or not DUE_RE.match(req["due"]):
+            return refuse("due must be a UTC time YYYY-MM-DDTHH:MM:SSZ")
+        return subprocess.run(NPM + ["add", "--triggers-at", req["due"], "--category", "breakage", "--severity", "warning",
+                                     "--dedupe-key", HEARTBEAT_KEY, "--title", HB_TITLE, "--body", HB_BODY], cwd=APP).returncode
+    return refuse("unknown op or unexpected fields")
+
+
+if __name__ == "__main__":
+    sys.exit(main(os.environ.get("SSH_ORIGINAL_COMMAND", "").strip()))

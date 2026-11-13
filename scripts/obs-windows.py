@@ -35,9 +35,11 @@ import sys
 from datetime import datetime, timezone
 
 SCHEMA = "deploy-windows/1"
-# The canonical deploy set: ALERT_ACTORS minus machine and advisory. server/tests/unit/dt-deploy-actor-parity.test.ts
-# fails unless this tuple equals that derivation AND dt-deploy.sh's DEPLOY_ACTOR_LIST.
-OWNERS = ("cc-a", "cc-b", "cc-c", "cc-infra", "codex-a", "codex-b", "codex-c", "codex-infra", "kyle", "langston", "coltrane")
+# Every NON-MACHINE actor in ALERT_ACTORS (the deploy set plus the advisory pair). server/tests/unit/dt-deploy-actor-parity
+# .test.ts fails unless this tuple equals that derivation (a window's owner need not be able to deploy).
+# + the two ADVISORY actors (Langston gate B: PM Claude must be able to own a window; its canonical actor is pm-claude).
+OWNERS = ("cc-a", "cc-b", "cc-c", "cc-infra", "codex-a", "codex-b", "codex-c", "codex-infra", "kyle", "langston", "coltrane",
+          "pm-claude", "pm-codex")
 CLOSE_REASONS = ("completed", "replaced", "abandoned", "superseded")
 AMEND_FIELDS = ("end", "until_event", "expected_by", "review_by", "disturbs", "detail")
 ISO = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
