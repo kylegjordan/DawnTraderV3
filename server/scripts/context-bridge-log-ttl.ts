@@ -180,7 +180,6 @@ async function listDeletePopulationLabels(client: pg.Client, cutoff: Date): Prom
 export interface ContextMonthDependencies {
   exportPartition: typeof exportPartition;
   getStorageClient: () => StorageClient;
-  readFile: typeof fs.readFileSync;
   unlinkFile: typeof fs.unlinkSync;
   countGzipJsonlLines: typeof countGzipJsonlLines;
   evidenceExistsForManifest: typeof evidenceExistsForManifest;
@@ -191,7 +190,6 @@ export interface ContextMonthDependencies {
 const DEFAULT_CONTEXT_MONTH_DEPS: ContextMonthDependencies = {
   exportPartition,
   getStorageClient,
-  readFile: fs.readFileSync,
   unlinkFile: fs.unlinkSync,
   countGzipJsonlLines,
   evidenceExistsForManifest,
@@ -284,8 +282,11 @@ export async function exportAndUploadContextMonth(
 
   // Upload + verify. If warm rejects with 413 (Supabase project file_size_limit
   // exceeded), fall back to cold tier (B2 supports 5 GB single-call).
-  const data = deps.readFile(exportRes.localPath);
+  // B-DISK-FILE-TIERING 3a (AP-4 C-2): the export file is uploaded and verified by the FILE forms — the buffered warm
+  // pair here (B-NEW-47 missed it, #169) and the buffered cold fallback are gone. The export itself is still built in
+  // memory by its exporter (AP-4's recorded limit).
   const storage = deps.getStorageClient();
+  const verifyPath = `${exportRes.localPath}.verify`;
   let upload;
   let actualBucket = cfg.warmBucket;
   let actualPath = `${cfg.warmPrefix}/${SOURCE_TABLE}/${month.label}.jsonl.gz`;
@@ -293,8 +294,13 @@ export async function exportAndUploadContextMonth(
   let actualUri = storageUri;
 
   try {
-    upload = await storage.uploadWarm(actualBucket, actualPath, data);
-    const readBack = await storage.downloadWarm(actualBucket, actualPath);
+    upload = await storage.uploadWarmFile(actualBucket, actualPath, exportRes.localPath);
+    let readBack: { checksum: string };
+    try {
+      readBack = await storage.downloadWarmFile(actualBucket, actualPath, verifyPath);
+    } finally {
+      fs.rmSync(verifyPath, { force: true });
+    }
     if (upload.checksum !== exportRes.checksum || readBack.checksum !== exportRes.checksum) {
       throw new Error(
         `[B75 ctx-bridge] ${month.label}: checksum mismatch ` +
@@ -314,27 +320,30 @@ export async function exportAndUploadContextMonth(
     actualPath = `${SOURCE_TABLE}/${month.label}.jsonl.gz`;
     actualTier = 'cold';
     actualUri = `b2://${actualBucket}/${actualPath}`;
-    upload = await storage.uploadCold(actualBucket, actualPath, data);
-    const readBack = await storage.downloadCold(actualBucket, actualPath);
-    if (readBack.checksum !== exportRes.checksum) {
+    // Streamed and ATTESTED (upload response + b2_get_file_info by file id) — no whole-object re-download.
+    const cold = await storage.uploadColdFile(actualBucket, actualPath, exportRes.localPath);
+    upload = cold;
+    if (cold.checksum !== exportRes.checksum) {
       throw new Error(
-        `[B75 ctx-bridge] ${month.label}: cold checksum mismatch ` +
-          `local=${exportRes.checksum} readback=${readBack.checksum}`,
+        `[B75 ctx-bridge] ${month.label}: cold upload hashed a different file ` +
+          `local=${exportRes.checksum} upload=${cold.checksum}`,
       );
     }
-    // Update the manifest row to reflect cold tier (it was inserted as 'warm pending' earlier)
+    // Update the manifest row to reflect cold tier (it was inserted as 'warm pending' earlier), with the attestation
     await ctlClient.query(
       `UPDATE data_archive_manifest
-         SET tier = 'cold', storage_uri = $2
+         SET tier = 'cold', storage_uri = $2,
+             provider_file_id = $3, provider_sha1 = $4, provider_bytes = $5, verification_method = 'b2-sha1-attested'
        WHERE id = $1`,
-      [manifestId, actualUri],
+      [manifestId, actualUri, cold.fileId, cold.sha1, cold.bytes],
     );
   }
 
   // B-B75-EXPORT-COMPLETENESS (OBJ-7, R-1): the proof, the basis stamp and `verified`
   // land in ONE transaction, evidence first (the manifest tie trigger's invariant). The
-  // downloaded count is taken from the local file, which the read-back checksum above
-  // has just shown byte-identical to the stored object. The tier is where the object
+  // downloaded count is taken from the local file, which the warm read-back checksum (or, on
+  // the cold fallback, B2's SHA-1 attestation of the stored version) has just shown
+  // byte-identical to the stored object. The tier is where the object
   // actually landed — `cold` after the 413 fallback (Langston Step-1 condition 1).
   const downloadedRowCount = await deps.countGzipJsonlLines(exportRes.localPath);
   await ctlClient.query('BEGIN');

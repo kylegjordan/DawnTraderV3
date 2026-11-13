@@ -716,6 +716,117 @@ export class StorageClient {
     };
   }
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // B-DISK-FILE-TIERING amendment 4, increment 3a = amendment 1's AP-4 (C-1: fix the PRIMITIVES) + the attestation
+  // (Langston's Plan B + Coltrane 1-3, `1-system-manual/pm/decisions/2026-11-06_cold-archive-daily-chunk-plan.md` §4).
+  // The cold twins of B-NEW-47's warm file pair: nothing here holds a whole object in memory. The P10 run measured the
+  // buffered path at 1.06 GiB peak RSS for a 171 MB object (2026-11-05); these stream through a local file.
+  // An accepted upload is a server-side proof of the stored bytes: B2 refuses a body that does not hash to the SHA-1
+  // sent in `X-Bz-Content-Sha1`. `uploadColdFile` keeps the response (it was discarded before), checks it, then reads
+  // the same file VERSION back by `fileId` with `b2_get_file_info` (metadata only — no file bytes, a Class-B call).
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Streams a local file to cold and attests the stored version. One streamed read for SHA-256 + SHA-1, one for the
+   * body. Throws on ANY mismatch, and on `transaction_cap_exceeded` (fails closed — a caller must never delete warm
+   * on a throw).
+   */
+  async uploadColdFile(bucket: string, path: string, localPath: string): Promise<ColdFileUpload> {
+    if (!this.isColdConfigured()) {
+      throw new Error('[B75 storage-client] cold storage not configured: set B2_KEY_ID, B2_APPLICATION_KEY, B2_BUCKET in env');
+    }
+    const { bytes, sha256, sha1 } = await hashFileSha256Sha1(localPath);
+    const auth = await this.b2Authorize();
+    const bucketId = await this.b2ResolveBucketId(bucket);
+    const upUrlRes = await fetch(`${auth.apiUrl}/b2api/v3/b2_get_upload_url`, {
+      method: 'POST',
+      headers: { Authorization: auth.accountAuthToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bucketId }),
+    });
+    if (!upUrlRes.ok) {
+      const body = await upUrlRes.text().catch(() => '');
+      throw new Error(`[B75 storage-client] B2 get_upload_url failed: ${upUrlRes.status} — ${body}`);
+    }
+    const upUrl = (await upUrlRes.json()) as { uploadUrl: string; authorizationToken: string };
+    // A stream body needs `duplex: 'half'` under Node's fetch (undici rejects it otherwise); Content-Length is set so
+    // B2 receives a sized body, never chunked.
+    const upRes = await fetch(upUrl.uploadUrl, {
+      method: 'POST',
+      headers: {
+        Authorization: upUrl.authorizationToken,
+        'X-Bz-File-Name': encodePath(path),
+        'X-Bz-Content-Sha1': sha1,
+        'Content-Type': 'application/gzip',
+        'Content-Length': String(bytes),
+      },
+      body: Readable.toWeb(fs.createReadStream(localPath)) as unknown as BodyInit,
+      duplex: 'half',
+    } as RequestInit & { duplex: 'half' });
+    if (!upRes.ok) {
+      const body = await upRes.text().catch(() => '');
+      throw new Error(`[B75 storage-client] B2 upload failed: ${upRes.status} — ${body}`);
+    }
+    const up = (await upRes.json()) as B2FileVersion;
+    // Coltrane 1: the response names the version that was stored — check every field we sent.
+    assertB2Version('upload response', up, { action: 'upload', bucketId, fileName: path, sha1, bytes });
+    // Coltrane 2: read the SAME version back by its id (metadata) and check again.
+    const info = await this.b2GetFileInfo(up.fileId);
+    assertB2Version('b2_get_file_info', info, { action: 'upload', bucketId, fileName: path, sha1, bytes });
+    return { bytes, checksum: sha256, sha1, fileId: up.fileId, uri: `b2://${bucket}/${path}` };
+  }
+
+  /** Streams a cold object (by NAME) to a local file; SHA-256 by a second streamed pass (AP-4 C-1). */
+  async downloadColdFile(bucket: string, path: string, localPath: string): Promise<{ bytes: number; checksum: string; fileId: string | null }> {
+    if (!this.isColdConfigured()) {
+      throw new Error('[B75 storage-client] cold storage not configured');
+    }
+    const auth = await this.b2Authorize();
+    const res = await fetch(`${auth.downloadUrl}/file/${bucket}/${encodePath(path)}`, {
+      method: 'GET',
+      headers: { Authorization: auth.accountAuthToken },
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(`[B75 storage-client] B2 download (file) failed: ${res.status} — ${body}`);
+    }
+    if (!res.body) throw new Error('[B75 storage-client] B2 download (file): response has no body stream');
+    await pipeline(Readable.fromWeb(res.body as Parameters<typeof Readable.fromWeb>[0]), fs.createWriteStream(localPath, { mode: 0o600 }));
+    const checksum = await sha256HexStream(fs.createReadStream(localPath));
+    return { bytes: fs.statSync(localPath).size, checksum, fileId: res.headers.get('x-bz-file-id') };
+  }
+
+  /** `b2_get_file_info` by file id — metadata only, no file bytes. */
+  async b2GetFileInfo(fileId: string): Promise<B2FileVersion> {
+    const auth = await this.b2Authorize();
+    const res = await fetch(`${auth.apiUrl}/b2api/v3/b2_get_file_info`, {
+      method: 'POST',
+      headers: { Authorization: auth.accountAuthToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fileId }),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(`[B75 storage-client] B2 get_file_info failed: ${res.status} — ${body}`);
+    }
+    return (await res.json()) as B2FileVersion;
+  }
+
+  /**
+   * Deletes ONE file version by id (amendment 4 C-1: the 3a proof objects; 3b: the P10 orphan). Needs the `deleteFiles`
+   * capability, which the narrowed key of 3d will not have — so this is usable only until 3d step 5.
+   */
+  async deleteColdVersion(fileName: string, fileId: string): Promise<void> {
+    const auth = await this.b2Authorize();
+    const res = await fetch(`${auth.apiUrl}/b2api/v3/b2_delete_file_version`, {
+      method: 'POST',
+      headers: { Authorization: auth.accountAuthToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fileName, fileId }),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(`[B75 storage-client] B2 delete_file_version failed: ${res.status} — ${body}`);
+    }
+  }
+
   async deleteCold(bucket: string, path: string): Promise<void> {
     // B2 deletes go by fileId, not by name. Need to first list_file_versions to get fileId.
     if (!this.isColdConfigured()) {
@@ -763,6 +874,56 @@ export class StorageClient {
 
 export function sha256Hex(buf: Buffer): string {
   return crypto.createHash('sha256').update(buf).digest('hex');
+}
+
+/** The cold upload's attested result (amendment 4 / 3a): what the manifest records beside its SHA-256. */
+export interface ColdFileUpload {
+  bytes: number;
+  checksum: string; // SHA-256 hex (the manifest's convention)
+  sha1: string; // the SHA-1 B2 verified on receipt
+  fileId: string; // the exact stored VERSION (Coltrane 3)
+  uri: string;
+}
+
+/** The fields of a B2 file version this code reads (upload response and `b2_get_file_info` share the shape). */
+export interface B2FileVersion {
+  action: string;
+  bucketId: string;
+  fileName: string;
+  fileId: string;
+  contentSha1: string;
+  contentLength: number;
+}
+
+/** Throws unless the version is exactly the one sent (Coltrane 1-2). Exported for tests. */
+export function assertB2Version(
+  where: string,
+  v: B2FileVersion,
+  want: { action: string; bucketId: string; fileName: string; sha1: string; bytes: number },
+): void {
+  const bad: string[] = [];
+  if (v.action !== want.action) bad.push(`action=${v.action}`);
+  if (v.bucketId !== want.bucketId) bad.push(`bucketId=${v.bucketId}`);
+  if (v.fileName !== want.fileName) bad.push(`fileName=${v.fileName}`);
+  if (v.contentSha1 !== want.sha1) bad.push(`contentSha1=${v.contentSha1}`);
+  if (Number(v.contentLength) !== want.bytes) bad.push(`contentLength=${v.contentLength}`);
+  if (!v.fileId) bad.push('fileId missing');
+  if (bad.length) {
+    throw new Error(`[B75 storage-client] B2 ${where} does not attest the version sent (${bad.join(', ')}; expected ${want.fileName} ${want.bytes} B sha1 ${want.sha1})`);
+  }
+}
+
+/** SHA-256 and SHA-1 of a file in ONE streamed read, plus its size. */
+export async function hashFileSha256Sha1(localPath: string): Promise<{ bytes: number; sha256: string; sha1: string }> {
+  const h256 = crypto.createHash('sha256');
+  const h1 = crypto.createHash('sha1');
+  let bytes = 0;
+  for await (const chunk of fs.createReadStream(localPath)) {
+    h256.update(chunk as Buffer);
+    h1.update(chunk as Buffer);
+    bytes += (chunk as Buffer).length;
+  }
+  return { bytes, sha256: h256.digest('hex'), sha1: h1.digest('hex') };
 }
 
 export async function sha256HexStream(stream: Readable): Promise<string> {

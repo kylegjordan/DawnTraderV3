@@ -253,3 +253,4 @@
 2026-11-12-b-cron-missed-catchup.sql
 2026-11-13-b-close-writer-costs-drop-defaults.sql
 2026-11-05-b-entry-gate-inc-b.sql
+2026-11-13-b-disk-file-tiering-cold-attestation.sql

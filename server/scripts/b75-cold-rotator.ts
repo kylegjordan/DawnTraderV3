@@ -27,6 +27,9 @@
  */
 
 import 'dotenv/config';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import pg from 'pg';
 import { getStorageClient, type StorageClient } from '../services/data-archive/storage-client.js';
 import { isDirectEntry } from './direct-entry.js';
@@ -46,6 +49,9 @@ export interface ColdRotatorConfig {
   coldBucket: string;
   coldPrefix: string;
   coldProvider: string;
+  /** B-DISK-FILE-TIERING 3a: the local free-space floor the temp file must not cross — the SAME setting the disk-file
+   *  tiering job uses (`data_lifecycle.disk_file_free_floor_bytes`), because it is the same disk. */
+  freeFloorBytes: number;
 }
 
 /** The warm-retention window (days) that applies to a given source_table: its
@@ -106,6 +112,7 @@ async function loadConfig(client: pg.Client): Promise<ColdRotatorConfig> {
     coldBucket: reqStr('cold_bucket'),
     coldPrefix: reqStr('cold_prefix'),
     coldProvider: reqStr('cold_provider'),
+    freeFloorBytes: reqNum('disk_file_free_floor_bytes'),
   };
 }
 
@@ -156,127 +163,160 @@ export async function listColdRotationCandidates(
 }
 
 export interface ColdRotationDependencies {
-  storage: Pick<StorageClient, 'downloadWarm' | 'uploadCold' | 'downloadCold' | 'deleteWarm'>;
+  // B-DISK-FILE-TIERING 3a (Langston N1): the FILE forms only, so a buffered whole-object method is unreachable from the
+  // rotator by type. The liveness canary keeps the Buffer forms for its 104-byte object.
+  storage: Pick<StorageClient, 'downloadWarmFile' | 'uploadColdFile' | 'deleteWarm'>;
   createClient: () => pg.Client;
+  /** where the private per-object temp folder is made (default: deploy's home); tests pass their own */
+  tempRoot?: string;
+  /** local free bytes on the temp file's disk (default: statfs of tempRoot); tests pass their own */
+  freeBytes?: () => number;
 }
 
 /** Execute one warm-to-cold state transition. Warm deletion is deliberately
  * outside and after both manifest writes so every thrown mutation leaves the
- * warm copy in place. */
+ * warm copy in place.
+ *
+ * B-DISK-FILE-TIERING amendment 4 / 3a (= amendment 1 AP-4 + the attestation): streams through a private temp file
+ * instead of holding the object in memory three times (P10: 1.06 GiB peak RSS for a 171 MB object), and verifies the
+ * cold copy by B2's attestation instead of downloading it back (that re-download was ~100% of rotation egress). */
 export async function rotateColdCandidate(
   candidate: ColdRotationCandidate,
   cfg: ColdRotatorConfig,
   deps: ColdRotationDependencies,
 ): Promise<number> {
   const { bucket: warmBucket, path: warmPath } = parseSupabaseUri(candidate.storage_uri);
-  const warmObj = await deps.storage.downloadWarm(warmBucket, warmPath);
-  if (warmObj.checksum !== candidate.checksum) {
-    throw new Error(
-      `[B75 rotator] warm-tier checksum drift: manifest=${candidate.checksum} actual=${warmObj.checksum}`,
-    );
+  const tempRoot = deps.tempRoot ?? os.homedir();
+  const freeBytes = deps.freeBytes ?? (() => { const st = fs.statfsSync(tempRoot); return Number(st.bavail) * Number(st.bsize); });
+  const need = 2 * Number(candidate.bytes_compressed) + cfg.freeFloorBytes;
+  const free = freeBytes();
+  // a missing floor or size would make `need` NaN, and `free < NaN` is false — refuse rather than skip the check
+  if (!Number.isFinite(need) || !Number.isFinite(free) || free < need) {
+    throw new Error(`[B75 rotator] refused ${candidate.id}: ${free} bytes free, need ${need} (2 x object + the ${cfg.freeFloorBytes} floor)`);
   }
-
-  const coldPath = `${candidate.source_table}/${candidate.partition_label}.jsonl.gz`;
-  await deps.storage.uploadCold(cfg.coldBucket, coldPath, warmObj.data);
-  const coldObj = await deps.storage.downloadCold(cfg.coldBucket, coldPath);
-  if (coldObj.checksum !== candidate.checksum) {
-    throw new Error(
-      `[B75 rotator] cold-tier post-upload checksum mismatch: expected=${candidate.checksum} got=${coldObj.checksum}`,
-    );
-  }
-
-  const coldUri = `b2://${cfg.coldBucket}/${coldPath}`;
-  const ctlClient = deps.createClient();
-  await ctlClient.connect();
+  const dir = fs.mkdtempSync(path.join(tempRoot, '.b75-cold-rotator-'));
+  fs.chmodSync(dir, 0o700);
   try {
-    await ctlClient.query('BEGIN');
-    const coldManifest = await ctlClient.query<{ id: string; completeness_basis: string | null }>(
-      `INSERT INTO data_archive_manifest (
-         source_table, partition_label, tier, state, storage_uri,
-         min_ts, max_ts, date_range_start, date_range_end,
-         row_count, bytes_compressed, original_partition_size_bytes,
-         checksum, format, compression, verified_at, completeness_basis
-       ) SELECT source_table, partition_label, 'cold', 'active', $2,
-                min_ts, max_ts, date_range_start, date_range_end,
-                row_count, bytes_compressed, original_partition_size_bytes,
-                checksum, format, compression, NOW(), completeness_basis
-          FROM data_archive_manifest
-         WHERE id = $1
-         ON CONFLICT (source_table, partition_label, tier) DO UPDATE
-           SET state = 'active', storage_uri = EXCLUDED.storage_uri, verified_at = NOW(),
-               completeness_basis = EXCLUDED.completeness_basis
-       RETURNING id, completeness_basis`,
-      [candidate.id, coldUri],
-    );
-    const coldManifestRow = coldManifest.rows[0];
-    if (!coldManifestRow) {
-      throw new Error(`[B75 rotator] warm manifest ${candidate.id} disappeared before cold manifest creation`);
+    const local = path.join(dir, 'object.jsonl.gz');
+    const warm = await deps.storage.downloadWarmFile(warmBucket, warmPath, local);
+    if (warm.checksum !== candidate.checksum) {
+      throw new Error(
+        `[B75 rotator] warm-tier checksum drift: manifest=${candidate.checksum} actual=${warm.checksum}`,
+      );
     }
-    if (coldManifestRow.completeness_basis === 'source-count-matched') {
-      await ctlClient.query(
-        `INSERT INTO data_archive_exact_evidence (
-           manifest_id, source_table, partition_label, tier,
-           source_row_count, exported_row_count, downloaded_row_count,
-           cursor_contract, producing_build_sha, object_checksum,
-           selector_contract, selector_version, frozen_cutoff_at, ranking_observed_at,
-           keep_floor_rows, day_start, day_end, ordered_key_sha256, full_row_sha256
-         )
-         SELECT $2, source_table, partition_label, 'cold',
-                source_row_count, exported_row_count, downloaded_row_count,
-                cursor_contract, producing_build_sha, object_checksum,
-                selector_contract, selector_version, frozen_cutoff_at, ranking_observed_at,
-                keep_floor_rows, day_start, day_end, ordered_key_sha256, full_row_sha256
-           FROM data_archive_exact_evidence
-          WHERE manifest_id = $1
-         ON CONFLICT (manifest_id) DO NOTHING`,
-        [candidate.id, coldManifestRow.id],
+
+    const coldPath = `${candidate.source_table}/${candidate.partition_label}.jsonl.gz`;
+    // Streams the file and attests the stored version (response + b2_get_file_info by file id); throws on any mismatch.
+    const cold = await deps.storage.uploadColdFile(cfg.coldBucket, coldPath, local);
+    if (cold.checksum !== candidate.checksum) {
+      throw new Error(
+        `[B75 rotator] cold upload hashed a different file: expected=${candidate.checksum} got=${cold.checksum}`,
       );
-      const proof = await ctlClient.query<{ exact: boolean }>(
-        `SELECT EXISTS (
-           SELECT 1
-             FROM data_archive_exact_evidence warm
-             JOIN data_archive_exact_evidence cold
-               ON cold.manifest_id = $2
-              AND cold.source_table = warm.source_table
-              AND cold.partition_label = warm.partition_label
-              AND cold.tier = 'cold'
-              AND cold.source_row_count = warm.source_row_count
-              AND cold.exported_row_count = warm.exported_row_count
-              AND cold.downloaded_row_count = warm.downloaded_row_count
-              AND cold.cursor_contract = warm.cursor_contract
-              AND cold.producing_build_sha = warm.producing_build_sha
-              AND cold.object_checksum = warm.object_checksum
-              AND cold.selector_contract IS NOT DISTINCT FROM warm.selector_contract
-              AND cold.selector_version IS NOT DISTINCT FROM warm.selector_version
-              AND cold.frozen_cutoff_at IS NOT DISTINCT FROM warm.frozen_cutoff_at
-              AND cold.ranking_observed_at IS NOT DISTINCT FROM warm.ranking_observed_at
-              AND cold.keep_floor_rows IS NOT DISTINCT FROM warm.keep_floor_rows
-              AND cold.day_start IS NOT DISTINCT FROM warm.day_start
-              AND cold.day_end IS NOT DISTINCT FROM warm.day_end
-              AND cold.ordered_key_sha256 IS NOT DISTINCT FROM warm.ordered_key_sha256
-              AND cold.full_row_sha256 IS NOT DISTINCT FROM warm.full_row_sha256
-            WHERE warm.manifest_id = $1
-         ) AS exact`,
-        [candidate.id, coldManifestRow.id],
+    }
+
+    const coldUri = `b2://${cfg.coldBucket}/${coldPath}`;
+    const ctlClient = deps.createClient();
+    await ctlClient.connect();
+    try {
+      await ctlClient.query('BEGIN');
+      const coldManifest = await ctlClient.query<{ id: string; completeness_basis: string | null }>(
+        `INSERT INTO data_archive_manifest (
+           source_table, partition_label, tier, state, storage_uri,
+           min_ts, max_ts, date_range_start, date_range_end,
+           row_count, bytes_compressed, original_partition_size_bytes,
+           checksum, format, compression, verified_at, completeness_basis,
+           provider_file_id, provider_sha1, provider_bytes, verification_method
+         ) SELECT source_table, partition_label, 'cold', 'active', $2,
+                  min_ts, max_ts, date_range_start, date_range_end,
+                  row_count, bytes_compressed, original_partition_size_bytes,
+                  checksum, format, compression, NOW(), completeness_basis,
+                  $3, $4, $5, 'b2-sha1-attested'
+            FROM data_archive_manifest
+           WHERE id = $1
+           ON CONFLICT (source_table, partition_label, tier) DO UPDATE
+             SET state = 'active', storage_uri = EXCLUDED.storage_uri, verified_at = NOW(),
+                 completeness_basis = EXCLUDED.completeness_basis,
+                 provider_file_id = EXCLUDED.provider_file_id, provider_sha1 = EXCLUDED.provider_sha1,
+                 provider_bytes = EXCLUDED.provider_bytes, verification_method = EXCLUDED.verification_method
+         RETURNING id, completeness_basis`,
+        [candidate.id, coldUri, cold.fileId, cold.sha1, cold.bytes],
       );
-      if (proof.rows[0]?.exact !== true) {
-        throw new Error(
-          `[B75 rotator] proven warm object ${candidate.id} has no exact selector/equality proof for cold manifest ${coldManifestRow.id}`,
-        );
+      const coldManifestRow = coldManifest.rows[0];
+      if (!coldManifestRow) {
+        throw new Error(`[B75 rotator] warm manifest ${candidate.id} disappeared before cold manifest creation`);
       }
+      // L-2 (Langston, cold-archive plan §4): the cold row inherits warm's exact evidence because the stored bytes are
+      // ATTESTED identical — B2 accepted a body hashing to the SHA-1 we sent, and b2_get_file_info by the returned file id
+      // re-read that SHA-1 and length (storage-client `uploadColdFile`); the SHA-256 is the warm file's, checked against
+      // the manifest before the upload. It no longer rests on a whole-object re-download, which 3a removed.
+      if (coldManifestRow.completeness_basis === 'source-count-matched') {
+        await ctlClient.query(
+          `INSERT INTO data_archive_exact_evidence (
+             manifest_id, source_table, partition_label, tier,
+             source_row_count, exported_row_count, downloaded_row_count,
+             cursor_contract, producing_build_sha, object_checksum,
+             selector_contract, selector_version, frozen_cutoff_at, ranking_observed_at,
+             keep_floor_rows, day_start, day_end, ordered_key_sha256, full_row_sha256
+           )
+           SELECT $2, source_table, partition_label, 'cold',
+                  source_row_count, exported_row_count, downloaded_row_count,
+                  cursor_contract, producing_build_sha, object_checksum,
+                  selector_contract, selector_version, frozen_cutoff_at, ranking_observed_at,
+                  keep_floor_rows, day_start, day_end, ordered_key_sha256, full_row_sha256
+             FROM data_archive_exact_evidence
+            WHERE manifest_id = $1
+           ON CONFLICT (manifest_id) DO NOTHING`,
+          [candidate.id, coldManifestRow.id],
+        );
+        const proof = await ctlClient.query<{ exact: boolean }>(
+          `SELECT EXISTS (
+             SELECT 1
+               FROM data_archive_exact_evidence warm
+               JOIN data_archive_exact_evidence cold
+                 ON cold.manifest_id = $2
+                AND cold.source_table = warm.source_table
+                AND cold.partition_label = warm.partition_label
+                AND cold.tier = 'cold'
+                AND cold.source_row_count = warm.source_row_count
+                AND cold.exported_row_count = warm.exported_row_count
+                AND cold.downloaded_row_count = warm.downloaded_row_count
+                AND cold.cursor_contract = warm.cursor_contract
+                AND cold.producing_build_sha = warm.producing_build_sha
+                AND cold.object_checksum = warm.object_checksum
+                AND cold.selector_contract IS NOT DISTINCT FROM warm.selector_contract
+                AND cold.selector_version IS NOT DISTINCT FROM warm.selector_version
+                AND cold.frozen_cutoff_at IS NOT DISTINCT FROM warm.frozen_cutoff_at
+                AND cold.ranking_observed_at IS NOT DISTINCT FROM warm.ranking_observed_at
+                AND cold.keep_floor_rows IS NOT DISTINCT FROM warm.keep_floor_rows
+                AND cold.day_start IS NOT DISTINCT FROM warm.day_start
+                AND cold.day_end IS NOT DISTINCT FROM warm.day_end
+                AND cold.ordered_key_sha256 IS NOT DISTINCT FROM warm.ordered_key_sha256
+                AND cold.full_row_sha256 IS NOT DISTINCT FROM warm.full_row_sha256
+              WHERE warm.manifest_id = $1
+           ) AS exact`,
+          [candidate.id, coldManifestRow.id],
+        );
+        if (proof.rows[0]?.exact !== true) {
+          throw new Error(
+            `[B75 rotator] proven warm object ${candidate.id} has no exact selector/equality proof for cold manifest ${coldManifestRow.id}`,
+          );
+        }
+      }
+      await ctlClient.query(
+        `UPDATE data_archive_manifest
+           SET state = 'migrated', tier_changed_at = NOW()
+         WHERE id = $1`,
+        [candidate.id],
+      );
+      await ctlClient.query('COMMIT');
+    } catch (err) {
+      await ctlClient.query('ROLLBACK').catch(() => {});
+      throw err;
+    } finally {
+      await ctlClient.end().catch(() => {});
     }
-    await ctlClient.query(
-      `UPDATE data_archive_manifest
-         SET state = 'migrated', tier_changed_at = NOW()
-       WHERE id = $1`,
-      [candidate.id],
-    );
-    await ctlClient.query('COMMIT');
-  } catch (err) {
-    await ctlClient.query('ROLLBACK').catch(() => {});
-    throw err;
   } finally {
-    await ctlClient.end().catch(() => {});
+    fs.rmSync(dir, { recursive: true, force: true });
   }
 
   await deps.storage.deleteWarm(warmBucket, warmPath);
@@ -446,12 +486,15 @@ async function runColdRotatorCliBody(): Promise<void> {
     return;
   }
 
-  // Phase 2: real rotation. For each candidate:
-  //   1. downloadWarm → buffer
-  //   2. uploadCold (B2) → verify by re-download + checksum match
-  //   3. INSERT new manifest row (tier='cold', state='active') with cold_storage_uri
+  // Phase 2: real rotation. For each candidate (B-DISK-FILE-TIERING 3a — streamed, attested; L-2):
+  //   1. downloadWarmFile → a private 0700 temp file (free space checked first: 2 x object + the floor);
+  //      its SHA-256 must equal the manifest's
+  //   2. uploadColdFile (B2) streams the file and ATTESTS the stored version: the upload response's action, bucket,
+  //      name, SHA-1 and length, then b2_get_file_info by the returned file id — no re-download
+  //   3. INSERT the cold manifest row (tier='cold', state='active') with provider_file_id / provider_sha1 /
+  //      provider_bytes and verification_method='b2-sha1-attested'
   //   4. UPDATE warm manifest row → state='migrated', tier_changed_at=NOW()
-  //   5. deleteWarm
+  //   5. deleteWarm (only after 1-4 succeed; the temp folder is removed whatever happens)
   //
   // If any step fails after upload but before warm delete, the next run
   // detects via NOT EXISTS … tier='cold' filter (cold row exists or doesn't —

@@ -403,8 +403,9 @@ describe('the other lanes and readers', () => {
     expect(CTX).toMatch(/PROVEN_BASIS,\s*actualTier,/);
   });
   it('rotator: the basis is carried in the INSERT list and the ON CONFLICT update (Langston r3)', () => {
-    expect(ROTATOR).toMatch(/verified_at, completeness_basis\s*\)\s*SELECT/);
-    expect(ROTATOR).toMatch(/NOW\(\), completeness_basis\s*FROM data_archive_manifest/);
+    // B-DISK-FILE-TIERING 3a: the attestation columns follow the basis in both lists
+    expect(ROTATOR).toMatch(/verified_at, completeness_basis,\s*provider_file_id, provider_sha1, provider_bytes, verification_method\s*\)\s*SELECT/);
+    expect(ROTATOR).toMatch(/NOW\(\), completeness_basis,\s*\$3, \$4, \$5, 'b2-sha1-attested'\s*FROM data_archive_manifest/);
     expect(ROTATOR).toContain('completeness_basis = EXCLUDED.completeness_basis');
   });
   it('rehydrate: chooses by label among downloadable rows, labels unproven counts, writes a sidecar', () => {

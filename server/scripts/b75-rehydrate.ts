@@ -392,7 +392,7 @@ export function finishRehydrateRun(
 export async function rehydrateChosenObject(
   args: RehydrateArgs,
   choice: LabelChoice<RehydrateManifestRow>,
-  storage: Pick<StorageClient, 'downloadWarmFile' | 'isColdConfigured' | 'downloadCold'>,
+  storage: Pick<StorageClient, 'downloadWarmFile' | 'isColdConfigured' | 'downloadColdFile'>,
 ): Promise<RehydrateObjectResult> {
   const { label, download, all } = choice;
   if (all.length > 1) {
@@ -440,10 +440,11 @@ export async function rehydrateChosenObject(
       console.warn(`[B75 rehydrate] ${label} (cold): cannot parse cold URI: ${download.storage_uri}`);
       return { kind: 'skipped-cold', bytes: 0, rowCount: 0 };
     }
-    const data = await storage.downloadCold(m[1], m[2]);
-    fs.writeFileSync(localPath, data.data);
-    bytes = data.bytes;
-    checksumOk = sha256Hex(data.data) === download.checksum;
+    // B-DISK-FILE-TIERING 3a (AP-4 C-2): a restore from cold streams to the file — a streaming rotator with a buffered
+    // restore would send to cold an object that cannot come back on this box. (By-id reads are increment 3b.)
+    const cold = await storage.downloadColdFile(m[1], m[2], localPath);
+    bytes = cold.bytes;
+    checksumOk = cold.checksum === download.checksum;
   }
 
   let outPath = localPath;

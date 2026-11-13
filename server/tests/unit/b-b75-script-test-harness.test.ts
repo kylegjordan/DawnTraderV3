@@ -112,7 +112,6 @@ function contextDeps(over: Partial<ContextMonthDependencies> = {}): ContextMonth
   return {
     exportPartition: vi.fn(),
     getStorageClient: vi.fn(),
-    readFile: vi.fn().mockReturnValue(Buffer.from('archive')),
     unlinkFile: vi.fn(),
     countGzipJsonlLines: vi.fn().mockResolvedValue(1),
     evidenceExistsForManifest: vi.fn().mockResolvedValue(false),
@@ -558,12 +557,13 @@ describe('context lane deletion fence', () => {
       else if (sql === 'COMMIT') events.push('commit');
       return { rows: [], rowCount: 1 };
     }) };
+    // B-DISK-FILE-TIERING 3a: the file forms; the cold fallback is attested (no download back)
     const storage = {
-      uploadWarm: vi.fn().mockRejectedValue(new Error('413 Payload Too Large')),
-      downloadWarm: vi.fn(),
+      uploadWarmFile: vi.fn().mockRejectedValue(new Error('413 Payload Too Large')),
+      downloadWarmFile: vi.fn(),
       isColdConfigured: vi.fn().mockReturnValue(true),
-      uploadCold: vi.fn().mockResolvedValue({ checksum: 'ck' }),
-      downloadCold: vi.fn().mockResolvedValue({ checksum: 'ck', data: Buffer.from('x'), bytes: 1 }),
+      uploadColdFile: vi.fn().mockResolvedValue({ checksum: 'ck', sha1: 'sha1-x', fileId: 'file-1', bytes: 10, uri: 'b2://b/p' }),
+      downloadColdFile: vi.fn(),
     };
     const deps = contextDeps({
       exportPartition: vi.fn().mockResolvedValue({
@@ -577,7 +577,12 @@ describe('context lane deletion fence', () => {
     });
     await exportAndUploadContextMonth({} as never, ctl as never, contextCfg, month, deps);
     expect(events).toEqual(['begin', 'evidence:cold', 'verified', 'commit']);
-    expect(storage.downloadCold).toHaveBeenCalledOnce();
+    expect(storage.uploadColdFile).toHaveBeenCalledOnce();
+    expect(storage.uploadColdFile.mock.calls[0][2]).toBe('fake.gz'); // the export FILE, never a buffer
+    expect(storage.downloadColdFile).not.toHaveBeenCalled(); // attested, not read back
+    const update = ctl.query.mock.calls.find((c) => String(c[0]).includes("SET tier = 'cold'"));
+    expect(update?.[0]).toContain("verification_method = 'b2-sha1-attested'");
+    expect(update?.[1]).toEqual(expect.arrayContaining(['file-1', 'sha1-x', 10]));
   });
 
   it('runs delete, active marking, and vacuum only after every month completes', async () => {
@@ -731,7 +736,7 @@ describe('cold rotation state machine', () => {
     warmRetentionDays: 365,
     perTableWarmRetentionDays: new Map([['fast_table', 30]]),
     coldRotatorDryRun: false,
-    warmBucket: 'warm', warmPrefix: 'archive', coldBucket: 'cold', coldPrefix: '', coldProvider: 'b2',
+    warmBucket: 'warm', warmPrefix: 'archive', coldBucket: 'cold', coldPrefix: '', coldProvider: 'b2', freeFloorBytes: 1,
   };
   const candidate: ColdRotationCandidate = {
     id: 'warm-1', source_table: 'fast_table', partition_label: '2025-01',
@@ -785,12 +790,14 @@ describe('cold rotation state machine', () => {
     expect(sql).toContain("m2.tier = 'cold'");
   });
 
-  it('deletes warm strictly after cold readback and both manifest writes', async () => {
+  it('deletes warm strictly after the ATTESTED upload and both manifest writes; no cold read-back; temp removed', async () => {
     const events: string[] = [];
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'b75-rot-'));
+    privateDirs.push(tempRoot);
+    let local = '';
     const storage = {
-      downloadWarm: vi.fn(async () => { events.push('warm-read'); return { checksum: 'ck', data: Buffer.from('x'), bytes: 1 }; }),
-      uploadCold: vi.fn(async () => { events.push('cold-upload'); return { checksum: 'ck' }; }),
-      downloadCold: vi.fn(async () => { events.push('cold-read'); return { checksum: 'ck', data: Buffer.from('x'), bytes: 1 }; }),
+      downloadWarmFile: vi.fn(async (_b: string, _p: string, l: string) => { events.push('warm-read'); local = l; fs.writeFileSync(l, 'x'); return { checksum: 'ck', bytes: 1 }; }),
+      uploadColdFile: vi.fn(async () => { events.push('cold-upload'); return { checksum: 'ck', sha1: 's1', fileId: 'f1', bytes: 1, uri: 'b2://cold/x' }; }),
       deleteWarm: vi.fn(async () => { events.push('warm-delete'); }),
     };
     const client = {
@@ -806,19 +813,37 @@ describe('cold rotation state machine', () => {
         throw new Error(`unexpected SQL: ${sql}`);
       }),
     };
-    await expect(rotateColdCandidate(candidate, cfg, { storage: storage as never, createClient: () => client as never }))
+    await expect(rotateColdCandidate(candidate, cfg, { storage: storage as never, createClient: () => client as never, tempRoot, freeBytes: () => 1e12 }))
       .resolves.toBe(8);
-    expect(events).toEqual(['warm-read', 'cold-upload', 'cold-read', 'begin', 'cold-manifest', 'warm-migrated', 'commit', 'warm-delete']);
+    expect(events).toEqual(['warm-read', 'cold-upload', 'begin', 'cold-manifest', 'warm-migrated', 'commit', 'warm-delete']);
+    expect(fs.existsSync(local)).toBe(false); // the private temp folder is removed
+    const insert = client.query.mock.calls.find((c) => String(c[0]).startsWith('INSERT INTO data_archive_manifest'));
+    expect(insert?.[1]).toEqual(expect.arrayContaining(['f1', 's1', 1]));
+  });
+
+  it('refuses before any I/O when free space is short of 2 x object + the floor, and when the floor is missing', async () => {
+    const storage = { downloadWarmFile: vi.fn(), uploadColdFile: vi.fn(), deleteWarm: vi.fn() };
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'b75-rot-'));
+    privateDirs.push(tempRoot);
+    await expect(rotateColdCandidate(candidate, cfg, { storage: storage as never, createClient: () => ({}) as never, tempRoot, freeBytes: () => 2 * 8 }))
+      .rejects.toThrow(/refused/);
+    const noFloor = { ...cfg, freeFloorBytes: undefined as unknown as number };
+    await expect(rotateColdCandidate(candidate, noFloor, { storage: storage as never, createClient: () => ({}) as never, tempRoot, freeBytes: () => 1e12 }))
+      .rejects.toThrow(/refused/);
+    expect(storage.downloadWarmFile).not.toHaveBeenCalled();
+    expect(storage.deleteWarm).not.toHaveBeenCalled();
   });
 
   it('keeps warm on checksum failure and continues to the next candidate', async () => {
     const deleted: string[] = [];
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'b75-rot-'));
+    privateDirs.push(tempRoot);
     const storage = {
-      downloadWarm: vi.fn(async (_bucket: string, objectPath: string) => ({
-        checksum: objectPath.includes('bad') ? 'wrong' : 'ck', data: Buffer.from('x'), bytes: 1,
-      })),
-      uploadCold: vi.fn().mockResolvedValue({ checksum: 'ck' }),
-      downloadCold: vi.fn().mockResolvedValue({ checksum: 'ck', data: Buffer.from('x'), bytes: 1 }),
+      downloadWarmFile: vi.fn(async (_bucket: string, objectPath: string, l: string) => {
+        fs.writeFileSync(l, 'x');
+        return { checksum: objectPath.includes('bad') ? 'wrong' : 'ck', bytes: 1 };
+      }),
+      uploadColdFile: vi.fn().mockResolvedValue({ checksum: 'ck', sha1: 's1', fileId: 'f1', bytes: 1, uri: 'b2://cold/x' }),
       deleteWarm: vi.fn(async (_bucket: string, objectPath: string) => { deleted.push(objectPath); }),
     };
     const client = {
@@ -830,7 +855,7 @@ describe('cold rotation state machine', () => {
     const bad = { ...candidate, id: 'bad', storage_uri: 'supabase://warm/bad' };
     const good = { ...candidate, id: 'good', partition_label: '2025-02', storage_uri: 'supabase://warm/good' };
     const result = await runColdRotationCandidates([bad, good], cfg, {
-      storage: storage as never, createClient: () => client as never,
+      storage: storage as never, createClient: () => client as never, tempRoot, freeBytes: () => 1e12,
     });
     expect(result).toEqual({ rotated: 1, failed: 1, bytesMoved: 8 });
     expect(deleted).toEqual(['good']);

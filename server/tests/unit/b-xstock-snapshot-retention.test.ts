@@ -1078,12 +1078,15 @@ describe('B-XSTOCK-SNAPSHOT-RETENTION canonical archive proof', () => {
       }
       return { rows: [] };
     });
+    // B-DISK-FILE-TIERING 3a: the file forms — the rotator streams through a temp file and the upload is attested
     const storage = {
-      downloadWarm: vi.fn(async () => ({ checksum, data: compressed, bytes: compressed.length })),
-      uploadCold: vi.fn(async () => ({ checksum })),
-      downloadCold: vi.fn(async () => ({ checksum, data: compressed, bytes: compressed.length })),
+      downloadWarmFile: vi.fn(async (_b: string, _p: string, l: string) => { fs.writeFileSync(l, compressed); return { checksum, bytes: compressed.length }; }),
+      uploadColdFile: vi.fn(async () => ({ checksum, sha1: 'sha1-x', fileId: 'file-1', bytes: compressed.length, uri: 'b2://cold/x' })),
+      downloadColdFile: vi.fn(async (_b: string, _p: string, l: string) => { fs.writeFileSync(l, compressed); return { checksum, bytes: compressed.length, fileId: 'file-1' }; }),
       deleteWarm: vi.fn(async () => { events.push('delete-warm'); }),
     };
+    const rotTemp = fs.mkdtempSync(path.join(os.tmpdir(), 'xstock-snapshot-rot-'));
+    tempDirs.push(rotTemp);
     await rotateColdCandidate({
       id: warmManifest.id, source_table: snap.table, partition_label: warmManifest.partition_label,
       storage_uri: warmManifest.storage_uri, row_count: warmManifest.row_count,
@@ -1091,9 +1094,9 @@ describe('B-XSTOCK-SNAPSHOT-RETENTION canonical archive proof', () => {
       created_at: new Date('2026-10-02T00:00:00Z'),
     }, {
       warmRetentionDays: 30, perTableWarmRetentionDays: new Map(), coldRotatorDryRun: false,
-      warmBucket: 'warm', warmPrefix: 'archive', coldBucket: 'cold', coldPrefix: '', coldProvider: 'b2',
+      warmBucket: 'warm', warmPrefix: 'archive', coldBucket: 'cold', coldPrefix: '', coldProvider: 'b2', freeFloorBytes: 1,
     }, {
-      storage: storage as never,
+      storage: storage as never, tempRoot: rotTemp, freeBytes: () => 1e12,
       createClient: () => ({
         connect: vi.fn().mockResolvedValue(undefined),
         end: vi.fn().mockResolvedValue(undefined),
@@ -1125,7 +1128,7 @@ describe('B-XSTOCK-SNAPSHOT-RETENTION canonical archive proof', () => {
     const choice = { label: manifest.partition_label, download: manifest, all: [manifest] };
     const result = await rehydrateChosenObject(args, choice, {
       downloadWarmFile: vi.fn(), isColdConfigured: vi.fn(() => true),
-      downloadCold: storage.downloadCold,
+      downloadColdFile: storage.downloadColdFile,
     } as never);
     writeSnapshotRehydrateRunIndex(args, [choice.label], [choice], [result]);
     await expect(loadProvenRehydratedSnapshot(out, snap.table, {
@@ -1145,9 +1148,9 @@ describe('B-XSTOCK-SNAPSHOT-RETENTION canonical archive proof', () => {
       created_at: new Date('2026-10-02T00:00:00Z'),
     }, {
       warmRetentionDays: 30, perTableWarmRetentionDays: new Map(), coldRotatorDryRun: false,
-      warmBucket: 'warm', warmPrefix: 'archive', coldBucket: 'cold', coldPrefix: '', coldProvider: 'b2',
+      warmBucket: 'warm', warmPrefix: 'archive', coldBucket: 'cold', coldPrefix: '', coldProvider: 'b2', freeFloorBytes: 1,
     }, {
-      storage: storage as never,
+      storage: storage as never, tempRoot: rotTemp, freeBytes: () => 1e12,
       createClient: () => ({
         connect: vi.fn().mockResolvedValue(undefined),
         end: vi.fn().mockResolvedValue(undefined),
