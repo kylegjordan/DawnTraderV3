@@ -52,6 +52,15 @@ MUTANTS = [
     ("the cap drops silently", L,
      '        return ("dropped the %d oldest breach episode(s) at the cap of %d; the run log keeps every run"\n'
      '                % (dropped, EPISODE_CAP))', '        return None'),
+    ('Step-4 BLOCKER: a transport failure counts as discharged again', L,
+     '    if _not_found(rc, err, alert_id):\n        return True, "%s no longer exists - discharged" % alert_id',
+     '    if "not found" in (out + err).lower() or "no such" in (out + err).lower():\n        return True, "%s no longer exists - discharged" % alert_id'),
+    ('Step-4: lsattr is no longer guarded on its own', L,
+     '        except Exception as e:\n            flags, why = None, "%s: %s" % (type(e).__name__, str(e)[:80])',
+     '        except ZeroDivisionError as e:\n            flags, why = None, "%s: %s" % (type(e).__name__, str(e)[:80])'),
+    ('Step-4: a missing rules file reads as a link attack again', L,
+     '    except FileNotFoundError:\n        out["tamper"].append("%s does not exist" % target)\n',
+     ''),
     ("Coltrane: the add is skipped while an id is stored", C,
      '    if active:\n        new_id, failure = _alert_add(key, "warning", title, body)\n        if not new_id:\n'
      '            return failure\n',

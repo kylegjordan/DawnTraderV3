@@ -57,6 +57,12 @@ PAIRS = [
     # let a duplicate in as a "record item".
     ("comms-infra/systemd/coltrane-bot.service", "/etc/systemd/system/coltrane-bot.service"),
     ("comms-infra/systemd/coltrane-bot.service.d/onfailure.conf", "/etc/systemd/system/coltrane-bot.service.d/onfailure.conf"),
+    # added 2026-11-13 (B-SIZE-WATCH-BREACH-ALARM, Langston Step 4): the batch edits the first unit, and an uninstalled
+    # unit change has no other instrument. The drop-in is the SHARED systemd/onfailure.conf (README.md:12).
+    ("comms-infra/systemd/coltrane-size-watch.service", "/etc/systemd/system/coltrane-size-watch.service"),
+    ("comms-infra/systemd/onfailure.conf", "/etc/systemd/system/coltrane-size-watch.service.d/onfailure.conf"),
+    ("comms-infra/systemd/langston-size-watch.service", "/etc/systemd/system/langston-size-watch.service"),
+    ("comms-infra/systemd/onfailure.conf", "/etc/systemd/system/langston-size-watch.service.d/onfailure.conf"),
 ]
 
 

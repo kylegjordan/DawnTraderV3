@@ -228,6 +228,14 @@ def _alerts(argv):
         return 255, "", "%s: %s" % (type(e).__name__, e)
 
 
+def _not_found(rc, err, alert_id):
+    """The ONE shape that means the row is gone: the CLI's own `Alert <id> not found` on stderr with exit 1
+    (scripts/system-alerts.ts, cmdResolve). Langston, Step 4: the old test scanned stdout+stderr for "not found" or
+    "no such", and a broken transport says exactly that ("cd: ... No such file or directory", "npm: command not
+    found"), so a failed resolve read as discharged and the stored id was cleared with the row still open."""
+    return rc == 1 and ("Alert %s not found" % alert_id) in [x.strip() for x in (err or "").splitlines()]
+
+
 def heartbeat(st, status):
     # ⚠️ `status` was accepted and never used (Langston, r2 minor). An argument a function
     #    ignores is a claim about what it considers, so it is now IN the alert body: if the
@@ -255,9 +263,10 @@ def heartbeat(st, status):
         #    do; treating it as a failure would latch the refuse-to-re-arm guard below and
         #    leave a hand-edit of the state file as the only exit — which is BLOCKER-1's
         #    shape, rebuilt in the fix for BLOCKER-1's sibling.
-        blob = (out + " " + err).lower()
-        if rc != 0 and ("already" in blob or "not found" in blob or "no such" in blob):
-            notes.append("prior %s was already discharged" % prev)
+        # ⛔ Only the CLI's exact not-found shape is a discharge (_not_found). A re-resolve of a resolved row
+        #    exits 0 in the real store, so there is no "already" case to catch.
+        if rc != 0 and _not_found(rc, err, prev):
+            notes.append("prior %s no longer exists - discharged" % prev)
             rc = 0
         else:
             notes.append("resolved %s" % prev if rc == 0
@@ -329,14 +338,13 @@ def _alert_add(key, severity, title, body):
 
 
 def _alert_resolve(alert_id, evidence):
-    """Resolve one row. Returns (discharged, note). An already-resolved or missing row is DISCHARGED, not a failure:
-    a human resolving it by hand is normal (the heartbeat's rule)."""
+    """Resolve one row. Returns (discharged, note). A row resolved by hand re-resolves with exit 0 in the real store;
+    a row that no longer exists answers with the CLI's exact not-found shape. Anything else is a FAILURE, kept."""
     rc, out, err = _alerts(["resolve", alert_id, "--by", "cc-infra", "--evidence", evidence])
     if rc == 0:
         return True, "resolved %s" % alert_id
-    blob = (out + " " + err).lower()
-    if "already" in blob or "not found" in blob or "no such" in blob:
-        return True, "%s was already discharged" % alert_id
+    if _not_found(rc, err, alert_id):
+        return True, "%s no longer exists - discharged" % alert_id
     return False, "RESOLVE FAILED %s rc=%d %s" % (alert_id, rc, err[:120])
 
 
@@ -445,6 +453,8 @@ def rules_check(target=None, record=None, mirror=None, upstream=None, installer=
     out["record"] = {k: rec.get(k) for k in ("commit", "blob", "sha256", "installed_at")}
     try:
         fd = os.open(target, os.O_RDONLY | os.O_NOFOLLOW)
+    except FileNotFoundError:
+        out["tamper"].append("%s does not exist" % target)
     except OSError as e:
         out["tamper"].append("%s cannot be opened without following a link (%s)" % (target, type(e).__name__))
     else:
@@ -465,10 +475,17 @@ def rules_check(target=None, record=None, mirror=None, upstream=None, installer=
         if (st.st_uid, st.st_gid, stat.S_IMODE(st.st_mode)) != (0, 0, 0o644):
             out["tamper"].append("it is %d:%d mode %o, not root:root 0644" % (st.st_uid, st.st_gid,
                                                                               stat.S_IMODE(st.st_mode)))
-        r = subprocess.run(["lsattr", "-d", target], capture_output=True, text=True)
-        flags = r.stdout.split()[0] if r.returncode == 0 and r.stdout.split() else None
+        # ⛔ GUARDED ON ITS OWN (Langston, Step 4): an exception here used to escape into run()'s catch-all, which
+        #    REPLACES the whole result - a sha or mode mismatch already collected above was thrown away and reported
+        #    as "not established".
+        try:
+            r = subprocess.run(["lsattr", "-d", target], capture_output=True, text=True)
+            flags = r.stdout.split()[0] if r.returncode == 0 and r.stdout.split() else None
+            why = r.stderr.strip()[:80] or r.returncode
+        except Exception as e:
+            flags, why = None, "%s: %s" % (type(e).__name__, str(e)[:80])
         if flags is None:
-            out["unknown"].append("lsattr could not read its flags (%s)" % (r.stderr.strip()[:80] or r.returncode))
+            out["unknown"].append("lsattr could not read its flags (%s)" % why)
         elif "i" not in flags:
             out["tamper"].append("its immutable flag is NOT set (lsattr %s)" % flags)
     try:
@@ -484,6 +501,9 @@ def rules_check(target=None, record=None, mirror=None, upstream=None, installer=
 
 
 def run(quiet=False, injected_total=None, injected_archive_bytes=None, drill_store=False):
+    # ⛔ ONE timestamp for the whole run (Langston, Step 4): the run row, every alert body's "Measured", the breach
+    #    episode and last_run_ts all carry it, so the stamp printed in an alert greps straight to its run-log row.
+    run_ts = iso()
     files, total, missing = measure()
     if injected_total is not None:      # --self-test only; never reachable in a real run
         total = injected_total
@@ -612,7 +632,7 @@ def run(quiet=False, injected_total=None, injected_archive_bytes=None, drill_sto
     # ⭐ B-SIZE-WATCH-BREACH-ALARM: one row per condition (see CONDITION_ALERTS). A drill touches none of them.
     alerts, episodes_note, drill_row, drill_ok = {}, None, None, True
     if injected_total is None:
-        ts, ev = iso(), _runlog_ref()
+        ts, ev = run_ts, _runlog_ref()
         per_file = "; ".join("%s=%s" % (os.path.basename(f["path"]), f["bytes"]) for f in files)
         stamp = (" Measured " + ts + "; this row is NOT updated while the condition lasts - the live number is "
                  + LIVE_READ + ". Owner CC-INFRA.")
@@ -648,7 +668,7 @@ def run(quiet=False, injected_total=None, injected_archive_bytes=None, drill_sto
     elif drill_store:
         drill_ok, drill_row = drill_alert()
 
-    row = {"ts": iso(), "drill": drill, "status": status,
+    row = {"ts": run_ts, "drill": drill, "status": status,
            "total_bytes": total, "ceiling_bytes": ceiling,
            "over_by": over, "files": files, "missing": missing,
            "hours_since_previous_run": gap_h, "alarm": bool(alarm), "delivery": delivery,

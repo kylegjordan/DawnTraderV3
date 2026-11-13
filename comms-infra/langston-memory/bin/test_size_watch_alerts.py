@@ -7,9 +7,12 @@
    nothing tests the connection"). Every check below calls the tool's own daily-run entry with only its OUTSIDE world
    replaced: the staging alert CLI (`_alerts`) by FakeStore, Discord (`post`) by a recorder, the rules check and the
    archive walk by fixtures, and the state/run-log/watched paths by files in a private directory.
-⛔ FakeStore reproduces the two behaviours of server/services/system-alerts.ts addAlert that the design rests on, and
-   nothing else: an add whose dedupe key matches a NON-resolved row returns that row unchanged; a resolved row does
-   not block a fresh one. If the real store ever changes either, these checks stop describing production.
+⛔ FakeStore reproduces the behaviours of server/services/system-alerts.ts the design rests on, and nothing else:
+   ADD - a dedupe key matching a NON-resolved row returns that row unchanged; a resolved row does not block a fresh one.
+   RESOLVE (Langston, Step 4: the first version modelled this WRONG) - resolveAlert has no state guard, so re-resolving
+   a resolved row succeeds (exit 0); an id that does not exist exits 1 with exactly `Alert <id> not found` on stderr
+   (scripts/system-alerts.ts cmdResolve). A broken transport (`fail_resolve` set to an error string) exits non-zero
+   with that string. If the real store ever changes any of these, these checks stop describing production.
 ⛔ The private directory is under $HOME, never /tmp (#979: a shared /tmp shadowed an import on Helsinki 2026-11-13).
 Paths of the tools under test can be overridden (SIZE_WATCH_PATH, COLTRANE_WATCH_PATH, MEMORY_WRITE_PATH) so the
 mutation runner can point this at a mutated copy."""
@@ -71,15 +74,14 @@ class FakeStore:
             return 0, json.dumps({"id": row["id"]}), ""
         if argv[0] == "resolve":
             if self.fail_resolve:
-                return 1, "", "simulated transport failure"
+                err = self.fail_resolve if isinstance(self.fail_resolve, str) else "ssh: connect: Connection timed out"
+                return (127 if "command not found" in err else 1), "", err
             for r in self.rows:
                 if r["id"] == argv[1]:
-                    if r["state"] == "resolved":
-                        return 1, "", "alert already resolved"
-                    r["state"] = "resolved"
+                    r["state"] = "resolved"                         # no state guard: a re-resolve also exits 0
                     r["evidence"] = argv[argv.index("--evidence") + 1]
                     return 0, json.dumps({"id": r["id"]}), ""
-            return 1, "", "alert not found"
+            return 1, "", "Alert %s not found" % argv[1]
         return 2, "", "unknown verb"
 
     def by_key(self, key):
@@ -181,11 +183,15 @@ def test_langston(tmp):
     check("L5 the missing-file id is cleared", state(m).get("missing_alert_id"), None)
     check("L5 the breach row is still active", len(store.active(B)), 1)
 
-    # 6. under, but the resolve fails -> id kept, retried next run
+    # 6. under, but the transport fails -> id kept, retried next run. ⛔ These are the REAL failure strings Langston
+    #    drove the old discharge test with: each one contains "no such" or "not found" and was read as DISCHARGED.
     sizes(paths, 300, 300, 100)                        # 700 < 1000
-    store.fail_resolve = True
-    m.run(quiet=True)
-    check("L6 a failed resolve keeps the breach id", state(m).get("breach_alert_id"), open_breach)
+    for err in ("cd: /home/deploy/dawntrader: No such file or directory", "bash: npm: command not found",
+                "sudo: ssh: command not found", "ssh: connect to host 188.245.193.8 port 22: Connection timed out"):
+        store.fail_resolve = err
+        m.run(quiet=True)
+        check("L6 a transport failure is NOT a discharge (%s)" % err[:30], state(m).get("breach_alert_id"),
+              open_breach)
     check("L6 and the row stays active", len(store.active(B)), 1)
     store.fail_resolve = False
 
@@ -205,6 +211,15 @@ def test_langston(tmp):
     sizes(paths, 300, 300, 100)
     m.run(quiet=True)
     check("L7 a hand-resolved prior is discharged, id cleared", state(m).get("breach_alert_id"), None)
+
+    # 7b. a prior that no longer exists (the CLI's exact not-found shape) -> discharged, id cleared
+    sizes(paths, 600, 500, 100)
+    m.run(quiet=True)
+    gone = state(m).get("breach_alert_id")
+    store.rows = [x for x in store.rows if x["id"] != gone]
+    sizes(paths, 300, 300, 100)
+    m.run(quiet=True)
+    check("L7b a prior that no longer exists is discharged, id cleared", state(m).get("breach_alert_id"), None)
 
     # 9. tamper: unknown from lsattr -> no resolve; unknown only from the branch-head read -> resolves
     world["rules"]["tamper"] = ["its immutable flag is NOT set (lsattr ----)"]
@@ -237,7 +252,7 @@ def test_langston(tmp):
           [r["state"] for r in store.by_key("langston-size-watch-breach-drill")], ["resolved"])
     check("L8 the drill row is info", store.by_key("langston-size-watch-breach-drill")[0]["severity"], "info")
     check("L8 the real breach id is untouched", state(m).get("breach_alert_id"), real)
-    store.fail_resolve = True
+    store.fail_resolve = "cd: /home/deploy/dawntrader: No such file or directory"
     rc = m.run(quiet=True, injected_total=5000, drill_store=True)
     store.fail_resolve = False
     check("L8 a drill whose resolve fails exits 3", rc, 3)
@@ -278,6 +293,36 @@ def test_langston(tmp):
         last = json.loads(fh.read().strip().split("\n")[-1])
     check("G the run row says an episode was dropped", "dropped the 1 oldest" in (last.get("episodes_note") or ""),
           True)
+
+    # LR. rules_check: a missing file is named as missing; an lsattr that cannot run does NOT discard (1)/(2) findings
+    m4 = load(SIZE_WATCH, "lsw_rules")
+    rec = os.path.join(tmp, "INSTALLED")
+    with open(rec, "w", encoding="utf-8") as fh:
+        json.dump({"commit": "c0ffee", "blob": "b", "sha256": "0" * 64, "installed_at": "t"}, fh)
+
+    class NoLsattr:
+        @staticmethod
+        def run(*a, **k):
+            raise FileNotFoundError("lsattr")
+    m4.subprocess = NoLsattr
+    gone = os.path.join(tmp, "no-such-CLAUDE.md")
+    try:
+        r1 = m4.rules_check(target=gone, record=rec, installer=os.path.join(tmp, "no-installer"))
+    except Exception as e:
+        r1 = {"tamper": ["raised %s" % type(e).__name__], "unknown": []}
+    check("LR a missing rules file reads as missing, not as a link", r1["tamper"], ["%s does not exist" % gone])
+    present = os.path.join(tmp, "CLAUDE-rules.md")
+    with open(present, "w", encoding="utf-8") as fh:
+        fh.write("not the installed content")
+    try:
+        r2 = m4.rules_check(target=present, record=rec, installer=os.path.join(tmp, "no-installer"))
+    except Exception as e:
+        r2 = None
+    check("LR an lsattr that cannot run does not raise out of rules_check", r2 is not None, True)
+    check("LR and the content mismatch already found is KEPT",
+          any("differs from the installed commit" in t for t in (r2 or {}).get("tamper", [])), True)
+    check("LR and the lsattr failure is reported as unknown",
+          any("lsattr could not read" in u for u in (r2 or {}).get("unknown", [])), True)
 
     # 10. langston-memory-write still reads the ceiling from a state file carrying the new fields
     os.environ["LANGSTON_HOME"] = tmp
@@ -323,7 +368,7 @@ def test_coltrane(tmp):
     check("C11 the next run resolves the old heartbeat", [r["state"] for r in store.by_key(HB) if r["id"] == hb1],
           ["resolved"])
     check("C11 and arms exactly one new one", len(store.active(HB)), 1)
-    store.fail_resolve = True
+    store.fail_resolve = "bash: npm: command not found"
     before = len(store.by_key(HB))
     adds_before = len(store.adds(HB))
     m.cmd_run(A())

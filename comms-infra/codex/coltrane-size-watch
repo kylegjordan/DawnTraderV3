@@ -161,14 +161,22 @@ def _alert_add(key, severity, title, body, triggers_at=None):
     return new_id, None
 
 
+def _not_found(rc, err, alert_id):
+    """The ONE shape that means the row is gone: the CLI's own `Alert <id> not found` on stderr with exit 1
+    (scripts/system-alerts.ts, cmdResolve). Langston, Step 4: the old test scanned stdout+stderr for "not found" or
+    "no such", and a broken transport says exactly that ("cd: ... No such file or directory", "npm: command not
+    found"), so a failed resolve read as discharged and the stored id was cleared with the row still open."""
+    return rc == 1 and ("Alert %s not found" % alert_id) in [x.strip() for x in (err or "").splitlines()]
+
+
 def _alert_resolve(alert_id, evidence):
-    """Returns (discharged, note). An already-resolved or missing row is discharged: a hand-resolve is normal."""
+    """Returns (discharged, note). A hand-resolved row re-resolves with exit 0; a missing row answers with the CLI's
+    exact not-found shape; anything else is a failure and the id is kept."""
     rc, out, err = _alerts(["resolve", alert_id, "--by", "cc-infra", "--evidence", evidence])
     if rc == 0:
         return True, "resolved %s" % alert_id
-    blob = (out + " " + err).lower()
-    if "already" in blob or "not found" in blob or "no such" in blob:
-        return True, "%s was already discharged" % alert_id
+    if _not_found(rc, err, alert_id):
+        return True, "%s no longer exists - discharged" % alert_id
     return False, "RESOLVE FAILED %s rc=%d %s" % (alert_id, rc, err[:120])
 
 
