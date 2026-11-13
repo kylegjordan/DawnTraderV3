@@ -83,7 +83,7 @@ The Codex weekly allowance crossed Kyle's 92% stop line at 2026-11-12T13:12:43Z.
 
 ## Memory and exact-copy record
 
-After CI run `43385164986` passed all four jobs at handoff ref `226a217bd55bc6d8dfcf4e253002d78f0959129b`, PM Codex replaced all five outside Claude copies from the pushed `origin/migration/aws-supabase` blobs. Each outside copy exactly matched the pushed repo blob:
+After CI run `43389592627` passed all four jobs at handoff ref `dec5b5be63fbddbcafdf7e446390401118535eb0`, PM Codex replaced all five outside Claude copies from the pushed `origin/migration/aws-supabase` blobs. Each outside copy exactly matched the pushed repo blob:
 
 | file | outside size | repo size | SHA-256 (both copies) |
 |---|---:|---:|---|
