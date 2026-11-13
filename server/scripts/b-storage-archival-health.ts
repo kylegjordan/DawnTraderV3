@@ -11,11 +11,17 @@
  * For each archival cron it checks:
  *   - STALE   — the log file was not written at or after the cron's most recent
  *               scheduled fire (cadence-aware since B-DISK-FILE-TIERING amendment 1,
- *               `server/services/archival-cadence.ts`; it was a fixed grace), OR the
- *               tail has no completion line (a run started but never finished).
- *   - MISCONFIGURED — a check's schedule does not parse: it pages, never skips.
- *   - FAILED  — the last completion line reports failed>0.
- * Either fires a §10.5 alert (warning), deduped per-cron-per-reason.
+ *               `server/services/archival-cadence.ts`; it was a fixed grace).
+ *   - NOT_STARTED — no run started at/after that fire: the last start line is older (a job that
+ *               refused before printing it) or absent (amendment 2, AP-7).
+ *   - INCOMPLETE — the last run started but has no completion line after its start.
+ *   - FAILED  — the completion line AFTER the last start reports failed>0.
+ *   - MISCONFIGURED — a check's in-repo schedule does not parse: it pages, never skips.
+ *   - SCHEDULE_DRIFT / NOT_SCHEDULED — the root crontab disagrees with the in-repo schedule,
+ *               or carries no active line for the job (read every run).
+ * Each fires a §10.5 alert (warning), deduped per-cron-per-reason. archival-health never resolves
+ * its own rows: a standing row suppresses a later one on the same key, so hand-resolve is the
+ * only clearing instrument.
  *
  * Disk-usage thresholds are NOT re-checked here — DatabaseMonitor owns that and
  * (as of B-STORAGE-HARDEN OBJ-5) wires warning/critical straight into §10.5.
@@ -35,7 +41,19 @@ import 'dotenv/config';
 import fs from 'node:fs';
 import pg from 'pg';
 import { addAlert } from '../services/system-alerts.js';
+import { execFileSync } from 'node:child_process';
 import { cadenceVerdict } from '../services/archival-cadence.js';
+import { computePrevFire } from '../services/cron-next-fire.js';
+import {
+  ARCHIVAL_TAIL_CAP_BYTES,
+  UNVERIFIED_MARKER,
+  UNVERIFIED_PAGE_AFTER_RUNS,
+  evaluateRun,
+  normaliseSchedule,
+  selectCrontabLine,
+  tailText,
+  unverifiedStreak,
+} from '../services/archival-run-check.js';
 import {
   DAILY_PARTITION_CUTOVERS,
   cutoverForTable,
@@ -62,15 +80,21 @@ interface CheckSpec {
   logFile: string;
   /**
    * The subject cron's expression, UTC, copied from the `Cron line` in that script's header comment — a
-   * test holds the two equal. ⚠️ REACH OF THAT FENCE (Langston, amendment 1 (c)): it compares two in-repo
-   * strings, so it catches a typo in one copy and nothing else; the root crontab is unreadable as deploy, so
-   * no runtime self-read exists. Every box-side drift is LOUD (a job moved, loosened or dead reads STALE daily)
-   * except ONE silent direction: an expression here LOOSER than the box's (e.g. monthly here, daily on the box)
-   * lets a dead job pass for weeks. Edit this and the box together.
+   * test holds the two equal (a typo fence: two in-repo strings). Since amendment 2 (AP-7) every run ALSO reads
+   * the root crontab (`sudo -n crontab -l` as deploy works — measured 2026-11-13) and compares this with the
+   * job's active line: a mismatch pages `schedule_drift` and the run is graded on the BOX's expression (the box
+   * decides when the job fires); no active line pages `not_scheduled`. That closes the silent direction the old
+   * comment named (an expression here looser than the box's). If the crontab cannot be read, the run logs
+   * `schedule_unverified`, grades on this string, and pages on the 3rd consecutive unverified run.
    */
   schedule: string;
-  /** regex whose FIRST capture group is the `failed` count on the completion line; null = staleness-only */
+  /** regex whose capture groups are the `failed` counts on the completion line (summed); null = staleness-only */
   donePattern: RegExp | null;
+  /**
+   * regex matching the subject's own start line; its FIRST capture group is the start's ISO timestamp. Required
+   * whenever `donePattern` is set (AP-7): the DONE must follow a start at/after the scheduled fire.
+   */
+  startPattern: RegExp | null;
   /** when the log file is absent: 'skip' (not scheduled yet / bootstrapping) or 'alert' */
   onMissing: 'skip' | 'alert';
 }
@@ -84,6 +108,7 @@ const CHECKS: CheckSpec[] = [
     logFile: 'b75-retention.log',
     schedule: '15 2 * * *',
     donePattern: /DONE .*\bfailed=(\d+)\b.*\bplain_failed=(\d+)\b/,
+    startPattern: /\[B75 sweep\] started at (\S+) run_id=/,
     onMissing: 'alert',
   },
   {
@@ -92,6 +117,7 @@ const CHECKS: CheckSpec[] = [
     logFile: 'b75-cold-rotator.log',
     schedule: '0 3 1 * *',
     donePattern: /DONE candidates=\d+ rotated=\d+ failed=(\d+)/,
+    startPattern: /\[B75 rotator\] started at (\S+) /,
     onMissing: 'skip', // first run is the OBJ-1 manual proof; monthly thereafter
   },
   {
@@ -100,6 +126,7 @@ const CHECKS: CheckSpec[] = [
     logFile: 'b75-cold-liveness.log',
     schedule: '0 4 * * 1',
     donePattern: null, // the canary self-alerts on failure; watchdog only catches "didn't run"
+    startPattern: null,
     onMissing: 'skip',
   },
   {
@@ -113,13 +140,16 @@ const CHECKS: CheckSpec[] = [
     logFile: 'disk-file-tiering.log',
     schedule: '45 2 * * *',
     donePattern: /DONE moved=\d+ failed=(\d+)/,
+    startPattern: /\[disk-tiering\] (\S+) started run /,
     onMissing: 'alert',
   },
 ];
 
 async function fire(
   spec: CheckSpec,
-  reason: 'stale' | 'failed' | 'missing' | 'incomplete' | 'misconfigured' | 'errored',
+  reason:
+    | 'stale' | 'failed' | 'missing' | 'incomplete' | 'misconfigured' | 'errored'
+    | 'not_started' | 'schedule_drift' | 'not_scheduled',
   detail: string,
 ): Promise<void> {
   try {
@@ -146,13 +176,103 @@ async function fire(
   }
 }
 
-function tail(content: string, n: number): string[] {
-  const lines = content.split('\n').filter((l) => l.trim().length > 0);
-  return lines.slice(Math.max(0, lines.length - n));
+/** One page for the whole run, on its own key (not per check): this watchdog could not read the root crontab. */
+async function fireUnverified(runs: number, why: string): Promise<void> {
+  try {
+    await addAlert({
+      triggers_at: new Date(),
+      category: 'health_check',
+      severity: 'warning',
+      title: 'Archival watchdog cannot read the root crontab',
+      body:
+        `The archival watchdog could not read the root crontab (\`sudo -n crontab -l\` as deploy) on ${runs} consecutive ` +
+        `runs (${why}). It still grades every archival cron on the schedules written in b-storage-archival-health.ts, ` +
+        `but it can no longer tell whether the box runs them on those schedules. Restore the deploy user's read of the crontab.`,
+      metadata: { source: 'b-storage-archival-health', batch: 'B-DISK-FILE-TIERING', check: 'crontab', reason: 'schedule_unverified', runs },
+      dedupe_key: 'archival-health-crontab-schedule_unverified',
+    });
+    console.log(`[archival-health] ALERT crontab/schedule_unverified: ${runs} consecutive runs`);
+  } catch (err) {
+    console.error('[archival-health] failed to raise the schedule_unverified alert:', err);
+  }
+}
+
+/** The root crontab as text, or why it could not be read. */
+function readCrontab(): { text: string } | { text: null; why: string } {
+  try {
+    return { text: execFileSync('sudo', ['-n', 'crontab', '-l'], { encoding: 'utf-8', timeout: 10_000, stdio: ['ignore', 'pipe', 'pipe'] }) };
+  } catch (err) {
+    return { text: null, why: String((err as Error)?.message ?? err).split('\n')[0].slice(0, 200) };
+  }
+}
+
+/** The root crontab, read once per run in main() (AP-7); null = unreadable (`schedule_unverified`). */
+let CRONTAB: string | null = null;
+
+/** The last `min(size, maxBytes)` of a file as text, in one pass (C-4); '' when the file is absent. */
+function readTail(path: string, maxBytes: number = ARCHIVAL_TAIL_CAP_BYTES): string {
+  let fd: number;
+  try {
+    fd = fs.openSync(path, 'r');
+  } catch {
+    return '';
+  }
+  try {
+    const size = fs.fstatSync(fd).size;
+    const n = Math.min(size, maxBytes);
+    const buf = Buffer.alloc(n);
+    fs.readSync(fd, buf, 0, n, size - n);
+    return tailText(buf, size);
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+/**
+ * The expression this run grades the check on (AP-7 r3 B2): the box's when it disagrees with the in-repo one (the
+ * box decides when the job fires), the in-repo one otherwise. Each disagreement pages on its own key.
+ */
+async function effectiveSchedule(spec: CheckSpec): Promise<string> {
+  if (CRONTAB === null) return spec.schedule;
+  const sel = selectCrontabLine(CRONTAB, spec.logFile);
+  if (sel.kind === 'none') {
+    await fire(
+      spec,
+      'not_scheduled',
+      `The root crontab has no active line appending to ${spec.logFile} (commented-out lines are ignored) — the job is not scheduled on the box. Graded on the in-repo schedule "${spec.schedule}".`,
+    );
+    return spec.schedule;
+  }
+  if (sel.kind === 'many') {
+    await fire(
+      spec,
+      'schedule_drift',
+      `The root crontab has ${sel.lines.length} active lines appending to ${spec.logFile}: ${sel.lines.map((l) => `"${l.slice(0, 160)}"`).join('; ')}. Graded on the in-repo schedule "${spec.schedule}".`,
+    );
+    return spec.schedule;
+  }
+  if (computePrevFire(sel.schedule, 'UTC', new Date()) === null) {
+    await fire(
+      spec,
+      'schedule_drift',
+      `The root crontab's expression "${sel.schedule}" for ${spec.logFile} does not parse. Graded on the in-repo schedule "${spec.schedule}".`,
+    );
+    return spec.schedule;
+  }
+  if (normaliseSchedule(sel.schedule) !== normaliseSchedule(spec.schedule)) {
+    await fire(
+      spec,
+      'schedule_drift',
+      `The root crontab runs it at "${sel.schedule}" UTC but b-storage-archival-health.ts says "${spec.schedule}". Graded on the crontab's expression (the box decides when it fires); fix whichever is wrong.`,
+    );
+    return sel.schedule;
+  }
+  return spec.schedule;
 }
 
 async function runCheck(spec: CheckSpec, nowMs: number): Promise<boolean> {
   const path = `${LOG_DIR}/${spec.logFile}`;
+  const schedule = await effectiveSchedule(spec);
   let stat: fs.Stats;
   try {
     stat = fs.statSync(path);
@@ -166,12 +286,12 @@ async function runCheck(spec: CheckSpec, nowMs: number): Promise<boolean> {
   }
 
   const ageMs = nowMs - stat.mtimeMs;
-  const cadence = cadenceVerdict(spec.schedule, stat.mtimeMs, nowMs);
+  const cadence = cadenceVerdict(schedule, stat.mtimeMs, nowMs);
   if (cadence.kind === 'misconfigured') {
     await fire(
       spec,
       'misconfigured',
-      `Its schedule "${spec.schedule}" does not parse, so this watchdog cannot tell whether the cron ran — fix the schedule in b-storage-archival-health.ts.`,
+      `Its schedule "${schedule}" does not parse, so this watchdog cannot tell whether the cron ran — fix the schedule in b-storage-archival-health.ts.`,
     );
     return false;
   }
@@ -179,37 +299,45 @@ async function runCheck(spec: CheckSpec, nowMs: number): Promise<boolean> {
     await fire(
       spec,
       'stale',
-      `Its log was last written ${(ageMs / HOUR_MS).toFixed(1)}h ago, before its scheduled run at ${new Date(cadence.dueMs).toISOString()} (cron "${spec.schedule}" UTC) — the cron did not run.`,
+      `Its log was last written ${(ageMs / HOUR_MS).toFixed(1)}h ago, before its scheduled run at ${new Date(cadence.dueMs).toISOString()} (cron "${schedule}" UTC) — the cron did not run.`,
     );
     return false;
   }
 
   if (spec.donePattern) {
-    const lines = tail(fs.readFileSync(path, 'utf-8'), 60);
-    let doneLine: string | null = null;
-    for (let i = lines.length - 1; i >= 0; i--) {
-      if (spec.donePattern.test(lines[i])) {
-        doneLine = lines[i];
-        break;
-      }
+    if (!spec.startPattern) {
+      await fire(spec, 'misconfigured', `It has a completion pattern but no start pattern, so a run cannot be tied to its own start (AP-7).`);
+      return false;
     }
-    if (!doneLine) {
+    // AP-7: the LAST start must be at/after the scheduled fire and a DONE must follow it; failures come from that DONE.
+    const verdict = evaluateRun({
+      live: readTail(path),
+      rotated: readTail(`${path}.1`),
+      startPattern: spec.startPattern,
+      donePattern: spec.donePattern,
+      dueMs: cadence.dueMs,
+    });
+    if (verdict.kind === 'not_started') {
       await fire(
         spec,
-        'incomplete',
-        `Its log was written recently but has no completion line in the last 60 lines — a run may have crashed or hung mid-sweep.`,
+        'not_started',
+        `No run started at or after its scheduled time ${verdict.dueIso} (cron "${schedule}" UTC): ${verdict.lastStartIso ? `the last start was ${verdict.lastStartIso}` : `no start line in ${spec.logFile} or its .1`}. The log's last line: "${verdict.lastLine.trim().slice(0, 300)}".`,
       );
       return false;
     }
-    const m = spec.donePattern.exec(doneLine);
-    // Sum every numeric capture group (b75-retention has failed + plain_failed).
-    let failedTotal = 0;
-    if (m) for (let g = 1; g < m.length; g++) failedTotal += Number(m[g] || 0);
-    if (failedTotal > 0) {
+    if (verdict.kind === 'incomplete') {
+      await fire(
+        spec,
+        'incomplete',
+        `Its run that started at ${verdict.startIso} has no completion line after its start — it crashed or is still hung. The log's last line: "${verdict.lastLine.trim().slice(0, 300)}".`,
+      );
+      return false;
+    }
+    if (verdict.failedTotal > 0) {
       await fire(
         spec,
         'failed',
-        `Its last run reported failed=${failedTotal}. Data was NOT dropped/lost (the sweep is fail-safe) but items did not archive: "${doneLine.trim()}".`,
+        `Its last run reported failed=${verdict.failedTotal}. Data was NOT dropped/lost (the sweep is fail-safe) but items did not archive: "${verdict.doneLine.trim()}".`,
       );
       return false;
     }
@@ -320,8 +448,23 @@ async function checkDailyPartitionRunway(nowMs: number): Promise<boolean> {
 
 async function main(): Promise<void> {
   const nowMs = Date.now();
-  console.log(`[archival-health] started at ${new Date(nowMs).toISOString()}`);
+  const startIso = new Date(nowMs).toISOString();
+  console.log(`[archival-health] started at ${startIso}`);
   let allOk = true;
+  // AP-7: read the root crontab once; every check compares its schedule with the box's line.
+  const crontab = readCrontab();
+  CRONTAB = crontab.text;
+  if (crontab.text === null) {
+    // Logged every run; pages on the 3rd consecutive (Langston r2 (b)) — counted from this script's own log and its .1
+    // (C-r4-1), excluding this run, whose own lines are already in the file.
+    console.log(`${UNVERIFIED_MARKER} ${crontab.why}`);
+    const previous = unverifiedStreak({
+      live: readTail(`${LOG_DIR}/archival-health.log`, 16 * 1024),
+      rotated: readTail(`${LOG_DIR}/archival-health.log.1`, 16 * 1024),
+      currentStartIso: startIso,
+    });
+    if (previous + 1 >= UNVERIFIED_PAGE_AFTER_RUNS) await fireUnverified(previous + 1, crontab.why);
+  }
   for (const spec of CHECKS) {
     // One check's throw must not end the run for the others (Langston C-2): it pages as its own reason.
     let ok = false;

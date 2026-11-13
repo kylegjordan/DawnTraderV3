@@ -289,14 +289,15 @@ function traceBounds(p: string, mtimeMs: number): NameBounds {
 
 async function main(): Promise<void> {
   for (const k of ['DATABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY']) {
-    // A missing setting is a failed run, and must say so on a DONE line (archival-health reads the latest one).
+    // A missing setting is a failed run. archival-health pages it as `not_started` (no start line at/after the
+    // scheduled fire, amendment 2 AP-7) and quotes this DONE line, so the page names `env_missing=1`.
     if (!process.env[k]) { log(`${k} not set`); log('DONE moved=0 failed=1 env_missing=1'); process.exit(1); }
   }
   if (!acquireLock()) {
-    // A skipped run must READ as a failure: archival-health looks for the latest DONE line, and an
-    // older run's DONE in its window would otherwise read green (Langston Step 4 part 1, change 2).
-    // It cannot latch: the lock self-breaks after LOCK_STALE_MS (12 h), so the next tick runs; and a holder
-    // that finishes writes its own later DONE, which wins (amendment 1, H-1: working as designed).
+    // A skipped run must READ as a failure. Since amendment 2 (AP-7) archival-health ties the DONE to a start at/after
+    // the scheduled fire, so this night pages as `not_started` (no start line printed) and the page quotes this DONE
+    // line, naming `lock_held=1`. It cannot latch: the lock self-breaks after LOCK_STALE_MS (12 h), so the next tick
+    // runs; and a holder that finishes writes its own start and DONE, which the next check reads (amendment 1, H-1).
     log(`another run holds the lock (${LOCK_FILE}) — skipping this tick`);
     log('DONE moved=0 failed=1 lock_held=1');
     return;
