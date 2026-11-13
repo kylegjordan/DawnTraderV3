@@ -444,34 +444,75 @@ def _deploy_windows(box):
         % (len(stale), notice_only))
 
 
-# B-4 (Langston, gate B r2): the watcher's key is bounded ONLY by the options on its authorized_keys line. Drop
-# command= one day and that key is a full deploy shell from Helsinki - so the line itself is checked, exactly.
-NOTICE_KEY_FILE = "/home/deploy/.ssh/authorized_keys"
+# B-4 + B-7 (Langston, gate B r2/r3): the watcher's key is bounded ONLY by the options on its authorized_keys line.
+# sshd binds the KEY, not the comment, and the FIRST matching line wins (measured: an unrestricted copy of the key
+# placed above the pinned line is a full deploy shell). So the check counts lines by KEY MATERIAL, across every file
+# sshd reads for deploy (AuthorizedKeysFile = .ssh/authorized_keys .ssh/authorized_keys2, measured on staging),
+# and requires exactly ONE, carrying exactly the pinned options and comment. The public key is committed here; it is
+# not a secret. The private half lives only on Helsinki (/home/langston/.ssh/dt_deploy_notice_ed25519).
+NOTICE_KEY_FILES = ["/home/deploy/.ssh/authorized_keys", "/home/deploy/.ssh/authorized_keys2"]
+NOTICE_KEY_MATERIAL = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICO7VlYgryoFjb7aFlxnjLh4InAGK37mSc6o95JqAoxL"
 NOTICE_KEY_COMMENT = "dt-deploy-notice@helsinki"
 NOTICE_KEY_OPTIONS = 'restrict,from="204.168.141.77",command="/usr/local/bin/dt-deploy-notice-gate"'
+KEY_TYPES = ("ssh-ed25519", "ssh-rsa", "ecdsa-sha2-nistp256", "ecdsa-sha2-nistp384", "ecdsa-sha2-nistp521",
+             "sk-ssh-ed25519@openssh.com", "sk-ecdsa-sha2-nistp256@openssh.com", "ssh-dss")
+
+
+def split_key_line(ln):
+    """(options, 'type base64', comment) of one authorized_keys line, or None. Options may hold quoted spaces, so the
+    key type is found as a whole token rather than by position."""
+    toks = ln.split()
+    for i, t in enumerate(toks):
+        if t in KEY_TYPES and i + 1 < len(toks):
+            return " ".join(toks[:i]), t + " " + toks[i + 1], " ".join(toks[i + 2:])
+    return None
 
 
 def check_notice_key():
-    """Exactly ONE line carries the watcher's comment, and its options are EXACTLY the pinned string. Fail-closed:
-    a missing file, no such line, two of them, or any other options is a STATE failure (subject deploy-notice-key)."""
-    try:
-        body = read_small(P(NOTICE_KEY_FILE))[1].decode("utf-8", "replace")
-    except OSError as e:
-        out("STATE", "%s cannot be read (%s), so the deploy-notice key's restriction is unverified"
-            % (NOTICE_KEY_FILE, type(e).__name__), "KEYS", "deploy-notice-key")
-        return
-    lines = [ln.strip() for ln in body.splitlines()
-             if ln.strip() and not ln.strip().startswith("#") and ln.split()[-1] == NOTICE_KEY_COMMENT]
-    if len(lines) != 1:
-        out("STATE", "%s holds %d line(s) for %s; exactly one is required" % (NOTICE_KEY_FILE, len(lines), NOTICE_KEY_COMMENT),
+    """Exactly ONE line, over every effective file, carries the watcher's KEY; its options and comment are exactly the
+    pinned ones; and no other key carries the watcher's comment. Fail-closed (STATE, subject deploy-notice-key) on an
+    unreadable authorized_keys, a missing line, a second copy anywhere, or any other options."""
+    hits, named, read = [], [], 0
+    for f in NOTICE_KEY_FILES:
+        try:
+            body = read_small(P(f))[1].decode("utf-8", "replace")
+            read += 1
+        except FileNotFoundError:
+            if f == NOTICE_KEY_FILES[0]:
+                out("STATE", "%s does not exist, so the deploy-notice key's restriction is unverified" % f, "KEYS", "deploy-notice-key")
+                return
+            continue
+        except OSError as e:
+            out("STATE", "%s cannot be read (%s), so the deploy-notice key's restriction is unverified" % (f, type(e).__name__),
+                "KEYS", "deploy-notice-key")
+            return
+        for ln in body.splitlines():
+            s = ln.strip()
+            if not s or s.startswith("#"):
+                continue
+            parts = split_key_line(s)
+            if parts is None:
+                continue
+            if parts[1] == NOTICE_KEY_MATERIAL:
+                hits.append((f, parts))
+            elif parts[2] == NOTICE_KEY_COMMENT:
+                named.append(f)
+    if len(hits) != 1:
+        out("STATE", "the deploy-notice key appears on %d line(s) across %s; exactly one is required (sshd uses the FIRST "
+            "match, so a second copy can be an unrestricted shell)" % (len(hits), ", ".join(NOTICE_KEY_FILES)),
             "KEYS", "deploy-notice-key")
         return
-    opts = lines[0].split(" ssh-ed25519 ", 1)[0] if " ssh-ed25519 " in lines[0] else "<no options>"
-    if opts != NOTICE_KEY_OPTIONS:
-        out("STATE", "the deploy-notice key's options are %r, expected exactly %r - without them the key is a full "
-            "deploy shell" % (opts[:160], NOTICE_KEY_OPTIONS), "KEYS", "deploy-notice-key")
+    f, (opts, _, comment) = hits[0]
+    if opts != NOTICE_KEY_OPTIONS or comment != NOTICE_KEY_COMMENT:
+        out("STATE", "the deploy-notice key in %s has options %r and comment %r, expected exactly %r and %r - without them "
+            "the key is a full deploy shell" % (f, opts[:160] or "<none>", comment[:60], NOTICE_KEY_OPTIONS, NOTICE_KEY_COMMENT),
+            "KEYS", "deploy-notice-key")
         return
-    out("OK", "the deploy-notice key is pinned to dt-deploy-notice-gate")
+    if named:
+        out("STATE", "another key carries the deploy-notice comment (%s) - the comment must name only the pinned key"
+            % ", ".join(named), "KEYS", "deploy-notice-key")
+        return
+    out("OK", "the deploy-notice key is on exactly one line, pinned to dt-deploy-notice-gate")
 
 
 def check_extra(name, box):

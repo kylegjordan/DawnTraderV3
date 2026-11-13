@@ -554,6 +554,7 @@ _OPEN_KEYS.clear()
 DM.git, DM.raise_alert, DM.open_alert_keys, DM.resolve_alert_key = _real_git, _real_raise, _real_open, _real_resolve
 # B-4: the deploy-notice key line is checked exactly (fail-closed)
 os.makedirs(_wr + "/home/deploy/.ssh", exist_ok=True)
+DM.NOTICE_KEY_MATERIAL = "ssh-ed25519 AAAAKEY"
 _GOOD = 'restrict,from="204.168.141.77",command="/usr/local/bin/dt-deploy-notice-gate" ssh-ed25519 AAAAKEY dt-deploy-notice@helsinki'
 _REV = 'from="204.168.141.77" ssh-ed25519 AAAAREV langston@helsinki'
 for _label, _body, _ok in [
@@ -562,13 +563,28 @@ for _label, _body, _ok in [
         ("from= changed -> STATE", _GOOD.replace("204.168.141.77", "0.0.0.0/0") + NL, False),
         ("no options at all -> STATE", "ssh-ed25519 AAAAKEY dt-deploy-notice@helsinki" + NL, False),
         ("the line missing -> STATE", _REV + NL, False),
-        ("two lines for the comment -> STATE", _GOOD + NL + _GOOD + NL, False)]:
+        ("two lines for the comment -> STATE", _GOOD + NL + _GOOD + NL, False),
+        ("B-7: an UNRESTRICTED copy of the key under another comment, ABOVE the pinned line -> STATE",
+         "ssh-ed25519 AAAAKEY unrestricted@dup" + NL + _GOOD + NL, False),
+        ("B-7: ... and BELOW it -> STATE", _GOOD + NL + "ssh-ed25519 AAAAKEY unrestricted@dup" + NL, False),
+        ("B-7: the pinned comment on a DIFFERENT key (the real key absent) -> STATE",
+         _GOOD.replace("AAAAKEY", "AAAAOTHER") + NL, False),
+        ("B-7: a second key wearing the watcher comment beside the real line -> STATE",
+         _GOOD + NL + "ssh-ed25519 AAAAOTHER dt-deploy-notice@helsinki" + NL, False)]:
     open(_wr + "/home/deploy/.ssh/authorized_keys", "w").write(_body)
     DM.PROBLEMS.clear(); DM.CLASSES.clear()
     with contextlib.redirect_stdout(io.StringIO()):
         DM.check_extra("deploy_notice_key", {})
     _bad = ("KEYS", "deploy-notice-key") in DM.CLASSES
     check("B-4: " + _label, _bad != _ok, str(DM.PROBLEMS))
+# B-7: sshd also reads authorized_keys2 - a copy THERE is a second line too
+open(_wr + "/home/deploy/.ssh/authorized_keys", "w").write(_GOOD + NL)
+open(_wr + "/home/deploy/.ssh/authorized_keys2", "w").write("ssh-ed25519 AAAAKEY unrestricted@ak2" + NL)
+DM.PROBLEMS.clear(); DM.CLASSES.clear()
+with contextlib.redirect_stdout(io.StringIO()):
+    DM.check_extra("deploy_notice_key", {})
+check("B-7: an unrestricted copy in authorized_keys2 -> STATE", ("KEYS", "deploy-notice-key") in DM.CLASSES, str(DM.PROBLEMS))
+os.unlink(_wr + "/home/deploy/.ssh/authorized_keys2")
 os.unlink(_wr + "/home/deploy/.ssh/authorized_keys")
 DM.PROBLEMS.clear(); DM.CLASSES.clear()
 with contextlib.redirect_stdout(io.StringIO()):
