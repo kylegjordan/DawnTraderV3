@@ -49,7 +49,6 @@
 
 > ⛔ **Position lines carry STEP NUMBERS, never a prose next-step** — my own B-TOKEN-WATCH 1→3 skip (`#754`); the rule is `CLAUDE.md` §0.a.
 
-**KYLE'S RULINGS 2026-08-28 — ALL SETTLED + IMPLEMENTED; read `B_TOKEN_WATCH_PRE_AUDIT.md` PART E (grid unchanged / tracking page fenced / Helsinki mount removed = `#921`).**
 
 ---
 
@@ -90,11 +89,7 @@ Registered in `cc-wake-filter.py` as **"Infra Claude"** — the `--sender` value
 ⛔ **THE FULL DESIGN, ITS MEASUREMENTS AND ITS DEAD BRANCHES ARE IN THE REPO — `B_TOKEN_WATCH_PRE_AUDIT.md` PARTS A-H + `B_TOKEN_WATCH_PRE_REGISTRATION.md` (append-only, AMENDMENTS 1-15). READ IT THERE.**
 **Carry only:** births via Helius (server-side filtered), follow-ups via DexScreener, CoinGecko terms forbid the dataset on every tier - detail and the residuals in `B_TOKEN_WATCH_PRE_AUDIT.md`. Helius key `~/.claude/.helius-key`.
 
-## ✅ B-TOKEN-WATCH — STEPS 1-5 CLOSED, DO NOT RE-DERIVE (repo is authoritative)
-
-**Steps 1-5 APPROVED/green** (Step 4 `3c6e6ced3`; CI 4/4 `33182142814`). Scope, pre-registration (AMENDMENTS 1-15) and the pre-audit are all in the repo.
-
-## ▶ B-TOKEN-WATCH STEP 6 — CLOSED. Repo is authoritative; only the live/actionable residue is kept here.
+## ▶ B-TOKEN-WATCH STEPS 1-6 CLOSED (scope, pre-registration AMENDMENTS 1-15, pre-audit PART E rulings all in the repo). Repo is authoritative; only the live/actionable residue is kept here.
 
 **Deployed and live** — endpoint, nginx zone `tokenwatch` (**never `api`**), user `tokenwatch`, store `/var/lib/token-watch`, dead-man's switch, isolation proofs, tracking page. ⛔ **All of it is recorded in the commits + `B_TOKEN_WATCH_PRE_REGISTRATION.md` — read the ref, never re-derive from here.**
 
