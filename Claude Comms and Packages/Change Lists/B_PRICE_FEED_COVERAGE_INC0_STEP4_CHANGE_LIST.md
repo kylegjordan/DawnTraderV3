@@ -182,3 +182,13 @@ local_utc_after: 2026-11-13T21:01:01.836Z
 
 **Coordination:** a forced restart stops paper trading for every session and voids any open observation window, so the run's instant is agreed with the crew first (and it sits in KD-56's register if that is live by then). The xStock market is closed from 01:00Z Saturday to 01:00Z Monday, so the earliest off-session opportunity is after Monday's 01:00Z reopen. **Step 8 stays forbidden until the carrier fires or the pre-condition closes the arm.**
 
+## r12 — Langston's confirmation and the forced run's pre-registration constraints (2026-11-13 21:47Z)
+
+**Pre-condition, code half, CONFIRMED by Langston at `1421aec9d` (engine byte-identical at `dcb44dee2`):** `getLatestEquityTick` has four occurrences in the engine — the import `:387`, a comment `:2436`, and exactly two call sites, `:625` and `:2477`; `judgeDispatchTick` has ONE production call site repo-wide (`active-dispatch.ts:216`) and the engine never imports it. Chain: `:5548` → `:5585 getRankedSignals` → `:5839 processSignal` → `:7619 executeSimulatedTrade` → `:6252 _evaluateOpenDepthGate` → `:625`.
+
+**Binding on the forced run's pre-registration (adopted):**
+1. **The instant.** Monday 01:00Z (Sun 20:00 ET, on EST) is structurally blind: `PAUSE_SUN_REOPEN = [1200,1235)` (`market-hours.ts:191`, Sunday branch `:199`) holds 01:00:00–01:34:59Z and its pause arm returns `venue_transition_pause sun_reopen` at engine `:609`, above the judge at `:625`. **Earliest usable instant 01:35:00Z; on weekdays avoid 16:15–16:35 and 20:15–20:35 ET.** My r11 "after Monday's 01:00Z reopen" is corrected to this.
+2. **Three pre-empts above the judge are pre-declared NON-EXERCISE, not FAIL:** the venue-transition pause (`:609`); a null snapshot — the judge sits inside `if (assetClass === 'xstock_spot' && snapshot)` (`:624`), so a symbol with no `xstock_spot_ticker_snap` row skips it into `warmth.reason`; and `depth_verdict` (`:617`), whose `qty_absent` population clusters in extended hours at 00:15:00Z (the `depth-source.ts` header) — beside the window.
+3. **The expected arm is the pair `{absent, observed=false}`**, not one value: `absent` if no frame has arrived in the new process, `observed=false` if a replay-only mark is born cold (`equity-spot-archiver.ts:325`). **`ok` — a genuinely changed quote at `:314` latching `observed=true` before the open — is pre-declared a RE-RUN, never a result** (#661 leg 3).
+4. **The denominator ships first** (Step 4 in flight, ref `763c5b3ac` on `migration/b-pfc-inc0-depth-denominator`, CI 4/4 run 43511031665), so the forced run's read is evaluations-beside-blocks.
+
