@@ -55,6 +55,8 @@ REGISTER_PATH="1-system-manual/DEPLOY_WINDOWS.jsonl"
 # NOT named dt-deploy-*: server/db-pool-alerts.ts:378 reads any process carrying that substring as a live deploy.
 OBS_WINDOWS="/usr/local/bin/dt-obs-windows"
 NOTICE="/home/deploy/dawntrader-deploy.notice"
+# C-21: the in-window alert mint gives up after this; -k kills a child that ignores SIGTERM (Langston, gate A).
+MINT_TIMEOUT_S="60"
 # ── END CONSTANTS ──
 LIVENESS_URL="http://localhost:5000/api/health/liveness"
 
@@ -306,7 +308,7 @@ if [ "$IN_WINDOW" != none ]; then
   for W in ${IN_WINDOW//,/ }; do
     WB=${W%%/*}; WREST=${W#*/}; WO=${WREST%%/*}; WS=${WREST#*/}
     # C-21: a wedged mint must not hold the lock for ever (a live pid blocks the #540 break). Timeout = failure.
-    if ! (cd "$APP_DIR" && timeout 60 npm run -s system-alerts -- add --triggers-at "$ATTEMPT_AT" --category governance \
+    if ! (cd "$APP_DIR" && timeout -k 10 "$MINT_TIMEOUT_S" npm run -s system-alerts -- add --triggers-at "$ATTEMPT_AT" --category governance \
           --severity warning --dedupe-key "deploy-in-window:$WB:$SHA:$ATTEMPT_KEY" \
           --title "Deploy $SHA is STARTING inside the $WB observation window ($WS)" \
           --body "Owner $WO: a staging deploy of $SHA by $BY started at $ATTEMPT_AT inside your $WB window ($WS). The app restarts. Whether it completed is in /home/deploy/dawntrader-deploy.record (or its absence); the Helsinki deploy-notice watcher posts the outcome and resolves this alert with that evidence. Resolve, never ack. (B-DEPLOY-WINDOW-GUARD, #1249)" \

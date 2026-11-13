@@ -86,7 +86,7 @@ sh("git", "clone", "-q", "--bare", work, bare)
 sh("git", "clone", "-q", "-b", "migration/aws-supabase", bare, app)
 fake = T + "/bin"
 os.makedirs(fake)
-open(fake + "/npm", "w").write("#!/bin/sh\necho \"npm $*\" >> %s/npm.log\nexit ${FAKE_NPM_RC:-1}\n" % T)
+open(fake + "/npm", "w").write("#!/bin/sh\necho \"npm $*\" >> %s/npm.log\ncase \"$*\" in *system-alerts*) [ -z \"$FAKE_NPM_SLEEP\" ] || sleep \"$FAKE_NPM_SLEEP\" ;; esac\nexit ${FAKE_NPM_RC:-1}\n" % T)
 open(fake + "/pm2", "w").write("#!/bin/sh\nexit 1\n")
 for f in ("npm", "pm2"):
     os.chmod(fake + "/" + f, 0o755)
@@ -94,7 +94,8 @@ obs = T + "/dt-obs-windows"
 shutil.copyfile(A.obs_windows, obs)
 os.chmod(obs, 0o755)
 consts = {"APP_DIR": app, "LOCK_DIR": T + "/lock", "RECORD": T + "/record", "BRANCH": "origin/migration/aws-supabase",
-          "REGISTER_PATH": "1-system-manual/DEPLOY_WINDOWS.jsonl", "OBS_WINDOWS": obs, "NOTICE": T + "/notice"}
+          "REGISTER_PATH": "1-system-manual/DEPLOY_WINDOWS.jsonl", "OBS_WINDOWS": obs, "NOTICE": T + "/notice",
+          "MINT_TIMEOUT_S": "1"}
 shipped = [ln.split("=", 1)[0] for ln in src[a:b].splitlines() if "=" in ln and not ln.startswith("#")]
 check("the harness sets exactly the shipped constants", set(shipped) == set(consts), shipped)
 tested = T + "/dt-deploy"
@@ -113,8 +114,9 @@ def notice_lines():
         return []
 
 
-def deploy(sha, *extra, npm_rc="1"):
-    env = dict(os.environ, PATH=fake + ":" + os.environ["PATH"], FAKE_NPM_RC=npm_rc)
+def deploy(sha, *extra, npm_rc="1", npm_sleep=""):
+    env = dict(os.environ, PATH=fake + ":" + os.environ["PATH"], FAKE_NPM_RC=npm_rc,
+               FAKE_NPM_SLEEP=npm_sleep)
     r = subprocess.run(["bash", tested, sha, "--by", "cc-infra"] + list(extra), capture_output=True, text=True, env=env,
                        timeout=120)
     return r.returncode, r.stdout + r.stderr
@@ -227,6 +229,18 @@ check("C-20: the landing sha inside the deploy -> becomes LIVE", "hold H-1: B-IN
 check("C-20: the side-branch landing sha -> stays NOT live", "hold H-1: B-SIDE stays NOT live" in out, out)
 check("C-20: an unresolvable landing sha -> CANNOT BE DETERMINED, never 'not live'",
       "hold H-1: B-GHOST liveness CANNOT BE DETERMINED" in out and "B-GHOST stays NOT live" not in out, out)
+# C-21: a mint that hangs is cut off by the timeout and counts as a failure -> notice-only; the deploy goes on
+sh("git", "reset", "-q", "--hard", BASE, cwd=app)
+if os.path.exists(T + "/notice"):
+    os.unlink(T + "/notice")
+sha = push(H + "\n" + win("B-X", "cc-b") + "\n", "a hanging mint")
+import time as _t
+_t0 = _t.time()
+rc, out = deploy(sha, "--in-window", "B-X", npm_rc="0", npm_sleep="30")
+_el = _t.time() - _t0
+check("C-21: a mint that hangs 30 s is cut off (timeout 1 s here) -> notice-only, and the run does not wait it out",
+      "IN-WINDOW ALERT NOT RAISED" in out and bool(notice_lines()) and "window_notice=notice-only" in notice_lines()[0]
+      and _el < 25, "elapsed %.1fs rc=%s\n%s" % (_el, rc, out))
 # the helper absent -> exit 4
 os.rename(obs, obs + ".gone")
 case("the parser not installed -> exit 4", H + "\n", [], 4, "is not installed")
