@@ -603,8 +603,17 @@ for _label, _ak, _ak2, _ok in [
         ("B-8: Langston's crafted line (a decoy key-type token inside a quoted option) ABOVE the pinned line -> STATE",
          'command="x ssh-ed25519 AAAADECOY; /bin/echo CRAFTED" ' + _KEY + " evil@craft" + NL + _GOOD + NL, None, False),
         ("cert-authority anywhere -> STATE", _GOOD + NL + "cert-authority " + _OTHER + " ca@x" + NL, None, False),
+        ("r6 BLOCKER-1: CAPITALISED Cert-Authority -> STATE (sshd is case-insensitive)",
+         _GOOD + NL + "Cert-Authority " + _OTHER + " ca@x" + NL, None, False),
+        ("r6 BLOCKER-2: cert-authority PAST 64 KiB of padding -> STATE (the file is read whole)",
+         _GOOD + NL + ("# " + "p" * 1000 + NL) * 97 + "cert-authority " + _OTHER + " ca@x" + NL, None, False),
         ("an unparseable junk line beside the pinned line -> OK (sshd skips it too)", "junk junk" + NL + _GOOD + NL, None, True)]:
     check("key: " + _label, _keycheck(_ak, _ak2) == _ok, str(DM.PROBLEMS))
+_lim = DM.NOTICE_KEY_READ_LIMIT
+DM.NOTICE_KEY_READ_LIMIT = 4096
+check("r6: a file LONGER than the read limit -> STATE, never a truncated read",
+      not _keycheck(_GOOD + NL + ("# " + "p" * 1000 + NL) * 8), str(DM.PROBLEMS))
+DM.NOTICE_KEY_READ_LIMIT = _lim
 _FILES["v"] = ([".ssh/authorized_keys"], None)
 check("B-9: sshd reads a DIFFERENT file set -> STATE", not _keycheck(_GOOD + NL), str(DM.PROBLEMS))
 _FILES["v"] = (None, "sshd -T exited 255")
@@ -620,6 +629,26 @@ DM.key_fingerprints = lambda p: (None, "ssh-keygen -lf exited 255")
 check("ssh-keygen failing -> STATE, never a pass", not _keycheck(_GOOD + NL), str(DM.PROBLEMS))
 DM.key_fingerprints = _real_kf
 DM.sshd_key_files = _real_files
+# sshd_key_files itself, against a fake sshd -T: the pair with every outside-source option none -> the list; each
+# outside source set, or an option not printed at all, -> refused
+_fs = os.path.join(_wr, "fake-sshd")
+_SSHD_OUT = {"v": ""}
+_real_sshd = DM.SSHD
+DM.SSHD = _fs
+_BASE = ["authorizedkeysfile .ssh/authorized_keys .ssh/authorized_keys2", "authorizedkeyscommand none",
+         "trustedusercakeys none", "authorizedprincipalscommand none"]
+def _sshd(lines):
+    open(_fs, "w").write("#!/bin/sh\ncat <<'EOF'\n" + NL.join(lines) + "\nEOF\n")
+    os.chmod(_fs, 0o755)
+    return DM.sshd_key_files()
+check("sshd -T: the pinned pair and all outside sources none -> the pair", _sshd(_BASE) == (_PAIR, None), _sshd(_BASE))
+for _opt, _val in [("trustedusercakeys", "/etc/ssh/ca.pub"), ("authorizedkeyscommand", "/usr/bin/fetch %u"),
+                   ("authorizedprincipalscommand", "/usr/bin/p %u")]:
+    _l = [x if not x.startswith(_opt + " ") else _opt + " " + _val for x in _BASE]
+    check("sshd -T: %s set -> refused" % _opt, _sshd(_l)[0] is None, _sshd(_l))
+_l = [x for x in _BASE if not x.startswith("trustedusercakeys")]
+check("sshd -T: trustedusercakeys NOT PRINTED -> refused, never read as none", _sshd(_l)[0] is None, _sshd(_l))
+DM.SSHD = _real_sshd
 # open_alert_keys reads the store by id, latest row wins - against a real file
 _af = tempfile.mkdtemp(prefix="drift-af-")
 DM.ROOT = _af

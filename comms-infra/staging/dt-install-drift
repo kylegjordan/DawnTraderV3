@@ -463,6 +463,9 @@ NOTICE_KEY_FP = "SHA256:4/ifpFrzGu4N6W2E7isLrpWj4sAndThgGD1AGYM+Ads"
 NOTICE_KEY_COMMENT = "dt-deploy-notice@helsinki"
 NOTICE_KEY_OPTIONS = 'restrict,from="204.168.141.77",command="/usr/local/bin/dt-deploy-notice-gate"'
 NOTICE_KEY_LINE = "%s %s %s" % (NOTICE_KEY_OPTIONS, NOTICE_KEY_MATERIAL, NOTICE_KEY_COMMENT)
+# r6 BLOCKER-2 (Langston): sshd reads the WHOLE file; read_small's default 64 KiB silently truncated, and a
+# cert-authority line past it passed. Read up to this, and a file LONGER than it is STATE, never a truncated read.
+NOTICE_KEY_READ_LIMIT = 1 << 22
 
 
 def sshd_key_files():
@@ -479,8 +482,11 @@ def sshd_key_files():
         parts = ln.split(None, 1)
         if len(parts) == 2:
             vals[parts[0].lower()] = parts[1].strip()
-    if vals.get("authorizedkeyscommand", "none") != "none":
-        return None, "sshd has an AuthorizedKeysCommand (%s); keys can come from outside these files" % vals["authorizedkeyscommand"][:80]
+    # r6 (Langston, folded): each of these authorizes keys OUTSIDE authorized_keys, so each must be none. A setting
+    # sshd -T does not print is not "none" here: it is refused, so a renamed option cannot read as absent.
+    for opt in ("authorizedkeyscommand", "trustedusercakeys", "authorizedprincipalscommand"):
+        if vals.get(opt) != "none":
+            return None, "sshd %s is %s; keys can be authorized outside these files" % (opt, (vals.get(opt) or "not printed")[:80])
     if "authorizedkeysfile" not in vals:
         return None, "sshd -T printed no authorizedkeysfile"
     return vals["authorizedkeysfile"].split(), None
@@ -510,7 +516,11 @@ def check_notice_key():
     for rel in files:
         f = P(NOTICE_KEY_HOME + "/" + rel)
         try:
-            body = read_small(f)[1].decode("utf-8", "replace")
+            st, raw = read_small(f, limit=NOTICE_KEY_READ_LIMIT)
+            if len(raw) < st.st_size:
+                return bad("%s is %d bytes, over the %d this check reads whole - unverified, never truncated"
+                           % (f, st.st_size, NOTICE_KEY_READ_LIMIT))
+            body = raw.decode("utf-8", "replace")
         except FileNotFoundError:
             if rel == files[0]:
                 return bad("%s does not exist, so the deploy-notice key's restriction is unverified" % f)
@@ -522,12 +532,13 @@ def check_notice_key():
             return bad("the deploy-notice key's restriction is unverified: " + why)
         hits += fps.count(NOTICE_KEY_FP)
         for ln in body.splitlines():
-            st = ln.strip()
-            if not st or st.startswith("#"):
+            line_ = ln.strip()
+            if not line_ or line_.startswith("#"):
                 continue
-            if "cert-authority" in st:
+            # r6 BLOCKER-1 (Langston): sshd matches option names case-INSENSITIVELY (Cert-Authority is honoured).
+            if "cert-authority" in line_.lower():
                 ca.append(rel)
-            if st == NOTICE_KEY_LINE:
+            if line_ == NOTICE_KEY_LINE:
                 exact += 1
     if ca:
         return bad("a cert-authority line is present in %s - any key that CA signs is authorized" % ", ".join(sorted(set(ca))))
