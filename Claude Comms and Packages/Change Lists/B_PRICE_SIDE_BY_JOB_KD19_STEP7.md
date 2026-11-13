@@ -167,3 +167,5 @@ Read on staging at 2026-11-13 ~15:40Z against the registered closing condition i
 REVIEWER: none — NOT RE-READ (an evidence read against a pre-registered predicate, carried to Coltrane/Langston at Step 10/11).
 
 **STEP: 9 of 11 COMPLETE · NEXT STEP: 10 of 11 (KD-19 governance).**
+
+**Evidence-ref correction.** The alert resolution (2026-11-13T15:41:59.816Z, `resolved_by_claimed=cc-c`) recorded `resolution_evidence = ae571e113dd2b9f2b0a3d3cfdc49ccc9d1d1f8f4`. Only the first nine characters are right; the full sha was mistyped. **The evidence commit is `ae571e113b0f6040d817e66775b87cab4f8a2fc0`** (§8 above). The alert CLI has no amend verb, and the alert log is an audit record that is not hand-edited, so this line is the correction of record.
