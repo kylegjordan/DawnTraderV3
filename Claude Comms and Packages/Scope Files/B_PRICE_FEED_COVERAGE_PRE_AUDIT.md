@@ -87,3 +87,25 @@ change-class: architecture · `#1222` · owner CC-B · scope r9 `1c4a776c5` (Lan
 - **ONE carrier at the four gates: KD-48's archive row.** It is the only one of the three that sees every reach, accepted AND refused, which OBJ-3's shadow-refused cohort needs. This batch's OBJ-3 READS it and writes nothing of its own at those four sites.
 - **P10's `birthFreshness` stays, as the per-signal copy for admitted reaches, and carries KD-48's attempt id** so the two join on one key — same value, same clock (increment 0's mark-change age), never a second measurement.
 - **KD-48's week-over-week series splits at any bound change**, so the split is filed when OBJ-3 is pre-registered: **in KD-56's register if it is live by then; otherwise the fallback the scope already names** — a dated alert chain with its successor minted at each read, plus a line in this batch's progress report, never a single row with no recurrence (scope OBJ-3, r7 Langston condition 5).
+
+### PART 1 — OBJ-6 MAPPING TABLE (r1, 2026-11-13): every deciding row, what judges it after increment 3
+Rows from the census (at `c8dfa3db1`) plus row 47; the clock column follows the method's M3; OBJ-3's FAIL dispositions are scope OBJ-3 (a)-(c). Every line number is re-derived at increment 3's build ref.
+
+| row | checkpoint | today's bound | after increment 3 | `observed` discriminator (C-8) | if OBJ-3 FAILS |
+|---|---|---|---|---|---|
+| **#1** | xStock dispatch | 15,000 ms on mark-change age (increment 0) | the surface cell, through the central reader | ✅ lands regardless | keeps 15,000 ms (a) |
+| **#2** | entry fill depth warmth | 5,000 crypto / 15,000 xStock | the surface cell | ✅ (xStock leg) | keeps (a) |
+| **#3** | entry fill re-check at use | #2 + elapsed | the surface cell + elapsed | ✅ (xStock leg) | keeps (a) |
+| **#5** | xStock open-seam liveness | ≥ 1 last-price change in 45 min | the surface cell on the price's age; the liveness rule stays as a separate `sourceHealthy`-side check (OBJ-1) | ✅ lands regardless | keeps (a) |
+| **#6** | crypto resting maker entry fill | 8,000 hardcoded | the surface cell | — | keeps (a) |
+| **#8** | RTB refresh, crypto | 2,000 | the surface cell | — | keeps (a) |
+| **#9** | RTB refresh, xStock | per-symbol ceiling as #18 | the surface cell | — (in-memory tick already) | keeps (a) |
+| **#10** | RTB decide-time re-check | age + elapsed from #8/#9 | inherits #8/#9 | — | keeps (a) |
+| **#23** | xStock birth quote | 30 min hardcoded | the surface cell, **post-plan, conditional** | ✅ lands regardless | keeps (a) |
+| **#46** | xStock birth bar close | none (cache lifetime only) | **interim** M9 (strict form) + the candle-time carry in the same increment | — | interim regardless (b) |
+| **B0** | crypto birth mark | none | **interim** M9 (venue push, sides-dated stamp within the ceiling); **post-plan, conditional** | — | interim regardless (b) |
+| **#47** | crypto birth sides, `level-basis.ts:231` (8c ON branch only) | `level_basis.level_build_max_age_ms` | adopted under the central reader, **for the sides quantity**; dormant while 8c is switched off | — | keeps its ceiling (a) |
+| **#7, #11, #12, #18, #19** | exits | their current measured contracts | **unchanged** until the exit estimand (method M10) is derived and reviewed | — | n/a |
+
+**Excluded or demoted, with the scope's written reasons (OBJ-6):** VTS #20/#21/#24 · source selection #13/#14/#16/#26 (#16 re-checked by name — PART 1 #16 trace) · feed maintenance #30/#39 (→ OBJ-1) · grading #28 · sampling #40. **Promotion** (increment B's interim 300,000 ms seed, KD-31) is replaced by the surface cell at that checkpoint — it is not a census row because it was added after the census.
+**The fence (OBJ-6 verification):** a compile-forced central reader plus a check that rejects any newly added direct trading-path age comparison bypassing it, proved by mutating one in and watching it fail.
