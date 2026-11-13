@@ -15,9 +15,9 @@
 
 | # | item | status | decision |
 |---|---|---|---|
-| 1 | `B-DB-POOL-GUARD` (`#1239`, absorbs `#1062`) — guard the app's 10 shared database connections | IN FLIGHT, Step 9 (measurement live 2026-11-05; 48 h readings to ~11-07 08:10Z, then increment 3 — the limits) | KD-2 order 3 |
+| 1 | `B-DB-POOL-GUARD` (`#1239`, absorbs `#1062`) — guard the app's 10 shared database connections | IN FLIGHT, Step 7 (2026-11-13: increments 1-3b and P5 live; the weekday qd-probe leg done, the archival-scheduler leg withdrawn — `02830e875`; only the UI leg is left, held on row 119 / `#1037`) | KD-2 order 3 |
 | 2 | `B-DISK-FILE-TIERING` (`#1233`) with the price-feed debug-log trim (`#1240`) folded in | IN FLIGHT, Step 9 (trim deployed + verified; trace archived; cold-path memory fix + H-1..H-3 in Step-2 amendment 1 with Langston; log compression held until after 2026-11-18) | KD-2 order 5 |
-| 3 | `B-STATUS-BOARD` (`#1227`) — Kyle's phone check, then Steps 10-11 | IN FLIGHT, Step 8 (old crew-status page retired 2026-11-05; Langston's second pass sent) | already agreed |
+| 3 | `B-STATUS-BOARD` (`#1227`) — RETIRED under Kyle's KD-35 (the phone board is not kept) | IN FLIGHT, Step 10-11 (2026-11-13: Step 7 re-read, Step 8 PROCEED by Langston; governance landing, then the completion report) | already agreed |
 | 4 | `#527` — the xStock VTS records carry their cost split (fee, slippage, spread) | ✅ CLOSED 2026-11-05: already done 2026-07-17, measured complete since 2026-09-03 | KD-13 |
 | 5 | Roadmap `25-9` — start collecting xStock pair-correlation data (collection only) | QUEUED, before live, after items 1-2 | KD-14 |
 | 6 | Dead or one-time code removals (sprint rows 79, 82, 84, 84a) | after live ONLY if the reachability census (row 78, Infra Claude) shows each cannot affect paper or live trading; anything it cannot isolate comes out before live | KD-16 |
@@ -28,7 +28,7 @@
 | 10 | `B-SYMBOL-CLASS-IDENTITY` (row 19, `#1024`): a ticker shared by a coin and an xStock becomes two instruments; closes with KD-25 (both may be open at once in one mode) | QUEUED, after item 9 | KD-26, KD-25 |
 | 11 | `#441` — the weekly xStock opportunity-loss watch, built by me as an item of ANALYST's `B-XSTOCK-SESSION-FRESHNESS` (row 3b.f-c); `B-XSTOCK-FRESHNESS-MONITOR` closes into it | ACKED 2026-11-06; build order is CC-C's batch, to the round-4 consensus in `pm/decisions/2026-11-05_xstock-freshness-condition.md` | KD-48 |
 | 12 | The cold-archive key: the staging app holds an account-wide Backblaze key; replace it with a bucket-restricted key that cannot delete, and take the wide key off the server | folded into `B-DISK-FILE-TIERING` OBJ-3 (the cold-path rewrite), per `pm/decisions/2026-11-06_cold-archive-daily-chunk-plan.md` §6 | KD-32 |
-| 13 | `B-DB-SIZE-RELIEF` (sprint stage 00, order 5c): A1 signal_eval_archive hot window 30 -> 15 days; A2 the two monthly tables onto daily partitions; A2 now covers six tables and absorbs #688 (scope r3) | QUEUED, after B-DB-POOL-GUARD inc 3 and B-CLOSE-WRITER-COSTS, before the December low; A1 jumps ahead if B-CLOSE-WRITER-COSTS is not done by ~11-20; alert c0a0b00d resolves on a measured reading under 65% after A1 | KD-60 |
+| 13 | `B-DB-SIZE-RELIEF` (sprint stage 00, order 5c): A1 signal_eval_archive hot window 30 -> 15 days; A2 the two monthly tables onto daily partitions; A2 now covers six tables and absorbs #688 (scope r3) | IN FLIGHT, Step 7 parked (Step 6 done: deployed `957b13fde`, the sweep and the daily cutover passed, database 113,677 MiB measured, alert `c0a0b00d` resolved 2026-11-11; Step 7 waits on row 119 / `#1037` making the Data Archive panel load; deploy hold at and after `a2f5cbc6d`) | KD-60 |
 | ? | `#914` (row 126) | open with Kyle via PM Claude | pending |
 
 ---
