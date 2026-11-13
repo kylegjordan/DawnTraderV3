@@ -63,7 +63,7 @@ tested = os.path.join(T, "dt-install-drift")
 
 def write_copy(host):
     consts = {"HOSTNAME": repr(host), "ROOT": repr(T), "RUNUSER": repr([fr]), "SYSTEMCTL": repr(fs),
-              "ALERT_NPM": repr(["/bin/true"])}
+              "ALERT_NPM": repr(["/bin/true"]), "SSHD": repr("/bin/false"), "SSH_KEYGEN": repr("/usr/bin/ssh-keygen")}
     open(tested, "w").write(src[:a] + "".join("%s = %s\n" % kv for kv in consts.items()) + src[b:])
     return consts
 
@@ -552,44 +552,74 @@ o = _win("not a register" + NL)
 check("windows: a MALFORMED register clears no alert (control)", _RESOLVED == [], str(_RESOLVED))
 _OPEN_KEYS.clear()
 DM.git, DM.raise_alert, DM.open_alert_keys, DM.resolve_alert_key = _real_git, _real_raise, _real_open, _real_resolve
-# B-4: the deploy-notice key line is checked exactly (fail-closed)
+# B-4/B-7/B-8/B-9 (Langston, gate B r2-r5): the deploy-notice key - counted by FINGERPRINT with the real ssh-keygen,
+# matched as the exact pinned line, over the files sshd -T names. Real ed25519 keys, generated here.
 os.makedirs(_wr + "/home/deploy/.ssh", exist_ok=True)
-DM.NOTICE_KEY_MATERIAL = "ssh-ed25519 AAAAKEY"
-_GOOD = 'restrict,from="204.168.141.77",command="/usr/local/bin/dt-deploy-notice-gate" ssh-ed25519 AAAAKEY dt-deploy-notice@helsinki'
-_REV = 'from="204.168.141.77" ssh-ed25519 AAAAREV langston@helsinki'
-for _label, _body, _ok in [
-        ("the pinned line beside a reviewer line -> OK", _REV + NL + _GOOD + NL, True),
-        ("command= dropped -> STATE", _GOOD.replace(',command="/usr/local/bin/dt-deploy-notice-gate"', "") + NL, False),
-        ("from= changed -> STATE", _GOOD.replace("204.168.141.77", "0.0.0.0/0") + NL, False),
-        ("no options at all -> STATE", "ssh-ed25519 AAAAKEY dt-deploy-notice@helsinki" + NL, False),
-        ("the line missing -> STATE", _REV + NL, False),
-        ("two lines for the comment -> STATE", _GOOD + NL + _GOOD + NL, False),
-        ("B-7: an UNRESTRICTED copy of the key under another comment, ABOVE the pinned line -> STATE",
-         "ssh-ed25519 AAAAKEY unrestricted@dup" + NL + _GOOD + NL, False),
-        ("B-7: ... and BELOW it -> STATE", _GOOD + NL + "ssh-ed25519 AAAAKEY unrestricted@dup" + NL, False),
-        ("B-7: the pinned comment on a DIFFERENT key (the real key absent) -> STATE",
-         _GOOD.replace("AAAAKEY", "AAAAOTHER") + NL, False),
-        ("B-7: a second key wearing the watcher comment beside the real line -> STATE",
-         _GOOD + NL + "ssh-ed25519 AAAAOTHER dt-deploy-notice@helsinki" + NL, False)]:
-    open(_wr + "/home/deploy/.ssh/authorized_keys", "w").write(_body)
+
+
+def _mk(name):
+    k = os.path.join(_wr, name)
+    sh("ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", name, "-f", k)
+    return " ".join(open(k + ".pub").read().split()[:2])
+
+
+_KEY, _OTHER = _mk("watcherkey"), _mk("otherkey")
+DM.NOTICE_KEY_MATERIAL = _KEY
+DM.NOTICE_KEY_FP = sh("ssh-keygen", "-lf", _wr + "/watcherkey.pub").split()[1]
+DM.NOTICE_KEY_LINE = "%s %s %s" % (DM.NOTICE_KEY_OPTIONS, _KEY, DM.NOTICE_KEY_COMMENT)
+_PAIR = [".ssh/authorized_keys", ".ssh/authorized_keys2"]
+_FILES = {"v": (_PAIR, None)}
+_real_files = DM.sshd_key_files
+DM.sshd_key_files = lambda: _FILES["v"]
+DM.NOTICE_KEY_HOME = "/home/deploy"
+_GOOD = DM.NOTICE_KEY_LINE
+_REV = "from=\"204.168.141.77\" " + _OTHER + " langston@helsinki"
+
+
+def _keycheck(ak, ak2=None):
+    open(_wr + "/home/deploy/.ssh/authorized_keys", "w").write(ak)
+    if ak2 is None:
+        if os.path.exists(_wr + "/home/deploy/.ssh/authorized_keys2"):
+            os.unlink(_wr + "/home/deploy/.ssh/authorized_keys2")
+    else:
+        open(_wr + "/home/deploy/.ssh/authorized_keys2", "w").write(ak2)
     DM.PROBLEMS.clear(); DM.CLASSES.clear()
     with contextlib.redirect_stdout(io.StringIO()):
         DM.check_extra("deploy_notice_key", {})
-    _bad = ("KEYS", "deploy-notice-key") in DM.CLASSES
-    check("B-4: " + _label, _bad != _ok, str(DM.PROBLEMS))
-# B-7: sshd also reads authorized_keys2 - a copy THERE is a second line too
-open(_wr + "/home/deploy/.ssh/authorized_keys", "w").write(_GOOD + NL)
-open(_wr + "/home/deploy/.ssh/authorized_keys2", "w").write("ssh-ed25519 AAAAKEY unrestricted@ak2" + NL)
-DM.PROBLEMS.clear(); DM.CLASSES.clear()
-with contextlib.redirect_stdout(io.StringIO()):
-    DM.check_extra("deploy_notice_key", {})
-check("B-7: an unrestricted copy in authorized_keys2 -> STATE", ("KEYS", "deploy-notice-key") in DM.CLASSES, str(DM.PROBLEMS))
-os.unlink(_wr + "/home/deploy/.ssh/authorized_keys2")
+    return ("KEYS", "deploy-notice-key") not in DM.CLASSES
+
+
+for _label, _ak, _ak2, _ok in [
+        ("the pinned line beside a reviewer line -> OK", _REV + NL + _GOOD + NL, None, True),
+        ("command= dropped -> STATE", _GOOD.replace(',command="/usr/local/bin/dt-deploy-notice-gate"', "") + NL, None, False),
+        ("from= widened -> STATE", _GOOD.replace("204.168.141.77", "0.0.0.0/0") + NL, None, False),
+        ("no options at all -> STATE", _KEY + " dt-deploy-notice@helsinki" + NL, None, False),
+        ("the line missing -> STATE", _REV + NL, None, False),
+        ("the pinned line twice -> STATE", _GOOD + NL + _GOOD + NL, None, False),
+        ("B-7: an unrestricted copy ABOVE the pinned line -> STATE", _KEY + " unrestricted@dup" + NL + _GOOD + NL, None, False),
+        ("B-7: ... BELOW it -> STATE", _GOOD + NL + _KEY + " unrestricted@dup" + NL, None, False),
+        ("B-7: the pinned comment on a DIFFERENT key -> STATE", _GOOD.replace(_KEY, _OTHER) + NL, None, False),
+        ("B-7: an unrestricted copy in authorized_keys2 -> STATE", _GOOD + NL, _KEY + " unrestricted@ak2" + NL, False),
+        ("B-8: Langston's crafted line (a decoy key-type token inside a quoted option) ABOVE the pinned line -> STATE",
+         'command="x ssh-ed25519 AAAADECOY; /bin/echo CRAFTED" ' + _KEY + " evil@craft" + NL + _GOOD + NL, None, False),
+        ("cert-authority anywhere -> STATE", _GOOD + NL + "cert-authority " + _OTHER + " ca@x" + NL, None, False),
+        ("an unparseable junk line beside the pinned line -> OK (sshd skips it too)", "junk junk" + NL + _GOOD + NL, None, True)]:
+    check("key: " + _label, _keycheck(_ak, _ak2) == _ok, str(DM.PROBLEMS))
+_FILES["v"] = ([".ssh/authorized_keys"], None)
+check("B-9: sshd reads a DIFFERENT file set -> STATE", not _keycheck(_GOOD + NL), str(DM.PROBLEMS))
+_FILES["v"] = (None, "sshd -T exited 255")
+check("B-9: sshd -T cannot be read -> STATE, never a pass", not _keycheck(_GOOD + NL), str(DM.PROBLEMS))
+_FILES["v"] = (_PAIR, None)
 os.unlink(_wr + "/home/deploy/.ssh/authorized_keys")
 DM.PROBLEMS.clear(); DM.CLASSES.clear()
 with contextlib.redirect_stdout(io.StringIO()):
     DM.check_extra("deploy_notice_key", {})
-check("B-4: the file missing -> STATE (fail-closed, never a silent pass)", ("KEYS", "deploy-notice-key") in DM.CLASSES, str(DM.PROBLEMS))
+check("the file missing -> STATE (fail-closed)", ("KEYS", "deploy-notice-key") in DM.CLASSES, str(DM.PROBLEMS))
+_real_kf = DM.key_fingerprints
+DM.key_fingerprints = lambda p: (None, "ssh-keygen -lf exited 255")
+check("ssh-keygen failing -> STATE, never a pass", not _keycheck(_GOOD + NL), str(DM.PROBLEMS))
+DM.key_fingerprints = _real_kf
+DM.sshd_key_files = _real_files
 # open_alert_keys reads the store by id, latest row wins - against a real file
 _af = tempfile.mkdtemp(prefix="drift-af-")
 DM.ROOT = _af

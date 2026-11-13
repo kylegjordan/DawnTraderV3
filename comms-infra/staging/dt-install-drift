@@ -48,6 +48,8 @@ HOSTNAME = None                  # None = socket.gethostname()
 ROOT = ""                        # a prefix on every absolute path it reads (tests only)
 RUNUSER = ["/usr/sbin/runuser", "-u"]
 SYSTEMCTL = "/usr/bin/systemctl"
+SSHD = "/usr/sbin/sshd"
+SSH_KEYGEN = "/usr/bin/ssh-keygen"
 # B-DEPLOY-WINDOW-GUARD: how the deploy_windows check raises its own alerts - as deploy, in the app dir, a clean env
 # (runuser keeps root's HOME, and npm would then write root's cache). A test substitutes a recorder.
 # B-3 (Langston, gate B): under /usr/bin/timeout -k - subprocess.run's own timeout kills only the direct child, so a
@@ -444,75 +446,98 @@ def _deploy_windows(box):
         % (len(stale), notice_only))
 
 
-# B-4 + B-7 (Langston, gate B r2/r3): the watcher's key is bounded ONLY by the options on its authorized_keys line.
-# sshd binds the KEY, not the comment, and the FIRST matching line wins (measured: an unrestricted copy of the key
-# placed above the pinned line is a full deploy shell). So the check counts lines by KEY MATERIAL, across every file
-# sshd reads for deploy (AuthorizedKeysFile = .ssh/authorized_keys .ssh/authorized_keys2, measured on staging),
-# and requires exactly ONE, carrying exactly the pinned options and comment. The public key is committed here; it is
-# not a secret. The private half lives only on Helsinki (/home/langston/.ssh/dt_deploy_notice_ed25519).
-NOTICE_KEY_FILES = ["/home/deploy/.ssh/authorized_keys", "/home/deploy/.ssh/authorized_keys2"]
+# B-4 + B-7 + B-8 (Langston, gate B r2-r5): the watcher's key is bounded ONLY by the options on its authorized_keys
+# line. sshd binds the KEY and the FIRST matching line wins, and a quoted option can carry a decoy key-type token that a
+# hand parser takes for the key (B-8, measured on a real sshd). So this check parses NOTHING itself:
+#   1. the files sshd reads for deploy come from `sshd -T` (B-9), and must be exactly the pinned pair;
+#   2. occurrences of the watcher's key are counted by FINGERPRINT with ssh-keygen -lf - sshd's own parser - and there
+#      must be exactly ONE across those files;
+#   3. that occurrence must be the pinned line, matched as an EXACT full line (options, key, comment);
+#   4. no line may carry cert-authority (ssh-keygen fingerprints such a line like any key);
+#   5. anything that cannot be read or run is STATE (subject deploy-notice-key), never a pass.
+# The public key is committed here; it is not a secret. The private half lives only on Helsinki.
+NOTICE_KEY_HOME = "/home/deploy"
+NOTICE_KEY_SSHD_FILES = [".ssh/authorized_keys", ".ssh/authorized_keys2"]
 NOTICE_KEY_MATERIAL = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICO7VlYgryoFjb7aFlxnjLh4InAGK37mSc6o95JqAoxL"
+NOTICE_KEY_FP = "SHA256:4/ifpFrzGu4N6W2E7isLrpWj4sAndThgGD1AGYM+Ads"
 NOTICE_KEY_COMMENT = "dt-deploy-notice@helsinki"
 NOTICE_KEY_OPTIONS = 'restrict,from="204.168.141.77",command="/usr/local/bin/dt-deploy-notice-gate"'
-KEY_TYPES = ("ssh-ed25519", "ssh-rsa", "ecdsa-sha2-nistp256", "ecdsa-sha2-nistp384", "ecdsa-sha2-nistp521",
-             "sk-ssh-ed25519@openssh.com", "sk-ecdsa-sha2-nistp256@openssh.com", "ssh-dss")
+NOTICE_KEY_LINE = "%s %s %s" % (NOTICE_KEY_OPTIONS, NOTICE_KEY_MATERIAL, NOTICE_KEY_COMMENT)
 
 
-def split_key_line(ln):
-    """(options, 'type base64', comment) of one authorized_keys line, or None. Options may hold quoted spaces, so the
-    key type is found as a whole token rather than by position."""
-    toks = ln.split()
-    for i, t in enumerate(toks):
-        if t in KEY_TYPES and i + 1 < len(toks):
-            return " ".join(toks[:i]), t + " " + toks[i + 1], " ".join(toks[i + 2:])
-    return None
+def sshd_key_files():
+    """The AuthorizedKeysFile list sshd applies to deploy, from sshd -T. (list, None) or (None, reason)."""
+    try:
+        r = subprocess.run([SSHD, "-T", "-C", "user=deploy,host=localhost,addr=127.0.0.1"], capture_output=True,
+                           text=True, timeout=30)
+    except (subprocess.TimeoutExpired, OSError) as e:
+        return None, "sshd -T could not run (%s)" % type(e).__name__
+    if r.returncode != 0:
+        return None, "sshd -T exited %d" % r.returncode
+    vals = {}
+    for ln in r.stdout.splitlines():
+        parts = ln.split(None, 1)
+        if len(parts) == 2:
+            vals[parts[0].lower()] = parts[1].strip()
+    if vals.get("authorizedkeyscommand", "none") != "none":
+        return None, "sshd has an AuthorizedKeysCommand (%s); keys can come from outside these files" % vals["authorizedkeyscommand"][:80]
+    if "authorizedkeysfile" not in vals:
+        return None, "sshd -T printed no authorizedkeysfile"
+    return vals["authorizedkeysfile"].split(), None
+
+
+def key_fingerprints(path):
+    """Every fingerprint ssh-keygen -lf (sshd's own key parser) finds in the file. (list, None) or (None, reason)."""
+    try:
+        r = subprocess.run([SSH_KEYGEN, "-lf", path], capture_output=True, text=True, timeout=30)
+    except (subprocess.TimeoutExpired, OSError) as e:
+        return None, "ssh-keygen could not run (%s)" % type(e).__name__
+    if r.returncode != 0:
+        return None, "ssh-keygen -lf %s exited %d" % (path, r.returncode)
+    return [ln.split()[1] for ln in r.stdout.splitlines() if len(ln.split()) >= 2], None
 
 
 def check_notice_key():
-    """Exactly ONE line, over every effective file, carries the watcher's KEY; its options and comment are exactly the
-    pinned ones; and no other key carries the watcher's comment. Fail-closed (STATE, subject deploy-notice-key) on an
-    unreadable authorized_keys, a missing line, a second copy anywhere, or any other options."""
-    hits, named, read = [], [], 0
-    for f in NOTICE_KEY_FILES:
+    def bad(text):
+        out("STATE", text, "KEYS", "deploy-notice-key")
+    files, why = sshd_key_files()
+    if files is None:
+        return bad("the deploy-notice key's restriction is unverified: " + why)
+    if files != NOTICE_KEY_SSHD_FILES:
+        return bad("sshd reads %s for deploy, not the pinned %s - this check would not see a key in the others (B-9)"
+                   % (" ".join(files), " ".join(NOTICE_KEY_SSHD_FILES)))
+    hits, exact, ca = 0, 0, []
+    for rel in files:
+        f = P(NOTICE_KEY_HOME + "/" + rel)
         try:
-            body = read_small(P(f))[1].decode("utf-8", "replace")
-            read += 1
+            body = read_small(f)[1].decode("utf-8", "replace")
         except FileNotFoundError:
-            if f == NOTICE_KEY_FILES[0]:
-                out("STATE", "%s does not exist, so the deploy-notice key's restriction is unverified" % f, "KEYS", "deploy-notice-key")
-                return
+            if rel == files[0]:
+                return bad("%s does not exist, so the deploy-notice key's restriction is unverified" % f)
             continue
         except OSError as e:
-            out("STATE", "%s cannot be read (%s), so the deploy-notice key's restriction is unverified" % (f, type(e).__name__),
-                "KEYS", "deploy-notice-key")
-            return
+            return bad("%s cannot be read (%s), so the deploy-notice key's restriction is unverified" % (f, type(e).__name__))
+        fps, why = key_fingerprints(f)
+        if fps is None:
+            return bad("the deploy-notice key's restriction is unverified: " + why)
+        hits += fps.count(NOTICE_KEY_FP)
         for ln in body.splitlines():
-            s = ln.strip()
-            if not s or s.startswith("#"):
+            st = ln.strip()
+            if not st or st.startswith("#"):
                 continue
-            parts = split_key_line(s)
-            if parts is None:
-                continue
-            if parts[1] == NOTICE_KEY_MATERIAL:
-                hits.append((f, parts))
-            elif parts[2] == NOTICE_KEY_COMMENT:
-                named.append(f)
-    if len(hits) != 1:
-        out("STATE", "the deploy-notice key appears on %d line(s) across %s; exactly one is required (sshd uses the FIRST "
-            "match, so a second copy can be an unrestricted shell)" % (len(hits), ", ".join(NOTICE_KEY_FILES)),
-            "KEYS", "deploy-notice-key")
-        return
-    f, (opts, _, comment) = hits[0]
-    if opts != NOTICE_KEY_OPTIONS or comment != NOTICE_KEY_COMMENT:
-        out("STATE", "the deploy-notice key in %s has options %r and comment %r, expected exactly %r and %r - without them "
-            "the key is a full deploy shell" % (f, opts[:160] or "<none>", comment[:60], NOTICE_KEY_OPTIONS, NOTICE_KEY_COMMENT),
-            "KEYS", "deploy-notice-key")
-        return
-    if named:
-        out("STATE", "another key carries the deploy-notice comment (%s) - the comment must name only the pinned key"
-            % ", ".join(named), "KEYS", "deploy-notice-key")
-        return
-    out("OK", "the deploy-notice key is on exactly one line, pinned to dt-deploy-notice-gate")
+            if "cert-authority" in st:
+                ca.append(rel)
+            if st == NOTICE_KEY_LINE:
+                exact += 1
+    if ca:
+        return bad("a cert-authority line is present in %s - any key that CA signs is authorized" % ", ".join(sorted(set(ca))))
+    if hits != 1:
+        return bad("ssh-keygen finds the deploy-notice key %d time(s) across %s; exactly one is required (sshd uses the "
+                   "FIRST match, so a second copy can be an unrestricted shell)" % (hits, " ".join(files)))
+    if exact != 1:
+        return bad("the one line carrying the deploy-notice key is not the pinned line %r - without it the key is a full "
+                   "deploy shell" % NOTICE_KEY_LINE)
+    out("OK", "the deploy-notice key occurs exactly once (by fingerprint) and is the pinned dt-deploy-notice-gate line")
 
 
 def check_extra(name, box):
