@@ -580,3 +580,51 @@ Langston PROCEED 01:31Z (census re-derived at `7fc76ca43`) with BLOCKER-1 + four
 | — | Langston's `MEMORY.md` | ✅ | his "Owed, CC-C: `8c` + `8d`, `8a-P4c` inc 2-3 Step 7/10" shortened to `8c` + `8d` through `langston-memory-write` (the part shrinks) |
 | T1 | session task lists (`CC_A`, `CC_B`, `CC_C`, `CC_INFRA`) | ✅ mine / N/A ×3 | `CC_C_SESSION_TASK_LIST.md` row 17 · 3 · 2 |
 
+
+### 9.11 KD-19 (b) + EXIT-LEG (c) — STEPS 3-10 (CC-C; Step 10 landed 2026-11-13)
+
+**What it is for.** Kyle's KD-19 (2026-11-04): VTS exits are priced like paper's — (b) booked with the same order-book walk paper uses, not the single best price; (c) the fixed 0.05% per-leg slippage allowance removed once the walk carries the impact. This increment does (b) on both classes and lanes, and (c) on the EXIT leg only; the entry leg is owed as a later KD-19 increment on plan row 17.
+
+**Steps.** Scope `Scope Files/B_PRICE_SIDE_BY_JOB_KD19_SCOPE.md` (Step 1 approved by Langston 2026-11-07; D-1 ruled by Coltrane) · audit and plan `Scope Files/B_PRICE_SIDE_BY_JOB_KD19_PRE_AUDIT.md` (Step 2 r2 PROCEED) · change list `Change Lists/B_PRICE_SIDE_BY_JOB_KD19_CHANGE_LIST.md` (Step 4 r2, Langston) · deployed in the 2026-11-07 joint deploy, KD-19 head `6c39f14cb`, restart 15:15:11Z · Step 7 48 h read and Step 8 (Coltrane CONFIRMED at `8a19a33c7`) in `Change Lists/B_PRICE_SIDE_BY_JOB_KD19_STEP7.md` §1-§6 · Step 9 event wait registered §7, met 2026-11-13 §8 (first live unpriced close, SYY 2026-11-11, carries no `exitWalk`; 3 of 3; alert `7e20ed0f` resolved).
+
+**Unproven, stated as unproven.** The `no_depth_config` arm has never fired live (pre-registered count zero); the crypto REST size is impact-priced on only 12 of 26 REST exits in the 48 h read, so most of those still carry the allowance; the entry leg is untouched.
+
+**Step 10 governance ledger (copied from the governance commit):**
+
+CHANGE-CLASS: architecture
+
+| # | document | verdict | one line |
+|---|---|---|---|
+| T1 | `BATCH_CATALOG.md` | ✅ | KD-19 (b)+(c) exit-leg entry under the parent: what shipped, deploy, epochs, Step 7-9 evidence. |
+| T1 | `PHASE_HISTORY.md` | ✅ | Dated 2026-11-13 line under the parent's exit/fill entry. |
+| T1 | `SPRINT_TO_LIVE_PLAN.md` (row 17) | ✅ | KD-19 status moved from "NEXT Step 3" to Steps 3-9 done, Step 10 landed, next Step 11. |
+| T1 | `PHASE_19_PLAN.md` (row 3n, in flight) | ✅ | Status cell gains a 2026-11-13 pointer: per-piece status is on sprint row 17. |
+| T1 | shared `MEMORY.md` + `MEMORY_CC_C.md` | ✅ | Own file: KD-19 at Step 10; shared file unchanged, its price-side line already points at System Manual §18.0.1. |
+| T1 | the batch `SCOPE` | ✅ | Present: `B_PRICE_SIDE_BY_JOB_KD19_SCOPE.md` (Step 1, approved 2026-11-07). |
+| T1 | the batch `PRE_AUDIT` | ✅ | Present: `B_PRICE_SIDE_BY_JOB_KD19_PRE_AUDIT.md` (Step 2 r2, Langston PROCEED). |
+| T1 | `COMPLETION_REPORT` | ✅ | The parent stays open; this increment's record is §9.11 of the parent's progress report, converted at the parent's close. |
+| T1 | the `Observation` column | N/A | KD-19's only observation (the first live unpriced close) was met 2026-11-13; nothing left to wait on for this increment. |
+| T1 | the four session task lists | ✅ mine / N/A ×3 | `CC_C_SESSION_TASK_LIST.md` row 17: KD-19 at Step 10, next Step 11; CC_A, CC_B, CC_INFRA: N/A, not mine. |
+| T1 | Langston's `MEMORY.md` | ✅ | His owed-work line rewritten in place via `langston-memory-write` (stale `8d` and a line-number cite out, KD-19 state in); loaded set 143,768 → 143,761 B, ceiling 143,856. |
+| T2 | `SYSTEM_MANUAL.md` | ✅ | §18.0.1: both VTS booking cells now read the walk; new paragraph with the order, `exitWalk`, size certainty, (c) exit leg, three paper/VTS divergences. |
+| T2 | `SYSTEM_IMPACT_MAP.md` | ✅ | Registry entry (side sizes on cached feed rows), §2.2 sizes rule, §7.1 `bookVtsExit`, §9.14 the paper seam's split and refusal. |
+| T2 | `RUNNING_ISSUES.md` | N/A | KD-19 opened, closed or annotated no issue; its homes are plan row 17 and the decisions log. |
+| T2 | `CHANGES_AND_FIXES.md` | N/A | No bug or risk entry; the one folded defect (P-8e) is annotated in the Codex findings register. |
+| T2 | `POST_AUDIT_ROADMAP.md` | N/A | No phase-level change; KD-19 is a piece of plan row 17. |
+| T2 | `ADJUSTMENT_FRAMEWORK.md` | ✅ | Epoch precedent line: `crypto_spot/vts` 7→8, `xstock_spot/vts` 9→10, `updated_at` set (rule 7). |
+| T2 | `AUTHORITY_BASELINE.md` | N/A | No constitutional baseline touched; the diff is VTS booking, friction and feed shape. |
+| T2 | `STORAGE_POLICY.md` | N/A | No table or retention change; `exitWalk` is a field inside existing JSON and archive snapshots. |
+| T2 | `MULTI_ASSET_VTS_EXPANSION_PLAN.md` | ✅ | Working-list review note: no item A-F changes; one xStock VTS epoch boundary (9→10). |
+| T2 | `ASSET_CLASS_ONBOARDING_WORKFLOW.md` | N/A | No onboarding learning; both classes use the same walk. |
+| T2 | `BUILD_METHOD_PLAYBOOK.md` | N/A | The method did not change. |
+| T2 | `LANGSTON_ARCHITECTURE.md` | N/A | The reviewer's build did not change. |
+| T2 | `CLAUDE.md` / `CONDUCT.md` | N/A | No rule changed. |
+| T2 | `_archive/CLAUDE_MD_RULE_HISTORY.md` | N/A | No `CLAUDE.md` rule changed. |
+| T2 | `DELETED_COMPONENTS_LOG.md` | N/A | No component removed; the doubled slippage term was split per leg, not deleted. |
+| T2 | `MISTAKE_PATTERNS.md` | ✅ | `wrong-object` instance: a full sha typed from memory into an alert's evidence (`9bbc55f06`). |
+| T2 | `GOVERNANCE_EXCEPTIONS.md` | N/A | No new exception; the parent's open-batch re-justification row (alert `1ae9a06b`) stands. |
+| T2 | `ALERT_HANDLING_PROTOCOL.md` | N/A | The ack/resolve process did not change. |
+| T2 | `DELIVERY_BOARD_PROTOCOL.md` | N/A | Board columns and fields did not change. |
+| T2 | `CLAUDE_CODE_FEATURE_WATCH.md` | N/A | The daily model check did not run in this batch. |
+
+**NEXT: Step 11** — Langston (or Coltrane) confirms this increment's record; the parent stays open for `8c`, `#1250` and the KD-19 entry leg.
