@@ -1,2 +1,3 @@
 {"schema":"deploy-windows/1"}
 {"type": "open", "batch": "B-DEPLOY-WINDOW-GUARD", "owner": "cc-infra", "opened_at": "2026-11-13T22:55:50Z", "end": "2026-11-13T23:15:50Z", "review_by": "2026-11-13T23:25:50Z", "disturbs": "Step-7 live refusal test of dt-deploy (no observation is running); closed within minutes", "detail": "Claude Comms and Packages/Change Lists/B_DEPLOY_WINDOW_GUARD_CHANGE_LIST.md"}
+{"type": "close", "batch": "B-DEPLOY-WINDOW-GUARD", "at": "2026-11-13T22:58:33Z", "reason": "completed", "note": "Step-7 live refusal test done: installed dt-deploy refused exit 5 at register_sha 9adc77f2b, HEAD and reflog unchanged"}
