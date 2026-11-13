@@ -673,3 +673,76 @@ limit, not “fixed” into false certainty.
    a current nonexact row or any post-boot legacy-shaped row certify a candidate?
 9. Can either production process-start comparison be inverted or bypassed
    without making the initial-read and locked-recheck behavioral controls fail?
+
+## 12. STEP 7 LIVE VERIFICATION OF THE STEP-11 REPAIR — PASS (CC-C, 2026-11-13)
+
+**Deployed object.** Joint deploy by `cc-a`: `dt-deploy 77f6fd5984aeb42a2c3a319dba32b116ca49b28b`
+at `2026-11-13T21:03:55Z`, restart 698, `ENGINE RESUMED`, identity asserted
+(`/home/deploy/dawntrader-deploy.record`; `dist/BUILD_SHA` reads the same sha).
+`git merge-base --is-ancestor` confirms both `1251fb8e4` and the repair landing
+`b4edaf089` are ancestors of the deployed sha. The running build carries the
+repaired arm: `dist/index.js` holds the line
+`successful_boundaries.trigger_source IN ('cron', 'missed_catchup')` (1 line) and
+`successful_boundaries.evidence_source = 'occurrence'` (1 line), matching
+`server/services/cron-fire-evidence-verifier.ts:159-162` at the deployed sha.
+**Process, not file:** PM2 `pm_uptime` = `2026-11-13T21:03:45Z` (pid 3264025,
+restart 698), after the build; the verifier's own line
+`Started; interval=900s, grace_multiplier=1.5x` follows at `21:03:53Z`.
+
+**Pre-registered prediction (written from the durable read before the pass):**
+all six registered jobs healthy on the first post-restart pass, every certifying
+boundary an exact current occurrence or identified audit row, zero STALE / skip /
+error verifier lines, zero new cron alerts.
+
+**Durable population (read about 21:06Z, before the pass, all `scheduled_for >= 2026-11-13T00:00Z`).**
+`scheduled_tasks_audit`, the six jobs: 536 rows, every one `success` with an
+occurrence id and `trigger_source = 'cron'` — feed_integrity 254 and qd_probe 254
+(00:00 → 21:05, every five-minute slot), awareness_state_update 22 (00:00 → 21:00,
+every hour), awareness_reflection 4, formula_audit 1, universe_discovery 1.
+`scheduled_job_occurrences` holds `succeeded`, `first_source = natural` rows for
+formula_audit 03:00, universe_discovery 06:00 and awareness_reflection
+00/06/12/18:00. So today's population contains no legacy-shaped or
+non-scheduled exact row.
+
+**Result — first post-restart pass, `2026-11-13 21:18:53Z` (out stream):** six of
+six `healthy`:
+
+| job | last_successful_boundary | mature_occurrence |
+|---|---|---|
+| xstock_universe_discovery_cron | 06:00:00.000Z | 06:00:00.000Z |
+| xstock_qd_probe_cron | 21:15:00.000Z | 21:05:00.000Z |
+| formula_audit_cron | 03:00:00.000Z | 03:00:00.000Z |
+| feed_integrity_cron | 21:15:00.000Z | 21:05:00.000Z |
+| awareness_state_update_cron | 21:00:00.000Z | 21:00:00.000Z |
+| awareness_reflection_cron | 18:00:00.000Z | 18:00:00.000Z |
+
+Error stream: **zero** verifier lines since the restart. **Positive control:**
+the same stream holds verifier STALE lines when they happen
+(`error__2026-11-13_00-00-00.log`, e.g. `2026-11-12 21:30:32 … job=feed_integrity_cron STALE …`).
+Alert store (`system-alerts.jsonl`, whole file, merged by id): 68 cron-keyed rows
+all-time (positive control), **0 created since `21:03:55Z`**.
+
+**What this does and does not prove.** It proves the running process on the
+repaired predicate still certifies every real current boundary (no regression,
+no false page) across all six jobs. **It does not exercise the repair's refusal
+arms live:** today's population holds no exact legacy-shaped or non-scheduled
+row, so the exact-legacy refusal, exact non-scheduled refusal and exact
+missed-catch-up acceptance remain proven by the twelve-state real-database fence
+only, as stated in §11. Stated, not claimed.
+
+**UI judgement:** unchanged from §9 — the repair changes only the background
+verifier's evidence classification; no page, panel or rendering contract moves.
+
+`NOT RE-READ` by a second reader before Langston.
+
+**Reproduce (staging, as `deploy`, in `/home/deploy/dawntrader`):**
+
+```bash
+cat /home/deploy/dawntrader-deploy.record; cat dist/BUILD_SHA
+grep -c "successful_boundaries.trigger_source IN ('cron', 'missed_catchup')" dist/index.js
+for s in out error; do grep -h 'CRON-FIRE-VERIFIER' /var/log/dawntrader/$s.log \
+  | grep -E '^2026-11-13 21:(0[4-9]|[1-5][0-9])'; done
+grep -h 'CRON-FIRE-VERIFIER' /var/log/dawntrader/error__2026-11-13_00-00-00.log | tail -1
+```
+
+**STEP: 7 of 11 COMPLETE · NEXT STEP: 8 of 11** (Langston's second pass on this restart).
