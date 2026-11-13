@@ -75,6 +75,11 @@ describe('P6 rebased onto row 8c — the maker arm prices the triple it is given
     const sided = repriceAtAsk({ inputs: { ...inputs, levelGeometry: 'sided' }, planEntry: 100, planEntryMaker: 99.95, ask: 100, worseSideFrac: 0.25, policy: 'maker_preferred' });
     expect(sided.makerNetEVAdjusted).not.toBe(mid.makerNetEVAdjusted);
   });
+  it('Langston N-1: with the geometry held sided, the maker entry alone moves the maker EV (the callee reads planEntryMaker)', () => {
+    const sidedAt = (makerEntry: number) => repriceAtAsk({ inputs: { ...inputs, levelGeometry: 'sided' }, planEntry: 100, planEntryMaker: makerEntry, ask: 100, worseSideFrac: 0.25, policy: 'maker_preferred' });
+    expect(sidedAt(99.95).makerNetEVAdjusted).not.toBe(sidedAt(100).makerNetEVAdjusted);
+    expect(sidedAt(99.95).takerNetEvAtAsk).toBe(sidedAt(100).takerNetEvAtAsk); // the taker arm never reads the maker entry
+  });
   it('a bad maker entry throws rather than guess', () => {
     expect(() => repriceAtAsk({ inputs, planEntry: 100, planEntryMaker: Number.NaN, ask: 100, worseSideFrac: 0.25, policy: 'maker_only' })).toThrow(/planEntryMaker/);
   });
