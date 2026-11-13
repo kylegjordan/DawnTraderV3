@@ -59,7 +59,12 @@ def main(raw):
             if os.path.exists(path):
                 sys.stdout.write(open(path, encoding="utf-8", errors="replace").read())
         sys.stdout.write(SEP + "\n")
-        sys.stdout.write(open(RECORD, encoding="utf-8", errors="replace").read())
+        # B-6 (Langston, gate B r2): guarded like its sibling. No record (a box that never completed a dt-deploy) is
+        # a fact to report, not a traceback that makes the watcher read "staging unreadable" and page every 2 min.
+        if os.path.exists(RECORD):
+            sys.stdout.write(open(RECORD, encoding="utf-8", errors="replace").read())
+        else:
+            sys.stdout.write("#RECORD-ABSENT\n")
         return 0
     if op == "resolve" and set(req) == {"op", "key", "evidence"}:
         key, ev = req["key"], req["evidence"]

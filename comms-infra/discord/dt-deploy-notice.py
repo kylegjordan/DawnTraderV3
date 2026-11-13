@@ -230,8 +230,11 @@ def run():
             started = parse_iso(f["attempt_at"])
         except (KeyError, ValueError):
             started = 0
-        done = (rec.get("sha") == f.get("sha") and "deployed_at" in rec
-                and parse_iso(rec["deployed_at"]) >= started)
+        try:                                # B-6: a malformed deployed_at is "not this attempt's completion", not a crash
+            rec_t = parse_iso(rec["deployed_at"]) if "deployed_at" in rec else None
+        except ValueError:
+            rec_t = None
+        done = rec.get("sha") == f.get("sha") and rec_t is not None and rec_t >= started
         if not done and now() - started < OUTCOME_WAIT_S:
             continue
         if "outcome_post" not in p:

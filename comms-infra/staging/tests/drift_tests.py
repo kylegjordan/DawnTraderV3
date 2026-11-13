@@ -552,6 +552,28 @@ o = _win("not a register" + NL)
 check("windows: a MALFORMED register clears no alert (control)", _RESOLVED == [], str(_RESOLVED))
 _OPEN_KEYS.clear()
 DM.git, DM.raise_alert, DM.open_alert_keys, DM.resolve_alert_key = _real_git, _real_raise, _real_open, _real_resolve
+# B-4: the deploy-notice key line is checked exactly (fail-closed)
+os.makedirs(_wr + "/home/deploy/.ssh", exist_ok=True)
+_GOOD = 'restrict,from="204.168.141.77",command="/usr/local/bin/dt-deploy-notice-gate" ssh-ed25519 AAAAKEY dt-deploy-notice@helsinki'
+_REV = 'from="204.168.141.77" ssh-ed25519 AAAAREV langston@helsinki'
+for _label, _body, _ok in [
+        ("the pinned line beside a reviewer line -> OK", _REV + NL + _GOOD + NL, True),
+        ("command= dropped -> STATE", _GOOD.replace(',command="/usr/local/bin/dt-deploy-notice-gate"', "") + NL, False),
+        ("from= changed -> STATE", _GOOD.replace("204.168.141.77", "0.0.0.0/0") + NL, False),
+        ("no options at all -> STATE", "ssh-ed25519 AAAAKEY dt-deploy-notice@helsinki" + NL, False),
+        ("the line missing -> STATE", _REV + NL, False),
+        ("two lines for the comment -> STATE", _GOOD + NL + _GOOD + NL, False)]:
+    open(_wr + "/home/deploy/.ssh/authorized_keys", "w").write(_body)
+    DM.PROBLEMS.clear(); DM.CLASSES.clear()
+    with contextlib.redirect_stdout(io.StringIO()):
+        DM.check_extra("deploy_notice_key", {})
+    _bad = ("KEYS", "deploy-notice-key") in DM.CLASSES
+    check("B-4: " + _label, _bad != _ok, str(DM.PROBLEMS))
+os.unlink(_wr + "/home/deploy/.ssh/authorized_keys")
+DM.PROBLEMS.clear(); DM.CLASSES.clear()
+with contextlib.redirect_stdout(io.StringIO()):
+    DM.check_extra("deploy_notice_key", {})
+check("B-4: the file missing -> STATE (fail-closed, never a silent pass)", ("KEYS", "deploy-notice-key") in DM.CLASSES, str(DM.PROBLEMS))
 # open_alert_keys reads the store by id, latest row wins - against a real file
 _af = tempfile.mkdtemp(prefix="drift-af-")
 DM.ROOT = _af

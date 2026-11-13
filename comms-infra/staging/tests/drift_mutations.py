@@ -33,6 +33,8 @@ MUTATIONS = [
     ("drift", "attack 2: an unreadable register clears alerts", "    if text is not None and census_ok:\n", "    if True:\n"),
     ("drift", "open_alert_keys ignores later rows of an id", "                last[d.get(\"id\")] = d\n",
      "                last.setdefault(d.get(\"id\"), d)\n"),
+    ("drift", "B-4: the key options are not compared", "    if opts != NOTICE_KEY_OPTIONS:\n", "    if False:\n"),
+    ("drift", "B-4: a second line for the comment is accepted", "    if len(lines) != 1:\n", "    if not lines:\n"),
     ("drift", "C-15: an unusable register is off the verdict", '        if rc == 4:\n            out("STATE",',
      '        if rc == 4:\n            out("OK",'),
     ("drift", "no ancestry check on the installed sha", '            if anc is None:\n                out("STATE", "the installed sha', '            if False:\n                out("STATE", "the installed sha'),

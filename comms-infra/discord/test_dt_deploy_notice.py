@@ -240,13 +240,26 @@ def suite():
     wire(m, w7, T0 + 400); m.run()
     check("B-1: a MIXED two-window notice-only line resolves BOTH windows' keys (the minted one is not orphaned)",
           sorted(r["key"].split(":")[1] for r in w7.resolves) == ["B-A", "B-B"], w7.resolves)
+    # B-6: a malformed deployed_at in the record is "not completed", never a crash
+    fresh(); w9 = World(); w9.notice = []
+    wire(m, w9, T0); m.run()
+    w9.notice.append(line(SHA, ISO0, "B-X/cc-b/open"))
+    w9.record = {"sha": SHA, "deployed_at": "garbage"}
+    wire(m, w9, T0 + 60)
+    try:
+        rc = m.run()
+        crashed = False
+    except Exception as e:
+        rc, crashed = None, e
+    check("B-6: a malformed deployed_at does not crash the run and is not read as completion",
+          not crashed and rc == 0 and len(w9.posts) == 1 and "STARTED" in w9.posts[0], (crashed, w9.posts))
     print("dt-deploy-notice suite: %d passed, %d failed" % (PASS, FAIL))
     return 1 if FAIL else 0
 
 
 MUTATIONS = [
     ("owners not put in the opening list", '    head = ", ".join(names) if names else', '    head = "Deploy notice" if names else'),
-    ("an older deploy of the sha counts as completion", "and parse_iso(rec[\"deployed_at\"]) >= started)", ")"),
+    ("an older deploy of the sha counts as completion", "rec_t is not None and rec_t >= started", "rec_t is not None"),
     ("no 30-min not-completed", "if not done and now() - started < OUTCOME_WAIT_S:", "if not done:"),
     ("a failed post skips the line", "            failed = True\n            break", "            failed = True\n            st[\"seen\"] += 1\n            break"),
     ("B-1: the resolve is guarded on alerted again", "        if True:\n            ev = (", '        if f.get("window_notice") == "alerted":\n            ev = ('),

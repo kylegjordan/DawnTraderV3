@@ -122,7 +122,7 @@ BOXES = {
                   "dt-unit-failure@dt-install-drift.service": (SS + "dt-unit-failure@.service", [])},
         "timers": ["dt-install-drift.timer"],
         "checks": ["dt_api_page", "setter_marker", "accounts", "sudoers_others", "no_authorized_keys2",
-                   "deploy_windows"],
+                   "deploy_windows", "deploy_notice_key"],
     },
     "dawntrader-agent": {
         "git_as": "langston",
@@ -444,8 +444,40 @@ def _deploy_windows(box):
         % (len(stale), notice_only))
 
 
+# B-4 (Langston, gate B r2): the watcher's key is bounded ONLY by the options on its authorized_keys line. Drop
+# command= one day and that key is a full deploy shell from Helsinki - so the line itself is checked, exactly.
+NOTICE_KEY_FILE = "/home/deploy/.ssh/authorized_keys"
+NOTICE_KEY_COMMENT = "dt-deploy-notice@helsinki"
+NOTICE_KEY_OPTIONS = 'restrict,from="204.168.141.77",command="/usr/local/bin/dt-deploy-notice-gate"'
+
+
+def check_notice_key():
+    """Exactly ONE line carries the watcher's comment, and its options are EXACTLY the pinned string. Fail-closed:
+    a missing file, no such line, two of them, or any other options is a STATE failure (subject deploy-notice-key)."""
+    try:
+        body = read_small(P(NOTICE_KEY_FILE))[1].decode("utf-8", "replace")
+    except OSError as e:
+        out("STATE", "%s cannot be read (%s), so the deploy-notice key's restriction is unverified"
+            % (NOTICE_KEY_FILE, type(e).__name__), "KEYS", "deploy-notice-key")
+        return
+    lines = [ln.strip() for ln in body.splitlines()
+             if ln.strip() and not ln.strip().startswith("#") and ln.split()[-1] == NOTICE_KEY_COMMENT]
+    if len(lines) != 1:
+        out("STATE", "%s holds %d line(s) for %s; exactly one is required" % (NOTICE_KEY_FILE, len(lines), NOTICE_KEY_COMMENT),
+            "KEYS", "deploy-notice-key")
+        return
+    opts = lines[0].split(" ssh-ed25519 ", 1)[0] if " ssh-ed25519 " in lines[0] else "<no options>"
+    if opts != NOTICE_KEY_OPTIONS:
+        out("STATE", "the deploy-notice key's options are %r, expected exactly %r - without them the key is a full "
+            "deploy shell" % (opts[:160], NOTICE_KEY_OPTIONS), "KEYS", "deploy-notice-key")
+        return
+    out("OK", "the deploy-notice key is pinned to dt-deploy-notice-gate")
+
+
 def check_extra(name, box):
-    if name == "deploy_windows":
+    if name == "deploy_notice_key":
+        check_notice_key()
+    elif name == "deploy_windows":
         deploy_windows(box)
     elif name == "dt_api_page":
         p = P("/var/lib/dt-api/page.json")

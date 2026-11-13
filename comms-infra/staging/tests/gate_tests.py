@@ -54,6 +54,11 @@ check("read with no notice file: the separator and the record, exit 0", rc == 0 
 open(G.NOTICE, "w").write("attempt_at=x attempt_key=y sha=z\n")
 rc, o, e, c = run(tok({"op": "read"}))
 check("read with a notice file: the notice first, then the separator", rc == 0 and o.startswith("attempt_at=x") and G.SEP in o, o)
+os.rename(G.RECORD, G.RECORD + ".away")
+rc, o, e, c = run(tok({"op": "read"}))
+check("B-6: read with NO record -> exit 0 and an explicit #RECORD-ABSENT, never a traceback",
+      rc == 0 and "#RECORD-ABSENT" in o and G.SEP in o, (rc, o, e))
+os.rename(G.RECORD + ".away", G.RECORD)
 rc, o, e, c = run(tok({"op": "resolve", "key": KEY, "evidence": "completed; posts 1,2"}))
 check("resolve of this watcher's own key -> resolve-key as deploy-notice-watcher",
       rc == 0 and c == [["resolve-key", KEY, "--by", "deploy-notice-watcher", "--evidence", "completed; posts 1,2"]], c)
