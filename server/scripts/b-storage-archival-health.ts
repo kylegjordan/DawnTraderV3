@@ -64,6 +64,9 @@ import {
 // with `--plant` on the command line (Langston, override delta): `dotenv` loads `/home/deploy/dawntrader/.env`, a
 // hand-edited file no review sees, so an env var alone must not be able to disable alerting; the cron line passes no
 // arguments, so the cron run cannot be a plant run.
+// ⛔ A plant run's stdout goes to the terminal or a plant file, NEVER appended to /var/log/dawntrader/archival-health.log:
+// it prints the same `started at` and `DONE — all_ok=` lines the liveness watchdog's `archivalHealthRan` reads, so an
+// appended plant run would satisfy that day's check (Langston, override delta PROCEED).
 const PLANT = process.argv.includes('--plant');
 const LOG_DIR = (PLANT && process.env.ARCHIVAL_HEALTH_LOG_DIR) || '/var/log/dawntrader';
 const CRONTAB_FILE = (PLANT && process.env.ARCHIVAL_HEALTH_CRONTAB_FILE) || '';
