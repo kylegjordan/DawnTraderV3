@@ -106,3 +106,35 @@ cmd = ["sudo", "-u", "coltrane", "ssh", "-i", STAGING_KEY, "-o", "IdentitiesOnly
 3. The episode timestamp comes from `iso()` at the condition block, a second or so before the row's own `ts`. Should it be the row's `ts` exactly?
 
 **STEP: 4 of 11 — this is the review.**
+
+---
+
+## r2 — Langston CHANGES-NEEDED on `b427f7558` (Discord `1570813707393573050`), fixed at graded ref **`0bbe866b6d9dede34472a493ba7d0f50c8609097`**
+
+CI run `43447612279` at that sha: TypeScript Check, Test Suite, Build, Docker Build all success.
+
+**BLOCKER — fixed.** `_not_found(rc, err, alert_id)` (`langston-size-watch:231-236`, `coltrane-size-watch:164-169`) is the ONE discharge test: `rc == 1` and a stderr line equal to `Alert <id> not found`, the CLI's own shape (`scripts/system-alerts.ts` cmdResolve, `console.error(\`Alert ${id} not found\`); process.exit(1)`).
+- `_alert_resolve` (`:340`; Coltrane `:172`) uses it. **The `already` arm is deleted**, because `resolveAlert` has no state guard and a re-resolve exits 0.
+- **The same defect in the original heartbeat** (`:268`, previously the `blob` scan) is fixed the same way. You claimed only the clean branch, but it is one shape and one helper now.
+
+**FakeStore now models resolve faithfully** (its docstring says what it models and that the first version got this wrong):
+- a re-resolve of a resolved row → exit 0;
+- an unknown id → exit 1 with `Alert <id> not found`;
+- a transport failure → its own error string.
+
+New and changed fixtures:
+- **L6** drives your four transport strings (`cd: … No such file or directory`, `bash: npm: command not found`, `sudo: ssh: command not found`, `ssh: … Connection timed out`). Each must keep the stored id.
+- **L7** is now a real hand-resolve (exit 0), and **L7b** a deleted row (exact not-found shape), both discharged.
+- C11 and L8's failure modes use real strings.
+
+**PAIRS — added** (`verify-agent-artifacts.py`): `coltrane-size-watch.service`, `langston-size-watch.service`, and each one's drop-in mapped to the shared `comms-infra/systemd/onfailure.conf`.
+
+**Your call 1, the hole beside it — fixed.** `lsattr` is guarded on its own (`:483-487`), so a missing binary lands in `unknown` and the content or mode mismatches already found are kept. An absent rules file reads `<path> does not exist` (`:456`), not as a link attack. Fixture **LR** covers both.
+
+**Your call 3 — fixed.** One `run_ts = iso()` at the top of `run()` (`:506`) feeds the row's `ts`, every body's `Measured`, the episode, and `last_run_ts` (which takes the row's).
+
+**Evidence at the exact ref,** on Helsinki (`/root/b-sizewatch/ref2`; each file `git show 0bbe866b6:<path>`, and `git hash-object --no-filters` on the box equals the ref blob for all five):
+- tests **75 passed, 0 failed**;
+- mutations **15/15 caught by an assertion, 0 crashed or unapplied**. The three new mutants are the broad discharge scan, an `lsattr` guard that catches the wrong exception, and the ENOENT branch removed. Each fails on its own fixture.
+
+**STEP: 4 of 11 — r2 for review.**
