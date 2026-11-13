@@ -5,7 +5,16 @@
 # Scope: B_DEPLOY_LOCK_SCOPE.md rev 4 (Langston Step-1 APPROVED)
 # Pre-audit: B_DEPLOY_LOCK_PRE_AUDIT.md (Step-2 APPROVED)
 #
-# Usage:  dt-deploy <full-40-char-sha> --by <session> [--pre-restart '<npm script>']
+# Usage:  dt-deploy <full-40-char-sha> --by <session> [--in-window <batch,...>] [--pre-restart '<npm script>']
+#
+# --in-window (B-DEPLOY-WINDOW-GUARD, #1249): other batches run pre-registered OBSERVATION WINDOWS on staging, and a
+# deploy restarts the app inside them. The register 1-system-manual/DEPLOY_WINDOWS.jsonl is read AT THE BRANCH HEAD
+# (never the worktree, which still holds the PREVIOUSLY deployed sha here - Langston C-1), parsed by the installed
+# dt-obs-windows, and a deploy that would land in an OPEN window is REFUSED (exit 5) unless --in-window names EVERY
+# open window. A missing or unusable register REFUSES (exit 4) - fail-closed; a register fix is a branch commit and
+# needs no deploy. Before the tree is touched, a deploy that lands in ANY window (open or stale, named or not) appends
+# a NOTICE line (fail-closed, exit 6) which a Helsinki watcher turns into a wake for every owner, and raises one
+# alert per window (best-effort: a failed mint is written into the notice and the record as notice-only).
 #
 # --by (#656, Kyle-directed hotfix): every session reaches this box as the SAME
 # unix identity (root -> su deploy), so the observed identity cannot attribute
@@ -19,6 +28,9 @@
 #   → build (writes dist/BUILD_SHA) → db:migrate → optional --pre-restart
 #   → pm2 restart → POST-CONDITIONS asserted at the objects → record written
 #   ONLY after assertions pass.
+#   B-DEPLOY-WINDOW-GUARD inserts two steps: the REGISTER CHECK right after the sha-on-branch check, and the
+#   NOTICE + in-window ALERT right after the dirty-worktree check, immediately before the reset (Langston C-13:
+#   a dirty-tree refusal must never wake anyone for a deploy that was never going to start).
 #
 # The lock (OBJ-2/3/4): /home/deploy/dawntrader-deploy.lock — OUTSIDE the repo
 # so no reset can touch the lock protecting it. mkdir is the atomic primitive.
@@ -38,12 +50,17 @@ APP_DIR="/home/deploy/dawntrader"
 LOCK_DIR="/home/deploy/dawntrader-deploy.lock"
 RECORD="/home/deploy/dawntrader-deploy.record"
 BRANCH="origin/migration/aws-supabase"
+REGISTER_PATH="1-system-manual/DEPLOY_WINDOWS.jsonl"
+# NOT named dt-deploy-*: server/db-pool-alerts.ts:378 reads any process carrying that substring as a live deploy.
+OBS_WINDOWS="/usr/local/bin/dt-obs-windows"
+NOTICE="/home/deploy/dawntrader-deploy.notice"
 LIVENESS_URL="http://localhost:5000/api/health/liveness"
 
 SHA="${1:-}"
 PRE_RESTART=""
 BY=""
-USAGE="Usage: dt-deploy <full-40-char-sha> --by <cc-a|cc-b|cc-c|cc-infra|codex-a|codex-b|codex-c|codex-infra|kyle|langston|coltrane> [--pre-restart '<npm script>']"
+IN_WINDOW_ARG=""
+USAGE="Usage: dt-deploy <full-40-char-sha> --by <cc-a|cc-b|cc-c|cc-infra|codex-a|codex-b|codex-c|codex-infra|kyle|langston|coltrane> [--in-window <batch,...>] [--pre-restart '<npm script>']"
 shift $(( $# > 0 ? 1 : 0 ))
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -59,12 +76,16 @@ while [ $# -gt 0 ]; do
                    case "$2" in -*) echo "dt-deploy: REFUSED — --pre-restart value looks like a flag (${#2} chars, not echoed). $USAGE" >&2; exit 1 ;; esac
                    [ -z "$PRE_RESTART" ] || { echo "dt-deploy: REFUSED — duplicate --pre-restart." >&2; exit 1; }
                    PRE_RESTART="$2"; shift 2 ;;
+    --in-window)   [ $# -ge 2 ] || { echo "dt-deploy: REFUSED — --in-window needs a value. $USAGE" >&2; exit 1; }
+                   case "$2" in -*) echo "dt-deploy: REFUSED — --in-window value looks like a flag (${#2} chars, not echoed). $USAGE" >&2; exit 1 ;; esac
+                   [ -z "$IN_WINDOW_ARG" ] || { echo "dt-deploy: REFUSED — duplicate --in-window." >&2; exit 1; }
+                   IN_WINDOW_ARG="$2"; shift 2 ;;
     # B-DEPLOY-ACTOR-ALLOWLIST P2: the '=' form of a KNOWN flag fell to the
     # catch-all below, which echoed the WHOLE RAW TOKEN — the fourth echo site,
     # found at Step 2 and absent from the original three. Named here so the
     # message stays useful without carrying a user value: ${1%%=*} is the flag
     # name only, everything from the first '=' stripped.
-    --by=*|--pre-restart=*)
+    --by=*|--pre-restart=*|--in-window=*)
                    echo "dt-deploy: REFUSED — ${1%%=*} takes a SPACE-separated value, not '='. $USAGE" >&2; exit 1 ;;
     *)             echo "dt-deploy: REFUSED — unrecognised argument (${#1} chars, not echoed). $USAGE" >&2; exit 1 ;;
   esac
@@ -209,6 +230,44 @@ say "fetch"; git fetch origin
 git cat-file -e "$SHA^{commit}" 2>/dev/null || fail "sha $SHA does not exist at origin"
 git merge-base --is-ancestor "$SHA" "$BRANCH" || fail "sha $SHA is not on $BRANCH — staging deploys only reviewed refs (§7.1)"
 
+# ── B-DEPLOY-WINDOW-GUARD: THE REGISTER, READ AT THE BRANCH HEAD (Langston C-1/C-2) ─────────────────────────
+# The worktree is still at the PREVIOUSLY deployed sha here, so its copy of the register can be days stale - the
+# #449 shape. git show reads the head the fetch above just moved. Every refusal and the record name WHICH register
+# was read, so a refusal or a pass can be re-derived (register_sha / register_blob / in_window).
+REGISTER_SHA=$(git rev-parse "$BRANCH")
+REGISTER_BLOB=$(git rev-parse --verify --quiet "$BRANCH:$REGISTER_PATH" || echo absent)
+win_refuse() {  # $1 exit code, $2 text
+  echo "dt-deploy: REFUSED — $2" >&2
+  echo "  register_sha=$REGISTER_SHA register_blob=$REGISTER_BLOB in_window=${IN_WINDOW:-unread}" >&2
+  exit "$1"
+}
+[ -x "$OBS_WINDOWS" ] || win_refuse 4 "$OBS_WINDOWS is not installed, so the observation-window register cannot be read. Fail-closed: install it (B-DEPLOY-WINDOW-GUARD P9)."
+[ "$REGISTER_BLOB" != absent ] || win_refuse 4 "the observation-window register $REGISTER_PATH does not exist at $BRANCH. Fail-closed: restore it by a commit to the branch (no deploy needed)."
+REGISTER_TEXT=$(git show "$BRANCH:$REGISTER_PATH") || win_refuse 4 "the register exists at $BRANCH but could not be read."
+WIN_ARGS=(check)
+[ -z "$IN_WINDOW_ARG" ] || WIN_ARGS+=(--in-window "$IN_WINDOW_ARG")
+set +e
+WIN_OUT=$(printf '%s\n' "$REGISTER_TEXT" | "$OBS_WINDOWS" "${WIN_ARGS[@]}")
+WIN_RC=$?
+set -e
+case "$WIN_RC" in
+  0) ;;
+  4) win_refuse 4 "the observation-window register is unusable (the reason is printed above). Fail-closed: fix it by a commit to the branch (no deploy needed)." ;;
+  5) win_refuse 5 "this deploy would land inside an open observation window (named above)." ;;
+  *) win_refuse 4 "$OBS_WINDOWS exited $WIN_RC - treated as an unusable register." ;;
+esac
+# || true: under pipefail a no-match grep would trip set -e here, before the explicit refusal below can speak.
+IN_WINDOW=$(printf '%s\n' "$WIN_OUT" | grep -E '^IN_WINDOW ' | cut -d' ' -f2 || true)
+[ -n "$IN_WINDOW" ] || win_refuse 4 "$OBS_WINDOWS printed no IN_WINDOW line - treated as an unusable register."
+printf '%s\n' "$WIN_OUT" | grep -E '^(WINDOW|HOLD) ' | sed 's/^/dt-deploy: register: /' || true
+printf '%s\n' "$WIN_OUT" | grep -E ' stale ' | sed 's/^WINDOW /dt-deploy: STALE WINDOW /' || true
+# Holds (Langston C-4): store the fact, derive liveness here - is each pending batch's landing sha inside $SHA?
+while read -r _ HID _ HBATCH HSHA; do
+  [ -n "$HSHA" ] || continue
+  if git merge-base --is-ancestor "$HSHA" "$SHA" 2>&1; then echo "dt-deploy: hold $HID: $HBATCH becomes LIVE with this deploy"
+  else echo "dt-deploy: hold $HID: $HBATCH stays NOT live (its landing sha is not in $SHA)"; fi
+done < <(printf '%s\n' "$WIN_OUT" | grep -E '^HOLD ' || true)
+
 # ── OBJ-7: NEVER reset through a dirty worktree — fail loud, discard nothing ─
 DIRTY=$(git status --porcelain)
 if [ -n "$DIRTY" ]; then
@@ -216,6 +275,36 @@ if [ -n "$DIRTY" ]; then
   echo "$DIRTY" >&2
   echo "Disposition is a human call: commit it, stash it, or name it disposable — then rerun." >&2
   exit 3
+fi
+
+# ── B-DEPLOY-WINDOW-GUARD: TELL THE OWNERS BEFORE THE TREE MOVES (Langston BLOCKER-1, C-12, C-13) ─────────────
+# HERE, after the dirty-tree check and before the reset: an abort anywhere below has already disturbed the window,
+# and the record (written last) would never say so. The NOTICE line is the delivery leg - the Helsinki watcher reads
+# it - so it is FAIL-CLOSED. The ALERT is the durable record and is BEST-EFFORT: its failure modes (a full disk, a
+# tree npm cannot run) coincide with needing to deploy, and refusing there would push the deployer onto the hand
+# reset that tells nobody (C-12). A failed mint is written into the notice line and the record as notice-only, and
+# the daily install-drift check raises an alert for every such line.
+WINDOW_NOTICE=none
+if [ "$IN_WINDOW" != none ]; then
+  ATTEMPT_AT=$(date -u +%FT%TZ)
+  ATTEMPT_KEY=$(date -u -d "$ATTEMPT_AT" +%Y%m%dT%H%M%SZ)
+  WINDOW_NOTICE=alerted
+  for W in ${IN_WINDOW//,/ }; do
+    WB=${W%%/*}; WREST=${W#*/}; WO=${WREST%%/*}; WS=${WREST#*/}
+    if ! (cd "$APP_DIR" && npm run -s system-alerts -- add --triggers-at "$ATTEMPT_AT" --category governance \
+          --severity warning --dedupe-key "deploy-in-window:$WB:$SHA:$ATTEMPT_KEY" \
+          --title "Deploy $SHA is STARTING inside the $WB observation window ($WS)" \
+          --body "Owner $WO: a staging deploy of $SHA by $BY started at $ATTEMPT_AT inside your $WB window ($WS). The app restarts. Whether it completed is in /home/deploy/dawntrader-deploy.record (or its absence); the Helsinki deploy-notice watcher posts the outcome and resolves this alert with that evidence. Resolve, never ack. (B-DEPLOY-WINDOW-GUARD, #1249)" \
+          --metadata "{\"batch\":\"$WB\",\"owner\":\"$WO\",\"sha\":\"$SHA\",\"attempt_at\":\"$ATTEMPT_AT\",\"window_state\":\"$WS\"}" \
+          >/dev/null); then
+      WINDOW_NOTICE=notice-only
+      echo "dt-deploy: IN-WINDOW ALERT NOT RAISED for $WB (owner $WO). The notice still goes out; the daily check will raise it." >&2
+    fi
+  done
+  printf 'attempt_at=%s sha=%s by=%s in_window=%s window_notice=%s register_sha=%s\n' \
+    "$ATTEMPT_AT" "$SHA" "$BY" "$IN_WINDOW" "$WINDOW_NOTICE" "$REGISTER_SHA" >> "$NOTICE" \
+    || win_refuse 6 "could not append the in-window notice to $NOTICE, so no owner would be told. Nothing was touched. The fix is that file (disk or permission), never a hand reset."
+  echo "dt-deploy: in-window notice written for $IN_WINDOW (alert: $WINDOW_NOTICE)"
 fi
 
 # ── conditional npm ci — F5: BEFORE build, on lockfile diff ──────────────────
@@ -299,6 +388,10 @@ deployed_via=$(whoami)@$(hostname) via ${SUDO_USER:-direct}
 check_failure_window_s=$WINDOW
 migrate_ran_at=$MIG_AT
 migrate_ms=$MIG_MS
+register_sha=$REGISTER_SHA
+register_blob=$REGISTER_BLOB
+in_window=$IN_WINDOW
+window_notice=$WINDOW_NOTICE
 EOF
 echo "dt-deploy: OK — $SHA live, engine resumed, identity asserted."
 # Langston (Step-4b): this script BOUNDS the window, it does not measure the

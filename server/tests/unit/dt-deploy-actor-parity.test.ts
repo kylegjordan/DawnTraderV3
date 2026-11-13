@@ -190,5 +190,29 @@ describe('dt-deploy --by parity with ALERT_ACTORS (B-DEPLOY-ACTOR-ALLOWLIST)', (
     expect(src).not.toContain("'--by $BY' must be");
     expect(src).not.toContain('unrecognised argument: $1');
     expect(src).not.toContain("--pre-restart value '$2'");
+    // B-DEPLOY-WINDOW-GUARD: the sixth site, the new --in-window flag.
+    expect(src).not.toContain("--in-window value '$2'");
+    expect(src).not.toContain('$IN_WINDOW_ARG"' + ' is not');
+  });
+
+  // B-DEPLOY-WINDOW-GUARD (#1249): an observation window's owner must be a canonical deploy actor, and the register's
+  // parser (scripts/obs-windows.py, installed as dt-obs-windows) holds its own literal because it runs as python on the
+  // staging box. Same ruling as the bash table above: keep a readable literal, make DRIFT detectable here.
+  it('the register parser\'s OWNERS == the deploy canonical set == DEPLOY_ACTOR_LIST (fail-closed)', () => {
+    const path = join(REPO_ROOT, 'scripts', 'obs-windows.py');
+    let py: string;
+    try {
+      py = readFileSync(path, 'utf8');
+    } catch (e) {
+      throw new Error(`FAIL-CLOSED: cannot read ${path} — ${String(e)}`);
+    }
+    const tuple = /^OWNERS = \(([^)]*)\)/m.exec(py);
+    if (!tuple) throw new Error('FAIL-CLOSED: OWNERS = (...) not found in scripts/obs-windows.py');
+    const owners = [...tuple[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+    expect(owners.length).toBeGreaterThan(0);
+    expect(new Set(owners)).toEqual(deployCanonicalSet);
+    expect(owners.length).toBe(deployCanonicalSet.size); // no duplicates
+    const list = /^DEPLOY_ACTOR_LIST="([^"]+)"/m.exec(readScript())?.[1] ?? '';
+    expect(new Set(list.split('|').map((s) => s.trim()))).toEqual(new Set(owners));
   });
 });
