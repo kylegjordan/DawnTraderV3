@@ -25,7 +25,8 @@ description: STEP 2 ONLY of the DawnTrader batch workflow - the Pre-Implementati
 2. **MANDATORY: consult `SYSTEM_IMPACT_MAP.md` for every affected component** — upstream feeders, downstream consumers, shared state, background execution, blast radius. **Skipping the SIM review is how cascade bugs get through. Non-negotiable.**
 3. **If the scope contradicts the System Manual, one of them is wrong — flag it.** If either doc is SILENT on something the batch touches, **that silence is itself a governance gap — flag it.**
 4. Write the plan, each item pointing back at its finding.
-5. End with the **plain-language summary**: here is what the audit turned up, here is the plan.
+5. ⛔ **IF THIS BATCH'S VERIFICATION READS AN OBSERVATION WINDOW ON STAGING** (a soak, a trading session, a count of closes), **file its `open` row in `1-system-manual/DEPLOY_WINDOWS.jsonl` IN THE STEP-2 COMMIT**, and close it with a reason code when the window ends. The grammar is in `scripts/obs-windows.py`'s header; every window carries a `review_by`. `dt-deploy` refuses to land in an open window unless the deploy names it, so **an unfiled window is unprotected**, and Langston gates Step 2 on the row (`B-DEPLOY-WINDOW-GUARD`, `#1249`).
+6. End with the **plain-language summary**: here is what the audit turned up, here is the plan.
 
 ## ⛔⛔ THE SIX SOURCES — YOU READ ALL SIX THAT APPLY, AND YOU NAME WHICH YOU READ
 > ★ **Kyle, 2026-08-21, on why this is written out as a list instead of "be thorough": these are the things he finds himself repeating every time.** A rule he has to repeat is a rule that is not written down where it fires. **Now it is.**

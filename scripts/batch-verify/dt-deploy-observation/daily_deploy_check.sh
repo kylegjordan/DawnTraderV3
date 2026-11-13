@@ -2,7 +2,7 @@
 # Daily dt-deploy observation (alert 7814ebc5) — four checks at the objects.
 cd /home/deploy/dawntrader || exit 1
 echo "== (1a) RECORD tail"
-tail -n 9 /home/deploy/dawntrader-deploy.record
+cat /home/deploy/dawntrader-deploy.record   # whole record: B-DEPLOY-WINDOW-GUARD added fields, and a fixed tail -n 9 dropped sha= (#1249 P5)
 REC_SHA=$(grep -E '^sha=' /home/deploy/dawntrader-deploy.record | tail -1 | cut -d= -f2)
 REC_RT=$(grep -E '^restart_time=' /home/deploy/dawntrader-deploy.record | tail -1 | cut -d= -f2)
 REC_BY=$(grep -E '^deployed_by_claimed=' /home/deploy/dawntrader-deploy.record | tail -1 | cut -d= -f2)

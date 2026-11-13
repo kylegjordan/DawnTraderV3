@@ -89,6 +89,9 @@ FILES = {
     "comms-infra/staging/systemd/dt-install-drift.timer": ("/etc/systemd/system/dt-install-drift.timer", 0o644),
     "comms-infra/systemd/agent-unit-failure@.service": ("/etc/systemd/system/agent-unit-failure@.service", 0o644),
     "comms-infra/tools/agent-unit-failure-alert": ("/usr/local/bin/agent-unit-failure-alert", 0o755),
+    "comms-infra/discord/dt-deploy-notice.py": ("/usr/local/bin/dt-deploy-notice", 0o755),
+    "comms-infra/systemd/dt-deploy-notice.service": ("/etc/systemd/system/dt-deploy-notice.service", 0o644),
+    "comms-infra/systemd/dt-deploy-notice.timer": ("/etc/systemd/system/dt-deploy-notice.timer", 0o644),
 }
 for rp in list(FILES) + ["comms-infra/staging/dtmint-authorized_keys"]:
     dst = os.path.join(work, rp)
@@ -107,6 +110,9 @@ sh("git", "-C", bare, "update-ref", "refs/heads/migration/aws-supabase", C1)
 os.makedirs(T + "/var/lib/dt-install-drift")
 os.makedirs(T + "/run")                            # exists on every real box (tmpfs)
 os.chmod(T + "/var/lib/dt-install-drift", 0o755)
+os.makedirs(T + "/var/lib/dt-deploy-notice")      # B-DEPLOY-WINDOW-GUARD: systemd StateDirectory, langston-owned
+os.chmod(T + "/var/lib/dt-deploy-notice", 0o755)
+shutil.chown(T + "/var/lib/dt-deploy-notice", "langston", "langston")
 
 
 def stamp(age=0):
@@ -128,9 +134,13 @@ def systemd(**over):
                     "dt-install-drift.service": {"fragment": SS + "dt-install-drift.service", "dropins": [SS + "dt-install-drift.service.d/onfailure.conf"]},
                     "dt-install-drift.timer": {"fragment": SS + "dt-install-drift.timer"},
                     "agent-unit-failure@agent-staging-session.service": {"fragment": SS + "agent-unit-failure@.service"},
-                    "agent-unit-failure@dt-install-drift.service": {"fragment": SS + "agent-unit-failure@.service"}},
+                    "agent-unit-failure@dt-install-drift.service": {"fragment": SS + "agent-unit-failure@.service"},
+                    "dt-deploy-notice.service": {"fragment": SS + "dt-deploy-notice.service"},
+                    "dt-deploy-notice.timer": {"fragment": SS + "dt-deploy-notice.timer"},
+                    "agent-unit-failure@dt-deploy-notice.service": {"fragment": SS + "agent-unit-failure@.service"}},
           "timers": {"agent-staging-session.timer": {"is-enabled": "enabled", "is-active": "active"},
-                     "dt-install-drift.timer": {"is-enabled": "enabled", "is-active": "active"}}}
+                     "dt-install-drift.timer": {"is-enabled": "enabled", "is-active": "active"},
+                     "dt-deploy-notice.timer": {"is-enabled": "enabled", "is-active": "active"}}}
     for k, v in over.items():
         st[k].update(v)
     json.dump(st, open(SYSJ, "w"))

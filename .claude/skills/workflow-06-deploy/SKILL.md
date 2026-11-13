@@ -13,6 +13,11 @@ ssh root@188.245.193.8 "su - deploy -c 'dt-deploy <FULL-40-CHAR-SHA> --by <sessi
 ```
 ⛔ **NEVER the raw git-pull/build/restart chain.** `dt-deploy` locks against concurrent deploys, refuses a dirty worktree, runs `db:migrate` in-chain, conditionally `npm ci`s on a lockfile change, and **asserts sha-identity + ENGINE RESUMED before recording.**
 ⛔ **The sha is the FULL 40 characters of the REVIEWED commit.** `--pre-restart '<npm script>'` for batch-specific steps.
+⛔ **OBSERVATION WINDOWS (`B-DEPLOY-WINDOW-GUARD`, `#1249`).** Before touching the tree, `dt-deploy` reads `1-system-manual/DEPLOY_WINDOWS.jsonl` **at the branch head**. Its three refusals, each naming `register_sha` and `register_blob`:
+- **exit 4: the register is missing or unusable.** Fix it by a commit to the branch; no deploy is needed.
+- **exit 5: the deploy would land in an open window.** Talk to the owner. If it must go ahead, name **every** open window: `--in-window <batch,…>`.
+- **exit 6: the in-window notice could not be written.** Fix that file (disk or permission). **Never fall back to a hand reset**, which tells nobody.
+A deploy that lands in any window, open or stale, wakes each owner (the Helsinki deploy-notice watcher) and raises one alert per window **before** the reset. The record gains `register_sha`, `register_blob`, `in_window` and `window_notice`.
 
 ## ⛔ WHAT `dt-deploy` ACTUALLY DOES — SO YOU KNOW WHAT IT HAS AND HAS NOT PROVEN
 **The chain, in order, all in one command so no step can be forgotten:** take the lock → fetch → confirm the sha is ON the branch → **fail loud on a dirty worktree** (it refuses; it does not destroy) → reset to the NAMED sha → `npm ci` **only if the lockfile changed** → build (writes `dist/BUILD_SHA`) → `db:migrate` → optional `--pre-restart` → `pm2 restart` → **assert the post-conditions AT THE OBJECTS** → write the record.

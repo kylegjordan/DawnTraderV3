@@ -137,8 +137,14 @@ BOXES = {
             # the paging chain these units' failures ride on (r1: it was not covered)
             ("comms-infra/systemd/agent-unit-failure@.service", "/etc/systemd/system/agent-unit-failure@.service", 0o644, "root", "root"),
             ("comms-infra/tools/agent-unit-failure-alert", "/usr/local/bin/agent-unit-failure-alert", 0o755, "root", "root"),
+            # B-DEPLOY-WINDOW-GUARD (#1249, Langston J6 / #661 leg 3): the watcher that wakes window owners. A unit
+            # that is disabled or edited is caught here; one that never fires is caught by its own daily heartbeat.
+            ("comms-infra/discord/dt-deploy-notice.py", "/usr/local/bin/dt-deploy-notice", 0o755, "root", "root"),
+            ("comms-infra/systemd/dt-deploy-notice.service", "/etc/systemd/system/dt-deploy-notice.service", 0o644, "root", "root"),
+            ("comms-infra/systemd/dt-deploy-notice.timer", "/etc/systemd/system/dt-deploy-notice.timer", 0o644, "root", "root"),
         ],
-        "dirs": [("/var/lib/dt-install-drift", 0o755, "root", "root")],
+        "dirs": [("/var/lib/dt-install-drift", 0o755, "root", "root"),
+                 ("/var/lib/dt-deploy-notice", 0o755, "langston", "langston")],
         "private": [("/root/.ssh/dtmint_ed25519", 0o600, "root", "root"),
                     ("/var/lib/dt-install-drift/installed.sha", 0o644, "root", "root")],
         "units": {"agent-staging-session.service": (SS + "agent-staging-session.service", [SS + "agent-staging-session.service.d/onfailure.conf"]),
@@ -146,8 +152,11 @@ BOXES = {
                   "dt-install-drift.service": (SS + "dt-install-drift.service", [SS + "dt-install-drift.service.d/onfailure.conf"]),
                   "dt-install-drift.timer": (SS + "dt-install-drift.timer", []),
                   "agent-unit-failure@agent-staging-session.service": (SS + "agent-unit-failure@.service", []),
-                  "agent-unit-failure@dt-install-drift.service": (SS + "agent-unit-failure@.service", [])},
-        "timers": ["agent-staging-session.timer", "dt-install-drift.timer"],
+                  "agent-unit-failure@dt-install-drift.service": (SS + "agent-unit-failure@.service", []),
+                  "dt-deploy-notice.service": (SS + "dt-deploy-notice.service", []),
+                  "dt-deploy-notice.timer": (SS + "dt-deploy-notice.timer", []),
+                  "agent-unit-failure@dt-deploy-notice.service": (SS + "agent-unit-failure@.service", [])},
+        "timers": ["agent-staging-session.timer", "dt-install-drift.timer", "dt-deploy-notice.timer"],
         "checks": ["mint_key_pairing", "staging_host_key"],
     },
 }

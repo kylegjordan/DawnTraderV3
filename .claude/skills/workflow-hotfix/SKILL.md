@@ -79,6 +79,7 @@ Implement, commit with explicit paths, push to `migration/aws-supabase`. ⚠️ 
 
 ## ⛔ 4. DEPLOY, THEN VERIFY ONCE
 1. **Deploy:** `dt-deploy <full-40-char-sha> --by <session>` — the ONLY deploy path (B-DEPLOY-LOCK #649). Deploy the **reviewed** sha.
+   ⛔ **If staging is inside another batch's open observation window, `dt-deploy` refuses (exit 5) unless you name EVERY open window: `--in-window <batch,…>`.** Talk to the owners first; the deploy tells them in any case (`B-DEPLOY-WINDOW-GUARD`, `#1249`).
 2. **VERIFY ONCE ON STAGING — and verify THE THING THAT WAS BROKEN**, not that the server came back up. If it has a UI surface, **navigate it** (§9.3: "staging verified" means UI-navigated, never curl-checked).
 3. **Confirm the original symptom is GONE, using the same measurement that showed it present.** The same instrument, or you have not shown a change.
 

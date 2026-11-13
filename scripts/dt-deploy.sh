@@ -46,6 +46,7 @@
 # ═════════════════════════════════════════════════════════════════════════════
 set -euo pipefail
 
+# ── CONSTANTS (B-DEPLOY-WINDOW-GUARD P12 (iii): scripts/test-dt-deploy-windows.py swaps ONLY this block, on the INSTALLED bytes) ──
 APP_DIR="/home/deploy/dawntrader"
 LOCK_DIR="/home/deploy/dawntrader-deploy.lock"
 RECORD="/home/deploy/dawntrader-deploy.record"
@@ -54,6 +55,7 @@ REGISTER_PATH="1-system-manual/DEPLOY_WINDOWS.jsonl"
 # NOT named dt-deploy-*: server/db-pool-alerts.ts:378 reads any process carrying that substring as a live deploy.
 OBS_WINDOWS="/usr/local/bin/dt-obs-windows"
 NOTICE="/home/deploy/dawntrader-deploy.notice"
+# ── END CONSTANTS ──
 LIVENESS_URL="http://localhost:5000/api/health/liveness"
 
 SHA="${1:-}"

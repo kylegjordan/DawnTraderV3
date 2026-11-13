@@ -121,7 +121,7 @@ J3 asks for stale windows to surface before a deploy lands in one, riding the da
 
 **Load-bearing claims NOT RE-READ by a fresh reader** (no reader was spawned this step, on cost; you are the second pass): A-4's process-name hazard, A-5's description of what `dt-install-drift` compares against, A-8's filter branch for a `Deploy notice` sender.
 
-| **P14** | **r2 (C-7): delete `scripts/batch-verify/dt-deploy-observation/daily_deploy_check.sh`.** Disposition (5), see A-14. A `DELETED_COMPONENTS_LOG.md` row, a `.removed` copy in `_archive/deleted-code/`, and SIM `:3924` repointed to `dt-install-drift`. | A-14, C-7 |
+| **P14** | **REVERSED at Step 3 (Part E): KEEP `daily_deploy_check.sh`.** It is not unscheduled: a self-chained weekly alert runs it by hand (A-15). Disposition (1). P5's display fix lands in it (`tail -n 9` → `cat`). SIM `:3924` is still repointed: the scheduled PAGING comparator for the installed copy is `dt-install-drift`, and the weekly hand run is a second reading. | A-15, C-7 |
 
 ## Judgement calls I want attacked
 
@@ -156,7 +156,7 @@ He ruled CHANGES NEEDED on two blockers, approved the rest, and accepted D-1 to 
 (The cadence later became daily; the docstring at `:4` reads "DAILY (the spec's cadence)".) It was built so that a crew-access install stays exactly what was reviewed, and so that a hand edit or a missed install is found by a scheduled check rather than by memory. **Disposition (2): relevant, and it needs updating to today's intent.** It gains two manifest entries, a per-entry pending grace, and one schedule-riding check that is kept off its verdict (B-2). Its own meaning, "the installs are the reviewed copies", is unchanged.
 **`dt-unit-failure-alert`:** tier 2, not changed (B-2 is answered without it). Intent: turn a failed staging unit into one system alert per (class, subject) for Infra Claude. Disposition (1).
 
-### A-14. `daily_deploy_check.sh` — disposition (5), deleted (C-7)
+### A-14. `daily_deploy_check.sh` — disposition (5), deleted (C-7) — ⛔ WRONG, REVERSED IN A-15
 It writes no state: 43 lines, every one an `echo`, so the deletion-time state-write census finds nothing to orphan. Each of its checks has a live home:
 - **(1) record vs built sha** → the drift line's `base_ambiguous` check (`dt-deploy-drift.sh:276-278`, hourly).
 - **(1) restart count vs record** → `server/db-pool-alerts.ts:157-175`.
@@ -181,6 +181,15 @@ He cleared both blockers and gave PROCEED, with **C-12 to be settled here before
 | — | P8/residual (5): the drift line does NOT catch the pre-stamp abort | Corrected in P8 and residual (5) above, with the mechanism (`package.json:8`, `dt-deploy.sh:293`). |
 
 **P9's verdict sentence, as it now reads (C-15, C-16):** the `deploy_windows` check is off the verdict for stale windows and `notice-only` lines, and ON the verdict when the register is unusable or when it cannot raise its own alerts.
+
+## PART E — Step 3: a finding that reverses C-7's answer (2026-11-13 ~19:55Z)
+
+### A-15. `daily_deploy_check.sh` IS scheduled — by a self-chained weekly alert, not by cron
+**A-14 said its only references were SIM `:3924` and dated history. That searched the REPO and never the ALERT STORE.** Measured on staging (`/var/log/dawntrader/system-alerts.jsonl`, all rows titled "Weekly dt-deploy observation (self-chained)", 8 ids): the chain is live. Each run is resolved by the session that ran it and a successor is minted a week out. The last four are `be06cec8` (resolved cc-b), `e441b84b` (resolved cc-b), `bf7a50e3` (resolved codex-b, 11-11) and **`7164d7ab`, scheduled for 2026-11-18T07:00Z**. Its body is the script's four checks, and the 2026-09-22 resolve (`96198e10`, cc-c) cites the script by path.
+⇒ **Disposition (1): relevant and connected.** It is a weekly hand-run reading owned by whoever the alert routes to, and it is not lingering legacy. Deleting it would have broken that chain on 11-18. **P14 is reversed: keep it.** P5's display fix (`tail -n 9` → `cat`) lands, because with 12 record lines it would hide `sha=` and `restart_time=`.
+**Install ordering, so the 11-18 run does not read a false DIFFERS:** the script's check (3) compares the installed `dt-deploy` with the blob at the RECORDED deploy sha. So the install happens **immediately after a deploy whose sha contains this batch's `dt-deploy.sh`**. Then installed = the blob at the recorded sha, and both readings say MATCH.
+**The other two checks the A-14 re-homing named still stand** (the drift line's `base_ambiguous` for the post-stamp case; `db-pool-alerts` for restart count and the stranded lock). They are now second readings, not replacements.
+`MISTAKE: wrong-object [B-DEPLOY-WINDOW-GUARD]` — "no live reference" was measured over the repo; the live consumer is a row in the alert store.
 
 ## Plain-language summary
 **r2:** Langston found one real gap. A deploy that started inside someone's test period and then failed would have told them nothing. The warning now goes out before the deploy touches anything, and if the warning cannot be sent, the deploy does not happen. The old comparison script is deleted, because each of its checks now lives somewhere that runs on its own.
