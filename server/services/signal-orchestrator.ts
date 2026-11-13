@@ -26,6 +26,7 @@
  */
 
 import { StrategyEngine, StrategySignal, stampMaxHoldingMs } from './strategy-engine';
+import { readRetirementAsk } from './rtb-retirement-ask.js'; // B-ENTRY-GATE (#1224) P2 — the birth price
 // B-FILTER-DIAG-STANDARDIZE: read the decline reason the strategies already set (shared module).
 // ⚠️ MODULE GLOBAL — safe only while evaluation is SERIAL; verified zero Promise.all in this file.
 import { getNullReason, resetNullReason } from '../utils/null-reason-tracker.js';
@@ -378,6 +379,17 @@ export function resolveDbsScoreAtQueue(
 }
 
 export class SignalOrchestrator {
+  /** B-ENTRY-GATE (#1224) P2 (r12 Q-2): the birth's live price, through the refresh's own reader (the exit's contract,
+   *  dispatched on the stamped class). A refusal is no price, carried with its reason — never a fallback. */
+  private async _birthPriced(symbol: string, assetClass: string, stopPrice: number): Promise<{ ok: true; price: number; ageMs: number; source: string } | { ok: false; reason: string }> {
+    try {
+      const a = await readRetirementAsk({ symbol, assetClass, stopPrice });
+      return a.ok ? { ok: true, price: a.ask, ageMs: a.ageMs, source: a.basis } : { ok: false, reason: a.reason };
+    } catch (err) {
+      return { ok: false, reason: `ask_read_threw: ${err instanceof Error ? err.message : String(err)}` };
+    }
+  }
+
   private mode: 'live' | 'paper';
   private strategyEngine: StrategyEngine;
   // Phase 8.8.7: FilteredPairsService DEPRECATED - using activeFilterPool instead
@@ -1300,12 +1312,20 @@ export class SignalOrchestrator {
       // above stays the calc home per Kyle's P19-B7.2b placement).
       chosenNetEv: _mtPolicyDecision.chosenNetEV,
       chosenEntryMode: _mtPolicyDecision.chosenMode,
+      // B-ENTRY-GATE (#1224) P2: the plan under its own names (never entryPrice/targetPrice — r11) and the live price,
+      // read through the exit's own contract; a refusal travels with its reason (r12 Q-2).
+      planEntry: rawSignal.entryPrice,
+      planStop: rawSignal.stopPrice,
+      planTarget: rawSignal.targetPrice ?? null,
+      priced: await this._birthPriced(rawSignal.symbol, sqeAssetClass, rawSignal.stopPrice),
     };
 
     // P19-B8.5 OBJ-6 (Langston-approved): ACTIVE-path gen — the HF8 confidence floor +
     // HF9 governance gate run in SHADOW (evaluate + log, never block); their stability
     // input here is the cold-start default above. See SQEOptions.gateShadowMode + #514.
-    const sqeResult = await signalQualityEvaluator.evaluate(sqeInput, { gateShadowMode: true });
+    // B-ENTRY-GATE (#1224) P2: EntryWindow runs in its OWN shadow at birth (records, never refuses) until the birth
+    // magnitude is known (pre-audit A-2); InvalidTarget decides.
+    const sqeResult = await signalQualityEvaluator.evaluate(sqeInput, { gateShadowMode: true, entryWindowShadow: true, phase: 'birth' });
     // P19-B8.4b: SQE-at-generation tally — per-gate reject breakdown + the pass/fail denominator. The SAME
     // signal is re-SQE'd during RTB refresh (phase='refresh' in ready_to_buy_service); those are two labelled
     // numbers, never summed (MUST-4). Records BOTH pass and fail (a pass feeds the honest denominator).
@@ -1535,6 +1555,41 @@ export class SignalOrchestrator {
     }
     const _maxHoldingMs: number = _rawMaxHoldingMs;
 
+    // ⛔ B-ENTRY-GATE (#1224) P8 (Kyle decision 8; closes the #1051 structural case): this gate now runs BEFORE the RTB
+    // queue write and the admitted archive row. Before, it ran ~400 lines later, after `queueSQESignal` had already
+    // written the row: a dropped plan stayed queued (measured 2026-11-05: TQQQ/USD sma_trend_ride dropped `unreachable`
+    // at 09:17:05Z, queued the same second, still `reconfirmed` hours later). The queue now stores the gated target.
+    // reorg-B2 (Piece A): central target-floor lift + universal RR gate (per-class) — the ACTIVE
+    // convergence point (SINGLE, post-strategy, pre-geometry/sizing — covers every active emit path
+    // that goes through sizing). The VTS path applies the SAME normalizer in vts-runner. DROP (never
+    // co-move the structural stop) when RR < minRR (Langston Step-2). Also replaces the old
+    // `?? entry×1.015` V4 fallback literal — a target-less signal is now DROPPED, not fabricated.
+    const _b2Gate = getPerClassTargetGate(sizingContext.assetClass, strategyId);
+    // reorg-B2 (Piece C): ATR from the universal carrier (set once per pipe), marketContext as override.
+    const _b2Atr = marketContext?.atr ?? sizingContext.atr;
+    const _b2 = normalizeAndGateTarget({
+      entryPrice: rawSignal.entryPrice, stopPrice: rawSignal.stopPrice, targetPrice: rawSignal.targetPrice ?? NaN,
+      minRR: _b2Gate.minRR,
+      atr: _b2Atr ?? NaN, reachAtrMax: _b2Gate.reachAtrMax,
+    });
+    // ★ #371 normalizer-side ATR capture (active path): the RAW atr this gate read, same
+    // (strategy,class) bucket as the guard side so the divergence is within-bucket.
+    try { recordNormalizerAtr(strategyId, sizingContext.assetClass, _b2Atr ?? NaN); } catch { /* never blocks the gate */ }
+    if (!_b2.ok) {
+      if (_b2.reason === 'invalid_atr') {
+        // LOUD: a wiring/data bug (ATR absent on both the SizingContext carrier AND marketContext),
+        // NEVER silently masked as a feasibility drop (Langston Step-4).
+        console.error(`[reorg-B2][TARGET_GATE][active][INVALID_ATR] ${rawSignal.symbol}/${strategyId} — ATR unavailable on the active build path (sizingContext.atr + marketContext both missing). Wiring bug — investigate.`);
+      } else {
+        console.warn(`[reorg-B2][TARGET_GATE][active] drop ${rawSignal.symbol}/${strategyId}: ${_b2.reason} rr=${_b2.rr.toFixed(2)} atrs=${_b2.atrsToTarget.toFixed(2)}`);
+      }
+      // P19-B8.4b: POST-SQE reject (the target gate sits after the SQE) — recorded by the specific reason
+      // (invalid_geometry / rr_below_min / invalid_atr / unreachable) so the drop is honest.
+      if (_fClass) recordActivePostSqeReject(sizingContext.mode, _fClass, _b2.reason ?? 'target_gate_unknown');
+      return null;
+    }
+    const _b2Target = _b2.targetPrice;
+
     // Phase 14: FinalScore computed in extended metrics — no duplicate calculation needed
     // Build RTB signal using pre-computed values from extendedMetrics
     const sqeSignalInput: SQESignalInput = {
@@ -1544,7 +1599,7 @@ export class SignalOrchestrator {
       strategy: strategyId,
       entryPrice: rawSignal.entryPrice,
       stopPrice: rawSignal.stopPrice,
-      targetPrice: rawSignal.targetPrice,
+      targetPrice: _b2Target, // B-ENTRY-GATE (#1224) P8: the gated target, the same one the sized signal carries
       quantity: sizingResult.quantity,
       notional: sizingResult.estimatedValue,
       confidence: extendedMetrics.confidence,
@@ -1623,6 +1678,8 @@ export class SignalOrchestrator {
         // `levelBasisAtBirth`) must survive this allow-list, or the RTB refresh, the open gate and the engine's maker limit
         // all read a sided triple as mid-priced. Carried by the one picker the HYBRID re-size uses; fenced by a hop test.
         ...pickLevelStamps(rawSignal.metadata),
+        // B-ENTRY-GATE (#1224) P10: the xStock birth freshness record (A-11) — named here or it dies at this allow-list.
+        birthFreshness: rawSignal.metadata?.birthFreshness,
         // P19-B8.5l (#581, unblocks #556): carry the entry-time ATR forward. RE-ENABLED after
         // the source fix in THIS batch — the B8.5k carry was reverted because `sizingContext.atr`
         // was a SINGLE SHARED value per scan cycle (the pattern pass at :1846 never re-stamped it,
@@ -1630,7 +1687,9 @@ export class SignalOrchestrator {
         // context.indicators?.atr` per pattern-symbol), so the value is now per-symbol-correct for
         // every consumer. Fed to atr_at_open → Open Trades display, RTB ranking, replay, VTS-parity.
         // Exit-neutral (B8.5k T1/T2; trailing off). Gated by the ≥2-distinct-atr-per-cycle fence
-        // test (p19-b8-5l). No fail-loud here — the rebuild precedes the :1898 invalid_atr gate.
+        // test (p19-b8-5l). No fail-loud here, and this value CAN be undefined: the reorg-B2 target gate above
+        // (B-ENTRY-GATE P8) reads `marketContext?.atr ?? sizingContext.atr`, so a present marketContext.atr with an
+        // absent sizingContext.atr passes the gate and still stamps undefined here (Langston inc-B Step-4 C-2).
         atr: sizingContext.atr,
         // P19-B8.10 (OBJ-4): genesis capture of the display-context fields the VTS
         // records at open (regime / global regime / pair+global friction / pair+
@@ -2063,36 +2122,6 @@ export class SignalOrchestrator {
     // See: server/services/vts-runner.ts → runAutonomousSimulation()
     // DEPRECATED: captureSignalForVTS() no longer called from signal orchestrator
 
-    // reorg-B2 (Piece A): central target-floor lift + universal RR gate (per-class) — the ACTIVE
-    // convergence point (SINGLE, post-strategy, pre-geometry/sizing — covers every active emit path
-    // that goes through sizing). The VTS path applies the SAME normalizer in vts-runner. DROP (never
-    // co-move the structural stop) when RR < minRR (Langston Step-2). Also replaces the old
-    // `?? entry×1.015` V4 fallback literal — a target-less signal is now DROPPED, not fabricated.
-    const _b2Gate = getPerClassTargetGate(sizingContext.assetClass, strategyId);
-    // reorg-B2 (Piece C): ATR from the universal carrier (set once per pipe), marketContext as override.
-    const _b2Atr = marketContext?.atr ?? sizingContext.atr;
-    const _b2 = normalizeAndGateTarget({
-      entryPrice: rawSignal.entryPrice, stopPrice: rawSignal.stopPrice, targetPrice: rawSignal.targetPrice ?? NaN,
-      minRR: _b2Gate.minRR,
-      atr: _b2Atr ?? NaN, reachAtrMax: _b2Gate.reachAtrMax,
-    });
-    // ★ #371 normalizer-side ATR capture (active path): the RAW atr this gate read, same
-    // (strategy,class) bucket as the guard side so the divergence is within-bucket.
-    try { recordNormalizerAtr(strategyId, sizingContext.assetClass, _b2Atr ?? NaN); } catch { /* never blocks the gate */ }
-    if (!_b2.ok) {
-      if (_b2.reason === 'invalid_atr') {
-        // LOUD: a wiring/data bug (ATR absent on both the SizingContext carrier AND marketContext),
-        // NEVER silently masked as a feasibility drop (Langston Step-4).
-        console.error(`[reorg-B2][TARGET_GATE][active][INVALID_ATR] ${rawSignal.symbol}/${strategyId} — ATR unavailable on the active build path (sizingContext.atr + marketContext both missing). Wiring bug — investigate.`);
-      } else {
-        console.warn(`[reorg-B2][TARGET_GATE][active] drop ${rawSignal.symbol}/${strategyId}: ${_b2.reason} rr=${_b2.rr.toFixed(2)} atrs=${_b2.atrsToTarget.toFixed(2)}`);
-      }
-      // P19-B8.4b: POST-SQE reject (the reorg-B2 target gate sits after the :764 SQE) — recorded by the
-      // specific reason (invalid_geometry / rr_below_min / invalid_atr / unreachable) so the drop is honest.
-      if (_fClass) recordActivePostSqeReject(sizingContext.mode, _fClass, _b2.reason ?? 'target_gate_unknown');
-      return null;
-    }
-    const _b2Target = _b2.targetPrice;
 
     // Directive 11.3A: Compute net geometry with cost-aware adjustments
     // B79.0n.MCE: assetClass REQUIRED — resolved from the signal symbol.

@@ -1,5 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { env } from "../config";
+import { appendFileSync, existsSync, mkdirSync } from "node:fs";
+import { join as joinPath } from "node:path";
 
 export function singleTenantGuard(req: Request, _res: Response, next: NextFunction) {
   if (!env.SINGLE_TENANT) {
@@ -32,14 +34,13 @@ export function singleTenantGuard(req: Request, _res: Response, next: NextFuncti
     console.error("[SingleTenantViolation] userId detected in request:", violation);
 
     // Log to diagnostics file
+    // B-ENTRY-GATE (#1224) P9, increment B (Langston Step-4 r3 §13): was `require("fs")` — which throws in the ESM bundle,
+    // so every violation logged "Failed to log violation" and nothing was written — and a cwd-relative path. ESM import and
+    // an absolute directory, created if absent.
     try {
-      const fs = require("fs");
-      const logPath = "diagnostics/runtime_guard_violations.log";
-      fs.appendFileSync(
-        logPath,
-        JSON.stringify(violation) + "\n",
-        "utf8"
-      );
+      const dir = joinPath(process.cwd(), "diagnostics");
+      if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+      appendFileSync(joinPath(dir, "runtime_guard_violations.log"), JSON.stringify(violation) + "\n", "utf8");
     } catch (err) {
       console.error("[SingleTenantGuard] Failed to log violation:", err);
     }

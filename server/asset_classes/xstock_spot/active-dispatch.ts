@@ -258,6 +258,11 @@ export async function dispatchXstockActiveSignal(input: XstockActiveDispatchInpu
         entryLiquidityKind: input.entryLiquidityKind,
         // #1250 P0: rides the metadata through the RTB row to `processSignal`, where the taker open re-bases on it.
         ...(input.levelSpec !== undefined ? { levelSpec: input.levelSpec } : {}),
+        // B-ENTRY-GATE (#1224) P10 (pre-audit A-11): the birth freshness checkpoint records WHAT IT JUDGED — the tick age
+        // it passed, against which ceiling, from which source — so a signal's provenance carries its own freshness.
+        // Rebase onto B-PRICE-FEED-COVERAGE increment 0: the gate now judges the IN-MEMORY observed tick (`_tickJudge`),
+        // not the DB snapshot age, so the record names that source; on this path the arm was 'ok', so ageMs is a number.
+        birthFreshness: { ageMs: _tickJudge.ageMs, ceilingMs: safety.activeFillMaxAgeMs, source: 'equity_tick_memory' },
       },
     };
 

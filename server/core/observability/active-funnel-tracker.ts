@@ -79,6 +79,11 @@ export const SQE_CANONICAL_GATES = [
   // PRE-promotion NetEV rejects stay in `uncategorized` forever — the client labels
   // both windows honestly rather than reattributing history.
   'NetEV',
+  // B-ENTRY-GATE (#1224) increment B: NetEVMissing (P4s — an absent EV, never admissible by the exploration lane),
+  // EntryWindow (P2 — the plan's price against the worse-side window) and InvalidTarget (P2 — a plan with no usable target).
+  'NetEVMissing',
+  'EntryWindow',
+  'InvalidTarget',
 ] as const;
 export type SqeGateId = (typeof SQE_CANONICAL_GATES)[number] | 'uncategorized';
 const _CANON = new Set<string>(SQE_CANONICAL_GATES);

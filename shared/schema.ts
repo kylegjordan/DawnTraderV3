@@ -2032,14 +2032,14 @@ export const activeOpenPositions = pgTable("active_open_positions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   symbol: varchar("symbol", { length: 20 }).notNull(),
   // B-CLOSE-WRITER-COSTS P-5/P-6 (KD-24 "modes are independent"): which mode owns this position. Written explicitly
-  // by `storage.createActiveOpenPosition` from its `mode` argument. ⚠️ The DEFAULT is a ONE-DEPLOY WINDOW BRIDGE,
-  // not a fallback: `dt-deploy` migrates before it restarts, so the old process can still insert without `mode`
-  // in between, and only the paper engine runs. Migration 2 in the NEXT deploy drops it (pre-audit P-5 (e)).
-  // B-CLOSE-WRITER-COSTS P-14b: no money, class or mode value is left to a column default - every writer names it (the 16 defaults dropped by 2026-11-13-b-close-writer-costs-drop-defaults.sql).
+  // by `storage.createActiveOpenPosition` from its `mode` argument. No default: the one-deploy 'paper' bridge
+  // (P-5 (e)) was dropped by 2026-11-13-b-close-writer-costs-drop-defaults.sql (P-14b), so a writer that omits
+  // `mode` fails at the insert (and at compile time) instead of being filed as paper.
   mode: tradingModeEnum("mode").notNull(),
   // B69 (2026-05-03): asset class + exchange for cross-cutting analysis.
   // New rows are populated via `safeResolveAssetClass(symbol, exchange)` at
-  // active-execution-engine open. Defaults match pre-B69 reality.
+  // active-execution-engine open. Only `exchange` keeps a default ('kraken'); `asset_class` has none since P-14b,
+  // and the open writer names it, so an omission fails instead of being filed as crypto.
   exchange: text("exchange").notNull().default("kraken"),
   assetClass: text("asset_class").notNull(),
   strategyName: strategyTypeEnum("strategy_name").notNull(),
@@ -2212,6 +2212,9 @@ export const rtbSignals = pgTable("rtb_signals", {
   expiresAt: timestamp("expires_at", { withTimezone: true }), // R9.3-C: Made optional - lifecycle governed by SQE, not TTL
   // Directive 8.8.4-A3.R7: Refresh tracking for Central Clock integration
   lastRefreshedAt: timestamp("last_refreshed_at", { withTimezone: true }), // Last successful refresh timestamp
+  // B-ENTRY-GATE (#1224) P7: written ONLY by the refresh, never by the queue upsert (a re-issue keeps the priced history).
+  lastPricedAt: timestamp("last_priced_at", { withTimezone: true }), // the last pass with an admissible live ask
+  consecutiveUnpricedPasses: integer("consecutive_unpriced_passes").notNull().default(0), // passes since, with none
   missedRefreshes: integer("missed_refreshes").default(0), // Count of failed refresh attempts
   blockReason: varchar("block_reason", { length: 50 }), // Original capacity block: MAX_TRADES, MAX_TOTAL_EXPOSURE, etc.
   metadata: jsonb("metadata"), // Original signal data for re-evaluation

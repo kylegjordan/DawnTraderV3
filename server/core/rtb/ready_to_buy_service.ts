@@ -31,7 +31,7 @@ import { appendFileSync, existsSync, mkdirSync } from 'node:fs'; // B-ENTRY-GATE
 import { join as joinPath } from 'node:path';
 // B72 (2026-05-05): MIN_QUEUE_CONFIDENCE migrated to module='queue_admission'.
 // Read via cached sync resolver. Module prefetched in b72-warmup.
-import { getCachedNumberRequired } from '../../services/module-constants-service.js';
+import { getCachedNumberRequired, getCachedConstant } from '../../services/module-constants-service.js';
 // P19-B7.1 (OBJ-1/2): rank-time R-multiple = reuse the gate's own friction+kernel via the
 // wrapper (sample-free; the EV-input sample is a SEPARATE open-path call). Reads .netRewardToRisk.
 import { evaluateTradeExpectancy } from '../calculations/expectancy.js';
@@ -76,6 +76,9 @@ import { getCachedCostMetrics, computeTotalRoundTripCost, computeNetGeometry, ge
 // signal orchestrator + VTS call (F6).
 import { applyMakerTakerFillPolicy, decideMakerTaker, entryUrgencyClassForFamily, type FillPolicy } from '../math/maker-taker-decision.js';
 import { resolveFillPolicy, resolveMakerTakerHaircut } from '../../services/maker-taker-config.js';
+import { repriceAtAsk, type RepriceAtAsk } from '../trading/fill-economics.js'; // B-ENTRY-GATE (#1224) P6
+import { decidePlanAge } from './plan-age-limit.js'; // B-ENTRY-GATE (#1224) P11
+import { resolveFillEconInputs } from '../../services/fill-econ-inputs.js'; // B-ENTRY-GATE (#1224) P6 — the open's own resolver
 import { STRATEGY_FAMILY_MAP, normalizeStrategy } from '../../config/canonical-regime-strategy-map.js';
 import { getCachedSpread } from '../metrics/cost-metrics.js';
 import { getNormalizedVolatility as getVolatility } from '../metrics/market-metrics.js';
@@ -479,7 +482,10 @@ interface SignalRefreshState {
 }
 
 /** `B-RTB-REFRESH-LIVE-PRICE` ([C1](b), `#1189`): what `promoteSignal` did; the engine opens only on `'deleted'`. */
-export type PromoteOutcome = 'deleted' | 'missing' | 'refreshing' | 'delete_failed';
+// B-ENTRY-GATE (#1224) P11: 'stale_plan' (deleted, never opened) and 'plan_age_unresolved' (a bad limit row: not opened,
+// stays queued, loud). Every non-'deleted' outcome is already a refused claim at the engine (`CLAIM_REFUSED`).
+// P7: 'unpriced' — no admissible live ask within the class's promotion_price_max_age_ms; not opened, stays queued.
+export type PromoteOutcome = 'deleted' | 'missing' | 'refreshing' | 'delete_failed' | 'stale_plan' | 'plan_age_unresolved' | 'unpriced';
 /** `B-RTB-REFRESH-LIVE-PRICE` OBJ-3: one shadow row per signal per hour, plus one on a verdict change no sooner than
  *  `RTB_PRICE_SHADOW_CHANGE_MIN_MS` after the last (Langston Step-4 CONDITION 3) — at most 7 rows per signal per hour. */
 const RTB_PRICE_SHADOW_SAMPLE_MS = 3_600_000;
@@ -489,6 +495,7 @@ class ReadyToBuyService {
   private initialized = false;
   // Directive R9.3-A: Per-signal refresh tracking (replaces global isRefreshing)
   private signalRefreshStates: Map<string, SignalRefreshState> = new Map(); // P19-B4b D5: key = `${mode}:${signalId}`
+  private readonly _planAgeOffLogged = new Set<string>(); // B-ENTRY-GATE (#1224) P11: the OFF line, once per mode:class
   private engineStartTimes: Map<TradingMode, number> = new Map(); // Phase 8.8.4-C.6: Track engine start for TCL failsafe
   private tclFailsafeTriggered: Map<TradingMode, boolean> = new Map(); // Phase 8.8.4-C.6: Track if failsafe was triggered
 
@@ -1035,6 +1042,8 @@ class ReadyToBuyService {
               // is at or through its own stop or target is RETIRED — crypto on the first pass, xStock on the second consecutive
               // (`rtb-price-retirement.ts`) — through the refresh's own delete path, counted and archived. This is queue
               // hygiene; the open still refuses a bad fill on its own (row 59 increment 1).
+              let _rpx: RepriceAtAsk | null = null; // B-ENTRY-GATE (#1224) P6 — set inside the price block below
+              let _rpPriced: SQEInput['priced']; // B-ENTRY-GATE (#1224) P2 — the same ask, handed to the SQE's EntryWindow
               {
                 const _rpAsk: RetirementAsk = asks?.get(`${mode}:${signal.symbol}:${signal.strategy}`) ?? { ok: false, reason: 'ask_not_supplied' };
                 const _rpStop = parseFloat(String(signal.stopPrice));
@@ -1061,6 +1070,42 @@ class ReadyToBuyService {
                   return;
                 }
                 if (_rpAsk.ok) this._maybeArchivePriceShadow(mode, signal, sqeAssetClass, _rpAsk, _rpStop, _rpTarget, _refreshState, _rp.decision);
+                _rpPriced = _rpAsk.ok ? { ok: true, price: _rpAsk.ask, ageMs: _rpAsk.ageMs, source: _rpAsk.basis } : { ok: false, reason: _rpAsk.reason };
+                this._tallyPricedHour(sqeAssetClass, normalizedSymbol, _rpAsk.ok); // P7: the per-symbol record the xStock seed is read from
+
+                // ⭐ B-ENTRY-GATE (#1224) increment B, P6 (pre-audit A-4): RE-PRICE THE PLAN AT THE LIVE ASK, every priced pass.
+                // Net EV, the maker/taker choice and the worse-side window are asked AT TODAY'S PRICE, as the open will ask them;
+                // the plan's prices never move. The result REPLACES the throttled plan-price re-decide for the SQE's sign check
+                // and the stored snapshot, so a plan whose economics turned negative since it was queued is evicted here
+                // (the refresh's own DELETE; the exploration stamp's NetEV reprieve still applies) instead of reaching the open.
+                // No ask ⇒ no decision on price (the plan-price path stands, exactly as before), and never a retirement.
+                // A missing setting is LOUD and also no decision — it never invents a value.
+                if (_rpAsk.ok) {
+                  try {
+                    const _rpxInputs = resolveFillEconInputs(signal as any, sqeAssetClass);
+                    // Row `8c` (S4): a sided triple's maker arm rests at the bid recorded at the build; a sided stamp without it
+                    // throws → REPRICE_UNRESOLVED below (no decision on price), never a guessed maker entry.
+                    const _rpxMaker = makerEntryOf(signal.metadata);
+                    if (_rpxInputs.levelGeometry === 'sided' && _rpxMaker === null) throw new Error('row 8c: sided triple without a recorded maker entry');
+                    _rpx = repriceAtAsk({
+                      inputs: _rpxInputs,
+                      planEntry: Number(signal.entryPrice),
+                      planEntryMaker: _rpxInputs.levelGeometry === 'sided' ? _rpxMaker as number : Number(signal.entryPrice),
+                      ask: _rpAsk.ask,
+                      worseSideFrac: getCachedNumberRequired('entry_gate', 'entry_window_worse_side_frac',
+                        { exchange: '*', assetClass: sqeAssetClass, strategy: '*', regime: '*' }),
+                      policy: resolveFillPolicy(sqeAssetClass, 'entry'),
+                    });
+                    // Logged only when it changes something (a refusal, or a different arm than stored) — one line per queued
+                    // row per pass would be the same flood P9 just stopped in the refresh trace.
+                    if (!_rpx.admitted || _rpx.chosenMode !== (signal as any).chosenEntryMode) console.log(`[B-ENTRY-GATE][P6][REPRICE:${mode}] ${normalizedSymbol}/${signal.strategy} class=${sqeAssetClass} ask=${_rpAsk.ask} entry=${signal.entryPrice} ` +
+                      `policy=${_rpx.policy} admitted=${_rpx.admitted} mode=${_rpx.chosenMode ?? 'none'} chosenNetEV=${_rpx.chosenNetEV} takerAtAsk=${_rpx.takerNetEvAtAsk} ` +
+                      `maker=${_rpx.makerNetEVAdjusted} windowRefused=${_rpx.windowRefused} askAgeMs=${_rpAsk.ageMs} basis=${_rpAsk.basis}${_rpx.reason ? ` reason=${_rpx.reason}` : ''}`); // P10: the age + source judged
+                  } catch (rpxErr) {
+                    console.error(`[B-ENTRY-GATE][P6][REPRICE_UNRESOLVED:${mode}] ${normalizedSymbol}/${signal.strategy} class=${sqeAssetClass}: ` +
+                      `${rpxErr instanceof Error ? rpxErr.message : String(rpxErr)} — no decision on price this pass`);
+                  }
+                }
               }
 
               const sqeInput: SQEInput = {
@@ -1093,14 +1138,20 @@ class ReadyToBuyService {
                 // wall). This path replayed the queue-time snapshot, so a signal whose net
                 // expectancy had gone NEGATIVE since queueing was reconfirmed on the old
                 // number. Now prefers THIS tick's re-decide, exactly as the per-signal path does.
-                chosenNetEv: _acq.refreshedMT?.chosenNetEV
-                  ?? ((signal as any).chosenNetEv != null ? Number((signal as any).chosenNetEv) : undefined),
-                chosenEntryMode: (_acq.refreshedMT?.chosenMode
-                  ?? ((signal as any).chosenEntryMode as 'maker' | 'taker' | undefined)) ?? undefined,
+                // B-ENTRY-GATE (#1224) P6: the at-ask re-price decides when there was a price; otherwise as before.
+                chosenNetEv: _rpx ? _rpx.chosenNetEV : (_acq.refreshedMT?.chosenNetEV
+                  ?? ((signal as any).chosenNetEv != null ? Number((signal as any).chosenNetEv) : undefined)),
+                chosenEntryMode: (_rpx ? (_rpx.chosenMode ?? undefined) : (_acq.refreshedMT?.chosenMode
+                  ?? ((signal as any).chosenEntryMode as 'maker' | 'taker' | undefined))) ?? undefined,
+                // B-ENTRY-GATE (#1224) P2: the plan under its own names (never entryPrice/targetPrice — r11) and the ask.
+                planEntry: Number(signal.entryPrice),
+                planStop: parseFloat(String(signal.stopPrice)),
+                planTarget: signal.targetPrice != null ? parseFloat(String(signal.targetPrice)) : null,
+                priced: _rpPriced,
               };
               
               // P19-B8.5 OBJ-6: same shadow treatment as the single-refresh site above (#514).
-              const sqeResult = await signalQualityEvaluator.evaluate(sqeInput, { gateShadowMode: true });
+              const sqeResult = await signalQualityEvaluator.evaluate(sqeInput, { gateShadowMode: true, phase: 'refresh' }); // B-ENTRY-GATE P2
               // P19-B8.4b: SQE-during-refresh tally (phase='refresh') — per-gate breakdown + pass/fail
               // denominator, kept as TWO labelled numbers vs SQE-at-generation, never summed (MUST-4).
               if (_fCls) recordActiveSqeEvaluation(mode, _fCls, sqeResult.passed, sqeResult.failures, 'refresh');
@@ -1128,6 +1179,10 @@ class ReadyToBuyService {
                 updates: {
                   status: 'reconfirmed',
                   confidence: confidence.toString(),
+                  // B-ENTRY-GATE (#1224) P7: the priced-pass record — the refresh is its ONLY writer (the upsert never sets it).
+                  ...(_rpPriced?.ok
+                    ? { lastPricedAt: now, consecutiveUnpricedPasses: 0 }
+                    : { consecutiveUnpricedPasses: (Number((signal as any).consecutiveUnpricedPasses) || 0) + 1 }),
                   // ★ B-RETIRED-SCORE-REMOVAL (#558, A1): finalScore column write REMOVED (column
                   // is now nullable; dropped in Phase B). `refreshedFinalScore` still flows to the
                   // SQE input + logs — that consumer is the deferred SQE-contract slice.
@@ -1136,7 +1191,15 @@ class ReadyToBuyService {
                   // per-signal path — chosen_net_ev is read by BOTH the B7.1 ranker (queue
                   // order) and the [11.8B] open-gate, so a stale stored value mis-ranks and
                   // mis-gates. Atomic with the metadata write below (no half-updated row).
-                  ...(_acq.refreshedMT ? {
+                  // B-ENTRY-GATE (#1224) P6: an admitted at-ask re-price is the snapshot of record (a refused one never
+                  // reaches here — the SQE deleted it). Else the plan-price re-decide, as before.
+                  ...(_rpx?.admitted ? {
+                    chosenEntryMode: _rpx.chosenMode!,
+                    entryFillPolicy: _rpx.policy,
+                    chosenNetEv: _rpx.chosenNetEV.toString(),
+                    takerNetEv: _rpx.takerNetEvAtAsk.toString(),
+                    makerNetEvAdjusted: _rpx.makerNetEVAdjusted.toString(),
+                  } : _acq.refreshedMT ? {
                     chosenEntryMode: _acq.refreshedMT.chosenMode,
                     entryFillPolicy: _acq.refreshedMT.entryFillPolicy,
                     chosenNetEv: _acq.refreshedMT.chosenNetEV.toString(),
@@ -1286,6 +1349,33 @@ class ReadyToBuyService {
    * which IS the instrument. (A cumulative since-boot counter and its accessor stood here with no reader while the accessor's
    * comment called it the Step-7 read; removed after Langston's Step-11 finding, 2026-10-12.)
    */
+  /**
+   * B-ENTRY-GATE (#1224) P7 — priced vs unpriced refresh passes per (class, symbol), emitted ONCE per UTC hour as one line
+   * per class (`[B-ENTRY-GATE][P7][PRICED_SHARE_HOUR]`), then reset. This is the object the xStock promotion-age seed is
+   * read from (`Langston Design Asks/B_ENTRY_GATE_P7_XSTOCK_PREDICTION.md`): the row columns hold only the latest state,
+   * not a share. One line per class per hour, so it cannot become a flood.
+   */
+  private _pricedHour: { hourKey: string; counts: Map<string, { priced: number; unpriced: number }> } = { hourKey: '', counts: new Map() };
+  private _tallyPricedHour(cls: string, symbol: string, priced: boolean): void {
+    const hourKey = new Date().toISOString().slice(0, 13);
+    if (this._pricedHour.hourKey !== hourKey) {
+      if (this._pricedHour.hourKey) {
+        const byClass = new Map<string, string[]>();
+        for (const [k, v] of this._pricedHour.counts) {
+          const [c, sym] = k.split('|');
+          if (!byClass.has(c)) byClass.set(c, []);
+          byClass.get(c)!.push(`${sym}=${v.priced}/${v.unpriced}`);
+        }
+        for (const [c, parts] of byClass) console.log(`[B-ENTRY-GATE][P7][PRICED_SHARE_HOUR] hour=${this._pricedHour.hourKey}Z class=${c} priced/unpriced ${parts.join(' ')}`);
+      }
+      this._pricedHour = { hourKey, counts: new Map() };
+    }
+    const k = `${cls}|${symbol}`;
+    const v = this._pricedHour.counts.get(k) ?? { priced: 0, unpriced: 0 };
+    if (priced) v.priced++; else v.unpriced++;
+    this._pricedHour.counts.set(k, v);
+  }
+
   private _tallyPriceOutcome(pass: Map<string, number>, cls: string, d: RetirementDecision): void {
     const key = d.action === 'inside' ? `${cls}:inside` : `${cls}:${d.action}:${d.reason}`;
     pass.set(key, (pass.get(key) ?? 0) + 1);
@@ -1584,6 +1674,65 @@ class ReadyToBuyService {
       return 'refreshing';
     }
     const promotionStartMs = Date.now();
+    // ⭐ B-ENTRY-GATE (#1224) P11: the stale-plan limit — shipped with NO seeded row, so it is OFF and logs that once per
+    // class per process (`server/core/rtb/plan-age-limit.ts` holds the reason of record).
+    {
+      const _p11Class = asValidAssetClass(signal.assetClass);
+      let _p11Limit: unknown;
+      try {
+        _p11Limit = getCachedConstant('entry_gate', 'rtb_plan_max_age_ms', { exchange: '*', assetClass: _p11Class ?? '*', strategy: '*', regime: '*' });
+      } catch (err) {
+        console.error(`[B-ENTRY-GATE][P11][PLAN_AGE_UNRESOLVED] symbol=${normalizedSymbol} id=${signalId}: ${err instanceof Error ? err.message : String(err)} — not opened, stays queued`);
+        return 'plan_age_unresolved';
+      }
+      const _p11AgeMs = signal.queuedAt ? Date.now() - new Date(signal.queuedAt).getTime() : Number.NaN;
+      const _p11 = decidePlanAge({ ageMs: _p11AgeMs, limitMs: _p11Limit });
+      if (_p11 === 'off') {
+        const k = `${mode}:${_p11Class ?? 'unresolved'}`;
+        if (!this._planAgeOffLogged.has(k)) {
+          this._planAgeOffLogged.add(k);
+          console.log(`[B-ENTRY-GATE][P11][PLAN_AGE_LIMIT_OFF] mode=${mode} class=${_p11Class ?? 'unresolved'} — no entry_gate.rtb_plan_max_age_ms row; the stale-plan limit is OFF (value withdrawn: age does not separate outcome). Logged once per class per process.`);
+        }
+      } else if (_p11 === 'invalid_limit' || _p11 === 'age_unknown') {
+        console.error(`[B-ENTRY-GATE][P11][PLAN_AGE_UNRESOLVED] symbol=${normalizedSymbol} id=${signalId} decision=${_p11} limit=${String(_p11Limit)} queuedAt=${String(signal.queuedAt)} — not opened, stays queued`);
+        return 'plan_age_unresolved';
+      } else if (_p11 === 'stale') {
+        const removedStale = await storage.deleteRtbSignals({ mode, id: signal.id });
+        this.signalRefreshStates.delete(this._refreshKey(mode, signal.signalId));
+        this.logRtbTrace(mode, normalizedSymbol, signal.strategy, oldStatus, 'deleted', 'stale_plan');
+        console.log(`[B-ENTRY-GATE][P11][STALE_PLAN] symbol=${normalizedSymbol} id=${signalId} ageMs=${_p11AgeMs} limitMs=${String(_p11Limit)} removed=${removedStale} — not opened`);
+        return 'stale_plan';
+      }
+      // ⭐ B-ENTRY-GATE (#1224) P7: promotion needs a PRICED pass recently — a plan the refresh could not price against an
+      // admissible ask is not promoted on old economics. Per class; NO xStock row yet (seeded after a week of its own
+      // record against a named prediction, r12 Q-4) ⇒ OFF for that class and logged once.
+      let _p7Limit: unknown;
+      try {
+        _p7Limit = getCachedConstant('entry_gate', 'promotion_price_max_age_ms', { exchange: '*', assetClass: _p11Class ?? '*', strategy: '*', regime: '*' });
+      } catch (err) {
+        console.error(`[B-ENTRY-GATE][P7][PRICE_AGE_UNRESOLVED] symbol=${normalizedSymbol} id=${signalId}: ${err instanceof Error ? err.message : String(err)} — not opened, stays queued`);
+        return 'plan_age_unresolved';
+      }
+      if (_p7Limit === undefined) {
+        const k = `p7:${mode}:${_p11Class ?? 'unresolved'}`;
+        if (!this._planAgeOffLogged.has(k)) {
+          this._planAgeOffLogged.add(k);
+          console.log(`[B-ENTRY-GATE][P7][PRICE_AGE_GATE_OFF] mode=${mode} class=${_p11Class ?? 'unresolved'} — no entry_gate.promotion_price_max_age_ms row; promotion does not require a recent priced pass for this class. Logged once per class per process.`);
+        }
+      } else {
+        const _p7Lim = Number(_p7Limit);
+        if (!(Number.isFinite(_p7Lim) && _p7Lim > 0)) {
+          console.error(`[B-ENTRY-GATE][P7][PRICE_AGE_UNRESOLVED] symbol=${normalizedSymbol} id=${signalId} limit=${String(_p7Limit)} — not a positive number; not opened, stays queued`);
+          return 'plan_age_unresolved';
+        }
+        const _p7At = (signal as any).lastPricedAt ? new Date((signal as any).lastPricedAt).getTime() : Number.NaN;
+        const _p7AgeMs = Date.now() - _p7At;
+        if (!(Number.isFinite(_p7AgeMs) && _p7AgeMs <= _p7Lim)) {
+          console.log(`[B-ENTRY-GATE][P7][UNPRICED] symbol=${normalizedSymbol} id=${signalId} class=${_p11Class} lastPricedAt=${String((signal as any).lastPricedAt ?? 'never')} ageMs=${Number.isFinite(_p7AgeMs) ? _p7AgeMs : 'never'} limitMs=${_p7Lim} unpricedPasses=${String((signal as any).consecutiveUnpricedPasses ?? 0)} — not opened, stays queued`);
+          return 'unpriced';
+        }
+      }
+    }
     try {
       // ⛔ Langston Step-4 CONDITION 2: the outcome is MEASURED — `deleteRtbSignals` returns the rows it removed and does not
       // throw on a no-match. Zero rows means another path deleted it after the read above: `'missing'`, not `'deleted'`.
