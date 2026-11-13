@@ -79,7 +79,17 @@ The Codex weekly allowance crossed Kyle's 92% stop line at 2026-11-12T13:12:43Z.
 
 ## Memory and exact-copy record
 
-The five outside Claude memory files must be replaced from the final pushed `origin/migration/aws-supabase` blobs and verified by byte size and SHA-256 before the actual switch order. PM Codex records the final pairs in the PM POSITION and in the closing status message after the handoff commit is pushed and CI is green.
+After CI run `43385164986` passed all four jobs at handoff ref `226a217bd55bc6d8dfcf4e253002d78f0959129b`, PM Codex replaced all five outside Claude copies from the pushed `origin/migration/aws-supabase` blobs. Each outside copy exactly matched the pushed repo blob:
+
+| file | outside bytes | repo bytes | SHA-256 (both copies) |
+|---|---:|---:|---|
+| `MEMORY_PM.md` | 9,435 | 9,435 | `64ba5671bc5d4eee94ea0cf36e02a165dbe67bf5bcfae1c0bd7ea3f5bf04a0f7` |
+| `MEMORY_CC_A.md` | 24,071 | 24,071 | `fbda563eabbeb0bde8ad7bfe5897c89e07e2d3582a165d9bb77d4550ad613ea7` |
+| `MEMORY_CC_B.md` | 23,396 | 23,396 | `23867d1cc9a0a9df1bf77d906f6d599ca6b4c40bb846da836b1d5174c366a071` |
+| `MEMORY_CC_C.md` | 33,000 | 33,000 | `7379174eca597bd815de3b6251a1201aa67d79fbf4e312abc75027ba7d4c960d` |
+| `MEMORY_CC_INFRA.md` | 24,543 | 24,543 | `294d389ec9bcfff3a4d925083a2ecbe6e02d66f414074b2f1fc446607a74a4cc` |
+
+`MEMORY_CC_C.md` is still above its 24,576-byte loaded-notebook cap. ANALYST Claude should prune whole closed items into its archive before adding more notebook history; do not replace this exact current copy with an older shorter one.
 
 ## Exact next action
 
