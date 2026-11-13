@@ -44,12 +44,12 @@ Before a staging deploy, `dt-deploy` now reads a register of other batches' open
 
 **O-1, the first deploy that PROCEEDS with `--in-window` into a registered window (A-2).** A deploy that is refused is neither pass nor fail for O-1; it is O-3. PASS when, for that deploy:
 - (a) **a notice line appears**, carrying its `attempt_key`. Read-site: staging `/home/deploy/dawntrader-deploy.notice`.
-- **(b-i) the START post's opening list names every owner session** (a session owner by its wake name; Kyle as `Kyle`). This is the code's own obligation, always testable. Read-site: Helsinki `/var/log/cc-discord-inbox.jsonl`, the `kind=cc_outbound`, `sender=Deploy notice` row.
+- **(b-i) the START post accounts for EVERY owner:** the opening list names every owner `WAKE_NAME` maps (`cc-a`, `cc-b`, `cc-c`, `cc-infra`, `pm-claude`), plus Kyle as `Kyle`; every other canonical owner (`codex-a/b/c/infra`, `langston`, `coltrane`, `pm-codex`) appears in the post's `others` tail. FAIL if an owner appears in neither. Always testable, and it covers all 13 canonical owners. Read-site: Helsinki `/var/log/cc-discord-inbox.jsonl`, the `kind=cc_outbound`, `sender=Deploy notice` row.
 - **(b-ii) a wake record, but only for owners that are Claude-backed AND open at that moment**, enumerated when the result is judged. Read-site: that owner's watcher line `WAKE[Deploy notice via Discord-><ALIAS>]`, quoted by the owner in-channel with the post's message id. An owner that cannot be woken (a closed session, or a seat held by the Codex crew) is discharged by the alert row plus the post, and recorded as a residual, never as a FAIL.
 - (c) **within 30 minutes, a COMPLETED or DID NOT COMPLETE post** goes to the same owners. Same read-site as (b-i).
 - (d) **the watcher logs `RESOLVED deploy-in-window:<batch>:<sha>:<attempt_key> rows=1` for each window**, and the alert rows read `resolved` by `deploy-notice-watcher`. Read-sites: Helsinki `/var/log/dt-deploy-notice/log`; staging `/var/log/dawntrader/system-alerts.jsonl`, rows merged by id, keys `deploy-in-window:*`.
 
-FAIL if (a), (b-i), (c) or (d) is missing, or if `rows=0` where an alert was raised (a broken key join). A missing (b-ii) wake for an owner that could not be woken is not a FAIL.
+FAIL if (a), (b-i), (c) or (d) is missing; if `rows=0` where an alert was raised (a broken key join); **or if (b-ii) is missing for an owner that was Claude-backed and open at that moment** — the case the guard exists to catch. The one exception is an owner that could not be woken (closed, or a seat the Codex crew holds): discharged by the alert row plus the post, recorded as a residual.
 
 **O-2, the first stale window the daily census finds.** PASS when:
 - the daily `dt-install-drift` run raises `deploy-window-stale:<batch>` naming that window's owner, with its verdict still PASS;
@@ -68,7 +68,7 @@ Read-sites: staging `journalctl -u dt-install-drift.service` (the `deploy_window
 - both are mine, and I never acknowledge them; re-justifying does not clear `gov-openmaxage`;
 - at close: flip the row to `open-retired` and push **before** resolving the nag, or the next checker tick re-mints it.
 
-**Known code residual surfaced by A-1, recorded rather than fixed here:** `WAKE_NAME` maps a SEAT (`cc-c` → "ANALYST Claude"), so when the Codex crew holds that seat, the owner lands in the post's opening list together with the line *"the alert reaches every session"*, though nothing wakes it. The adjudication rule in (b-ii) keeps this from deciding O-1; the wording in the post is the residual.
+**Known code residual surfaced by A-1, recorded rather than fixed here:** `WAKE_NAME` maps a SEAT (`cc-c` → "ANALYST Claude"), so when the Codex crew holds that seat, the owner still lands in the post's opening list (the head), though nothing wakes it. (The line *"the alert reaches every session"* renders in the TAIL, beside *"not woken from here"*, `dt-deploy-notice.py:149`, not in the head — corrected per Langston.) The adjudication rule in (b-ii) keeps this from deciding O-1; the wording in the post is the residual.
 
 ## 4. What is unproven, stated as unproven
 
