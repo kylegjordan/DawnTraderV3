@@ -877,14 +877,20 @@ export class CronOccurrenceRunner {
             firedAt,
             status: status === 'succeeded' ? 'success' : 'error',
             errorMessage: errorMessage ?? undefined,
+            // The two identity fields come LAST so a job's own meta can never
+            // override them: the fire-evidence verifier accepts an exact audit
+            // row only when it carries an occurrence id and a cron or
+            // missed_catchup source (cron-fire-evidence-verifier.ts exact arm),
+            // so an override would silently void the job's own evidence and
+            // page STALE (Langston, B-CRON-MISSED-CATCHUP Step 8 carry 1).
             meta: {
-              trigger_source: item.source === 'natural' ? 'cron' : 'missed_catchup',
               duration_ms: completedAt.getTime() - firedAt.getTime(),
-              occurrence_id: claim.row.id,
               lag_ms: policy.lagMs,
               policy_version: CRON_RECOVERY_POLICY_VERSION,
               ...beforeMeta,
               ...resultMeta,
+              trigger_source: item.source === 'natural' ? 'cron' : 'missed_catchup',
+              occurrence_id: claim.row.id,
             },
           });
         } catch (err) {

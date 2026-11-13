@@ -358,6 +358,21 @@ describe('B-CRON-MISSED-CATCHUP occurrence runner', () => {
     expect(f.writeFireRow.mock.calls[0][0].firedAt).toEqual(new Date('2026-11-12T12:01:10.123Z'));
   });
 
+  it('a job\'s own meta cannot override the fire row\'s identity fields', async () => {
+    const f = fixture({
+      run: async () => ({ meta: { proof: true, trigger_source: 'poll', occurrence_id: 'forged' } }),
+      beforeRun: async () => ({ trigger_source: 'boot', occurrence_id: 'forged-before' }),
+    });
+    const boundary = new Date('2026-11-12T12:01:00.000Z');
+    const result = await f.runner.runNatural(f.job.name, boundary);
+    expect(result.status).toBe('succeeded');
+    const meta = f.writeFireRow.mock.calls[0][0].meta;
+    expect(meta.trigger_source).toBe('cron');
+    expect(meta.occurrence_id).toBe([...f.store.rows.values()][0].id);
+    expect(meta.occurrence_id).not.toMatch(/forged/);
+    expect(meta.proof).toBe(true);
+  });
+
   it('reconstructs the missed boundary before node-cron\'s advanced event date', async () => {
     const f = fixture();
     const result = await f.runner.runMissed(f.job.name, new Date('2026-11-12T12:02:00.000Z'));
