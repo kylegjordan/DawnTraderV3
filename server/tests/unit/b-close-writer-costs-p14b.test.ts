@@ -110,6 +110,21 @@ describe('P-14b — the rollback restores the 16 and is never applied by db:migr
   });
 });
 
+describe('P-14b — the restore writer is type-checked end to end (Langston Step 4 C, re-review)', () => {
+  // A cast on either side of insertOpenTradeRecordIfNoneOpen takes the restore's field list out of the compile fence:
+  // with `as any` on the caller's literal, deleting `assetClass` from it compiles (tsc 324); without, it fails (325).
+  it('storage spreads the record typed, and the restore caller passes its literal uncast', () => {
+    const storageSrc = read('server/storage.ts');
+    expect(storageSrc).toContain("...(record as Omit<InsertClosedTrade, 'mode'>), symbol: canonicalSymbol, assetClass, mode })");
+    const restore = read('server/services/trade-record-restore.ts');
+    const start = restore.indexOf('storage.insertOpenTradeRecordIfNoneOpen(');
+    expect(start).toBeGreaterThan(-1);
+    const call = restore.slice(start, restore.indexOf('\n  });', start) + 6);
+    expect(call).toMatch(/\n  \}\);$/);
+    expect(call).not.toMatch(/as any/);
+  });
+});
+
 describe('P-14b — getClosedTradesGlobal is deleted (Langston C-2, rule 18)', () => {
   it('no source names it; its archive copy exists', () => {
     expect(read('server/storage.ts')).not.toContain('getClosedTradesGlobal');

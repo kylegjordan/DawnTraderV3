@@ -147,7 +147,7 @@ export async function restoreOpenTradeRecord(mode: TradingMode, positionId: stri
     recordRestoredFromPosition: true,
     restoredAt,
     restoredByClaimed: claimedBy,
-  } as any);
+  });
   if (result.status === 'exists') {
     return { ok: false, code: 409, error: 'an open trade record appeared for this position while restoring — not restored', recordIds: result.ids };
   }
