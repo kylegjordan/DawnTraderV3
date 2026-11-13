@@ -97,3 +97,21 @@ Fresh private Helsinki run after that fold: failure-notice suite **12 passed / 0
 - `dt-deploy` not used: this batch has no staging runtime target. NEW Claude's 14:30-21:00Z price-feed window was not touched (Helsinki only, finished before it).
 
 **STEP: 6 of 11 COMPLETE · NEXT STEP: 7 of 11** — the live readings: one deliberate failure per agent (OBJ-2), the restart-helper recovery summary (OBJ-3, the line above is the first), the enqueue-before-inbound order across the post-install population (OBJ-4), and the first real Coltrane failure row with text (OBJ-1).
+
+## Step 7 — method ruling and Coltrane's arm (Infra Claude, 2026-11-13)
+
+**The finding (§9.4 disposition 1, folded):** pre-audit §3 registered Step 7's live arm as "a forced short timeout through a test hook". No hook was built: `discord-langston-bridge.py:89 CLAUDE_TIMEOUT = 900` and `coltrane-bot.py:463 INVOKE_TIMEOUT_S = 900` are literals; the same search finds only the queue, flag and log path overrides. Langston re-derived the absence with its positive control (Discord `1570794392229253182`).
+
+**Langston's ruling — B, amended:** observe the first NATURAL failure per agent, **per-agent disposition, never one verdict**. A is the fallback for an agent whose window closes empty (NOT-RUN, not PASS, #661 leg 2), and if ever built it sits behind a test-only entry point, never `os.environ` in the live invoke path. C rejected. P5 (the twice-failed escalated alert) is ACCEPTED ON INSPECTION; no silence is cited for it.
+
+**Coltrane's arm — DISCHARGED by natural failures on 11-11, with the code under review.** Langston showed the live bot is byte-identical to the reviewed ref and read two natural timeouts: `coltrane-invokes.jsonl` 2026-11-11T10:56:47Z and 15:17:51Z, `rc 124`, `outcome timeout`, `notified true`; the channel notice for both is 157 chars, name-led, no stack trace; the 15:17:51Z notice was followed 49 s later by the requester's re-send (the wake leg; the 10:56 pair has no matching re-send established, so it is not cited for that leg). **The owed check, run by me against the live log with the bot's own readers** (`/usr/local/bin/coltrane-bot.py` loaded by the bridge venv's python with `-I`, from a private directory):
+- `runlog_rows()`: 580 rows. Both 11-11 rows: `handled_ids()` contains the id (`1570025742337703970`, `1570091443123523661`); `attempt_counts()` = 1 each.
+- **Positive control** (the live log could not fail it: 259 of 259 ids read handled): a three-row fixture run through the same `handled_ids` — `notified:true` timeout, `notified:false` timeout, and a failed row with no `notified` field — returned exactly `[111]`. The reader discriminates. Fixture removed by the same command.
+
+**Langston's arm — the window:** 14 days from the 11-13T13:19:43Z install. His base rate (re-derived): 68 `bridge_error_suppressed` rows 2026-06-22 → 11-08, 11 in the last 14 days, so 6-8 expected. PASS per failure: one name-led notice under 300 chars with no stack trace in the channel; the declared `langston_outbound` row with `failure_notice` in the inbox; the requester's watcher wakes; the census reads failed+notified; the next `langston-bridge-restart` proceeds instead of exiting 3. FAIL: a failure with no notice, or any leg missing. **Timer:** alert `e7ac23d6-f04f-46cd-9f24-9b407a270612`, `soak_verification`, triggers 2026-11-27T13:20:00Z, read back `scheduled` from the store.
+
+**Folded for the next touch of `discord-langston-bridge.py` (Langston):** the comment at `:473` says 64 rows from 06-22; his measurement is 68 from 06-22 (first row 06-22). Fix it then; no new row.
+
+**Out of scope, recorded on `#979`:** my first run of the Coltrane check, launched with its working directory in `/tmp`, imported a langston-owned `/tmp/attr.py` (2026-08-23) in place of the `attr` library and crashed. Re-run from a private directory with `-I`.
+
+**STEP: 7 of 11 IN PROGRESS · Coltrane arm PASS · Langston arm waiting on its natural-failure window (alert `e7ac23d6`).**
