@@ -602,7 +602,7 @@ CHANGE-CLASS: architecture
 | T1 | shared `MEMORY.md` + `MEMORY_CC_C.md` | ✅ | Own file: KD-19 at Step 10; shared file unchanged, its price-side line already points at System Manual §18.0.1. |
 | T1 | the batch `SCOPE` | ✅ | Present: `B_PRICE_SIDE_BY_JOB_KD19_SCOPE.md` (Step 1, approved 2026-11-07). |
 | T1 | the batch `PRE_AUDIT` | ✅ | Present: `B_PRICE_SIDE_BY_JOB_KD19_PRE_AUDIT.md` (Step 2 r2, Langston PROCEED). |
-| T1 | `COMPLETION_REPORT` | ✅ | The parent stays open; this increment's record is §9.11 of the parent's progress report, converted at the parent's close. |
+| T1 | `COMPLETION_REPORT` | SUSPENDED by the declared-`open` row (`GOVERNANCE_EXCEPTIONS.md`, B-PRICE-SIDE-BY-JOB 2026-11-10) | A `*_PROGRESS_REPORT.md` cannot satisfy the checker's completion-report key; this increment's record is §9.11, converted at the parent's close. |
 | T1 | the `Observation` column | N/A | KD-19's only observation (the first live unpriced close) was met 2026-11-13; nothing left to wait on for this increment. |
 | T1 | the four session task lists | ✅ mine / N/A ×3 | `CC_C_SESSION_TASK_LIST.md` row 17: KD-19 at Step 10, next Step 11; CC_A, CC_B, CC_INFRA: N/A, not mine. |
 | T1 | Langston's `MEMORY.md` | ✅ | His owed-work line rewritten in place via `langston-memory-write` (stale `8d` and a line-number cite out, KD-19 state in); loaded set 143,768 → 143,761 B, ceiling 143,856. |
@@ -622,9 +622,11 @@ CHANGE-CLASS: architecture
 | T2 | `_archive/CLAUDE_MD_RULE_HISTORY.md` | N/A | No `CLAUDE.md` rule changed. |
 | T2 | `DELETED_COMPONENTS_LOG.md` | N/A | No component removed; the doubled slippage term was split per leg, not deleted. |
 | T2 | `MISTAKE_PATTERNS.md` | ✅ | `wrong-object` instance: a full sha typed from memory into an alert's evidence (`9bbc55f06`). |
-| T2 | `GOVERNANCE_EXCEPTIONS.md` | N/A | No new exception; the parent's open-batch re-justification row (alert `1ae9a06b`) stands. |
+| T2 | `GOVERNANCE_EXCEPTIONS.md` | ✅ | The parent's declared-`open` row amended in place: its Step-9 wait clause struck, Step 9 met and alert `7e20ed0f` resolved recorded; state stays `open` (Langston's Step-11 condition). |
 | T2 | `ALERT_HANDLING_PROTOCOL.md` | N/A | The ack/resolve process did not change. |
 | T2 | `DELIVERY_BOARD_PROTOCOL.md` | N/A | Board columns and fields did not change. |
 | T2 | `CLAUDE_CODE_FEATURE_WATCH.md` | N/A | The daily model check did not run in this batch. |
 
 **NEXT: Step 11** — Langston (or Coltrane) confirms this increment's record; the parent stays open for `8c`, `#1250` and the KD-19 entry leg.
+
+**✅ STEP 11 CONFIRMED by Langston 2026-11-13 (Discord `1570834226595766403`), everything re-derived by him at `dc18a0228` and on staging** (1,652/1,652 priced selected rows carry `exitWalk`; 3/3 unpriced carry none; epochs live 8 and 11). His one condition, folded the same turn: the parent's `GOVERNANCE_EXCEPTIONS` open row amended in place (above). His two notes, folded: the completion-report cell reads SUSPENDED, not ✅; `MISTAKE_PATTERNS` carries the full correct sha. **At the parent's close: flip every `B-PRICE-SIDE-BY-JOB` open row to `open-retired` BEFORE resolving `1ae9a06b`.** The KD-19 exit increment is done; the parent stays open for `8c`, `#1250` and the KD-19 entry leg.
