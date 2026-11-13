@@ -1609,3 +1609,16 @@ Archive: git history is authoritative (this is a field-retirement within live fi
 **BLAST RADIUS / LIVE PROOF:** the removing diff deleted the complete in-process lock surface and routed the CLI through the launcher marker; the launcher is the sole supported cron/manual entry. At the Step-11 live read, the root schedule still called the refused direct TypeScript command, so that one line was corrected and read back to the launcher. A harmless private-lock fixture through the deployed launcher (`fbbe0b5e4`, repository and build stamp equal) aged a live lock seven hours; cron-shaped and manual-shaped contenders both refused; killing the holder admitted exactly one of two simultaneous successors; a third contender refused while that successor held the inode. The private fixture was removed in the same command. Source/process tests preserve the same three arms.
 
 **ARCHIVE:** no separate `.removed` file — the deleted lock surface is recoverable from git at `10ca27351^`; restoring it would restore the proven overlap/unlink race.
+
+## 2026-11-13 — Coltrane's self-attesting size-watch liveness check — B-SIZE-WATCH-BREACH-ALARM (`#1215`), Infra Claude
+
+| what | where | why |
+|---|---|---|
+| `cmd_heartbeat` and its `--heartbeat` flag | `comms-infra/codex/coltrane-size-watch` | It alarmed when the last run was more than 26 h old, but its only caller ran it inside the same unit straight after the measurement, so it only ever ran when the watch had just run. A dead timer runs nothing, this check included. |
+| `ExecStartPost=-/usr/local/bin/coltrane-size-watch --heartbeat` and its comment | `comms-infra/systemd/coltrane-size-watch.service` | The only caller of the above. |
+
+**WHY:** the self-attesting shape Langston's own heartbeat was rebuilt to escape on 2026-09-06 (`9e8bbd69b`: *"a watchdog that can only bark while it is alive is not a watchdog"*), never ported to Coltrane's copy. Replaced in the same commit by a staging heartbeat: every run resolves the pending `coltrane-size-watch-heartbeat` row and arms the next 26 h out, so a missed run fires on staging, where something other than this process notices.
+
+**BLAST RADIUS:** census at the Step-2 ref, tests excluded: the only `--heartbeat` invocation of this tool repo-wide is the removed unit line (Langston's positive control returned `staging-liveness-watchdog.mjs:483` and its own unit for the same grep); no `/etc/cron.d` entry calls it; it wrote no state (it only read `last_run_ts` and posted). The installed unit and drop-in `onfailure.conf` are otherwise unchanged; `OnFailure=` keeps its one home in the drop-in.
+
+**ARCHIVE:** `1-system-manual/_archive/deleted-code/coltrane-size-watch.cmd_heartbeat.20261113.removed` (the function and the unit lines, verbatim).

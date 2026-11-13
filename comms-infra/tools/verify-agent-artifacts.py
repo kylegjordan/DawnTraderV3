@@ -31,6 +31,8 @@ PAIRS = [
     ("comms-infra/langston-memory/bin/langston-load-canary", "/usr/local/bin/langston-load-canary"),
     ("comms-infra/codex/coltrane-load-canary", "/usr/local/bin/coltrane-load-canary"),
     ("comms-infra/codex/coltrane-size-watch", "/usr/local/bin/coltrane-size-watch"),
+    # added 2026-11-13 (B-SIZE-WATCH-BREACH-ALARM): it now writes alert rows, so an uninstalled change is a silent alarm.
+    ("comms-infra/langston-memory/bin/langston-size-watch", "/usr/local/bin/langston-size-watch"),
     ("comms-infra/codex/coltrane-memory", "/usr/local/bin/coltrane-memory"),
     ("comms-infra/codex/coltrane-review", "/usr/local/bin/coltrane-review"),
     ("comms-infra/codex/coltrane-repo-refresh", "/usr/local/bin/coltrane-repo-refresh"),
@@ -41,7 +43,7 @@ PAIRS = [
     ("comms-infra/AGENT_AUTHORING_GUIDE.md", "/home/langston/AGENT_AUTHORING_GUIDE.md"),
     ("comms-infra/AGENT_AUTHORING_GUIDE.md", "/home/coltrane/AGENT_AUTHORING_GUIDE.md"),
     # added 2026-09-11 (B-LANGSTON-CONTEXT increment 2) - files this batch changed that the list did not cover.
-    # NOT covered, stated rather than implied: langston-size-watch,
+    # NOT covered, stated rather than implied:
     # langston-log-loaded, coltrane-selfmemory-backup, agent-work-sync, agent-unit-failure-alert.
     ("comms-infra/langston-memory/bin/langston_memory.py", "/opt/langston-memory/bin/langston_memory.py"),
     ("comms-infra/langston-memory/bin/langston-promote-patterns", "/usr/local/bin/langston-promote-patterns"),

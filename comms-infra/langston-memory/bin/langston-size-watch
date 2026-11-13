@@ -45,7 +45,8 @@ USAGE:
                                         --by outside the actor allowlist.
     langston-size-watch --self-test     positive control: prove it CAN alarm
     langston-size-watch --fire-drill    prove the alarm can REACH a human — injects a breach
-                                        and really posts, labelled as a drill. Does NOT
+                                        and really posts, labelled as a drill, and adds + resolves one
+                                        DRILL alert row under its own key. Does NOT
                                         touch the heartbeat.
 """
 
@@ -95,6 +96,29 @@ STALE_HOURS = 48
 HEARTBEAT_KEY = "langston-size-watch-heartbeat"
 HEARTBEAT_HOURS = 26        # the daily timer plus slack for RandomizedDelaySec
 STAGING_CMD = "cd /home/deploy/dawntrader && npm run --silent system-alerts --"
+
+# ⭐ B-SIZE-WATCH-BREACH-ALARM (#1215, 2026-11-13). Until this, a breach was a Discord post and nothing else: no alert
+#    row ever had a breach as its subject, so the per-turn alert read every session does never saw one (55 breach runs
+#    in the retained logs, none a row). Each condition below now keeps ONE row under its OWN key (Langston C-2: a shared
+#    key would keep showing the first event's title), and the id is saved the moment the add returns (C-3).
+# ⛔ THE ADD RUNS ON EVERY RUN WHILE THE CONDITION HOLDS (Langston r1 BLOCKER-2). addAlert returns the existing row
+#    unchanged on a dedupe hit (server/services/system-alerts.ts, the dedupe block in addAlert) and a RESOLVED same-key
+#    row does not block a fresh one, so: open row -> no-op; a row someone resolved by hand while the breach lasts ->
+#    re-minted; a lost state file -> healed. "Skip the add while an id is stored" latched the alarm OFF.
+# ⛔ A RESOLVE NEEDS POSITIVE EVIDENCE OF THE CLEAN STATE (Langston C-1). measure() leaves a missing file OUT of the
+#    total, so "total <= ceiling" can be true with his rules file gone. Each condition resolves only on its own clean
+#    predicate; a run that cannot establish it resolves nothing.
+# ⛔ A ROW'S BODY IS FROZEN AT MINT (Langston, Step-2 condition). While a breach lasts every add returns the day-one
+#    row, so every body states WHEN it measured and WHERE the live number is. The Discord post carries today's number.
+CONDITION_ALERTS = {
+    "breach": ("breach_alert_id", "langston-size-watch-breach"),
+    "missing": ("missing_alert_id", "langston-size-watch-missing-file"),
+    "archive": ("archive_alert_id", "langston-size-watch-archive"),
+    "tamper": ("rules_tamper_alert_id", "langston-rules-tamper"),
+}
+DRILL_KEY = "langston-size-watch-breach-drill"   # a drill NEVER touches a real key (Langston ruling (b))
+EPISODE_CAP = 100                                # breach episodes kept in state; the run log keeps every run
+LIVE_READ = "langston-size-watch --status on Helsinki, or its run log " + RUNLOG
 
 
 def utc():
@@ -280,6 +304,102 @@ def heartbeat(st, status):
     return "; ".join(notes)
 
 
+def _runlog_ref():
+    """The reference token a resolve cites: the run-log line THIS run is about to write (the heartbeat's form)."""
+    try:
+        with open(RUNLOG, encoding="utf-8") as fh:
+            return "%s:%d" % (RUNLOG, sum(1 for _ in fh) + 1)
+    except Exception:
+        return "%s:1" % RUNLOG
+
+
+def _alert_add(key, severity, title, body):
+    """Add (or, on a dedupe hit, get back) the row under `key`. Returns (id, None) or (None, failure note)."""
+    rc, out, err = _alerts(["add", "--triggers-at", iso(), "--category", "health_check",
+                            "--severity", severity, "--dedupe-key", key, "--title", title, "--body", body])
+    if rc != 0:
+        return None, "ADD FAILED rc=%d %s" % (rc, err[:120])
+    try:
+        new_id = json.loads(out).get("id")
+    except Exception:
+        new_id = None
+    if not new_id:
+        return None, "added, but the id could not be parsed from the reply"
+    return new_id, None
+
+
+def _alert_resolve(alert_id, evidence):
+    """Resolve one row. Returns (discharged, note). An already-resolved or missing row is DISCHARGED, not a failure:
+    a human resolving it by hand is normal (the heartbeat's rule)."""
+    rc, out, err = _alerts(["resolve", alert_id, "--by", "cc-infra", "--evidence", evidence])
+    if rc == 0:
+        return True, "resolved %s" % alert_id
+    blob = (out + " " + err).lower()
+    if "already" in blob or "not found" in blob or "no such" in blob:
+        return True, "%s was already discharged" % alert_id
+    return False, "RESOLVE FAILED %s rc=%d %s" % (alert_id, rc, err[:120])
+
+
+def condition_alert(st, name, active, clean, title, body, evidence):
+    """One condition, one key, one stored id. Returns a short note for the run row."""
+    field, key = CONDITION_ALERTS[name]
+    prev = st.get(field)
+    if active:
+        new_id, failure = _alert_add(key, "warning", title, body)
+        if not new_id:
+            return failure          # the stored id (if any) is kept; the next run tries again
+        st[field] = new_id
+        save_state(st)              # C-3: persisted before anything else can fail
+        return ("same %s" if new_id == prev else "new %s") % new_id
+    if clean:
+        if not prev:
+            return "none"
+        ok, note = _alert_resolve(prev, evidence)
+        if ok:
+            st[field] = None
+            save_state(st)
+        return note                 # a failed resolve keeps the id; the next clean run retries
+    return ("not established - %s left as it is" % prev) if prev else "not established"
+
+
+def update_episodes(st, status, over, total, ts):
+    """OBJ-2: each breach episode survives the run log's rotation. A MISSING-FILE run changes nothing (its total is
+    short by the missing file); only UNDER or AT-CEILING closes an episode (C-1's predicate). Returns a note when the
+    cap drops an episode, so a truncated list is never read as the whole history (Langston ruling (g))."""
+    eps = st.setdefault("breach_episodes", [])
+    open_ep = eps[-1] if eps and eps[-1].get("end") is None else None
+    if status == "BREACH":
+        if open_ep is None:
+            eps.append({"start": ts, "end": None, "peak_over": over, "peak_total": total})
+        elif over > open_ep.get("peak_over", 0):
+            open_ep["peak_over"], open_ep["peak_total"] = over, total
+    elif status in ("UNDER", "AT-CEILING") and open_ep is not None:
+        open_ep["end"] = ts
+    if len(eps) > EPISODE_CAP:
+        dropped = len(eps) - EPISODE_CAP
+        del eps[:dropped]
+        return ("dropped the %d oldest breach episode(s) at the cap of %d; the run log keeps every run"
+                % (dropped, EPISODE_CAP))
+    return None
+
+
+def tamper_established(rules):
+    """The tamper check's own assertions (1)-(2) actually ran: an install record was read, and lsattr answered.
+    Assertion (3)'s network failure is NOT part of this - it says nothing about tampering."""
+    return rules.get("record") is not None and not any("lsattr" in u for u in rules.get("unknown") or [])
+
+
+def drill_alert():
+    """Ruling (b): a drill proves the add and resolve path under its OWN key, never the real one. Returns (ok, row)."""
+    new_id, failure = _alert_add(DRILL_KEY, "info", "DRILL - Langston size watch alarm path (not a real breach)",
+                                 "A fire drill of the size watch's alert path, run by hand by CC-INFRA. Nothing is "
+                                 "wrong with Langston's files. It is resolved by the same run that made it.")
+    if not new_id:
+        return False, {"id": None, "add": failure, "resolve": "not attempted"}
+    ok, note = _alert_resolve(new_id, new_id)
+    return ok, {"id": new_id, "add": "ok", "resolve": note}
+
+
 # ⭐ HIS RULES FILE'S INSTALL CHECK (B-LANGSTON-CLAUDEMD-RESIDUAL; Langston r1 on 9384b919a). The file is installed only
 #    by langston-rules-install, root:root 0644 and immutable. Prevention cannot see a crash between clearing and
 #    re-setting the flag, a flag that silently did not take, or a reviewed commit that was never installed - so this
@@ -363,7 +483,7 @@ def rules_check(target=None, record=None, mirror=None, upstream=None, installer=
     return out
 
 
-def run(quiet=False, injected_total=None, injected_archive_bytes=None):
+def run(quiet=False, injected_total=None, injected_archive_bytes=None, drill_store=False):
     files, total, missing = measure()
     if injected_total is not None:      # --self-test only; never reachable in a real run
         total = injected_total
@@ -489,6 +609,45 @@ def run(quiet=False, injected_total=None, injected_archive_bytes=None):
              "staging: " + hb + ". The size check itself is fine (" + status + "); what is "
              "broken is the thing that would tell you if the watch STOPPED running.", quiet)
 
+    # ⭐ B-SIZE-WATCH-BREACH-ALARM: one row per condition (see CONDITION_ALERTS). A drill touches none of them.
+    alerts, episodes_note, drill_row, drill_ok = {}, None, None, True
+    if injected_total is None:
+        ts, ev = iso(), _runlog_ref()
+        per_file = "; ".join("%s=%s" % (os.path.basename(f["path"]), f["bytes"]) for f in files)
+        stamp = (" Measured " + ts + "; this row is NOT updated while the condition lasts - the live number is "
+                 + LIVE_READ + ". Owner CC-INFRA.")
+        alerts["missing"] = condition_alert(
+            st, "missing", bool(missing), not missing,
+            "A file Langston loads every invoke is missing",
+            "Missing: " + ", ".join(missing) + ". A missing file is not a small one: the measured total leaves it "
+            "out, so no size reading means anything until it is back. Restore it; this row resolves on the first "
+            "daily run with no file missing." + stamp, ev)
+        alerts["breach"] = condition_alert(
+            st, "breach", status == "BREACH", status in ("UNDER", "AT-CEILING"),
+            "Langston load set is over its size ceiling",
+            "Total " + str(total) + " B against a ceiling of " + str(ceiling) + " B, over by " + str(over) +
+            " B. Per file: " + per_file + ". Rule #1007: the total may only decrease, so the fix is a trim in the "
+            "work that grew it - never a raise (the tool refuses one). This row resolves on the first daily run at "
+            "or under the ceiling." + stamp, ev)
+        alerts["archive"] = condition_alert(
+            st, "archive", bool(archive["over"] or archive["unreadable"]),
+            not archive["over"] and not archive["unreadable"],
+            "Langston memory archive needs a look",
+            ARCHIVE_DIR + ": " + str(archive["bytes"]) + " B across " + str(archive["files"]) + " files against a "
+            "threshold of " + str(ARCHIVE_THRESHOLD_BYTES) + " B; " + str(len(archive["unreadable"])) + " file(s) "
+            "could not be measured. It is unbounded by design (the only copy of every replaced MEMORY.md), so this "
+            "is a disk check, NOT an order to prune: read its index.jsonl for what is writing so often. Resolves on "
+            "the first run under the threshold with every file measured." + stamp, ev)
+        alerts["tamper"] = condition_alert(
+            st, "tamper", bool(rules["tamper"]), not rules["tamper"] and tamper_established(rules),
+            "Langston rules file does not match its install",
+            RULES_TARGET + ": " + "; ".join(rules["tamper"]) + ". It is installed only by langston-rules-install "
+            "from a reviewed commit. Compare it with /root/langston-rules-backup/ and re-install the recorded "
+            "commit. Resolves on the first run where the file matches its install record." + stamp, ev)
+        episodes_note = update_episodes(st, status, over, total, ts)
+    elif drill_store:
+        drill_ok, drill_row = drill_alert()
+
     row = {"ts": iso(), "drill": drill, "status": status,
            "total_bytes": total, "ceiling_bytes": ceiling,
            "over_by": over, "files": files, "missing": missing,
@@ -498,6 +657,7 @@ def run(quiet=False, injected_total=None, injected_archive_bytes=None):
                         "in the batch that lands the trim (#1007)."),
            "heartbeat": hb, "archive": archive, "archive_delivery": archive_delivery,
            "rules": rules, "rules_delivery": rules_delivery,
+           "alerts": alerts, "episodes_note": episodes_note, "drill_alert": drill_row,
            "population": "the three files in WATCHED, all of them, every run; plus the writer's archive, "
                          "measured separately and never added to the sum"}
     try:
@@ -515,7 +675,10 @@ def run(quiet=False, injected_total=None, injected_archive_bytes=None):
 
     print(json.dumps({k: row[k] for k in ("ts", "drill", "status", "total_bytes", "ceiling_bytes",
                                           "over_by", "hours_since_previous_run", "alarm", "heartbeat",
-                                          "delivery", "archive", "rules")}, indent=2, ensure_ascii=False))
+                                          "delivery", "archive", "rules", "alerts", "drill_alert")},
+                     indent=2, ensure_ascii=False))
+    if not drill_ok:
+        return 3            # a drill whose own row did not resolve is a failed drill (ruling (b)), never a pass
     return 1 if (status in ("BREACH", "MISSING-FILE") or archive["over"] or archive["unreadable"]
                  or rules["tamper"]) else 0
 
@@ -659,8 +822,9 @@ def main():
         if st is None:
             print("no state yet — run the watch once first")
             return 2
-        print("FIRE DRILL — a real Discord post will be made, labelled as a drill.")
-        rc = run(quiet=False, injected_total=st["ceiling_bytes"] + 4242)
+        print("FIRE DRILL — a real Discord post will be made, labelled as a drill, and one DRILL alert row "
+              "is added and resolved under its own key (" + DRILL_KEY + "). No real alert key is touched.")
+        rc = run(quiet=False, injected_total=st["ceiling_bytes"] + 4242, drill_store=True)
         return 0 if rc == 1 else 1
     if "--set-ceiling" in sys.argv:
         i = sys.argv.index("--set-ceiling")

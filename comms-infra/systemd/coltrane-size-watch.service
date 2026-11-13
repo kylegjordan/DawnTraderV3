@@ -5,9 +5,8 @@ Documentation=file:///usr/local/bin/coltrane-size-watch
 [Service]
 Type=oneshot
 ExecStart=/usr/local/bin/coltrane-size-watch
-# ⛔ The heartbeat runs AFTER the measurement, and only the heartbeat can distinguish
-#    "no breach" from "this watch stopped running a week ago" - they look identical
-#    from the channel. Langstons BLOCKER-3 was exactly this shape.
-ExecStartPost=-/usr/local/bin/coltrane-size-watch --heartbeat
+# ⛔ NO ExecStartPost heartbeat (B-SIZE-WATCH-BREACH-ALARM, rule 18). The old `--heartbeat` ran here, inside this
+#    same unit straight after the measurement, so it only ever ran when the watch was alive and could never
+#    report a dead one. The watch now arms a staging alert 26 h out on every run; a missed run fires it.
 # ⚠️ A BREACH EXITS 1 BY DESIGN, so the unit must not treat that as a unit failure.
 SuccessExitStatus=0 1
