@@ -214,9 +214,26 @@ describe('AP-7 fences — the patterns match what each subject writes (C-5, the 
     // one addAlert call in the whole script, inside raise(); everything else calls raise()
     expect((checker.match(/addAlert\(/g) ?? []).length).toBe(1); // the one call, inside raise()
     expect(checker).toContain('await addAlert(input);');
-    expect(checker).toMatch(/if \(DRY\) \{[\s\S]{0,160}return;\s*\}\s*await addAlert\(input\);/);
-    expect(checker).toContain("const LOG_DIR = process.env.ARCHIVAL_HEALTH_LOG_DIR || '/var/log/dawntrader';");
-    expect(checker).toContain("const DRY = process.env.ARCHIVAL_HEALTH_DRY === '1';");
+    expect(checker).toMatch(/if \(DRY\) \{[\s\S]{0,160}return false;\s*\}\s*await addAlert\(input\);\s*return true;/);
+    // the overrides take effect only with --plant on argv (Langston: .env alone must not be able to disable alerting)
+    expect(checker).toContain("const PLANT = process.argv.includes('--plant');");
+    expect(checker).toContain("const LOG_DIR = (PLANT && process.env.ARCHIVAL_HEALTH_LOG_DIR) || '/var/log/dawntrader';");
+    expect(checker).toContain("const CRONTAB_FILE = (PLANT && process.env.ARCHIVAL_HEALTH_CRONTAB_FILE) || '';");
+    expect(checker).toContain("const DRY = PLANT && process.env.ARCHIVAL_HEALTH_DRY === '1';");
     expect(checker).toContain("if (CRONTAB_FILE) return { text: fs.readFileSync(CRONTAB_FILE, 'utf-8') };");
+  });
+  it('a dry run never prints ALERT, and a plant run announces itself (Langston C-1, C-2)', () => {
+    const raiseCalls = (checker.match(/const raised = await raise\(\{/g) ?? []).length;
+    const labelled = (checker.match(/\$\{raised \? 'ALERT' : 'DRY-ALERT'\}/g) ?? []).length;
+    expect(raiseCalls).toBe(3);
+    expect(labelled).toBe(raiseCalls);
+    expect(checker).not.toMatch(/console\.log\(`\[archival-health\] ALERT /);
+    expect(checker).toContain('[archival-health] PLANT RUN (not production)');
+    expect(checker).toContain('IGNORED without --plant');
+  });
+  it('the cron line passes no arguments, so a cron run cannot be a plant run', () => {
+    const header = /^ \*\s+0 5 \* \* \* (.*)$/m.exec(checker);
+    expect(header).not.toBeNull();
+    expect(header![1]).not.toContain('--plant');
   });
 });
