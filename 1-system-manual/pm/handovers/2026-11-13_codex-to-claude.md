@@ -15,6 +15,7 @@ The Codex weekly allowance crossed Kyle's 92% stop line at 2026-11-12T13:12:43Z.
 3. Turn work back over to the Claude owners in the sequence below. Langston comes back through the authorized crew switch; Coltrane remains the Codex-shift reviewer of record only.
 4. Route the new B-CRON-MISSED-CATCHUP failures to ANALYST Claude before it resumes Step 5. Do not acknowledge event-wait alerts merely to silence them.
 5. Re-enable only the Claude-side schedules and watchers recorded in PM memory/automation inventory; do not resume the paused Codex heartbeat.
+6. A timed observation is not an instruction for an owner to sit idle. Once its boundary captures and watcher are safely armed, move the owner to the next independent eligible batch. If the nominal next batch depends on the pending observation, temporarily skip to the next recorded independent item and return when the evidence matures.
 
 ## OLD Claude — storage relief and archive UI dependency
 
@@ -28,13 +29,15 @@ The Codex weekly allowance crossed Kyle's 92% stop line at 2026-11-12T13:12:43Z.
 
 ## NEW Claude — price-feed proof, entry gate, and SBT observation
 
-- **Current work:** `B-PRICE-FEED-COVERAGE` increment 0, Step 7; Step 8 is forbidden until a complete registered U.S. session proves continuous runtime, a positive exact dispatch delta, and a natural `cold_tick` carrier.
+- **Current work:** `B-PRICE-FEED-COVERAGE` increment 0, Step 7; Step 8 is forbidden until one complete registered U.S. regular session proves continuous runtime, a positive exact dispatch delta, and a natural `cold_tick` carrier. “Complete” describes the experiment's evidence, not general app uptime.
 - **Why this batch exists:** prove the engine receives and classifies the price/depth evidence the later entry gate and strategy evaluation rely on. It is one part of the data-truth chain, not the final trading fix.
 - **What Codex proved:** `e7ef8413efb59bbeb757aca18a0770c5ffb960ae` deployed on Nov. 11; exact-ref CI was four-job green; pre-window evidence showed two dispatches and two stale-book controls but no natural cold-depth carrier.
-- **What remains:** the Nov. 12 14:30-21:00Z observation was missed because the KD-71 allowance stop occurred before the window. Register and capture the next qualifying uninterrupted session; do not infer success from the partial population.
+- **Why earlier windows do not qualify:** Nov. 11 was genuinely interrupted by normal crew deployments/restarts, including restart 691 at 17:16:25Z inside U.S. regular hours; the later inc-0 and ANALYST deployments advanced the process through restarts 693 and 694 in that same already-invalid session. Nov. 12 is different: no interruption was established, but the KD-71 allowance stop occurred at 13:12Z before the 14:30Z open, so NEW did not preserve the registered start and end snapshots. The app running 24/7 cannot substitute for those missing experiment boundaries.
+- **FRIDAY NOV. 13 RESERVED WINDOW — DO NOT MISS:** preserve raw no-cache start evidence immediately before 14:30Z and end evidence after 21:00Z (15:30-22:00 Warsaw), with the same PID, rising uptime, restart delta zero, a positive exact dispatch delta and the natural `cold_tick` carrier. Treat 14:30-21:00Z as deploy/restart-free for all owners unless an operational emergency outweighs the observation. If any unavoidable restart occurs, declare the window invalid and repeat; do not blend partial windows or infer success from app uptime.
 - **Next batch:** `B-ENTRY-GATE` increment B — complete the entry-admission data and behavior contract so later xStock strategy observations and calibration are based on trustworthy accepts/refusals.
 - **SBT xStock observation:** `B-SILENT-STRATEGY-CENSUS` remains Step 10. Last recorded read (2026-11-11 21:55Z) had 15 filled closes, mean net return -0.337373%, four winners, seven taker and eight maker closes across two UTC dates. This means **keep observing**, not kill and not promote: it had not reached 20 filled closes and was above the -1.5% early-stop line. The registered end rule remains 20 closes (pass if mean >= 0; fail if mean < 0), early stop at n>=10 and mean<=-1.5%, or Nov. 28 backstop. Strategy remains ON; every end is reported to Kyle; there is no automatic switch-off.
 - **Additional xStock strategies:** KD-57 still puts the other four candidates after the entry-gate verification, one at a time. KD-73's new baseline research gates SBT/xStock target-geometry or `min_rr` action only; it does not gate those four other candidates.
+- **Weekend capacity observation:** NEW retains technical and policy ownership of existing plan row 166b, `B-XSTOCK-WEEKEND-POSTURE`, but INFRA Claude is the read-only evidence collector so NEW's price-feed/entry-gate work is not displaced. After Friday's xStock close and NEW's price-feed end capture, INFRA counts total open slots, xStock positions held across the closure, crypto positions and unused capacity; identifies qualified crypto attempts refused specifically because capacity was full; and compares the same measures over prior weekends. It distinguishes a slot-capacity block from every other refusal reason and hands the evidence to NEW. Report whether weekend xStock holds repeatedly crowd out crypto and how long those xStocks remain open. This is evidence for a later cutoff/close-policy decision, not authority to close positions or change the live policy.
 - **Pushed stop:** branch `migration/b-price-feed-coverage-inc0-codex`, ref `43edb402df4d40abe041be545166c5b88941dbc2`, no unpublished tracked work; local `.claude/launch.json` preserved.
 - **Due on pickup:** daily SBT read alert `b7a96f04` is due. Read the full registered population before applying the decision rule.
 - **Plan alignment:** correct work, but the usage stop forced a new observation window rather than a conclusion.
@@ -54,10 +57,11 @@ The Codex weekly allowance crossed Kyle's 92% stop line at 2026-11-12T13:12:43Z.
 
 - **Current work:** `B-DISK-HEADROOM`, Step 9; Step 10 is allowed only after the scheduled 2026-12-01 02:05Z direct pre-sweep peak and table-size comparison.
 - **Why this batch exists:** keep the database and host within safe storage headroom while proving archival removal is complete, reversible and lock-safe.
-- **What Codex proved:** Stage B freed 28,351,709,184 bytes across a 22-child run with zero failures, 21/21 manifests, a 113,256-row May 1 rehydration hash match, and 515 lock-sampler ticks with zero waits/failures. The Nov. 12 production run dropped 14 target children / 14,830,919,680 bytes within a 19-child / 18,517,155,840-byte sweep, with 14/14 manifests and 528 sampler ticks without a failed, waiting or denied lock.
+- **What Codex proved:** Stage B freed 28.35 GB across a 22-child run with zero failures, 21/21 manifests, a 113,256-row May 1 rehydration hash match, and 515 lock-sampler ticks with zero waits/failures. The Nov. 12 production run dropped 14 target children / 14.83 GB within a 19-child / 18.52 GB sweep, with 14/14 manifests and 528 sampler ticks without a failed, waiting or denied lock.
 - **What remains:** wait for alert `f8188c60` on Dec. 1; no earlier Step-10 claim.
 - **Next batch:** `B-AGENT-INVOKE-FAILURE-NOTICE` Step 6 — make reviewer/agent invocation failures durable and visible. It was blocked only because its installer would enable Langston while the Codex crew had him off; Claude mode unblocks it. After that: `B-SIZE-WATCH-BREACH-ALARM` (alert when storage/headroom thresholds are breached), then `B-DEPLOY-WINDOW-GUARD` (prevent deployment outside approved safe windows).
-- **Standing alert:** token-watch store `7b19347d` was 7.18 GiB, above the 6 GiB warning and below the 8 GiB cap; do not resolve until below the registered threshold.
+- **Bounded weekend assignment (KD-74):** at the first safe boundary after Friday's 21:00Z close, collect row 166b's read-only xStock-slot/crypto-capacity evidence and prior-weekend comparison, then hand it to NEW and resume the recorded Infra queue. Do not make the trading-policy decision or change live behavior. The fresh comparative slot checks found this is less disruptive here than on OLD or ANALYST; it may briefly defer only the next eligible Infra step.
+- **Standing alert:** token-watch store `7b19347d` was approximately 7.71 GB, above the approximately 6.44 GB warning and below the approximately 8.59 GB cap; do not resolve until below the registered threshold.
 - **Pushed stop:** branch `migration/b-disk-headroom-step7-final`, ref `287dd74ba6f9f347233738aaf67a1e80bbe8ba10`, clean and 0/0 at stop.
 - **Plan alignment:** correct work. The base batch is legitimately time-gated; Claude mode opens the separate agent-failure-notice work.
 
@@ -81,15 +85,15 @@ The Codex weekly allowance crossed Kyle's 92% stop line at 2026-11-12T13:12:43Z.
 
 After CI run `43385164986` passed all four jobs at handoff ref `226a217bd55bc6d8dfcf4e253002d78f0959129b`, PM Codex replaced all five outside Claude copies from the pushed `origin/migration/aws-supabase` blobs. Each outside copy exactly matched the pushed repo blob:
 
-| file | outside bytes | repo bytes | SHA-256 (both copies) |
+| file | outside size | repo size | SHA-256 (both copies) |
 |---|---:|---:|---|
-| `MEMORY_PM.md` | 9,435 | 9,435 | `64ba5671bc5d4eee94ea0cf36e02a165dbe67bf5bcfae1c0bd7ea3f5bf04a0f7` |
-| `MEMORY_CC_A.md` | 24,071 | 24,071 | `fbda563eabbeb0bde8ad7bfe5897c89e07e2d3582a165d9bb77d4550ad613ea7` |
-| `MEMORY_CC_B.md` | 23,396 | 23,396 | `23867d1cc9a0a9df1bf77d906f6d599ca6b4c40bb846da836b1d5174c366a071` |
-| `MEMORY_CC_C.md` | 33,000 | 33,000 | `7379174eca597bd815de3b6251a1201aa67d79fbf4e312abc75027ba7d4c960d` |
-| `MEMORY_CC_INFRA.md` | 24,543 | 24,543 | `294d389ec9bcfff3a4d925083a2ecbe6e02d66f414074b2f1fc446607a74a4cc` |
+| `MEMORY_PM.md` | 9.991 KB | 9.991 KB | `b49fbe604cde5f1ac4edb2d3b7aa5f38f432879737afb9695996e8ada28bb065` |
+| `MEMORY_CC_A.md` | 24.071 KB | 24.071 KB | `fbda563eabbeb0bde8ad7bfe5897c89e07e2d3582a165d9bb77d4550ad613ea7` |
+| `MEMORY_CC_B.md` | 23.396 KB | 23.396 KB | `23867d1cc9a0a9df1bf77d906f6d599ca6b4c40bb846da836b1d5174c366a071` |
+| `MEMORY_CC_C.md` | 33.000 KB | 33.000 KB | `7379174eca597bd815de3b6251a1201aa67d79fbf4e312abc75027ba7d4c960d` |
+| `MEMORY_CC_INFRA.md` | 24.543 KB | 24.543 KB | `294d389ec9bcfff3a4d925083a2ecbe6e02d66f414074b2f1fc446607a74a4cc` |
 
-`MEMORY_CC_C.md` is still above its 24,576-byte loaded-notebook cap. ANALYST Claude should prune whole closed items into its archive before adding more notebook history; do not replace this exact current copy with an older shorter one.
+`MEMORY_CC_C.md` is still above its 24.576 KB loaded-notebook cap. ANALYST Claude should prune whole closed items into its archive before adding more notebook history; do not replace this exact current copy with an older shorter one.
 
 ## Exact next action
 

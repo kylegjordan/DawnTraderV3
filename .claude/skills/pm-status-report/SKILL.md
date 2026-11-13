@@ -38,3 +38,5 @@ Then include:
 End with a plain `Kyle needed` statement. Say `No Kyle action now` when the crew can continue independently. When Kyle is needed, name the exact decision, access, tool, service, account, signed-in session or other authority boundary; explain what work it blocks, give the owner's recommendation when one exists, and separate required action from optional input. Never ask Kyle for access or a decision that the current tools, records or `DECISIONS.md` already provide.
 
 Do not merely repeat counts or implementation details. Translate each result into why it matters for reliable trading, calibration, profitability evidence, data preservation or accepted risk. When a master-plan status cell is stale but the POSITION block and pushed evidence are current, say so and use the current evidence without hiding the documentation lag.
+
+Express storage and file sizes in familiar decimal units—KB, MB, GB or TB—at a sensible precision. Do not lead with raw bytes or binary-unit labels such as KiB/MiB/GiB; include an exact byte count only when it is needed as audit evidence.
