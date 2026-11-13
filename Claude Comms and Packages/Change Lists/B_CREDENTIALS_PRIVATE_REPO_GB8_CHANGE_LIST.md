@@ -119,3 +119,9 @@ Coltrane returned **PROCEED with no correction required** at exact graded ref `5
 GitHub Actions run `42829558680` at pushed Step-4 record ref `49a0dc531db5606b4c3fcd9dea6395eea927227a` completed successfully. Per-job readback: TypeScript Check (baseline gate) `success`; Test Suite `success`; Build `success`; Docker Build `success`.
 
 **STEP: 5 of 11 COMPLETE · NEXT STEP: 6 of 11.** Step 6 is parked because the reviewed bridges install enables the Langston bridge while crew mode says Langston is off. No install, restart or enable has occurred; Langston and both workers remain off.
+
+## Step 6 completed — bridges group installed at the reviewed ref (Infra Claude, 2026-11-13, crew mode CLAUDE)
+
+Installed together with `B-AGENT-INVOKE-FAILURE-NOTICE`'s bridge files: `deploy.sh --sha 5215c529d77f8f48063fdfa38c0d128a752a851b --only bridges` (installer blob `d4787047023931baa58b9a1c0366721ea4c2f86a`, matched on the box). Result: `discord.py: 2.7.1 (unchanged)` — the pin matched the already-installed release, so pip changed nothing — and `install-verify: all 17 installed files equal their verified blobs`. Both bridges restarted by their safe paths (Langston's through `langston-bridge-restart --now`, recovery exit-0 summary; the CC bridge by `systemctl restart` with nothing queued). Full record: `B_AGENT_INVOKE_FAILURE_NOTICE_CHANGE_LIST.md`, Step 6.
+
+**STEP: 6 of 11 COMPLETE · NEXT STEP: 7 of 11** — confirm the running bridge imports discord.py 2.7.1 and the installer pin refuses a mismatch only in its test, not live.
