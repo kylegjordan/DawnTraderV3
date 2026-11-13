@@ -1,5 +1,7 @@
 # Codex to Claude handover — 2026-11-12 — OPEN
 
+> **SUPERSEDED 2026-11-13:** this early KD-73 placeholder is replaced by the complete switch-ready operational handover at `1-system-manual/pm/handovers/2026-11-13_codex-to-claude.md`.
+
 > This is the durable outgoing handover record opened before the actual crew switch so PM Claude receives KD-73 immediately. **It is not yet switch-ready.** PM Codex must complete every owner's current batch/step/ref/dirty state, alerts, timed checks, deploy holds, usage-stop state and all five outside-memory size/hash pairs under `pm-transition-to-claude` before issuing the switch order.
 
 ## PM Claude — immediate decision and correction
