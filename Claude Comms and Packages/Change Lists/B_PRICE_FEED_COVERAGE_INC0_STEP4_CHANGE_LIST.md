@@ -129,3 +129,40 @@ local_utc_after: 2026-11-13T14:25:02.272Z
 ```
 
 **Qualifying test at END (registered, r8/r9; restated, not changed):** same `processPid` (2307433), `processUptimeSeconds` strictly greater, PM2 `restart_time` delta 0 (697), `stats.dispatched` delta > 0 (from 330), and a natural `cold_tick` depth-gate carrier inside the window. Any restart or missing boundary voids the session. Step 8 stays forbidden until both continuity and depth presence pass.
+
+**END boundary, captured 2026-11-13T21:01:01.468Z (server `observedAt`), raw and unedited below.**
+
+```
+=== PFC STEP-7 CAPTURE: END ===
+local_utc_before: 2026-11-13T21:01:00.335Z
+--- endpoint (raw, server no-store) ---
+{"schema":"xstock-active-dispatch/v1","observedAt":"2026-11-13T21:01:01.468Z","processPid":2307433,"processUptimeSeconds":117936.96221946,"stats":{"dormantSkips":0,"noOrchSkips":0,"dispatched":491,"dispatchErrors":0,"configClosedSkips":0,"staleSkips":32,"coldSkips":0,"classDormantSkips":0}}dt-api: HTTP 200 GET /api/active-engine/diagnostics/xstock-dispatch
+
+--- pm2 ---
+name=dawntrader pid=2307433 restart_time=697 status=online pm_uptime_ms=1794485724498
+name=pm2-logrotate pid=407311 restart_time=5 status=online pm_uptime_ms=1783967599164
+--- staging checkout head ---
+cd2b794dec63bea0771e32b733263b7ae516e6b8
+--- error.log boundary ---
+900300 /var/log/dawntrader/error.log
+2026-11-13 21:01:01 +00:00: [B-XSTOCK-BI
+--- xStock depth-gate blocks so far in error.log (all, by reason) ---
+--- inc-0 dispatch refusals so far in error.log (by arm) ---
+     21 stale
+local_utc_after: 2026-11-13T21:01:01.836Z
+```
+
+**The registered test, read against the END capture (nothing re-chosen after the data):**
+| registered condition | START | END | result |
+|---|---|---|---|
+| same `processPid` | 2307433 | 2307433 | ✅ |
+| `processUptimeSeconds` strictly greater | 94,177.37 | 117,936.96 (+23,759.6 s) | ✅ |
+| PM2 `restart_time` delta 0 | 697 | 697 | ✅ |
+| `stats.dispatched` delta > 0 | 330 | 491 (+161) | ✅ |
+| no deploy inside the window | staging head `cd2b794de` | `cd2b794de`; deploy record `/home/deploy/dawntrader-deploy.record`: `deployed_at=2026-11-12T12:15:34Z`, `restart_time=697` | ✅ |
+| a natural `cold_tick` depth-gate carrier inside 14:30–21:00Z | — | **none** | ❌ **absent** |
+
+**How the depth leg was read (a measured zero, not a blind one):** the window slice is error.log lines after 587,987 with timestamps 14:30:00–21:00:00Z — 307,933 lines, first `2026-11-13 14:30:00`, last `2026-11-13 21:00:00`. Inside it: **0 `DEPTH_GATE_BLOCK` rows of ANY class or reason**, 0 lines containing `cold_tick`. Positive control on the same file, same pattern: 2 `DEPTH_GATE_BLOCK` rows earlier today (the newest `2026-11-13 07:30:33 … APR/USD (crypto_spot) stale_book age=10408ms>5000ms`), and the rotated `error__2026-11-12…` and `error__2026-11-13…` files hold 17 and 10. So the instrument sees the line; the window simply held no depth refusal at all. Incidental, not registered: the dispatch counters moved `staleSkips` 31 → 32 and `coldSkips` 0 → 0, and the window held 1 `[INC0][DISPATCH_REFUSE] arm=stale` line.
+
+**Verdict, as registered:** **continuity PASSES — this is the first full uninterrupted post-change session. The depth-presence leg does NOT pass: no carrier occurred.** It is neither confirmed nor refuted; a session with zero depth refusals of any kind cannot exercise the `cold_tick` arm. **Step 8 remains forbidden** (r8/r9). Three sessions since the inc-0 deploy have now produced no natural xStock `cold_tick` depth carrier (r7: 0 against 2 same-prefix `stale_book` controls over the retained post-inc0 population). Waiting for one is not a plan with a known end, so the next step is a reviewer ruling — Langston — between (i) another full restart-free session with the same test, and (ii) a pre-registered FORCED carrier for the depth arm (as P0-6(a) already names a forced restart with a dispatch attempt for the dispatch arm). The window closed at 21:00Z; the joint deploy (OLD Claude's P-14b, ANALYST Claude's cron verifier, B-ENTRY-GATE increment B) may now restart staging.
+
