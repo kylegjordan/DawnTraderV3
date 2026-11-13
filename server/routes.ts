@@ -13432,6 +13432,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   // B-PRICE-FEED-COVERAGE increment 0, Step 7 (Langston 2026-11-13): the open depth gate's counters, read-only — the
   // per-class evaluation count (the denominator) beside the per-class:reason block count (`xstock_spot:cold_tick` is the
   // forced carrier's bucket). Both are process-local, so the same pid + uptime controls as the dispatch route.
+  // ⛔ `evaluations` is the denominator ONLY for the depth gate's own buckets: `blocks` also holds the price-liveness and
+  // consumption-freshness buckets, which run only after the gate passes (see the `_gateEvaluations` note, depth-source.ts).
   apiRouter.get('/active-engine/diagnostics/depth-gate', authenticateToken, async (_req: AuthenticatedRequest, res) => {
     try {
       const { getDepthGateEvaluationStats, getDepthGateBlockStats } = await import('./services/execution/depth-source.js');

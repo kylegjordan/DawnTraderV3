@@ -367,6 +367,11 @@ export function getDepthGateBlockStats(): Record<string, { count: number; lastRe
 // B-PRICE-FEED-COVERAGE increment 0, Step 7 (Langston 2026-11-13, #661 leg 3): the DENOMINATOR. The block counter above
 // counts refusals only, so a window with zero blocks cannot tell "the gate ran and passed" from "the gate never ran for
 // this class". One count per open-path evaluation, per class, recorded by the sole open-path caller before it asks.
+// ⛔ IT IS THE DENOMINATOR ONLY FOR THE BUCKETS `_evaluateOpenDepthGate` ITSELF RETURNS (`active-execution-engine.ts`, the
+// `DEPTH_GATE_BLOCK` branch). `_gateBlocks` has two more writers reached only AFTER the gate passes — the xStock price
+// liveness (`no_data` / `sparse_snapshots` / `flat_last` / `liveness_*`) and consumption freshness (`stale_at_consumption`
+// / `consumption_clock_invalid`) — whose population is strictly smaller; a ratio over `evaluations` for those buckets
+// mixes two populations in one row (Langston Step 4, 2026-11-13).
 const _gateEvaluations = new Map<string, { count: number; lastAt: number }>();
 
 /** Record one open-path depth-gate evaluation (the denominator; never throws). */
