@@ -7,7 +7,7 @@
 
 # ▶▶ CURRENT POSITION — READ THIS FIRST, BEFORE ANYTHING ELSE
 
-> ✅ **BACK ON CLAUDE 2026-11-13 (S6, acked 13:16Z).** Codex shift handover: `pm/handovers/2026-11-13_codex-to-claude.md` Infra section. Weekend (KD-74): after Fri 21:00Z, read-only row-166b xStock-slot/crypto-capacity evidence + prior weekends → NEW Claude; no policy change. No deploy/app restart 14:30-21:00Z today (NEW's price-feed window).
+> ✅ **BACK ON CLAUDE 2026-11-13 (S6, acked 13:16Z).** Codex shift handover: `pm/handovers/2026-11-13_codex-to-claude.md` Infra section. Weekend (KD-74): after Fri 21:00Z, read-only row-166b xStock-slot/crypto-capacity evidence + prior weekends + KD-76: every position open >7 days (strategy, asset class, age, unrealised result, slots held) → NEW Claude; close nothing, change nothing. No deploy/app restart 14:30-21:00Z today (NEW's price-feed window).
 > **A HEARTBEAT OR TIMER WAKE MEANS *RESUME*, NOT *REPORT*.** Read this block, then carry on from it.
 > **If BLOCKED-ON says Kyle, say NOTHING and do not work the item.**
 > ⚠️ **UPDATE THESE FOUR LINES AT EVERY STEP BOUNDARY.**
