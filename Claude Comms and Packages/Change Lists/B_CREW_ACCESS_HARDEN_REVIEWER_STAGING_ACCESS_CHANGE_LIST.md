@@ -152,3 +152,6 @@ The full 18-pair install comparator found this new artifact `MATCH` at mode `755
 deliberately mismatched positive control returned `DIFFERS`. It also reported three unrelated,
 pre-existing live differences (`coltrane-size-watch` and the two installed copies of
 `AGENT_AUTHORING_GUIDE.md`); those are not represented as part of this installation.
+
+## 2026-11-13 — one owed install TRANSFERRED to B-SIZE-WATCH-BREACH-ALARM (Infra Claude)
+The `coltrane-size-watch` difference named above (installed `ac244b69…` vs the repo's header-only update) is no longer this batch's to install. `B-SIZE-WATCH-BREACH-ALARM` changed that file and installed it at its reviewed ref `8a2cdefbb594754422fac1b5395d47a7ec8b9e30` (installed blob `ded9da661cb21ae8c5a225febfd8313ed1d2f348`), which carries the header update too. `verify-agent-artifacts.py 8a2cdefbb` now shows it MATCH; the two remaining DIFFERs are the installed copies of `AGENT_AUTHORING_GUIDE.md`, still this batch's. Record: `B_SIZE_WATCH_BREACH_ALARM_CHANGE_LIST.md`, Step 6.

@@ -143,3 +143,32 @@ New and changed fixtures:
 - **His own positive control:** a real resolve of an unknown id over the production transport → rc 1, empty stdout, stderr exactly `Alert 00000000-0000-0000-0000-000000000000 not found`. He re-ran the tests (75/0) and the mutants (15/15) himself from the ref blobs. The r1→r2 delta is only the four items.
 - **Folded (his §13 disposition 1):** Coltrane's missing-file run exits 4, outside his unit's `SuccessExitStatus=0 1`, so the drop-in `onfailure.conf` would ALSO page "the watch failed" for a run that worked: two pages for one condition. `coltrane-size-watch.service` now says `SuccessExitStatus=0 1 4` (a crash still exits 2 and pages). Langston's unit comment claimed "Parity with coltrane-size-watch.service", which is false for exit 4, so it is corrected in the comment only (his missing file exits 1, so `0 1` is the same rule there).
 - Cosmetic, recorded: the ENOENT line is `:457`, not `:456`.
+
+## Step 5 — CI green at the install ref
+`8a2cdefbb594754422fac1b5395d47a7ec8b9e30`, run `43450215613`: TypeScript Check, Test Suite, Build, Docker Build all success.
+
+## Step 6 — installed 2026-11-13 ~15:16Z (Infra Claude), Helsinki only; no app deploy, no restart of anything that trades
+- **Files** (`git show 8a2cdefbb:<path>` staged in `/root/b-sizewatch/inst`, each `git hash-object --no-filters` equal to its ref blob before install; installed with `install -o root -g root`, mode 0755 scripts / 0644 units):
+
+| file | before | after |
+|---|---|---|
+| `/usr/local/bin/langston-size-watch` | `336f8e9a…` (= the old repo blob, no prior drift) | `818a5d89…` |
+| `/usr/local/bin/coltrane-size-watch` | `ac244b69…` (the A8 drift) | `ded9da66…` — **ends the drift; transferred from B-CREW-ACCESS-HARDEN, noted in its change list** |
+| `/etc/systemd/system/langston-size-watch.service` | `6a4ebdae…` | `8f2ce658…` (comment only) |
+| `/etc/systemd/system/coltrane-size-watch.service` | `5e79dd9e…` | `80f7ce6f…` |
+
+- **Retired, not deleted:** all four old copies plus the stale `langston-size-watch.service.pre-successexit-20260911` moved to `/root/deploy-retired/20261113T151620Z-size-watch/`. `systemctl daemon-reload`.
+- **Read back:** `coltrane-size-watch.service` `SuccessExitStatus=0 1 4`, no `ExecStartPost`, `OnFailure=agent-unit-failure@coltrane-size-watch.service`. `langston-size-watch.service` `SuccessExitStatus=0 1`, `OnFailure=agent-unit-failure@langston-size-watch.service`. The drop-ins are untouched.
+- **`verify-agent-artifacts.py 8a2cdefbb`:** both scripts, both units and both drop-ins (mapped to `systemd/onfailure.conf`) MATCH. `match 23 | DIFFER 2 | missing 0`; the 2 are `AGENT_AUTHORING_GUIDE.md`, B-CREW-ACCESS-HARDEN's, and the tool's own positive control printed "DIFFERS — comparator works".
+- The timers were inactive at install (next runs 2026-11-14 05:41Z / 05:50Z), so no run raced the install.
+
+## Step 7 — first-pass live verification
+- **`langston-size-watch --fire-drill`** (15:16:52Z): exit 0. The Discord drill post `delivery: sent`. **Drill row `9f2d9024-1710-48c2-9e1f-4574510cd961`** under `langston-size-watch-breach-drill`, `info`, read back from the staging store as `resolved` by `cc-infra`, evidence its own id. `alerts: {}` (a drill touches no real key) and `heartbeat: skipped (drill)`.
+- **One real run of each through its unit** (`systemctl start`): both `Result=success`, `ExecMainStatus=0`.
+  - Langston, run row `2026-11-13T15:17:04Z`: `UNDER`, `alerts {missing: none, breach: none, archive: none, tamper: none}`, heartbeat `resolved c2dcb922…; armed 93dbb56c-06d1-467a-8d4a-bb9f7f53bcf4 for 2026-11-14T17:17:06Z`.
+  - Coltrane, run row `2026-11-13T15:17:07Z`: `UNDER`, `alerts {missing: none, breach: none}`, **his first staging heartbeat** `armed aa78ec84-a761-450e-85a7-56b0a0d6bdde for 2026-11-14T17:17:07Z`.
+- **Store census of the new keys** (whole file, 3,216 ids): 3 rows. `coltrane-size-watch-write-probe` resolved (the Step-2 probe), `langston-size-watch-breach-drill` resolved, `coltrane-size-watch-heartbeat` scheduled; Langston's heartbeat `93dbb56c` is scheduled. **No row under any real condition key**, which is right on an UNDER day. The same query found the drill and both heartbeats, so its silence on the real keys is not blind.
+- **Not reachable live, stated (P7):** a real breach, a missing file, an archive over 500 MiB and a tamper cannot be produced on demand and must not be forced. The real keys' add and resolve are shown by the drill (same helper, different key) plus fixtures L1-L9, LA, LR and C1-C5. The re-mint after a hand-resolve is carried by fixtures 2a and C2a alone.
+- **Still owed for Step 7:** read the first SCHEDULED runs (2026-11-14 ~05:41Z and ~05:50Z), so that each timer, not my hand, resolves its heartbeat and re-arms.
+
+**STEP: 7 of 11 · NEXT STEP: 8 of 11** — Langston's independent second pass, after the scheduled runs.
