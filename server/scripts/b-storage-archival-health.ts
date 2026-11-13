@@ -107,7 +107,8 @@ const CHECKS: CheckSpec[] = [
     label: 'B75 hot→warm retention sweep (daily 02:15 UTC)',
     logFile: 'b75-retention.log',
     schedule: '15 2 * * *',
-    donePattern: /DONE .*\bfailed=(\d+)\b.*\bplain_failed=(\d+)\b/,
+    // three failure counters, all summed (Langston Step 4 F2): partitions, the plain lane, the snapshot lane
+    donePattern: /DONE .*\bfailed=(\d+)\b.*\bplain_failed=(\d+)\b.*\bsnapshot_failed=(\d+)\b/,
     startPattern: /\[B75 sweep\] started at (\S+) run_id=/,
     onMissing: 'alert',
   },
@@ -202,7 +203,12 @@ function readCrontab(): { text: string } | { text: null; why: string } {
   try {
     return { text: execFileSync('sudo', ['-n', 'crontab', '-l'], { encoding: 'utf-8', timeout: 10_000, stdio: ['ignore', 'pipe', 'pipe'] }) };
   } catch (err) {
-    return { text: null, why: String((err as Error)?.message ?? err).split('\n')[0].slice(0, 200) };
+    // The reason sudo gives is on stderr ("sudo: a password is required"); message's first line only names the
+    // command (Langston Step 4 F1), so the page carries both.
+    const e = err as Error & { stderr?: string | Buffer };
+    const head = String(e?.message ?? err).split('\n')[0];
+    const cause = e?.stderr ? String(e.stderr).trim().split('\n')[0] : '';
+    return { text: null, why: (cause ? `${head} — ${cause}` : head).slice(0, 200) };
   }
 }
 

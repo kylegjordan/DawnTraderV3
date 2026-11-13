@@ -19,7 +19,7 @@ const read = (rel: string) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 const T = (iso: string) => Date.parse(iso);
 
 const RET_START = /\[B75 sweep\] started at (\S+) run_id=/;
-const RET_DONE = /DONE .*\bfailed=(\d+)\b.*\bplain_failed=(\d+)\b/;
+const RET_DONE = /DONE .*\bfailed=(\d+)\b.*\bplain_failed=(\d+)\b.*\bsnapshot_failed=(\d+)\b/;
 const TIER_START = /\[disk-tiering\] (\S+) started run /;
 const TIER_DONE = /DONE moved=\d+ failed=(\d+)/;
 const ROT_START = /\[B75 rotator\] started at (\S+) /;
@@ -31,10 +31,10 @@ const tierRun = (day: string, moved = 28, failed = 0) => [
   `[disk-tiering] ${day}T02:45:06.830Z moved disk_file.phase15b_dbs_telemetry/2026-10-08.jsonl bytes=93868190 gz=15904487 newlines=247470`,
   `[disk-tiering] ${day}T02:45:24.811Z DONE moved=${moved} failed=${failed} freed_bytes=132757058 free_after=31757565952 stopped_by=none hot_days=35`,
 ].join('\n');
-const retRun = (day: string, failed = 0, plainFailed = 0) => [
+const retRun = (day: string, failed = 0, plainFailed = 0, snapshotFailed = 0) => [
   `[B75 sweep] started at ${day}T02:15:03.042Z run_id=5e6f1dd5-09c7-426b-a0fb-5bc420a1b55c slice_threshold_hot_bytes=3221225472`,
   `[B75 sweep] xstock_perp_ticker_snap: no partitions older than 2026-10-01 (retentionDays=30)`,
-  `[B75 sweep] DONE — examined=5 dropped=5 failed=${failed} bytes_freed=3873783808 bytes_archived=472274229 plain_deleted=132480 plain_failed=${plainFailed} snapshot_deleted=29055 snapshot_failed=0 duration_ms=868264`,
+  `[B75 sweep] DONE — examined=5 dropped=5 failed=${failed} bytes_freed=3873783808 bytes_archived=472274229 plain_deleted=132480 plain_failed=${plainFailed} snapshot_deleted=29055 snapshot_failed=${snapshotFailed} duration_ms=868264`,
 ].join('\n');
 const rotRun = (day: string) => [
   `[B75 rotator] started at ${day}T03:00:02.960Z dry_run=false cold_provider=b2 cold_configured=true warm_retention_days=365`,
@@ -55,6 +55,10 @@ describe('AP-7 evaluateRun — the run is the last start at/after the fire, and 
   it('failures summed from the DONE after the last start (retention has two groups)', () => {
     const v = evaluateRun({ live: `${retRun('2026-11-12')}\n${retRun('2026-11-13', 2, 3)}`, rotated: '', startPattern: RET_START, donePattern: RET_DONE, dueMs: due('2026-11-13T02:15:00Z') });
     expect(v.kind === 'ok' && v.failedTotal).toBe(5);
+  });
+  it('a snapshot-lane-only failure is counted too (Langston F2): failures summed over all three counters', () => {
+    const v = evaluateRun({ live: retRun('2026-11-13', 0, 0, 4), rotated: '', startPattern: RET_START, donePattern: RET_DONE, dueMs: due('2026-11-13T02:15:00Z') });
+    expect(v.kind === 'ok' && v.failedTotal).toBe(4);
   });
   it('crash after the start: the previous night’s DONE does not count — incomplete', () => {
     const live = `${tierRun('2026-11-12')}\n[disk-tiering] 2026-11-13T02:45:02.265Z started run free=1 cwd=/x\n[disk-tiering] 2026-11-13T02:45:03.000Z moved a bytes=1 gz=1 newlines=1`;
@@ -184,7 +188,7 @@ describe('AP-7 schedule_unverified streak (r2 (b), r4 4(ii), C-r4-1)', () => {
 describe('AP-7 fences — the patterns match what each subject writes (C-5, the amendment-1 shape)', () => {
   const checker = read('server/scripts/b-storage-archival-health.ts');
   const subjects: Array<[string, string[], RegExp, RegExp]> = [
-    ['server/scripts/b75-retention-sweep.ts', ['`[B75 sweep] started at ${startedAt.toISOString()} run_id=', '[B75 sweep] DONE — examined=', 'failed=${', 'plain_failed=${'], RET_START, RET_DONE],
+    ['server/scripts/b75-retention-sweep.ts', ['`[B75 sweep] started at ${startedAt.toISOString()} run_id=', '[B75 sweep] DONE — examined=', 'failed=${', 'plain_failed=${', 'snapshot_failed=${'], RET_START, RET_DONE],
     ['server/scripts/b75-cold-rotator.ts', ['`[B75 rotator] started at ${startedAt.toISOString()} `', '[B75 rotator] DONE candidates=${', 'rotated=${', 'failed=${'], ROT_START, ROT_DONE],
     ['server/scripts/b-disk-file-tiering.ts', ['log(`started run free=${', "log('DONE moved=0 failed=1 env_missing=1')", "log('DONE moved=0 failed=1 lock_held=1')", 'DONE moved=${'], TIER_START, TIER_DONE],
   ];
