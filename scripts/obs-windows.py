@@ -21,7 +21,8 @@ A window is STALE when now is past its review_by, or past its end, or past its e
 block a deploy (scope J3); it is still reported, and dt-deploy still notifies its owner.
 
 EXIT: 0 = read, and (check) the deploy may proceed · 4 = the register is unusable · 5 = (check) the deploy must not
-proceed: an open window is not named, or a name is not an open window · 2 = this tool was called wrongly.
+proceed: an open window is not named · 7 = (check) an --in-window name is not an open window, or is given twice ·
+2 = this tool was called wrongly. (5 and 7 are separate so dt-deploy names the RIGHT cause - Langston Step 8 FINDING-1.)
 OUTPUT (stdout, one fact per line, values never contain spaces except after the last field):
   WINDOW <batch> <owner> <open|stale> <until-text>
   HOLD <hold> <row> <batch> <landing_sha>          (one line per pending batch of an unreleased hold)
@@ -254,10 +255,10 @@ def main(argv, stdin, out, err):
             if nm not in windows:
                 err.write("WINDOWS REFUSED: --in-window names something that is not an open window "
                           "(%d chars, not echoed). Open now: %s\n" % (len(nm), ", ".join(sorted(windows)) or "none"))
-                return 5
+                return 7
             if nm in named:
                 err.write("WINDOWS REFUSED: --in-window names the same window twice\n")
-                return 5
+                return 7
             named.add(nm)
     unnamed = [b for b in sorted(windows) if states[b][0] == "open" and b not in named]
     if unnamed:

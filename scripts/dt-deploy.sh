@@ -258,6 +258,9 @@ case "$WIN_RC" in
   0) ;;
   4) win_refuse 4 "the observation-window register is unusable (the reason is printed above). Fail-closed: fix it by a commit to the branch (no deploy needed)." ;;
   5) win_refuse 5 "this deploy would land inside an open observation window (named above)." ;;
+  # Step 8 FINDING-1 (Langston): a BAD NAME is a different cause from an UNNAMED window; "would land inside an open
+  # window" when none is open sends a deployer under pressure after the wrong thing. Same exit 5, its own text.
+  7) win_refuse 5 "--in-window names something that is not an open window, or names one twice (printed above). Check the batch id against the register; nothing was touched." ;;
   *) win_refuse 4 "$OBS_WINDOWS exited $WIN_RC - treated as an unusable register." ;;
 esac
 # || true: under pipefail a no-match grep would trip set -e here, before the explicit refusal below can speak.

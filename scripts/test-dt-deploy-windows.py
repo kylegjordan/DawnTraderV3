@@ -166,8 +166,12 @@ out = case("(e) worktree copy differs from HEAD's; HEAD's open window wins", H +
            "B-Z is in an open observation window")
 check("(e) ... and the refusal names the register it read (C-2)", "register_sha=" in out and "register_blob=" in out, out)
 # a name that is not an open window, and the --in-window refusal arms
-case("an --in-window name that is not open, not echoed", H + "\n" + win("B-X", "cc-b") + "\n",
+out = case("an --in-window name that is not open, not echoed", H + "\n" + win("B-X", "cc-b") + "\n",
      ["--in-window", "B-X,TOPSECRET"], 5, "not echoed")
+check("FINDING-1: a bad name gets ITS OWN reason, never 'would land inside an open window'",
+      "names something that is not an open window" in out and "would land inside" not in out, out)
+case("FINDING-1: a bad name with NO window open at all", H + "\n", ["--in-window", "B-TYPO"], 5,
+     "names something that is not an open window", absent="would land inside")
 rc, out = deploy(BASE, "--in-window=B-X")
 check("the '=' form of --in-window is refused", rc == 1 and "SPACE-separated" in out, out)
 # PASS through the check, then the dirty-tree refusal (exit 3): proves the check passed AND (C-13) no notice before it
