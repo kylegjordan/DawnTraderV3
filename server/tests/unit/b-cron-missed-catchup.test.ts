@@ -19,6 +19,7 @@ import {
   type LockedOccurrenceStore,
   type OccurrenceStore,
 } from '../../services/cron-occurrence-runner.js';
+import { RUNNER_AUTHORED_FIRE_META_KEYS } from '../../services/cron-registry.js';
 import type {
   CronJobRunResult,
   CronRecoveryPolicyKey,
@@ -360,8 +361,16 @@ describe('B-CRON-MISSED-CATCHUP occurrence runner', () => {
 
   it('a job\'s own meta cannot override the fire row\'s identity fields', async () => {
     const f = fixture({
-      run: async () => ({ meta: { proof: true, trigger_source: 'poll', occurrence_id: 'forged' } }),
-      beforeRun: async () => ({ trigger_source: 'boot', occurrence_id: 'forged-before' }),
+      // Deliberately violates JobFireMeta (a type error without the casts) to
+      // prove the runtime ordering holds even if a job bypasses the type.
+      run: async () => ({
+        meta: {
+          proof: true, trigger_source: 'poll', occurrence_id: 'forged',
+          duration_ms: -1, lag_ms: -1, policy_version: 'forged',
+        },
+      }) as unknown as CronJobRunResult,
+      beforeRun: (async () => ({ trigger_source: 'boot', occurrence_id: 'forged-before' })) as unknown as
+        NonNullable<RegisteredCronJob['recovery']>['beforeRun'],
     });
     const boundary = new Date('2026-11-12T12:01:00.000Z');
     const result = await f.runner.runNatural(f.job.name, boundary);
@@ -370,7 +379,34 @@ describe('B-CRON-MISSED-CATCHUP occurrence runner', () => {
     expect(meta.trigger_source).toBe('cron');
     expect(meta.occurrence_id).toBe([...f.store.rows.values()][0].id);
     expect(meta.occurrence_id).not.toMatch(/forged/);
+    expect(meta.duration_ms).toBeGreaterThanOrEqual(0);
+    expect(meta.lag_ms).toBeGreaterThanOrEqual(0);
+    expect(meta.policy_version).toBe(CRON_RECOVERY_POLICY_VERSION);
     expect(meta.proof).toBe(true);
+  });
+
+  it('every reserved fire-meta key is runner-authored: forged values never survive, and the list matches the runner', async () => {
+    const forged = Object.fromEntries(RUNNER_AUTHORED_FIRE_META_KEYS.map((key) => [key, '__forged__']));
+    const f = fixture({
+      run: async () => ({ meta: { ...forged, proof: true } }) as unknown as CronJobRunResult,
+      beforeRun: (async () => ({ ...forged })) as unknown as NonNullable<RegisteredCronJob['recovery']>['beforeRun'],
+    });
+    const result = await f.runner.runNatural(f.job.name, new Date('2026-11-12T12:01:00.000Z'));
+    expect(result.status).toBe('succeeded');
+    const meta = f.writeFireRow.mock.calls[0][0].meta as Record<string, unknown>;
+    for (const key of RUNNER_AUTHORED_FIRE_META_KEYS) {
+      expect(meta[key], key).toBeDefined();
+      expect(meta[key], key).not.toBe('__forged__');
+    }
+    expect(meta.proof).toBe(true);
+
+    // Source tie: the keys the runner writes AFTER the job's spreads are
+    // exactly this list, so adding or dropping one on either side fails here.
+    const source = readFileSync(resolve('server/services/cron-occurrence-runner.ts'), 'utf8').replace(/\r\n/g, '\n');
+    const call = source.slice(source.indexOf('await this.deps.writeFireRow({'));
+    const tail = call.slice(call.indexOf('...resultMeta,') + '...resultMeta,'.length, call.indexOf('},'));
+    const trailing = [...tail.matchAll(/^\s*([a-z_]+):/gm)].map((m) => m[1]);
+    expect([...trailing].sort()).toEqual([...RUNNER_AUTHORED_FIRE_META_KEYS].sort());
   });
 
   it('reconstructs the missed boundary before node-cron\'s advanced event date', async () => {
@@ -1247,6 +1283,46 @@ describe('B-CRON-MISSED-CATCHUP advisory lock session', () => {
 });
 
 describe('B-CRON-MISSED-CATCHUP source and registration fences', () => {
+  it('the registry type refuses a runner-authored fire-meta key from a job (compile-time fence)', () => {
+    // Tests are outside the tsc project, so this compiles a virtual job file
+    // against the real cron-registry.ts and reads the diagnostics directly.
+    const virtualName = '__job_fire_meta_fence__.ts';
+    const virtualPath = resolve('server/services', virtualName).replace(/\\/g, '/');
+    const lines = [
+      "import type { CronJobRunResult, JobFireMeta } from './cron-registry';",
+      'export const allowed: JobFireMeta = { proof: true, count: 3 };',
+      "export const reservedIdentity: CronJobRunResult = { meta: { trigger_source: 'poll' } };",
+      'export const reservedMeasure: JobFireMeta = { duration_ms: 1 };',
+      "export const reservedBefore: JobFireMeta = { occurrence_id: 'x' };",
+    ];
+    const options: ts.CompilerOptions = {
+      strict: true, noEmit: true, skipLibCheck: true, types: [],
+      target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ESNext,
+      moduleResolution: ts.ModuleResolutionKind.Node10,
+    };
+    const host = ts.createCompilerHost(options);
+    const getSourceFile = host.getSourceFile.bind(host);
+    const fileExists = host.fileExists.bind(host);
+    const isVirtual = (f: string) => f.replace(/\\/g, '/').endsWith(`/server/services/${virtualName}`);
+    host.getSourceFile = (f, lang, ...rest) =>
+      isVirtual(f) ? ts.createSourceFile(f, lines.join('\n'), lang) : getSourceFile(f, lang, ...rest);
+    host.fileExists = (f) => isVirtual(f) || fileExists(f);
+    const program = ts.createProgram([virtualPath], options, host);
+    const virtual = program.getSourceFiles().find((sf) => isVirtual(sf.fileName));
+    expect(virtual).toBeDefined();
+    const errors = ts.getPreEmitDiagnostics(program, virtual)
+      .filter((d) => d.category === ts.DiagnosticCategory.Error && d.file && d.start !== undefined);
+    const errorLines = errors.map((d) => d.file!.getLineAndCharacterOfPosition(d.start!).line);
+    // Pinned to TS2322 (not assignable): an unrelated error on those lines
+    // must not read as the reservation firing.
+    expect(errors.filter((d) => d.code !== 2322).map((d) => d.code)).toEqual([]);
+    // Line 0 is the import: it must resolve (a missing module would also be an
+    // error, which would read as a false pass on the reserved lines).
+    expect(errorLines).not.toContain(0);
+    expect(errorLines).not.toContain(1);
+    expect([...new Set(errorLines)].sort()).toEqual([2, 3, 4]);
+  });
+
   it('registers the forward migration and keeps the rollback out of the manifest', () => {
     const manifest = readFileSync(resolve('drizzle/migrations/MANIFEST.txt'), 'utf8')
       .split(/\r?\n/)

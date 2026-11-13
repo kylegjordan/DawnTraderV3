@@ -3,9 +3,15 @@
  * B-NEW-49 — scheduled-jobs-audit writer (2026-05-31)
  * ═══════════════════════════════════════════════════════════════════════════
  *
- * Shared writer for the `scheduled_tasks_audit` table. Every node-cron
- * callback in the system MUST call `writeFireRow()` on every fire (success
- * path AND error path) so silent failures become detectable via SQL query:
+ * Writer for the `scheduled_tasks_audit` table. Its ONLY production caller is
+ * the occurrence runner (`cron-occurrence-runner.ts`), which writes one row
+ * per fire (success AND error) with the runner-authored identity the
+ * fire-evidence verifier requires. A new scheduled job registers with the
+ * runner through `cron-registry.ts`; it does NOT call this writer directly,
+ * or its rows would lack that identity and read as missed. Poll and boot rows
+ * are written by `session-lifecycle-controller.ts` with its own type
+ * (corrected in B-CRON-MISSED-CATCHUP Step 9). Silent failures are
+ * detectable via SQL query:
  *
  *   SELECT task_name, MAX(fired_at), NOW() - MAX(fired_at) AS staleness
  *   FROM scheduled_tasks_audit

@@ -352,6 +352,7 @@ import {
   assessSufficiency,
   getTickerWitness,
   recordDepthGateBlock,
+  recordDepthGateEvaluation,
   applyXstockEntryTickAge,
   type DepthSnapshot,
 } from './execution/depth-source.js';
@@ -6249,6 +6250,9 @@ export class ActiveExecutionEngine {
     // P19-B4b.1 (#295): 24/5 book-depth-sufficiency + warmth gate BEFORE the fill,
     // replacing the B4a-C3 RTH liquid-fill-window clock proxy. Fail-closed — a missing
     // config / cold / thin / insufficient book skips the open loudly (observable counter).
+    // B-PRICE-FEED-COVERAGE increment 0, Step 7: count every evaluation BEFORE asking, so the block counter has a
+    // denominator — zero blocks then means "evaluated N times, refused none", never "maybe never ran" (#661 leg 3).
+    recordDepthGateEvaluation(_openClass);
     const _gate = await this._evaluateOpenDepthGate(signal.symbol, _openClass, signal.entryPrice * quantity);
     if (!_gate.pass) {
       console.warn(`[P19-B4b.1][DEPTH_GATE_BLOCK:${this.mode}] ${signal.symbol} (${_openClass}) ${_gate.reason} — skipping open`);

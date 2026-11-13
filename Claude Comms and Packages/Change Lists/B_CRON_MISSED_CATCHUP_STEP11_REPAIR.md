@@ -820,8 +820,8 @@ it passes. Both suites: 59 of 59. `tsc --noEmit`: 324 errors before and after
 Re-derived before filing: `GOVERNANCE_EXCEPTIONS.md` held 0 rows naming this
 batch (positive control 11 for `B-PRICE-SIDE-BY-JOB`); the alert store's 443
 governance rows (merged by id, non-null fields kept) name it 0 times while the
-open-checker titles name 28 distinct batches (Langston: 26 by his read; same
-conclusion). Filed: the declared-`open` row in `GOVERNANCE_EXCEPTIONS.md`, and
+two open-checker families name 26 distinct batches (corrected in §14: the 28
+first stated here was the `open > 48h` family's ROW count). Filed: the declared-`open` row in `GOVERNANCE_EXCEPTIONS.md`, and
 a ➕ instance on `#744` (owner CC-A) in `RUNNING_ISSUES.md`. The cause is
 recorded as a hypothesis.
 
@@ -830,3 +830,83 @@ and a deploy before Step 10.** It rides the next deliberate deploy; nothing
 restarts for it alone.
 
 **STEP: 9 of 11 — fix landed, NEXT: Langston's Step 4 on the carry-1 diff.**
+
+## 14. STEP 4 PROCEED ON CARRY 1, AND ITS THREE NOTES FOLDED (CC-C, 2026-11-13)
+
+Langston ruled **Step-4 PROCEED** on carry 1 at `7ddaadb83` (Discord
+`1570923179759771802`), re-reading the patch, the verifier's exact and legacy
+arms and the `writeFireRow` caller census himself. Three notes, none blocking,
+all folded here for the same deploy:
+
+1. **All five runner-authored keys are written last, and reserved on the
+   interface a job author reads.** His discriminator: not "identity" but *who is
+   the only party that can know the value* — `lag_ms` (the runner's
+   post-`markRunning` recheck), `policy_version` (a runner constant) and
+   `duration_ms` (`completedAt − firedAt`) cannot be computed by a job, so an
+   override only publishes a false runner measurement. `cron-registry.ts` now
+   exports `RUNNER_AUTHORED_FIRE_META_KEYS` and `JobFireMeta`
+   (`Record<string, unknown>` with those five as `?: never`);
+   `CronJobRunResult.meta` and `beforeRun`'s return use it, so returning a
+   reserved name is a **type error**, not a silent override. The runner writes
+   `...beforeMeta, ...resultMeta` first and the five keys after them.
+2. **The stale header in `scheduled-jobs-audit.ts`** ("every node-cron callback
+   MUST call `writeFireRow()`") now says the runner is the only production
+   caller and a new job registers through `cron-registry.ts`, never wiring this
+   writer directly.
+3. **The "28" was wrong:** it was the `open > 48h` family's row count. Re-derived
+   (merged by id, non-null fields kept): `open > 48h` 28 rows / 19 batches,
+   `OPEN > 7d` 22 rows / 17 batches, **26 distinct in the union** — Langston's
+   number. Corrected in `GOVERNANCE_EXCEPTIONS.md`, the `#744` instance, and §13.
+   The batch's name appears in 23 non-governance rows of the same file, so the
+   search reaches the string.
+
+**Fences.** (a) The runtime test now forges all five keys from `run` and
+`beforeRun`; the row must carry the runner's values. Mutation: with the
+pre-fold runner (identity last, measurements first) it fails
+`expected -1 to be greater than or equal to 0`. (b) A new compile-time fence
+compiles a virtual job file against the real `cron-registry.ts` (tests are
+outside the tsc project) and requires errors on exactly the three reserved-key
+lines, none on the import or the allowed line. Mutation: with `?: unknown`
+instead of `?: never` it fails (no errors). Both suites 60/60; `tsc --noEmit`
+324 = baseline, none in the touched files.
+
+**STEP: 9 of 11 — fold landed, NEXT: Langston confirms the fold at the ref, then
+it rides the next deliberate deploy (Step 6/7 on that restart), then Step 10.**
+
+## 15. LANGSTON CONFIRMS THE FOLD (PROCEED TO DEPLOY), AND HIS CLOSING NOTES FOLDED (CC-C, 2026-11-13)
+
+Langston **CONFIRMED** the §14 fold at `99722172178d431918eca9ed8265c2364af1307d`
+(Discord `1570929969817854053`): ancestor of his graded head `f8020547`, all
+touched files byte-identical; CI `43518141652` 4/4. He rebuilt the compile
+fence himself against TS 5.6.3: as shipped `[2,3,4]` all TS2322; with
+`?: unknown` `[]`; with a broken import `[0]` only, so a resolution failure
+cannot read as a pass. He re-derived that `JobFireMeta` rejects nothing a
+current job returns (six registrations plus the harness). **PROCEED to the
+deploy.** His non-blocking notes, folded before that deploy so the deployed
+code is final:
+
+- **A — the reservation binds object literals only.** Measured by him: a
+  `Record<string, unknown>` value, a spread of one, or `{duration_ms: undefined}`
+  all pass the type. The `cron-registry.ts` comment now says a reserved key
+  *written as an object literal* is a type error, that a wider value is not
+  caught, and that the runner's write-last ordering is what holds at runtime.
+- **B — the list is now tied to the runner.** A new test forges every key in
+  `RUNNER_AUTHORED_FIRE_META_KEYS` (iterated, not named) from both `run` and
+  `beforeRun` and requires none to survive, and a source tie reads the keys the
+  runner writes after `...resultMeta,` in its `writeFireRow` call and requires
+  them to equal the list. Mutation: dropping `'policy_version'` from the list
+  fails the tie (`expected [5 keys] to deeply equal [4 keys]`).
+- **C — the second stale header.** `xstock-qd-probe-cron.ts` no longer says
+  the job calls `writeFireRow`; the runner writes its fire row.
+- **Pin.** The compile fence now also requires every error on the virtual file
+  to be TS2322, so an unrelated error cannot read as the reservation firing.
+- **Slug nit.** The §14 commit's trailer reads `wrong-object`; the shape is
+  `wrong-population` (a row count standing in for a distinct union). The pushed
+  commit is not rewritten; this line is the correction of record.
+
+Both suites 61/61, run twice. One earlier combined run reported a test-file
+failure that was not captured and did not recur in the two reruns; recorded,
+not explained.
+
+**STEP: 9 of 11 — fold confirmed, NEXT: Step 6/7 on the next deliberate deploy,
+then Step 10.**
