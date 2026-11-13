@@ -13447,8 +13447,9 @@ The deploy chain MUST run `npm run db:migrate` between `npm run build` and `pm2 
 # B-DEPLOY-LOCK (#649, 2026-08-06): the invariant above is now ENFORCED by the
 # sanctioned deploy tool — migrate runs in-chain, between build and restart,
 # on every deploy. The raw chain is retired from all prescriptive docs.
-ssh root@188.245.193.8 "su - deploy -c 'dt-deploy <full-40-char-sha> --by <session>'"
+ssh root@188.245.193.8 "su - deploy -c 'dt-deploy <full-40-char-sha> --by <session> [--in-window <batch,...>]'"
 ```
+**Observation windows (`B-DEPLOY-WINDOW-GUARD`, 2026-11-13):** before the reset the tool reads `1-system-manual/DEPLOY_WINDOWS.jsonl` at the branch head; exit 4 = register missing or unusable, exit 5 = an open window not named (or a bad name), exit 6 = the in-window notice could not be written. Full behaviour: `workflow-06-deploy` and the SIM entry.
 
 Without the `db:migrate` step, every trade close fails the CHECK constraint AND `rehydrateOpenTrades` fails on the missing column. B-NEW-36 sub-batch (a) (`_migrations` ledger reconciliation) is the prerequisite that lets `db:migrate` run cleanly through the runner — without (a)'s 17-row backfill, the runner would fail on an unrelated pending migration's assertion before reaching B-NEW-36's two migrations.
 
