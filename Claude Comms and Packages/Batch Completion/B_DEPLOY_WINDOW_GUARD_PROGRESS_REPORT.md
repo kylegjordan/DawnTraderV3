@@ -38,23 +38,37 @@ Before a staging deploy, `dt-deploy` now reads a register of other batches' open
 
 **No UI surface.** The batch changes deploy tooling, a root check and a Discord watcher; nothing on the staging dashboard changed. Stated per `workflow-07-verify-cc`.
 
-## 3. ⛔ PRE-REGISTERED CLOSE CRITERION — written before the data (do not mine the window)
+## 3. ⛔ PRE-REGISTERED CLOSE CRITERION — written before the data (do not mine the window) — r2 (Langston A-1 to A-4, Discord `1570944885559791717`)
 
-**O-1, the first real deploy into a registered window.** PASS when, for that deploy:
-- (a) a notice line appears in `/home/deploy/dawntrader-deploy.notice`, carrying its `attempt_key`;
-- (b) a START post from `Deploy notice` opens with every owner session's name, and each owner's watcher records the wake;
-- (c) within 30 minutes, a COMPLETED or DID NOT COMPLETE post goes to the same owners;
-- (d) the watcher's log shows `RESOLVED deploy-in-window:<batch>:<sha>:<attempt_key> rows=1` for each window, and the alert rows read `resolved` by `deploy-notice-watcher`.
+**PREREQUISITE — THE CLOCK HAS NOT STARTED (A-3).** At `75aa89868` the register holds one `open` and its `close`, both my own Step-7 test: **zero windows filed by anyone else.** O-1, O-2 and O-3 all need someone else to file a window, which is OBJ-4 (NEW Claude's first rows). **The observation starts at the first window filed by another owner.** Until then nothing below can occur and nothing is being measured.
 
-FAIL if any of (a) to (d) is missing, or if `rows=0` where an alert was raised (a broken key join).
+**O-1, the first deploy that PROCEEDS with `--in-window` into a registered window (A-2).** A deploy that is refused is neither pass nor fail for O-1; it is O-3. PASS when, for that deploy:
+- (a) **a notice line appears**, carrying its `attempt_key`. Read-site: staging `/home/deploy/dawntrader-deploy.notice`.
+- **(b-i) the START post's opening list names every owner session** (a session owner by its wake name; Kyle as `Kyle`). This is the code's own obligation, always testable. Read-site: Helsinki `/var/log/cc-discord-inbox.jsonl`, the `kind=cc_outbound`, `sender=Deploy notice` row.
+- **(b-ii) a wake record, but only for owners that are Claude-backed AND open at that moment**, enumerated when the result is judged. Read-site: that owner's watcher line `WAKE[Deploy notice via Discord-><ALIAS>]`, quoted by the owner in-channel with the post's message id. An owner that cannot be woken (a closed session, or a seat held by the Codex crew) is discharged by the alert row plus the post, and recorded as a residual, never as a FAIL.
+- (c) **within 30 minutes, a COMPLETED or DID NOT COMPLETE post** goes to the same owners. Same read-site as (b-i).
+- (d) **the watcher logs `RESOLVED deploy-in-window:<batch>:<sha>:<attempt_key> rows=1` for each window**, and the alert rows read `resolved` by `deploy-notice-watcher`. Read-sites: Helsinki `/var/log/dt-deploy-notice/log`; staging `/var/log/dawntrader/system-alerts.jsonl`, rows merged by id, keys `deploy-in-window:*`.
+
+FAIL if (a), (b-i), (c) or (d) is missing, or if `rows=0` where an alert was raised (a broken key join). A missing (b-ii) wake for an owner that could not be woken is not a FAIL.
 
 **O-2, the first stale window the daily census finds.** PASS when:
-- the daily dt-install-drift run raises `deploy-window-stale:<batch>` naming that window's owner, with its verdict still PASS;
+- the daily `dt-install-drift` run raises `deploy-window-stale:<batch>` naming that window's owner, with its verdict still PASS;
 - once the owner amends or closes the window, a later run resolves that alert as `dt-install-drift`.
 
-FAIL if the alert never mints, if the verdict goes red, or if the alert is left active after the register no longer shows the window stale.
+Read-sites: staging `journalctl -u dt-install-drift.service` (the `deploy_windows` OK line) and `/var/log/dawntrader/system-alerts.jsonl` (keys `deploy-window-stale:*`). FAIL if the alert never mints, if the verdict goes red, or if the alert stays active after the register no longer shows the window stale.
 
-**Window shape:** a quantity, not a period: one occurrence each. There is no deadline; the batch waits for real events. **What closes it:** the data above **and** a decision recorded on it, by me with Langston.
+**O-3, the first refusal in the wild (A-2): a deploy that does NOT name an open window.** PASS when it exits 5, the app clone's HEAD and reflog are unchanged, and no notice line or alert is written. Read-sites: the deployer's own output; staging `git -C /home/deploy/dawntrader reflog`; the notice file; the alert store.
+
+**Window shape:** a quantity, not a period: one occurrence each. **What closes it:** the data above **and** a decision recorded on it, by me with Langston.
+
+**Report-back point, not a date (A-3).** If **5** deploys pass after the first filed window without an O-1 occurrence, I report to Langston rather than letting the row age.
+
+**The governance nags this row will mint (A-3):**
+- the declared-open row draws `gov-staleopen` at 48 h and `gov-openmaxage` at 7 days, and keeps re-minting for the whole observation;
+- both are mine, and I never acknowledge them; re-justifying does not clear `gov-openmaxage`;
+- at close: flip the row to `open-retired` and push **before** resolving the nag, or the next checker tick re-mints it.
+
+**Known code residual surfaced by A-1, recorded rather than fixed here:** `WAKE_NAME` maps a SEAT (`cc-c` → "ANALYST Claude"), so when the Codex crew holds that seat, the owner lands in the post's opening list together with the line *"the alert reaches every session"*, though nothing wakes it. The adjudication rule in (b-ii) keeps this from deciding O-1; the wording in the post is the residual.
 
 ## 4. What is unproven, stated as unproven
 
