@@ -230,3 +230,24 @@ tsc 325 (baseline synced from 328: the three errors were inside the two deleted 
 1. **The restore path is UNEXERCISED** — 0 of 1,646 `closed_trades` rows carry `restored_at` / `restored_by_claimed` / `record_restored_from_position`. The migration is schema, not behaviour. **Successor: the first real orphaned-position restore**, named in the completion report; "migration applied" is never written as "restore proven".
 2. **Arm coverage 1 of 8.** The trailing-7-day paper population spans eight `(chosen_entry_mode, exit_fee_mode, asset_class)` cells: taker/taker xStock (71), maker/taker xStock (31), maker/taker crypto (17), taker/maker (9), maker/maker xStock (5), maker/maker crypto (2), plus the rest. **Covered: maker/taker crypto (LIGHTER).** Owed: every other cell that occurs, the modal **taker/taker xStock** first. ⚠️ The xStock venue is shut for the weekend (Saturday 2026-11-07; 18 of 19 open positions read `withoutPrice`, alert `ebf0b55d`), so xStock cells arrive from the Sunday reopen.
 3. **The UI legs** (Close All confirm, the refusal toast, the strip refresh, the per-row fee on pre-existing booked rows) — blocked on Kyle's Chrome session, which has signed out of staging.
+
+### Step 7 — owed item 2, arm coverage: DONE (OLD Claude, 2026-11-13 ~14:35Z, read-only on staging)
+**Population:** every `closed_trades` row with `mode = 'paper'` closed at or after `2026-11-07T16:23:40Z` (increment 3 + P-14 live at `d01da3d86`) — **90 closes**, grouped by `(chosen_entry_mode, exit_fee_mode, asset_class)`. Eight cells occurred; **all eight are covered and all eight are clean.**
+
+| entry | exit | class | n | fee missing | `total_fee` ≠ `fees` or `total_cost` | `net_pnl` ≠ `gross_pnl` − `total_fee` | entry fee rate | exit fee rate |
+|---|---|---|---:|---:|---:|---:|---|---|
+| taker | taker | xstock_spot | 30 | 0 | 0 | 0 | 0.1000 % | 0.1000 % |
+| maker | taker | xstock_spot | 25 | 0 | 0 | 0 | −0.0200 % (rebate) | 0.1000 % |
+| taker | maker | xstock_spot | 9 | 0 | 0 | 0 | 0.1000 % | −0.0200 % |
+| maker | taker | crypto_spot | 8 | 0 | 0 | 0 | 0.4000 % | 0.8000 % |
+| maker | — | xstock_spot | 6 | 0 | 0 | 0 | 0 | — |
+| maker | maker | xstock_spot | 6 | 0 | 0 | 0 | −0.0200 % | −0.0200 % |
+| maker | maker | crypto_spot | 4 | 0 | 0 | 0 | 0.4000 % | 0.4000 % |
+| maker | — | crypto_spot | 2 | 0 | 0 | 0 | 0 | — |
+
+- Every rate is single-valued per cell and equals the fee schedule (crypto 0.40 % maker / 0.80 % taker; xStock 0.10 % taker / −0.02 % maker rebate, `#1010`).
+- The two `exit_fee_mode` = null cells are all `never_filled` (2 crypto, 6 xStock): every money column 0 and no exit price — the P-14 write as designed.
+- **One record per position:** 0 duplicate `(symbol, mode, opened_at)` groups among the 90.
+- **Instrument note:** the fee-missing and arithmetic counts are `FILTER` counts over the same rows that produce the rates, so a zero there sits beside 90 rows the query demonstrably read.
+
+**Still owed before Step 8:** (1) the restore path — **0 of 1,734** `closed_trades` rows carry `restored_at` or `record_restored_from_position`; still unexercised, successor unchanged (the first real orphaned-position restore). (3) the UI legs. (4) the later default-drop commit and migration — a deploy, so not inside NEW Claude's 14:30-21:00Z window today.
