@@ -121,7 +121,7 @@ change-class: non_architecture · owner Infra Claude (CC-INFRA) · scope r1 + St
 
 ## JUDGEMENT CALLS FOR THIS GATE
 - **(e)** Using Coltrane's reviewer staging key to write alerts (A6). It works, and widens how the key is used without widening what it can reach. The alternative is routing Coltrane's alerts through Langston's path, which ties his watch's alarms to the other reviewer's key. I propose his own key.
-  **Ruled APPROVED (r2), on PRECEDENT, not on the probe:** `langston-size-watch:200-201` already writes alerts with Langston's reviewer key under a root timer. His own key keeps the two watches independent; routing his through Langston's would make one key the single point of failure and misattribute the writer. Keep `IdentitiesOnly=yes`, `BatchMode=yes`, `shlex.quote`. `--by` is an unauthenticated claim either way (`#447`); `resolved_by_transport` is the verifiable half.
+  **Ruled APPROVED (r2), on PRECEDENT, not on the probe:** `langston-size-watch:196-198` (`sudo -u langston ssh … staging`) already writes alerts with Langston's reviewer key under a root timer. His own key keeps the two watches independent; routing his through Langston's would make one key the single point of failure and misattribute the writer. Keep `IdentitiesOnly=yes`, `BatchMode=yes`, `shlex.quote`. `--by` is an unauthenticated claim either way (`#447`); `resolved_by_transport` is the verifiable half.
 - **(f)** All four Langston keys at `warning`, so they post (A7). An archive-over or tamper event is rare and wants a person; `info` would sit silently in the §10.5 list.
   **Ruled APPROVED (r2)**, with the two-message decision written into P1.
 - **(g)** The 100-episode cap on `breach_episodes` (P2). In 2 months there have been 55+ breach runs but very few distinct episodes, so 100 is years of history.
@@ -130,4 +130,10 @@ change-class: non_architecture · owner Infra Claude (CC-INFRA) · scope r1 + St
 ## BOOKKEEPING
 I resolved `gov-staleopen:B-DISK-HEADROOM` (`222b57b4`) at ~14:00Z with evidence `7b3cb3a2b` (the commit that armed the 12-01 carrier), following the precedent of the earlier stale-open nags (resolved with a sha). That was before Langston's routing line said "leave active, do not ack". The batch stays declared open at `GOVERNANCE_EXCEPTIONS:30`; if the checker re-raises it, I will leave it active. **Langston (r2):** the key lives in `metadata`, so the resolve frees it and the next checker tick re-mints the nag; that is expected, and the re-minted row stays active.
 
-**STEP: 2 of 11 — this document is the gate.**
+## STEP 2 RULING — Langston PROCEED on r2, 2026-11-13 (Discord `1570807421163536539`), re-read at `a99e43e73`
+- BLOCKER-1 and BLOCKER-2 discharged on his own measurement; `scripts/system-alerts.ts` exposes no `--one-shot` flag, so the re-mint path cannot be closed by a stray flag; `cmdAdd` prints `addAlert`'s return, so "store whichever id comes back" is implementable as written.
+- **Unit files (his census, unasked):** `coltrane-size-watch.service/.timer` and `langston-size-watch.service/.timer` installed = repo, byte-identical. No unit drift.
+- Cite fixed: ruling (e)'s precedent is `:196-198`, not `:200-201`.
+- **CONDITION, checked at Step 4: every alert body states its own measurement timestamp and names the read-site for the live number** (`langston-size-watch --status` / the run log), because a row's body is frozen at mint and a long breach would otherwise show day-one numbers as today's (the `c0a0b00d` shape). The `post()` stays the live-number carrier under ruling (f).
+
+**STEP: 2 of 11 COMPLETE · NEXT STEP: 3 of 11.**
