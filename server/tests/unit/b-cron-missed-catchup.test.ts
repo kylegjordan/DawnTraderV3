@@ -360,8 +360,16 @@ describe('B-CRON-MISSED-CATCHUP occurrence runner', () => {
 
   it('a job\'s own meta cannot override the fire row\'s identity fields', async () => {
     const f = fixture({
-      run: async () => ({ meta: { proof: true, trigger_source: 'poll', occurrence_id: 'forged' } }),
-      beforeRun: async () => ({ trigger_source: 'boot', occurrence_id: 'forged-before' }),
+      // Deliberately violates JobFireMeta (a type error without the casts) to
+      // prove the runtime ordering holds even if a job bypasses the type.
+      run: async () => ({
+        meta: {
+          proof: true, trigger_source: 'poll', occurrence_id: 'forged',
+          duration_ms: -1, lag_ms: -1, policy_version: 'forged',
+        },
+      }) as unknown as CronJobRunResult,
+      beforeRun: (async () => ({ trigger_source: 'boot', occurrence_id: 'forged-before' })) as unknown as
+        NonNullable<RegisteredCronJob['recovery']>['beforeRun'],
     });
     const boundary = new Date('2026-11-12T12:01:00.000Z');
     const result = await f.runner.runNatural(f.job.name, boundary);
@@ -370,6 +378,9 @@ describe('B-CRON-MISSED-CATCHUP occurrence runner', () => {
     expect(meta.trigger_source).toBe('cron');
     expect(meta.occurrence_id).toBe([...f.store.rows.values()][0].id);
     expect(meta.occurrence_id).not.toMatch(/forged/);
+    expect(meta.duration_ms).toBeGreaterThanOrEqual(0);
+    expect(meta.lag_ms).toBeGreaterThanOrEqual(0);
+    expect(meta.policy_version).toBe(CRON_RECOVERY_POLICY_VERSION);
     expect(meta.proof).toBe(true);
   });
 
@@ -1247,6 +1258,43 @@ describe('B-CRON-MISSED-CATCHUP advisory lock session', () => {
 });
 
 describe('B-CRON-MISSED-CATCHUP source and registration fences', () => {
+  it('the registry type refuses a runner-authored fire-meta key from a job (compile-time fence)', () => {
+    // Tests are outside the tsc project, so this compiles a virtual job file
+    // against the real cron-registry.ts and reads the diagnostics directly.
+    const virtualName = '__job_fire_meta_fence__.ts';
+    const virtualPath = resolve('server/services', virtualName).replace(/\\/g, '/');
+    const lines = [
+      "import type { CronJobRunResult, JobFireMeta } from './cron-registry';",
+      'export const allowed: JobFireMeta = { proof: true, count: 3 };',
+      "export const reservedIdentity: CronJobRunResult = { meta: { trigger_source: 'poll' } };",
+      'export const reservedMeasure: JobFireMeta = { duration_ms: 1 };',
+      "export const reservedBefore: JobFireMeta = { occurrence_id: 'x' };",
+    ];
+    const options: ts.CompilerOptions = {
+      strict: true, noEmit: true, skipLibCheck: true, types: [],
+      target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ESNext,
+      moduleResolution: ts.ModuleResolutionKind.Node10,
+    };
+    const host = ts.createCompilerHost(options);
+    const getSourceFile = host.getSourceFile.bind(host);
+    const fileExists = host.fileExists.bind(host);
+    const isVirtual = (f: string) => f.replace(/\\/g, '/').endsWith(`/server/services/${virtualName}`);
+    host.getSourceFile = (f, lang, ...rest) =>
+      isVirtual(f) ? ts.createSourceFile(f, lines.join('\n'), lang) : getSourceFile(f, lang, ...rest);
+    host.fileExists = (f) => isVirtual(f) || fileExists(f);
+    const program = ts.createProgram([virtualPath], options, host);
+    const virtual = program.getSourceFiles().find((sf) => isVirtual(sf.fileName));
+    expect(virtual).toBeDefined();
+    const errorLines = ts.getPreEmitDiagnostics(program, virtual)
+      .filter((d) => d.category === ts.DiagnosticCategory.Error && d.file && d.start !== undefined)
+      .map((d) => d.file!.getLineAndCharacterOfPosition(d.start!).line);
+    // Line 0 is the import: it must resolve (a missing module would also be an
+    // error, which would read as a false pass on the reserved lines).
+    expect(errorLines).not.toContain(0);
+    expect(errorLines).not.toContain(1);
+    expect([...new Set(errorLines)].sort()).toEqual([2, 3, 4]);
+  });
+
   it('registers the forward migration and keeps the rollback out of the manifest', () => {
     const manifest = readFileSync(resolve('drizzle/migrations/MANIFEST.txt'), 'utf8')
       .split(/\r?\n/)

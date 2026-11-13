@@ -820,8 +820,8 @@ it passes. Both suites: 59 of 59. `tsc --noEmit`: 324 errors before and after
 Re-derived before filing: `GOVERNANCE_EXCEPTIONS.md` held 0 rows naming this
 batch (positive control 11 for `B-PRICE-SIDE-BY-JOB`); the alert store's 443
 governance rows (merged by id, non-null fields kept) name it 0 times while the
-open-checker titles name 28 distinct batches (Langston: 26 by his read; same
-conclusion). Filed: the declared-`open` row in `GOVERNANCE_EXCEPTIONS.md`, and
+two open-checker families name 26 distinct batches (corrected in §14: the 28
+first stated here was the `open > 48h` family's ROW count). Filed: the declared-`open` row in `GOVERNANCE_EXCEPTIONS.md`, and
 a ➕ instance on `#744` (owner CC-A) in `RUNNING_ISSUES.md`. The cause is
 recorded as a hypothesis.
 
@@ -830,3 +830,45 @@ and a deploy before Step 10.** It rides the next deliberate deploy; nothing
 restarts for it alone.
 
 **STEP: 9 of 11 — fix landed, NEXT: Langston's Step 4 on the carry-1 diff.**
+
+## 14. STEP 4 PROCEED ON CARRY 1, AND ITS THREE NOTES FOLDED (CC-C, 2026-11-13)
+
+Langston ruled **Step-4 PROCEED** on carry 1 at `7ddaadb83` (Discord
+`1570923179759771802`), re-reading the patch, the verifier's exact and legacy
+arms and the `writeFireRow` caller census himself. Three notes, none blocking,
+all folded here for the same deploy:
+
+1. **All five runner-authored keys are written last, and reserved on the
+   interface a job author reads.** His discriminator: not "identity" but *who is
+   the only party that can know the value* — `lag_ms` (the runner's
+   post-`markRunning` recheck), `policy_version` (a runner constant) and
+   `duration_ms` (`completedAt − firedAt`) cannot be computed by a job, so an
+   override only publishes a false runner measurement. `cron-registry.ts` now
+   exports `RUNNER_AUTHORED_FIRE_META_KEYS` and `JobFireMeta`
+   (`Record<string, unknown>` with those five as `?: never`);
+   `CronJobRunResult.meta` and `beforeRun`'s return use it, so returning a
+   reserved name is a **type error**, not a silent override. The runner writes
+   `...beforeMeta, ...resultMeta` first and the five keys after them.
+2. **The stale header in `scheduled-jobs-audit.ts`** ("every node-cron callback
+   MUST call `writeFireRow()`") now says the runner is the only production
+   caller and a new job registers through `cron-registry.ts`, never wiring this
+   writer directly.
+3. **The "28" was wrong:** it was the `open > 48h` family's row count. Re-derived
+   (merged by id, non-null fields kept): `open > 48h` 28 rows / 19 batches,
+   `OPEN > 7d` 22 rows / 17 batches, **26 distinct in the union** — Langston's
+   number. Corrected in `GOVERNANCE_EXCEPTIONS.md`, the `#744` instance, and §13.
+   The batch's name appears in 23 non-governance rows of the same file, so the
+   search reaches the string.
+
+**Fences.** (a) The runtime test now forges all five keys from `run` and
+`beforeRun`; the row must carry the runner's values. Mutation: with the
+pre-fold runner (identity last, measurements first) it fails
+`expected -1 to be greater than or equal to 0`. (b) A new compile-time fence
+compiles a virtual job file against the real `cron-registry.ts` (tests are
+outside the tsc project) and requires errors on exactly the three reserved-key
+lines, none on the import or the allowed line. Mutation: with `?: unknown`
+instead of `?: never` it fails (no errors). Both suites 60/60; `tsc --noEmit`
+324 = baseline, none in the touched files.
+
+**STEP: 9 of 11 — fold landed, NEXT: Langston confirms the fold at the ref, then
+it rides the next deliberate deploy (Step 6/7 on that restart), then Step 10.**

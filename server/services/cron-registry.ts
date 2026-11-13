@@ -48,9 +48,35 @@ export interface CronScheduledRunContext {
   policyVersion: string;
 }
 
+/**
+ * The fire row's meta keys that ONLY the occurrence runner can know: its
+ * scheduled identity (`trigger_source`, `occurrence_id`) and its own
+ * measurements (`duration_ms`, `lag_ms`, `policy_version`). The runner writes
+ * them LAST into `scheduled_tasks_audit.meta`, after a job's own meta, so a
+ * job's value for one of these names is always overwritten. They are reserved
+ * here, on the interface a job author reads, so returning one is a type error
+ * rather than a silent override: the fire-evidence verifier accepts an exact
+ * audit row only when its identity is the runner's (B-CRON-MISSED-CATCHUP
+ * Step 9, Langston Step-4 carry).
+ */
+export const RUNNER_AUTHORED_FIRE_META_KEYS = [
+  'trigger_source',
+  'occurrence_id',
+  'duration_ms',
+  'lag_ms',
+  'policy_version',
+] as const;
+export type RunnerAuthoredFireMetaKey = (typeof RUNNER_AUTHORED_FIRE_META_KEYS)[number];
+
+/** A job's own fire evidence: any key except the runner-authored ones. */
+export type JobFireMeta = Record<string, unknown> & {
+  [K in RunnerAuthoredFireMetaKey]?: never;
+};
+
 export interface CronJobRunResult {
-  /** Job-specific terminal evidence copied into scheduled_tasks_audit.meta. */
-  meta?: Record<string, unknown>;
+  /** Job-specific terminal evidence copied into scheduled_tasks_audit.meta.
+   * Must not use a RUNNER_AUTHORED_FIRE_META_KEYS name. */
+  meta?: JobFireMeta;
 }
 
 export interface CronRecoveryRegistration {
@@ -58,7 +84,7 @@ export interface CronRecoveryRegistration {
   run: (context: CronScheduledRunContext) => Promise<CronJobRunResult | void>;
   /** Work such as feed jitter that must happen after durable claim but before
    * the core is marked running. A crash here is therefore safely retryable. */
-  beforeRun?: (source: CronOccurrenceSource) => Promise<Record<string, unknown> | void>;
+  beforeRun?: (source: CronOccurrenceSource) => Promise<JobFireMeta | void>;
 }
 
 export interface RegisteredCronJob {
