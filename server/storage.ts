@@ -3685,7 +3685,7 @@ export class DatabaseStorage implements IStorage {
         .limit(4);
       if (open.length > 0) return { status: 'exists' as const, ids: open.map((r) => r.id) };
       const [inserted] = await tx.insert(closedTradesTable)
-        .values({ ...(record as object), symbol: canonicalSymbol, assetClass, mode } as any)
+        .values({ ...(record as Omit<InsertClosedTrade, 'mode'>), symbol: canonicalSymbol, assetClass, mode })
         .returning();
       return { status: 'inserted' as const, record: inserted };
     });

@@ -79,6 +79,11 @@ describe('P-14b — the migration drops exactly the 16, after its guard, inside 
     expect(sql).toContain("EXECUTE format('SELECT (%s)::text', r.d) INTO got;");
     expect(sql).toMatch(/IF r\.d IS NOT NULL THEN/);
   });
+  it('a default containing a call is refused BEFORE anything is evaluated (Langston Step 4 A)', () => {
+    const iRefuse = sql.indexOf("IF r.d ~ '\\(' THEN");
+    expect(iRefuse).toBeGreaterThan(-1);
+    expect(iRefuse).toBeLessThan(sql.indexOf('EXECUTE format('));
+  });
   it('the postcondition checks the kept defaults by (table, column) pair against the snapshot', () => {
     expect(sql).toMatch(/IS DISTINCT FROM b\.d/);
     expect(sql).toMatch(/kept default\(s\) changed, % appeared/);

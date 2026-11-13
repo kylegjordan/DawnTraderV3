@@ -22,7 +22,9 @@
 -- GUARD: each of the 16 targets either has NO default (already dropped — a re-run is a no-op) or has a default that
 -- EVALUATES to the expected value; any other value means this is not the database the file was written for — stop.
 -- Matching by evaluated value, not by text, because CI's schema-from-migrations and staging spell the same default
--- differently ('0'::numeric vs 0).
+-- differently ('0'::numeric vs 0). A default containing a call is refused before it is evaluated.
+-- The RAISE NOTICE lines show under psql only: db:migrate registers no notice listener, so the deploy log never
+-- carries them. The deploy's positive evidence is a post-deploy information_schema read (change list, P-14b).
 -- lock_timeout 5 s: a wedged ALTER fails the deploy (dt-deploy then does not restart) instead of stalling opens.
 --
 -- ⛔ ROLLBACK ORDER IS THE REVERSE OF THE DEPLOY ORDER (Langston, P-14b C-4). Forward: code first, then this. Backward:
@@ -64,6 +66,12 @@ BEGIN
       RAISE EXCEPTION 'B-CLOSE-WRITER-COSTS P-14b refused: column %.% does not exist', r.t, r.c;
     END IF;
     IF r.d IS NOT NULL THEN
+      -- refuse-on-call (Langston, Step 4 A): a ROLLBACK cannot undo nextval() or a volatile function's effects, so a
+      -- default containing a call is never evaluated; every expected spelling of the 16 is a literal and passes this.
+      IF r.d ~ '\(' THEN
+        RAISE EXCEPTION 'B-CLOSE-WRITER-COSTS P-14b refused: %.% default % contains a call — refusing to evaluate it',
+          r.t, r.c, r.d;
+      END IF;
       EXECUTE format('SELECT (%s)::text', r.d) INTO got;
       IF got IS DISTINCT FROM r.want THEN
         RAISE EXCEPTION 'B-CLOSE-WRITER-COSTS P-14b refused: %.% default is % (evaluates to %), expected %',
