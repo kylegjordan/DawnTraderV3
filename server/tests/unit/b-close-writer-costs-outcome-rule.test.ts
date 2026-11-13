@@ -186,7 +186,6 @@ describe('Q — at the ten sites a hard_reset row is excluded; the two named arm
   it('Q-6 getRealizedPnlTotal', () => expectNonOutcomeExcluded(() => storage.getRealizedPnlTotal('paper')));
   it('Q-7 getDailyRealizedPnlSince', () => expectNonOutcomeExcluded(() => storage.getDailyRealizedPnlSince('paper', since)));
   it('Q-8 getRecentClosedPnls', () => expectNonOutcomeExcluded(() => storage.getRecentClosedPnls('paper', 10)));
-  it('Q-9 getClosedTradesGlobal (default)', () => expectNonOutcomeExcluded(() => storage.getClosedTradesGlobal('paper')));
   it('Q-10 getLifetimeScoreboard binds the BOOKED allowlist (no hard_reset, no never_filled) and exit_price > 0', async () => {
     await storage.getLifetimeScoreboard('paper');
     const q = rendered().find((x) => x.sql.includes('close_reason IN ('))!;

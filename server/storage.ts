@@ -591,7 +591,6 @@ export interface IStorage {
   }): Promise<{ trades: ClosedTrade[]; totalCount: number }>;
   findOpenTradeRecord(mode: TradingMode, symbol: string, assetClass: string): Promise<OpenTradeRecordLookup>;
   insertOpenTradeRecordIfNoneOpen(mode: TradingMode, symbol: string, assetClass: string, record: ClosedTradeWrite<Omit<InsertClosedTrade, 'mode'>>): Promise<{ status: 'inserted'; record: ClosedTrade } | { status: 'exists'; ids: string[] }>;
-  getClosedTradesGlobal(mode: TradingMode, filters?: { limit?: number; closedOnly?: boolean; includeNeverFilled?: boolean }): Promise<ClosedTrade[]>; // Phase 27.F.14.B: Global-per-mode query for LATTI
   deleteClosedTrade(mode: TradingMode, id: string): Promise<void>; // B-PROMOTION-RACE-FIX (#508): single-row delete for the dup-race orphan compensation
 
   // Open positions
@@ -3889,32 +3888,6 @@ export class DatabaseStorage implements IStorage {
       trades,
       totalCount: countResult?.count || 0
     };
-  }
-
-  // Phase 27.F.14.B: Global-per-mode query for LATTI baseline calculations
-  async getClosedTradesGlobal(mode: TradingMode, filters?: { limit?: number; closedOnly?: boolean; includeNeverFilled?: boolean }): Promise<ClosedTrade[]> {
-    const limit = filters?.limit || 1000; // Higher default for global aggregation
-    const closedOnly = filters?.closedOnly ?? false;
-
-    const conditions: any[] = [eq(closedTradesTable.mode, mode)]; // Step F (#618)
-    if (closedOnly) {
-      conditions.push(sql`${closedTradesTable.closedAt} IS NOT NULL` as any);
-    }
-    // P19-B7.2c: non-outcome rows excluded by default (typed guard — see getClosedTrades).
-    if (!filters?.includeNeverFilled) {
-      conditions.push(notNonOutcomeReason() as any);
-    }
-
-    const query = db.select()
-      .from(closedTradesTable)
-      .orderBy(desc(closedTradesTable.closedAt))
-      .limit(limit);
-    
-    if (conditions.length > 0) {
-      return await query.where(and(...conditions));
-    }
-    
-    return await query;
   }
 
   // B-PROMOTION-RACE-FIX (#508): returns { position, created }. `created=false` is the I8E

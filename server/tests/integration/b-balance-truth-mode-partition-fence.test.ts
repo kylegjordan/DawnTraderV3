@@ -117,9 +117,9 @@ describe(TAG, () => {
 
     await db.execute(sql`
       INSERT INTO closed_trades (mode, symbol, base_currency, quantity, entry_price, exit_price,
-                                 strategy_name, side, pnl, net_pnl, close_reason, opened_at, closed_at)
+                                 strategy_name, side, pnl, net_pnl, close_reason, opened_at, closed_at, asset_class)
       VALUES ('live', ${MARKER_SYMBOL}, 'ZZ', '1', '1', '2', 'vwap_pullback', 'buy',
-              ${MARKER_PNL}, ${MARKER_PNL}, 'take_profit', now() - interval '1 hour', now())`);
+              ${MARKER_PNL}, ${MARKER_PNL}, 'take_profit', now() - interval '1 hour', now(), 'crypto_spot')`);
     seeded = true;
 
     const accessors = discoverReaders();

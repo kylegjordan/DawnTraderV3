@@ -1,0 +1,30 @@
+// ARCHIVED 2026-11-13 by B-CLOSE-WRITER-COSTS P-14b (Langston C-2): server/storage.ts getClosedTradesGlobal + its IStorage line.
+// 0 production callers; closedOnly defaulted to false. Built for LATTI baseline calculations (Phase 27.F.14.B); LATTI is retired (#659).
+// Not compilable on purpose (.removed). git history is the authoritative archive.
+
+  // Phase 27.F.14.B: Global-per-mode query for LATTI baseline calculations
+  async getClosedTradesGlobal(mode: TradingMode, filters?: { limit?: number; closedOnly?: boolean; includeNeverFilled?: boolean }): Promise<ClosedTrade[]> {
+    const limit = filters?.limit || 1000; // Higher default for global aggregation
+    const closedOnly = filters?.closedOnly ?? false;
+
+    const conditions: any[] = [eq(closedTradesTable.mode, mode)]; // Step F (#618)
+    if (closedOnly) {
+      conditions.push(sql`${closedTradesTable.closedAt} IS NOT NULL` as any);
+    }
+    // P19-B7.2c: non-outcome rows excluded by default (typed guard — see getClosedTrades).
+    if (!filters?.includeNeverFilled) {
+      conditions.push(notNonOutcomeReason() as any);
+    }
+
+    const query = db.select()
+      .from(closedTradesTable)
+      .orderBy(desc(closedTradesTable.closedAt))
+      .limit(limit);
+    
+    if (conditions.length > 0) {
+      return await query.where(and(...conditions));
+    }
+    
+    return await query;
+  }
+

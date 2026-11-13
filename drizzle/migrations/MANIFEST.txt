@@ -251,3 +251,4 @@
 2026-11-10-b-entry-gate-friction-coverage.sql
 2026-11-11-b-xstock-snapshot-retention.sql
 2026-11-12-b-cron-missed-catchup.sql
+2026-11-13-b-close-writer-costs-drop-defaults.sql

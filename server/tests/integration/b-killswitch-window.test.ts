@@ -108,6 +108,8 @@ function row(overrides: Record<string, unknown>) {
     // Step F (#618): closed_trades.mode is NOT NULL with NO DEFAULT, so every insert must
     // state its mode. This builder feeds all four inserts in this suite.
     mode: 'paper' as const,
+    // B-CLOSE-WRITER-COSTS P-14b: asset_class is NOT NULL with NO DEFAULT since the default-drop migration.
+    assetClass: 'crypto_spot',
     symbol: 'FENCE/USD',
     baseCurrency: 'FENCE',
     strategyName: 'strong_bull_trend' as const,

@@ -2248,8 +2248,9 @@ export class ActiveExecutionEngine {
         body: `The ${this.mode} position ${position.id} in ${position.symbol} was due to close, but neither it nor its open trade `
           + `record ${tradeId} carries a usable ${missing} (the open path writes it to both, from the same number), and a close `
           + `never invents a cost (KD-17). The position is kept open and the close is retried every cycle. The record resolves, `
-          + `so do NOT restore it. What to do: find what the open wrote — both copies are unusable, so the open itself computed `
-          + `a non-finite value — and set the correct value on the position by hand. `
+          + `so do NOT restore it. What to do: find what the open wrote — both copies are unusable, so either the open itself `
+          + `computed a non-finite value or the column was omitted at the write (no database default has filled it since `
+          + `B-CLOSE-WRITER-COSTS P-14b) — and set the correct value on the position by hand. `
           + `B-CLOSE-WRITER-COSTS P-14. DISPOSITION: RESOLVE, do not ACK.`,
         dedupe_key: `close-entry-cost-missing-${this.mode}-${position.symbol}`,
       });

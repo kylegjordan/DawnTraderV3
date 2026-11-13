@@ -1724,7 +1724,8 @@ export const closedTradesTable = pgTable("closed_trades", {
   // tracking and modularization. baseCurrency derived at migration time from symbol.
   baseCurrency: varchar("base_currency", { length: 10 }).notNull(),
   exchange: text("exchange").notNull().default("kraken"),
-  assetClass: text("asset_class").notNull().default("crypto_spot"),
+  // B-CLOSE-WRITER-COSTS P-14b: no money, class or mode value is left to a column default - every writer names it (the 16 defaults dropped by 2026-11-13-b-close-writer-costs-drop-defaults.sql).
+  assetClass: text("asset_class").notNull(),
   strategyName: strategyTypeEnum("strategy_name").notNull(),
   side: varchar("side", { length: 10 }).notNull(), // 'buy' or 'sell'
   // P19-B7.2b (OBJ-B): the maker/taker ENTRY decision + the actual per-side entry fee
@@ -1763,24 +1764,24 @@ export const closedTradesTable = pgTable("closed_trades", {
   reconstructedPnlPercent: decimal("reconstructed_pnl_percent", { precision: 20, scale: 8 }),
   reconstructionBasis: varchar("reconstruction_basis", { length: 64 }),
   pnlPercent: decimal("pnl_percent", { precision: 10, scale: 4 }),
-  fees: decimal("fees", { precision: 20, scale: 8 }).default("0"),
-  slippage: decimal("slippage", { precision: 20, scale: 8 }).default("0"),
+  fees: decimal("fees", { precision: 20, scale: 8 }),
+  slippage: decimal("slippage", { precision: 20, scale: 8 }),
   // Phase 8.8.3-C1: Granular fee tracking
-  entryFee: decimal("entry_fee", { precision: 20, scale: 8 }).default("0"),
-  exitFee: decimal("exit_fee", { precision: 20, scale: 8 }).default("0"),
-  totalFee: decimal("total_fee", { precision: 20, scale: 8 }).default("0"),
+  entryFee: decimal("entry_fee", { precision: 20, scale: 8 }),
+  exitFee: decimal("exit_fee", { precision: 20, scale: 8 }),
+  totalFee: decimal("total_fee", { precision: 20, scale: 8 }),
   // Phase 8.8.3-C4: Slippage tracking
   intendedEntryPrice: decimal("intended_entry_price", { precision: 20, scale: 8 }),
   actualEntryPrice: decimal("actual_entry_price", { precision: 20, scale: 8 }),
-  entrySlippage: decimal("entry_slippage", { precision: 20, scale: 8 }).default("0"),
+  entrySlippage: decimal("entry_slippage", { precision: 20, scale: 8 }),
   targetExitPrice: decimal("target_exit_price", { precision: 20, scale: 8 }),
   actualExitPrice: decimal("actual_exit_price", { precision: 20, scale: 8 }),
-  exitSlippage: decimal("exit_slippage", { precision: 20, scale: 8 }).default("0"),
+  exitSlippage: decimal("exit_slippage", { precision: 20, scale: 8 }),
   // Phase 8.8.3-C2: Cost transparency and P/L breakdown
-  totalCost: decimal("total_cost", { precision: 20, scale: 8 }).default("0"), // entry_fee + exit_fee + entry_slippage + exit_slippage
-  grossPnl: decimal("gross_pnl", { precision: 20, scale: 8 }).default("0"), // Market P/L without costs
-  netPnl: decimal("net_pnl", { precision: 20, scale: 8 }).default("0"), // gross_pnl - total_cost
-  netPnlPercent: decimal("net_pnl_percent", { precision: 10, scale: 4 }).default("0"), // Net return percentage
+  totalCost: decimal("total_cost", { precision: 20, scale: 8 }), // entry_fee + exit_fee + entry_slippage + exit_slippage
+  grossPnl: decimal("gross_pnl", { precision: 20, scale: 8 }), // Market P/L without costs
+  netPnl: decimal("net_pnl", { precision: 20, scale: 8 }), // gross_pnl - total_cost
+  netPnlPercent: decimal("net_pnl_percent", { precision: 10, scale: 4 }), // Net return percentage
   openedAt: timestamp("opened_at", { withTimezone: true }).notNull(),
   closedAt: timestamp("closed_at", { withTimezone: true }),
   closeReason: varchar("close_reason", { length: 50 }), // 'target_hit', 'stop_hit', 'trailing_stop_hit', 'moonbag_timeout', 'strategy_exit', 'manual', 'guardrail'
@@ -2034,12 +2035,13 @@ export const activeOpenPositions = pgTable("active_open_positions", {
   // by `storage.createActiveOpenPosition` from its `mode` argument. ⚠️ The DEFAULT is a ONE-DEPLOY WINDOW BRIDGE,
   // not a fallback: `dt-deploy` migrates before it restarts, so the old process can still insert without `mode`
   // in between, and only the paper engine runs. Migration 2 in the NEXT deploy drops it (pre-audit P-5 (e)).
-  mode: tradingModeEnum("mode").notNull().default("paper"),
+  // B-CLOSE-WRITER-COSTS P-14b: no money, class or mode value is left to a column default - every writer names it (the 16 defaults dropped by 2026-11-13-b-close-writer-costs-drop-defaults.sql).
+  mode: tradingModeEnum("mode").notNull(),
   // B69 (2026-05-03): asset class + exchange for cross-cutting analysis.
   // New rows are populated via `safeResolveAssetClass(symbol, exchange)` at
   // active-execution-engine open. Defaults match pre-B69 reality.
   exchange: text("exchange").notNull().default("kraken"),
-  assetClass: text("asset_class").notNull().default("crypto_spot"),
+  assetClass: text("asset_class").notNull(),
   strategyName: strategyTypeEnum("strategy_name").notNull(),
   side: varchar("side", { length: 10 }).notNull(), // 'buy' or 'sell'
   quantity: decimal("quantity", { precision: 20, scale: 8 }).notNull(),
@@ -2056,7 +2058,7 @@ export const activeOpenPositions = pgTable("active_open_positions", {
   volume24h: decimal("volume_24h", { precision: 20, scale: 2 }),
   volumeBucket: varchar("volume_bucket", { length: 20 }), // 'High' | 'Medium' | 'Low' | 'Very Low'
   // Phase 8.8.3-C1: Entry fee for projected total fees display
-  entryFee: decimal("entry_fee", { precision: 20, scale: 8 }).default("0"),
+  entryFee: decimal("entry_fee", { precision: 20, scale: 8 }),
   // P19-B7.2b (OBJ-B): the maker/taker ENTRY decision + the actual per-side entry fee
   // rate used, carried from the signal onto this open position (and forward to the
   // closed trade). NULL for pre-B7.2b positions (never coerced — rule-10). ENTRY-leg only.
@@ -2096,7 +2098,7 @@ export const activeOpenPositions = pgTable("active_open_positions", {
   anchorVersionAtOpen: integer("anchor_version_at_open"),
   // Phase 8.8.3-C4: Intended entry price for slippage tracking
   intendedEntryPrice: decimal("intended_entry_price", { precision: 20, scale: 8 }),
-  entrySlippage: decimal("entry_slippage", { precision: 20, scale: 8 }).default("0"),
+  entrySlippage: decimal("entry_slippage", { precision: 20, scale: 8 }),
   // Directive 9.2: Trade mode for trailing exit system
   tradeMode: varchar("trade_mode", { length: 20 }).default("TARGET"), // TARGET or TRAILING_TAKE
   // Directive 10.3: Signal Type Expansion

@@ -1622,3 +1622,9 @@ Archive: git history is authoritative (this is a field-retirement within live fi
 **BLAST RADIUS:** census at the Step-2 ref, tests excluded: the only `--heartbeat` invocation of this tool repo-wide is the removed unit line (Langston's positive control returned `staging-liveness-watchdog.mjs:483` and its own unit for the same grep); no `/etc/cron.d` entry calls it; it wrote no state (it only read `last_run_ts` and posted). The installed unit and drop-in `onfailure.conf` are otherwise unchanged; `OnFailure=` keeps its one home in the drop-in.
 
 **ARCHIVE:** `1-system-manual/_archive/deleted-code/coltrane-size-watch.cmd_heartbeat.20261113.removed` (the function and the unit lines, verbatim).
+
+## 2026-11-13 — `storage.getClosedTradesGlobal` — B-CLOSE-WRITER-COSTS P-14b (Langston Step-2 C-2), CC-A
+**WHAT:** `getClosedTradesGlobal(mode, filters?)` in `server/storage.ts` (the `DatabaseStorage` method and its `IStorage` line), and the one test case that called it (`b-close-writer-costs-outcome-rule.test.ts`, Q-9).
+**WHY:** 0 production callers; it returned OPEN trade records by default (`closedOnly` defaulted false), so once P-14b drops the money defaults it was a ready-made path to NULL money values for any future caller. Built for LATTI baseline calculations (Phase 27.F.14.B); LATTI is retired (`#659`). Rule 18: found dead in the batch, deleted in the batch.
+**BLAST RADIUS:** `git grep getClosedTradesGlobal` across `server`, `shared`, `client`, `scripts` — 3 hits before (interface, implementation, the Q-9 case), 0 after; `tsc` 324 = baseline. The other non-outcome readers Q-1..Q-8, Q-10.. in that test still run.
+**ARCHIVE:** `1-system-manual/_archive/deleted-code/getClosedTradesGlobal.20261113-B-CLOSE-WRITER-COSTS.removed` (the method verbatim). **COMMIT:** the P-14b code commit.
