@@ -62,7 +62,8 @@ tested = os.path.join(T, "dt-install-drift")
 
 
 def write_copy(host):
-    consts = {"HOSTNAME": repr(host), "ROOT": repr(T), "RUNUSER": repr([fr]), "SYSTEMCTL": repr(fs)}
+    consts = {"HOSTNAME": repr(host), "ROOT": repr(T), "RUNUSER": repr([fr]), "SYSTEMCTL": repr(fs),
+              "ALERT_ADD": repr(["/bin/true"])}
     open(tested, "w").write(src[:a] + "".join("%s = %s\n" % kv for kv in consts.items()) + src[b:])
     return consts
 
@@ -432,6 +433,113 @@ pr = _accounts_problems()
 check("... and with staff on its own gid nothing is reported (control)", not any("ALSO named" in x for x in pr), str(pr))
 DM.grp.getgrall = lambda: []
 shutil.rmtree(_root)
+
+# ── B-DEPLOY-WINDOW-GUARD (#1249): the deploy_windows check, in-process. Langston BLOCKER-2 / C-15 / C-16: a stale
+#    window and a notice-only deploy are raised to THEIR OWNER and stay OFF the verdict; an unusable register, or a
+#    check that cannot raise, is ON the verdict under its own subject - never check_extra's generic CHECK page. ──
+OBS_SRC = os.environ.get("OBS_SRC") or os.path.join(REPO_SRC, "..", "scripts", "obs-windows.py")
+_wr = tempfile.mkdtemp(prefix="drift-win-")
+DM.ROOT = _wr
+for d in ("/usr/local/bin", "/home/deploy/dawntrader", "/var/lib/dt-install-drift"):
+    os.makedirs(_wr + d, exist_ok=True)
+shutil.copyfile(OBS_SRC, _wr + "/usr/local/bin/dt-obs-windows")
+os.chmod(_wr + "/usr/local/bin/dt-obs-windows", 0o755)
+_REG = {"text": None, "err": "fatal: path does not exist"}
+_ALERTS = []
+_ALERT_RESULT = {"v": None}
+
+
+def _fake_git(box, *args, binary=False):
+    if args[0] == "show":
+        return _REG["text"], (None if _REG["text"] is not None else _REG["err"])
+    return None, "unexpected git %s" % (args,)
+
+
+def _fake_raise(key, title, body, meta):
+    if _ALERT_RESULT["v"] == "crash":
+        raise RuntimeError("boom")
+    _ALERTS.append((key, title, body))
+    return _ALERT_RESULT["v"]
+
+
+_real_git, _real_raise = DM.git, DM.raise_alert
+DM.git, DM.raise_alert = _fake_git, _fake_raise
+_BOX = {"ref": "refs/remotes/origin/migration/aws-supabase"}
+_H = '{"schema":"deploy-windows/1"}'
+_STALE = json.dumps({"type": "open", "batch": "B-OLD", "owner": "cc-b", "opened_at": "2020-01-01T00:00:00Z",
+                     "end": "2020-01-02T00:00:00Z", "review_by": "2020-01-03T00:00:00Z", "disturbs": "x", "detail": "y"})
+_OPEN = json.dumps({"type": "open", "batch": "B-NOW", "owner": "cc-a", "opened_at": "2020-01-01T00:00:00Z",
+                    "end": "2099-01-02T00:00:00Z", "review_by": "2099-01-03T00:00:00Z", "disturbs": "x", "detail": "y"})
+
+
+def _win(reg_text, notice=None):
+    DM.PROBLEMS.clear(); DM.CLASSES.clear(); del _ALERTS[:]
+    _REG["text"] = reg_text
+    if notice is not None:
+        open(_wr + "/home/deploy/dawntrader-deploy.notice", "w").write(notice)
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        try:                                   # the SAME wrapper run() puts round every check (its per-check try, "a check that crashes is a FAIL")
+            DM.check_extra("deploy_windows", _BOX)
+        except Exception as e:
+            DM.out("STATE", "the %s check could not run: %s" % ("deploy_windows", type(e).__name__), "CHECK", "deploy_windows")
+    return buf.getvalue()
+
+
+o = _win(_H + NL + _STALE + NL + _OPEN + NL)
+check("windows: a STALE window raises ONE alert to its owner, keyed by batch",
+      [a[0] for a in _ALERTS] == ["deploy-window-stale:B-OLD"] and "cc-b" in _ALERTS[0][2], str(_ALERTS))
+check("windows: ... and stays OFF the verdict (no problem, an OK line)", DM.PROBLEMS == [] and "OK       deploy_windows: 1 stale" in o,
+      str(DM.PROBLEMS) + o)
+o = _win(_H + NL + _OPEN + NL)
+check("windows: an OPEN window raises nothing and is not a problem (control)", _ALERTS == [] and DM.PROBLEMS == [], o)
+o = _win(None)
+check("windows: an UNREADABLE register is ON the verdict, subject deploy-windows-register",
+      ("WINDOWS", "deploy-windows-register") in DM.CLASSES and "every deploy is" in o, str(DM.CLASSES) + o)
+o = _win("not a register" + NL)
+check("windows: a MALFORMED register (no header) is ON the verdict, subject deploy-windows-register",
+      ("WINDOWS", "deploy-windows-register") in DM.CLASSES and "REGISTER REFUSED" in o, str(DM.CLASSES) + o)
+_ALERT_RESULT["v"] = "exit 1"
+o = _win(_H + NL + _STALE + NL)
+check("windows: an alert that cannot be raised is ON the verdict, subject deploy-windows-alert",
+      ("WINDOWS", "deploy-windows-alert") in DM.CLASSES, str(DM.CLASSES) + o)
+_ALERT_RESULT["v"] = "crash"
+o = _win(_H + NL + _STALE + NL)
+check("windows C-16: a crash inside the check is caught as deploy-windows-alert, never check_extra's CHECK class",
+      ("WINDOWS", "deploy-windows-alert") in DM.CLASSES and not any(c[0] == "CHECK" for c in DM.CLASSES), str(DM.CLASSES))
+_ALERT_RESULT["v"] = None
+_N1 = "attempt_at=2026-11-13T21:05:00Z sha=%s by=cc-a in_window=B-NOW/cc-a/open window_notice=notice-only register_sha=%s" % ("b" * 40, "c" * 40)
+_N2 = "attempt_at=2026-11-13T22:05:00Z sha=%s by=cc-a in_window=B-NOW/cc-a/open window_notice=alerted register_sha=%s" % ("d" * 40, "c" * 40)
+o = _win(_H + NL, notice=_N1 + NL + _N2 + NL)
+check("windows C-12: a notice-only deploy line raises ONE alert; an alerted line raises none",
+      len(_ALERTS) == 1 and _ALERTS[0][0].startswith("deploy-window-notice-only:") and DM.PROBLEMS == [], str(_ALERTS))
+o = _win(_H + NL, notice=_N1 + NL + _N2 + NL)
+check("windows C-12: ... and the same line is NOT raised again on the next run", _ALERTS == [], str(_ALERTS))
+DM.git, DM.raise_alert = _real_git, _real_raise
+
+# C-9: the per-file pending grace. A 2-day-old change to dt-deploy pages (grace 1); the same age elsewhere does not.
+_age = {"v": 2 * 86400}
+
+
+def _pend_git(box, *args, binary=False):
+    if args[0] == "rev-parse":
+        return ("old" if args[2].startswith("S1:") else "new"), None
+    if args[0] == "log":
+        return str(int(time.time() - _age["v"])), None
+    return None, "?"
+
+
+DM.git = _pend_git
+DM.PROBLEMS.clear(); DM.CLASSES.clear()
+_pbox = {"files": [("scripts/dt-deploy.sh", "/x", 0, "", ""), ("comms-infra/a", "/y", 0, "", "")],
+         "pending_days": {"scripts/dt-deploy.sh": 1}}
+with contextlib.redirect_stdout(io.StringIO()) as _pb:
+    DM.pending(_pbox, {"scripts/dt-deploy.sh": "S1", "comms-infra/a": "S1"}, "S2")
+check("C-9: a 2-day-old uninstalled change to dt-deploy pages (its grace is 1 day); another file's does not",
+      ("PENDING-STALE", "scripts/dt-deploy.sh") in DM.CLASSES and ("PENDING-STALE", "comms-infra/a") not in DM.CLASSES,
+      str(DM.CLASSES) + _pb.getvalue())
+DM.git = _real_git
+shutil.rmtree(_wr)
 
 print("drift suite: %d passed, %d failed" % (PASS, FAIL))
 sys.exit(1 if FAIL else 0)

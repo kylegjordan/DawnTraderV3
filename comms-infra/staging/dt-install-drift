@@ -48,12 +48,23 @@ HOSTNAME = None                  # None = socket.gethostname()
 ROOT = ""                        # a prefix on every absolute path it reads (tests only)
 RUNUSER = ["/usr/sbin/runuser", "-u"]
 SYSTEMCTL = "/usr/bin/systemctl"
+# B-DEPLOY-WINDOW-GUARD: how the deploy_windows check raises its own alerts - as deploy, in the app dir, a clean env
+# (runuser keeps root's HOME, and npm would then write root's cache). A test substitutes a recorder.
+ALERT_ADD = ["/usr/bin/env", "-i", "HOME=/home/deploy", "PATH=/usr/bin:/bin", "/usr/bin/npm", "run", "-s",
+             "system-alerts", "--", "add"]
 # ── END CONSTANTS ──
 
 GIT_ENV = ["/usr/bin/env", "-i", "PATH=/usr/bin:/bin", "HOME=/nonexistent", "GIT_CONFIG_NOSYSTEM=1"]
 INSTALLED_SHA = "/var/lib/dt-install-drift/installed.sha"
 CLASSES_OUT = "/run/dt-install-drift.classes"      # read by dt-unit-failure-alert for its dedupe key
 PENDING_DAYS = 7
+# B-DEPLOY-WINDOW-GUARD (#1249, Langston C-9): a box may shorten the grace per file. A reviewed fix to the deploy
+# guard must not sit uninstalled for a week with no page.
+REGISTER_PATH = "1-system-manual/DEPLOY_WINDOWS.jsonl"
+OBS_WINDOWS = "/usr/local/bin/dt-obs-windows"
+APP_DIR = "/home/deploy/dawntrader"
+DEPLOY_NOTICE = "/home/deploy/dawntrader-deploy.notice"
+NOTICE_RAISED = "/var/lib/dt-install-drift/notice-only-raised"
 MARKER_MAX_AGE_S = 2 * 3600
 GIT_TIMEOUT_S = 30
 
@@ -80,7 +91,12 @@ BOXES = {
             ("comms-infra/staging/systemd/dt-unit-failure@.service", "/etc/systemd/system/dt-unit-failure@.service", 0o644, "root", "root"),
             ("comms-infra/staging/systemd/dt-install-drift.service.d/onfailure.conf",
              "/etc/systemd/system/dt-install-drift.service.d/onfailure.conf", 0o644, "root", "root"),
+            # B-DEPLOY-WINDOW-GUARD (#1249, #1004): the deploy tool and its register parser. dt-deploy does not
+            # install itself; this is what notices when the installed copy is not the reviewed one.
+            ("scripts/dt-deploy.sh", "/usr/local/bin/dt-deploy", 0o755, "root", "root"),
+            ("scripts/obs-windows.py", "/usr/local/bin/dt-obs-windows", 0o755, "root", "root"),
         ],
+        "pending_days": {"scripts/dt-deploy.sh": 1, "scripts/obs-windows.py": 1},
         "dirs": [
             ("/etc/dt-api", 0o750, "root", "dtapi"),
             ("/var/lib/dt-api", 0o700, "dtapi", "dtapi"),
@@ -100,7 +116,8 @@ BOXES = {
                   # probe name — a drop-in for that one instance would otherwise go unseen
                   "dt-unit-failure@dt-install-drift.service": (SS + "dt-unit-failure@.service", [])},
         "timers": ["dt-install-drift.timer"],
-        "checks": ["dt_api_page", "setter_marker", "accounts", "sudoers_others", "no_authorized_keys2"],
+        "checks": ["dt_api_page", "setter_marker", "accounts", "sudoers_others", "no_authorized_keys2",
+                   "deploy_windows"],
     },
     "dawntrader-agent": {
         "git_as": "langston",
@@ -273,8 +290,108 @@ def check_units(box):
                 out("UNIT", "%s %s says %r, wanted %r" % (t, verb, o, want), "UNIT", t)
 
 
+def raise_alert(key, title, body, meta):
+    """One governance alert, as deploy, idempotent on its key while unresolved (system-alerts.ts addAlert dedupe).
+    Returns None on success, else a short reason. Never raises."""
+    cmd = RUNUSER + ["deploy", "--"] + ALERT_ADD + [
+        "--triggers-at", time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "--category", "governance",
+        "--severity", "warning", "--dedupe-key", key, "--title", title, "--body", body,
+        "--metadata", json.dumps(meta, sort_keys=True)]
+    try:
+        r = subprocess.run(cmd, cwd=P(APP_DIR), capture_output=True, timeout=180)
+    except (subprocess.TimeoutExpired, OSError) as e:
+        return type(e).__name__
+    return None if r.returncode == 0 else "exit %d" % r.returncode
+
+
+def deploy_windows(box):
+    """B-DEPLOY-WINDOW-GUARD (#1249, Langston BLOCKER-2, C-15, C-16). Rides this run's SCHEDULE, stays OFF its
+    verdict for what belongs to another session: a stale observation window, and a deploy whose in-window alert
+    was not raised (window_notice=notice-only), each get their OWN governance alert naming the window's owner.
+    ON the verdict, deliberately, and mine: the register is unusable (so every deploy is now refused, exit 4), or
+    this check cannot raise its alerts. It catches its own exceptions, so neither reaches check_extra's wrapper,
+    whose page would name the wrong owner and the wrong causes."""
+    try:
+        _deploy_windows(box)
+    except Exception as e:
+        out("STATE", "the deploy_windows check crashed (%s) - stale observation windows and notice-only deploys are "
+            "NOT being raised to their owners" % type(e).__name__, "WINDOWS", "deploy-windows-alert")
+
+
+def _deploy_windows(box):
+    text, err = git(box, "show", "%s:%s" % (box["ref"], REGISTER_PATH))
+    stale = []
+    if text is None:
+        out("STATE", "the observation-window register %s is unreadable at the branch head (%s), so every deploy is "
+            "now refused (dt-deploy exit 4)" % (REGISTER_PATH, err), "WINDOWS", "deploy-windows-register")
+    else:
+        try:
+            r = subprocess.run([P(OBS_WINDOWS), "census"], input=(text + "\n").encode("utf-8"),
+                               capture_output=True, timeout=60)
+            rc, so, se = r.returncode, r.stdout.decode("utf-8", "replace"), r.stderr.decode("utf-8", "replace")
+        except (subprocess.TimeoutExpired, OSError) as e:
+            rc, so, se = None, "", type(e).__name__
+        if rc == 4:
+            out("STATE", "the observation-window register is unusable, so every deploy is now refused (dt-deploy "
+                "exit 4): %s" % se.strip()[:200], "WINDOWS", "deploy-windows-register")
+        elif rc != 0:
+            out("STATE", "%s could not read the register (%s): %s" % (OBS_WINDOWS, rc, se.strip()[:160]),
+                "WINDOWS", "deploy-windows-alert")
+        else:
+            stale = [ln.split(" ", 3) for ln in so.splitlines() if ln.startswith("STALE ")]
+    failed = []
+    for _, batch, owner, why in stale:
+        why_ = raise_alert("deploy-window-stale:%s" % batch,
+                           "Observation window %s is STALE (owner %s)" % (batch, owner),
+                           "Owner %s: your observation window %s in %s is %s. A stale window no longer blocks a "
+                           "deploy, so a deploy can now restart the app inside it with only a notice. Close it (an "
+                           "entry with a reason code) or amend its review_by, by a commit. Resolve this alert once the "
+                           "register says so; never ack. (B-DEPLOY-WINDOW-GUARD, #1249)" % (owner, batch, REGISTER_PATH, why),
+                           {"batch": batch, "owner": owner, "reason": why})
+        if why_:
+            failed.append("stale %s (%s)" % (batch, why_))
+    raised = set()
+    try:
+        raised = set(open(P(NOTICE_RAISED)).read().split())
+    except FileNotFoundError:
+        pass
+    lines = []
+    try:
+        lines = read_small(P(DEPLOY_NOTICE), limit=1 << 22)[1].decode("utf-8", "replace").splitlines()
+    except FileNotFoundError:
+        pass
+    notice_only = 0
+    for ln in lines:
+        f = dict(kv.split("=", 1) for kv in ln.split() if "=" in kv)
+        if f.get("window_notice") != "notice-only":
+            continue
+        notice_only += 1
+        tag = "%s:%s" % (f.get("sha", "?"), f.get("attempt_at", "?"))
+        if tag in raised:
+            continue
+        why_ = raise_alert("deploy-window-notice-only:%s" % tag.replace(":", "").replace("-", ""),
+                           "A deploy landed in observation window(s) %s with NO alert raised" % f.get("in_window", "?"),
+                           "dt-deploy started %s by %s at %s inside %s, but its in-window alert could not be raised "
+                           "(window_notice=notice-only). The owners were told only by the Helsinki notice. Read "
+                           "/home/deploy/dawntrader-deploy.record for the outcome. Resolve, never ack." % (
+                               f.get("sha", "?"), f.get("by", "?"), f.get("attempt_at", "?"), f.get("in_window", "?")),
+                           {"sha": f.get("sha"), "attempt_at": f.get("attempt_at"), "in_window": f.get("in_window")})
+        if why_:
+            failed.append("notice-only %s (%s)" % (tag, why_))
+        else:
+            with open(P(NOTICE_RAISED), "a") as fh:
+                fh.write(tag + "\n")
+    if failed:
+        out("STATE", "the deploy_windows check could not raise %d owner alert(s): %s" % (len(failed), "; ".join(failed)),
+            "WINDOWS", "deploy-windows-alert")
+    out("OK", "deploy_windows: %d stale window(s) and %d notice-only deploy line(s), raised to their owners"
+        % (len(stale), notice_only))
+
+
 def check_extra(name, box):
-    if name == "dt_api_page":
+    if name == "deploy_windows":
+        deploy_windows(box)
+    elif name == "dt_api_page":
         p = P("/var/lib/dt-api/page.json")
         if os.path.lexists(p):
             try:
@@ -477,10 +594,11 @@ def pending(box, shas, head):
                 % (repo_path, err or "no commit in the range touches it"), None, repo_path)
             continue
         age = (time.time() - int(ct[0])) / 86400
+        grace = box.get("pending_days", {}).get(repo_path, PENDING_DAYS)
         out("PENDING", "%s changed on the branch after the install at %s (%.1f days ago)" % (repo_path, sha[:12], age))
-        if age > PENDING_DAYS:
-            out("STATE", "a reviewed change to %s has waited over %d days to be installed" % (repo_path, PENDING_DAYS),
-                "PENDING-STALE", repo_path)
+        if age > grace:
+            out("STATE", "a reviewed change to %s has waited over %d day%s to be installed"
+                % (repo_path, grace, "" if grace == 1 else "s"), "PENDING-STALE", repo_path)
 
 
 def read_installed_shas(box):
