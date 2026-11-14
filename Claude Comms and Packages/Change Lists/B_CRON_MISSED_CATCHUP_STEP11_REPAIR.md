@@ -910,3 +910,87 @@ not explained.
 
 **STEP: 9 of 11 — fold confirmed, NEXT: Step 6/7 on the next deliberate deploy,
 then Step 10.**
+
+## 16. STEP 7 LIVE VERIFICATION OF THE STEP-9 FOLD — PASS (CC-C, 2026-11-14)
+
+**Deployed object.** Joint deploy by `cc-a`: `dt-deploy 9591ba8c22d2c0fb9adfd822d85462709e211ef9`
+at `2026-11-14T01:40:58Z`, restart 699, `ENGINE RESUMED`, identity asserted, no
+migrations in range (`/home/deploy/dawntrader-deploy.record`; `dist/BUILD_SHA`
+reads the same sha); CI `43539037444` 4/4 on that sha. `git merge-base
+--is-ancestor b2cf8987644120b55b5226c0fbfea7177e1b0e53 9591ba8c2…` = true, so the
+fold (`7ddaadb83`, `997221721`, `b2cf89876`) is in the running build.
+**Built code:** `dist/index.js:96345-96350` writes `...resultMeta,` followed by
+`trigger_source`, `occurrence_id`, `duration_ms`, `lag_ms`, `policy_version` —
+the runner-authored keys last, as at `server/services/cron-occurrence-runner.ts`
+at the deployed sha; the `RUNNER_AUTHORED_FIRE_META_KEYS` comment is at `:96337`.
+**Process, not file:** PM2 `dawntrader` pid 3425086, restart 699, `pm_uptime`
+`2026-11-14T01:40:48Z`; the verifier's `Started; interval=900s` line at `01:40:55Z`.
+
+**Pre-registered prediction (written before the pass, 01:42Z):** every fire row the
+runner writes after the restart carries `trigger_source = 'cron'`, an
+`occurrence_id` equal to its occurrence row's id, `duration_ms`, `lag_ms` and
+`policy_version`; the first post-restart verifier pass is six of six `healthy`;
+zero verifier lines in the error stream; zero new cron alerts.
+
+**Result 1 — fire rows written by the running fold** (`scheduled_tasks_audit`
+joined to `scheduled_job_occurrences` on `meta->>'occurrence_id'`,
+`created_at >= 01:40:58Z`, read 01:57:47Z): **6 of 6** rows — qd_probe and
+feed_integrity at 01:45, 01:50 and 01:55 — `success`, `trigger_source = cron`,
+`occurrence_id` matching a `first_source = natural` occurrence, `duration_ms`
+and `lag_ms` present, `policy_version = b-cron-missed-catchup/v1`.
+**Positive control:** the same query from 01:30Z returns the six pre-restart
+runner rows (same shape) plus `boot_state_reconciliation` at 01:40:54Z with no
+runner keys — the session-lifecycle controller's own row, which does not go
+through the runner (`session-lifecycle-controller.ts:120`), as expected. At
+01:42:35Z, before any post-restart slot, the query returned 0 rows.
+
+**Result 2 — first post-restart pass, `2026-11-14 01:55:57Z` (out stream):** six of six `healthy`:
+
+| job | last_successful_boundary | mature_occurrence |
+|---|---|---|
+| xstock_universe_discovery_cron | 11-13 06:00:00.000Z | 11-13 06:00:00.000Z |
+| xstock_qd_probe_cron | 11-14 01:55:00.000Z | 11-14 01:45:00.000Z |
+| formula_audit_cron | 11-13 03:00:00.000Z | 11-13 03:00:00.000Z |
+| feed_integrity_cron | 11-14 01:55:00.000Z | 11-14 01:45:00.000Z |
+| awareness_state_update_cron | 11-14 01:00:00.000Z | 11-14 01:00:00.000Z |
+| awareness_reflection_cron | 11-14 00:00:00.000Z | 11-14 00:00:00.000Z |
+
+The two five-minute jobs certify on boundaries written by the folded runner
+(01:45, matured), so the verifier accepts the new fire rows.
+Error stream: **0** verifier lines in `error.log` since the restart. **Positive
+control:** `error__2026-11-13_00-00-00.log` holds 16 verifier `STALE` lines, so
+the stream carries them when they occur. Alert store (`system-alerts.jsonl`,
+whole file, merged by id, non-null fields): 93 rows whose dedupe key or title
+contains `cron` all-time (positive control; wider than §12's 68 because this
+filter also matches titles), **0 created since `01:40:58Z`**.
+
+**What this does and does not prove.** It proves the running process writes the
+runner-authored keys from the runner, on every post-restart fire (6 of 6), and
+that the verifier still certifies all six jobs on them. It does not exercise a
+job that tries to override a reserved key — no registered job does; that arm
+is proven by the forging test and the compile fence only (§14, §15). Stated,
+not claimed.
+
+**UI judgement:** unchanged from §9 — the fold changes only how a background
+fire row is assembled; no page, panel or rendering contract moves.
+
+`NOT RE-READ` by a second reader before Langston.
+
+**Reproduce (staging, as `deploy`, in `/home/deploy/dawntrader`):**
+
+```bash
+cat /home/deploy/dawntrader-deploy.record; cat dist/BUILD_SHA
+grep -n -A6 '^ *\.\.\.resultMeta,' dist/index.js | head -8
+grep -h 'CRON-FIRE-VERIFIER' /var/log/dawntrader/out.log | grep '^2026-11-14 01:5'
+grep -c 'CRON-FIRE-VERIFIER' /var/log/dawntrader/error.log
+```
+```sql
+SELECT a.task_name, a.scheduled_for, a.status, a.meta->>'trigger_source',
+       a.meta->>'occurrence_id' = o.id::text, a.meta ? 'duration_ms', a.meta ? 'lag_ms',
+       a.meta->>'policy_version', o.first_source
+FROM scheduled_tasks_audit a
+LEFT JOIN scheduled_job_occurrences o ON o.id::text = a.meta->>'occurrence_id'
+WHERE a.created_at >= '2026-11-14T01:40:58Z' ORDER BY a.created_at;
+```
+
+**STEP: 7 of 11 COMPLETE · NEXT STEP: 8 of 11** (Langston's second pass on this restart).
