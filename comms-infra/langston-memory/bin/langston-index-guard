@@ -1,0 +1,194 @@
+#!/usr/bin/env python3
+"""langston-index-guard - the write-time size check on Langston's harness auto-memory index.
+B-LANGSTON-CLAUDEMD-RESIDUAL, #1197 rider (Langston's ruling, Option A, Discord 1571187971703701525).
+
+WHY. His loaded set (CLAUDE.md + MEMORY.md + this index) is capped as a SUM that may only go down (row 2.8b).
+`langston-memory-write` refuses a MEMORY.md write that grows the set over the ceiling, but the index is written by the
+harness itself, through his file tools, so nothing checked it at write time: on 2026-11-14 it took the set 530 B over
+and only the daily size watch saw it.
+
+WHAT. A Claude Code PreToolUse hook, installed root-owned in /etc/claude-code/managed-settings.json with matcher "*",
+so it sees every tool call on the box. It acts only when a call's target realpaths to the index; every other call exits
+0 at once, with no log row and no import. On a call that targets the index:
+  - a tool not in WRITERS (enumerated at the installed CLI version, C-5) is REFUSED - fail closed, never assumed safe;
+  - the bytes after the call are predicted (Write: the content; Edit: the replacement applied to the bytes
+    on disk, `replace_all` honoured, C-5); an edit the tool itself would reject (old_string absent, or not unique
+    without replace_all) passes through, since the tool refuses it before writing;
+  - a call that does not grow the index passes (the non-increase gate: a trim can never be locked out);
+  - a call that grows it is checked through `read_ratchet` IMPORTED from langston-memory-write (C-2, one summer):
+    refused if the loaded set would end over its ceiling, or if anything could not be established. The two refusals
+    say which they are (C-3), and both name the ordering (C-4): each call is judged on its own bytes.
+Every decision on the index is logged to LOG (C-1): tool, realpath, bytes before/after, verdict.
+
+RUNS AS whoever runs claude - langston for his invokes (C-3). So the ratchet state must stay readable by langston and
+LOG must be appendable by him; deploy.sh asserts both. Exit 0 = allow; exit 2 = block (stderr goes to the model).
+"""
+import datetime, importlib.machinery, importlib.util, json, os, sys
+
+sys.dont_write_bytecode = True
+
+INDEX = os.environ.get("LIG_INDEX") or "/home/langston/.claude/projects/-home-langston/memory/MEMORY.md"
+WRITER = os.environ.get("LIG_WRITER") or "/usr/local/bin/langston-memory-write"
+LOG = os.environ.get("LIG_LOG") or "/var/log/langston-index-guard.jsonl"
+# C-5: the tools that can write a file, enumerated at Claude Code 2.1.318 (2026-11-14). A version bump re-checks this
+# list (deploy.sh records the installed version beside it); a tool outside it that targets the index is refused.
+CLI_VERSION_ENUMERATED = "2.1.318"
+# Measured: the init event of `claude -p --output-format stream-json --verbose` as langston (fixture HOME), 2026-11-14,
+# lists 25 tools; the ones that write a file are Write, Edit and NotebookEdit. MultiEdit is NOT in the set. NotebookEdit
+# edits notebooks, so a NotebookEdit aimed at the index is refused below as an unmeasurable write.
+WRITERS = ("Write", "Edit")
+# The running CLI version, read only on a matched call and stamped on its row, so a bump is visible in the log. A bump is
+# NOT refused: a NEW writing tool is already refused above as unenumerated, and refusing every save after the daily
+# CLI auto-update would be Option B's cost arriving unannounced. A mismatch is flagged on the row (`cli_mismatch`).
+CLI_PACKAGE = os.environ.get("LIG_CLI_PACKAGE") or "/usr/lib/node_modules/@anthropic-ai/claude-code/package.json"
+ORDERING = (" Each call is judged on its own bytes: to make room, remove lines in one call first, then add in the next."
+            " Do not route the write another way; ask Infra Claude if the set needs headroom.")
+
+
+def log(row):
+    row["ts"] = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    try:
+        with open(LOG, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(row, sort_keys=True) + "\n")
+        return True
+    except OSError:
+        return False
+
+
+def cli_running():
+    try:
+        with open(CLI_PACKAGE, encoding="utf-8") as fh:
+            return json.load(fh).get("version")
+    except (OSError, ValueError):
+        return None
+
+
+def target_of(tool_input):
+    for k in ("file_path", "notebook_path", "path"):
+        v = tool_input.get(k)
+        if isinstance(v, str) and v:
+            return v
+    return None
+
+
+def apply_edit(text, old, new, replace_all):
+    """The text after one edit, or None when the tool itself would reject it (it then writes nothing)."""
+    if not isinstance(old, str) or not isinstance(new, str) or old == "":
+        return None
+    n = text.count(old)
+    if n == 0 or (n > 1 and not replace_all):
+        return None
+    return text.replace(old, new) if replace_all else text.replace(old, new, 1)
+
+
+def predict(tool, ti, old_text):
+    """(new_text, why_passthrough). new_text None + a reason = the tool will reject the call itself."""
+    if tool == "Write":
+        c = ti.get("content")
+        if not isinstance(c, str):
+            raise ValueError("Write without string content")
+        return c, None
+    if tool == "Edit":
+        t = apply_edit(old_text, ti.get("old_string"), ti.get("new_string"), bool(ti.get("replace_all")))
+        return t, (None if t is not None else "the tool rejects this edit itself")
+    raise ValueError("unenumerated tool %r" % tool)
+
+
+def load_writer():
+    loader = importlib.machinery.SourceFileLoader("langston_memory_write_for_guard", WRITER)
+    spec = importlib.util.spec_from_loader(loader.name, loader)
+    mod = importlib.util.module_from_spec(spec)
+    loader.exec_module(mod)
+    return mod
+
+
+def block(row, msg):
+    row["verdict"] = "refused"
+    row["message"] = msg
+    if not log(row):
+        msg += " (The guard could not write its log.)"
+    sys.stderr.write(msg + "\n")
+    return 2
+
+
+def decide(event):
+    tool = event.get("tool_name")
+    ti = event.get("tool_input") or {}
+    if not isinstance(ti, dict):
+        return 0
+    path = target_of(ti)
+    if path is None:
+        return 0
+    if not os.path.isabs(path):
+        path = os.path.join(event.get("cwd") or os.getcwd(), path)
+    real = os.path.realpath(path)
+    if real != os.path.realpath(INDEX):
+        return 0
+    row = {"tool": tool, "realpath": real, "cli_enumerated": CLI_VERSION_ENUMERATED, "cli_running": cli_running()}
+    row["cli_mismatch"] = row["cli_running"] != CLI_VERSION_ENUMERATED
+    if tool not in WRITERS:
+        return block(row, "REFUSED by langston-index-guard: %r is not a tool this guard was enumerated for (Claude Code "
+                          "%s), so its effect on the auto-memory index cannot be measured. Use Write or Edit.%s"
+                          % (tool, CLI_VERSION_ENUMERATED, ORDERING))
+    try:
+        with open(real, "rb") as fh:
+            old = fh.read()
+    except FileNotFoundError:
+        old = b""
+    row["bytes_before"] = len(old)
+    try:
+        new_text, passthrough = predict(tool, ti, old.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError) as e:
+        return block(row, "REFUSED by langston-index-guard: could not establish the size after this write (%s)."
+                          " Nothing was written.%s" % (e, ORDERING))
+    if new_text is None:
+        row.update({"verdict": "passthrough", "why": passthrough})
+        log(row)
+        return 0
+    new_len = len(new_text.encode("utf-8"))
+    row["bytes_after"] = new_len
+    if new_len <= len(old):
+        row["verdict"] = "allowed-no-growth"
+        log(row)
+        return 0
+    try:
+        r = load_writer().read_ratchet(new_len, subject=INDEX)
+    except Exception as e:  # noqa: BLE001 - any failure to read the ratchet is "could not establish", never a pass
+        r = {"unknown": "the ratchet could not be read (%s: %s)" % (type(e).__name__, e)}
+    row["ratchet"] = {k: r.get(k) for k in ("state", "ceiling_bytes", "total", "unknown")}
+    if r.get("unknown"):
+        return block(row, "REFUSED by langston-index-guard: this write grows the auto-memory index by %d B and the "
+                          "loaded-set size COULD NOT BE ESTABLISHED: %s. Nothing was written.%s"
+                          % (new_len - len(old), r["unknown"], ORDERING))
+    if r["total"] > r["ceiling_bytes"]:
+        return block(row, "REFUSED by langston-index-guard: this write grows the auto-memory index by %d B and would "
+                          "leave the loaded set at %d B, OVER its ceiling of %d B (row 2.8b - it may only go down). "
+                          "Nothing was written.%s" % (new_len - len(old), r["total"], r["ceiling_bytes"], ORDERING))
+    row["verdict"] = "allowed-under-ceiling"
+    log(row)
+    return 0
+
+
+def main():
+    raw = sys.stdin.read()
+    try:
+        event = json.loads(raw)
+    except ValueError:
+        # an unparseable event cannot be checked against the index; refuse only if it names the index at all
+        if os.path.basename(INDEX) in raw and "-home-langston" in raw:
+            sys.stderr.write("REFUSED by langston-index-guard: the tool call could not be parsed.\n")
+            return 2
+        return 0
+    try:
+        return decide(event)
+    except Exception as e:  # noqa: BLE001
+        ti = event.get("tool_input") if isinstance(event, dict) else None
+        p = target_of(ti) if isinstance(ti, dict) else None
+        if p and os.path.realpath(p) == os.path.realpath(INDEX):
+            sys.stderr.write("REFUSED by langston-index-guard: internal error (%s: %s).\n" % (type(e).__name__, e))
+            return 2
+        return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

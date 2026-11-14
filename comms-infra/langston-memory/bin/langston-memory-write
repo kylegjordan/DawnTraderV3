@@ -854,9 +854,11 @@ def watched_paths():
     return [os.path.join(LANGSTON_HOME, "CLAUDE.md"), TARGET, os.path.join(LANGSTON_HOME, AUTO_MEMORY_INDEX)]
 
 
-def read_ratchet(mem_len):
-    """THE ONE READ of the ratchet, shared by growth_gate and size_line (Langston, 2026-10-17: two copies of one read is
-    the fix-follows-pointer generator). Returns {state, live, no_state, ceiling_bytes, other, missing, total, unknown}:
+def read_ratchet(mem_len, subject=None):
+    """THE ONE READ of the ratchet, shared by growth_gate, size_line and the index guard (Langston, 2026-10-17: two
+    copies of one read is the fix-follows-pointer generator; B-LANGSTON-CLAUDEMD-RESIDUAL C-2, 2026-11-14: one summer).
+    `subject` is the watched file whose NEW length is mem_len - MEMORY.md by default, the auto-memory index for
+    langston-index-guard. Returns {state, live, no_state, ceiling_bytes, other, missing, total, unknown}:
     `total` = the other watched files by stat + mem_len; `unknown` names the first thing that could not be established
     (state unreadable, no valid positive integer ceiling, the watch's persisted list != watched_paths() on the live
     home, a watched file missing on the live home). A test home uses ITS OWN state file, never the live one."""
@@ -884,9 +886,13 @@ def read_ratchet(mem_len):
         r["unknown"] = ("the size watch's persisted file list %r does not match this writer's %r - a loaded file could "
                         "be uncounted" % (rs.get("watched"), mine))
         return r
+    subj = os.path.realpath(subject or TARGET)
+    if subj not in [os.path.realpath(f) for f in mine]:
+        r["unknown"] = "%s is not a watched file - it is not part of the loaded set" % subj
+        return r
     other, missing = 0, []
     for f in mine:
-        if os.path.realpath(f) == os.path.realpath(TARGET):
+        if os.path.realpath(f) == subj:
             continue
         try:
             other += os.stat(f).st_size
