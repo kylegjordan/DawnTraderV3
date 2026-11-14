@@ -706,8 +706,8 @@ His rulings: (a) **yes**, no rule on archive prefixes, for the reason in C-2. (b
 
 **C-3 — the rule is verified, not assumed, and its failure is visible.**
 - **The verification:** step 4 already uploads and hides a throwaway `_liveness/` object. It records that object's file id and the step-4 listing (the positive control: the id is present). A re-list at least 2 days later must show the id gone. Until it is gone, step 1's removal of a working delete is resting on an unverified rule. If it is not gone, step 5 does not run.
-- **The meter:** the `_liveness/` class changes from a 10 MB byte delta to an **upload-version COUNT ceiling, more than 3 versions pages**. That reuses 3c's file-id machinery, and catches a dead rule within about two weeks of weekly canary runs. (At 104 B a week, the byte delta would take ~1,900 years to fire.) `_proof/` gets the same ceiling. Its setting, `cold_meter_liveness_max_versions` (proposed 3), replaces `cold_meter_liveness_growth_warn_bytes` in the not-yet-deployed 3c migration.
-  - **Order:** that 3c change is made before tonight's deploy if it clears review in time. Otherwise the 3c migration ships as is, and 3d's own migration replaces the key.
+- **The meter:** the `_liveness/` class changes from a 10 MB byte delta to an **upload-version COUNT ceiling, more than 3 versions pages**. That reuses 3c's file-id machinery, and catches a dead rule within about two weeks of weekly canary runs. (At 104 B a week, the byte delta would take ~1,900 years to fire.) `_proof/` gets the same ceiling. Its setting, `cold_meter_liveness_max_versions` (proposed 3), replaces `cold_meter_liveness_growth_warn_bytes`.
+  - **It ships in 3d's step-1 code, not as a change to the 3c already approved for tonight.** 3d's own migration adds `cold_meter_liveness_max_versions` (proposed 3) and removes `cold_meter_liveness_growth_warn_bytes`, so the 3c migration deploys tonight unchanged.
 - **`daysFromUploadingToHiding: 1` on `_liveness/` and `_proof/` as well** — folded, labelled **HYPOTHESIS until verified**. Per Backblaze's documentation it hides a file N days after upload, so a canary or proof object whose own hide never ran (the canary throws before hiding on a mismatch, `b75-cold-liveness.ts:114-126`) is still hidden, then deleted. The same re-list verifies it: the step-4 run also leaves one object it does NOT hide, and the re-list ≥ 2 days later must show that one gone too.
 - **The `DEPLOY_WINDOWS.jsonl` row — I propose filing it AT STEP 4, not in this Step-2 commit.**
   - **No deploy can disturb this observation.** A lifecycle rule runs inside B2; nothing `dt-deploy` does reaches it.
@@ -732,7 +732,7 @@ His rulings: (a) **yes**, no rule on archive prefixes, for the reason in C-2. (b
 
 **Steps, r2:**
 - **(0)** Kyle's residue decision; if yes, `--delete-residue` with the wide key.
-- **(1)** Code: `hideColdFile`, the canary and the proof hide, `deleteCold` removed, the two fences re-pointed. Reviewed, CI 4/4, deployed.
+- **(1)** Code: `hideColdFile`, the canary and the proof hide, `deleteCold` removed, the two fences re-pointed, and the `_liveness/` + `_proof/` count ceiling with its migration. Reviewed, CI 4/4, deployed.
 - **(2)** One `b2_update_bucket`, after a re-read that must still be `[]`. It sets rules on `_liveness/` and `_proof/`, each with `daysFromHidingToDeleting: 1` and `daysFromUploadingToHiding: 1`.
 - **(3)** Mint the key: `listFiles`/`readFiles`/`writeFiles`, bucket `dt-archive-cold`, no prefix.
 - **(4)** The atomic swap at a clear minute, then the proofs:
