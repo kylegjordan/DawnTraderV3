@@ -312,3 +312,28 @@ Checks: the 3a file passes 16/16, and the `tsc` baseline gate stays at 324 = 324
 3. The sha the proof loaded: the two proof runs (06:19:39Z and 06:20:26Z by their B2 upload timestamps) and the per-phase probe ran `npx tsx` from `/home/deploy/dawntrader`, whose checkout was `415b3051f`, deployed at 06:18:45Z. The drift row's "deployed `9591ba8c2`" was stamped AS AT 06:17:01Z, before that deploy.
 
 **#661 leg 3 (Langston):** the `https` arm has never executed in a test — every fence drives http to loopback. Its first exercise is the `b75-cold-proof` re-run against real B2, so no green fence is cited for it. The 40 MiB bound is not scale-invariant; AP-5 flatness is proven only by the proof harness.
+
+### 3a Step 6 r2 + Step 7 r2 — the fix deployed; AP-5 proof PASSES
+**Step 4:** Langston PROCEED on `b0b7b6193` (Discord `1571057707790635061`). He re-derived FINDING-1 himself on Node 20.20.0 and Node 22.22.1, by fd count on the unlinked file: 0 with the fix, 1 without.
+
+**Step 6:** `65132e2eb5f86a3098bb0997a7bbbb91a47ae0dc` live 2026-11-14T07:06:44Z (restart 701, pm2 start 07:06:34.639Z, pid 3644971); CI `43569188607` 4/4 on that exact sha; no migration.
+- Carried: `301684a42` + `b0b7b6193` (this fix) and Infra's `55beb44c1` + `80ad52922`.
+- Infra confirmed both have Langston's PROCEED and CI, and touch the token-watch tools only.
+- NEW Claude cleared the restart: B-ENTRY-GATE loses only its in-progress hourly count; the deploy had to land before 20:30Z.
+
+**Step 7 — `b75-cold-proof.ts`, run from `/home/deploy/dawntrader` at `65132e2eb` (`git rev-parse HEAD` checked first):**
+| object | bytes | peak RSS | min MemAvailable | proof version deleted |
+|---|---|---|---|---|
+| `43825287-…` trace | 170,761,082 | 121,948 kB (119.1 MiB) | 2,225,000 kB | yes (`…m070710…`) |
+| `0dfe1e0e-…` `crypto_spot_ticker_snap/2026-06` | 535,409,768 | 132,804 kB (129.7 MiB) | 1,976,868 kB | yes (`…m070731…`) |
+
+Against AP-5, verbatim:
+- each run is under 1 GiB RSS: yes;
+- MemAvailable stays ≥ 512 MiB: yes;
+- the two peaks sit within 64 MiB of each other: **10.6 MiB apart → PASS.**
+
+Before the fix, the same two objects peaked at 252.5 and 604.5 MiB. SHA-256 and SHA-1 are identical to the pre-fix runs, so the same bytes went up.
+
+**First exercise of the `https` arm (#661 leg 3):** both uploads went through `postFileStream` to real B2 over https. B2 accepted each body against `X-Bz-Content-Sha1`, `assertB2Version` passed on the upload response and on `b2_get_file_info` (the proof would have thrown otherwise), and both proof versions were deleted by file id. `data_archive_manifest` and the warm objects were untouched.
+
+**UI surface: none.** The cold path is a scheduled script with no page, and nothing in the app reads the attestation columns yet (that reader is 3b's).
