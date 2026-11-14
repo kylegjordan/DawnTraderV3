@@ -424,3 +424,22 @@ NEW Claude cleared the restart (no B-ENTRY-GATE activity since 07:06Z). The depl
 - **3b item 1 Step 8: Langston PROCEED** (Discord `1571091106735726724`). He re-derived every claim himself: the table (12 columns, 4 constraints, 3 indexes); the four rows on the full six-column key; candidates = 0 from the query; a hand rotator run (`deferred=0`, lock absent before and after); and the proof via the new path (kernel max RSS 125,804 kB, the third point in the band). Note: "no retry lines" holds because `b2AttemptLog` suppresses a first-try success by design (`storage-client.ts:648`). Item 1 is verified, except its fence-only legs (the retry on failure, the lock refusal and takeover, the two pages), which have not fired live.
 
 - **3b item 2 Step 4: Langston PROCEED on the fold** (Discord `1571098846455664641`). He re-derived the `/proc` accuracy himself: `CLK_TCK` = 100; the own-pid delta of 637.6 ms is 617.6 ms of `btime` second-truncation, signed toward HELD, so 5 s is about 5x the worst case. 152/152 pids are readable, so the `null` arm is fence-only. CI at the graded ref `24ed6ea87`: 4/4. **New finding, not blocking:** the takeover write is a plain `writeFileSync`, not `wx`, so two same-host runs that both judge the holder dead both believe they hold the lock. Langston homed it on 3c; **folded instead into 3b item 3** (`wx` takeover plus a read-back of our own pid), because it is cheap and the rotator is already open.
+
+### 3b item 3 — Step 3: bind the 4 pre-3a cold rows; the bucket inventory; the exclusive takeover
+- **NEW `storage-client.listColdFileVersions(bucket, prefix, setupMs?)`:** `b2_list_file_versions`, paged until there is no next marker. Each page goes through `withB2Retry`, and a page that keeps failing throws, so a partial listing is never returned (C-2).
+- **NEW `server/scripts/b75-cold-bind.ts`:** report by default; `--apply` writes. `planColdBindings` decides each unbound cold row:
+  - one version of the manifest's size → bind it;
+  - several versions with one SHA-1 → bind the newest, the rest are residue;
+  - differing SHA-1s → download each by id under a bound, the SHA-256 decides, and only with `--apply`;
+  - no version, or a size mismatch → refused.
+  - Before writing, `b2_get_file_info` and `assertB2Version` check the chosen version; the UPDATE is guarded `provider_file_id IS NULL`.
+- **Orphans are scoped to DawnTrader's own namespaces.** Only a first segment that is a manifest `source_table` (or `_proof`) can be an orphan; every other version is counted as another owner's and never listed. **Found at Step 3:** the first report listed 108 `token-watch/` objects (CC-INFRA's cold archive, which shares the bucket) as orphans, and item 4 deletes orphans. Fence: token-watch and `_liveness/` are never orphans.
+- **Lock takeover is exclusive** (Langston's item 2 finding, homed on 3c, folded here): remove the dead file, create with `wx`, read back our own pid. Losing the race reads as HELD. Fence plus mutation (plain write) → red.
+- **Report run on staging** (read-only, from a private copy, no deploy), the bucket listed in 1 page, 115 versions:
+  - other owner: `token-watch/` 109;
+  - ORPHAN: `disk_file.diagnostic_reports/phase-41F-L-trace.ndjson.jsonl.gz` (the P10 orphan, 170,761,082 B);
+  - bind: `context_bridge_log/2025-12`, `2026-02` and `exit_decision_archive/2026-05`, one version each;
+  - `context_bridge_log/2026-01`: two byte-identical versions (one SHA-1, 13,901,237 B), bind the newest (2026-07-07T22:58:09Z) — the older (22:52:35Z) is RESIDUE (FINDING-2);
+  - `failures=0`, and no download needed.
+- **`--apply` runs after deploy** (the script must be on the box). No staging deploy before NEW's 21:04Z read.
+Tests: 3b 60/60; 3a, harness and amendment2 93/93; tsc 324 = 324.

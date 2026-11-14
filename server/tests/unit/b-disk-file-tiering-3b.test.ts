@@ -472,3 +472,103 @@ describe('3b item 2 — Langston r3 carries', () => {
     expect(read('server/scripts/b75-cold-rotator.ts')).toContain('acquireRotatorLock(ROTATOR_LOCK_PATH, undefined, 2 * cfg.runDeadlineMs)');
   });
 });
+
+// ── 3b item 3: bind the pre-3a cold rows to exact versions; the inventory; the exclusive takeover ────────────────────
+import { coldPathOf, orphanVersions, otherOwnerCounts, planColdBindings, type UnboundColdRow } from '../../scripts/b75-cold-bind';
+import type { B2ListedVersion } from '../../services/data-archive/storage-client';
+
+const ROW: UnboundColdRow = { id: 'r1', source_table: 'context_bridge_log', partition_label: '2026-01', storage_uri: 'b2://dt-archive-cold/context_bridge_log/2026-01.jsonl.gz', bytes_compressed: 13901237, checksum: 'sha256-x' };
+const ver = (id: string, over: Partial<B2ListedVersion> = {}): B2ListedVersion => ({ fileId: id, fileName: 'context_bridge_log/2026-01.jsonl.gz', action: 'upload', contentLength: 13901237, contentSha1: 'aa', uploadTimestamp: 1, ...over });
+
+describe('3b item 3 — planColdBindings: one version, identical duplicates, differing duplicates, none, wrong size', () => {
+  it('exactly one version of the right size → bind it', () => {
+    const [d] = planColdBindings([ROW], [ver('v1')]);
+    expect(d).toMatchObject({ kind: 'bind', version: { fileId: 'v1' }, residue: [] });
+  });
+  it('two byte-identical versions (one SHA-1, one length) → bind the NEWEST; the older is residue (FINDING-2 shape)', () => {
+    const [d] = planColdBindings([ROW], [ver('old', { uploadTimestamp: 1783464755637 }), ver('new', { uploadTimestamp: 1783465089251 })]);
+    expect(d.kind).toBe('bind');
+    if (d.kind !== 'bind') return;
+    expect(d.version.fileId).toBe('new');
+    expect(d.residue.map((v) => v.fileId)).toEqual(['old']);
+  });
+  it('two versions with different SHA-1s → needs a download to decide (never a guess)', () => {
+    const [d] = planColdBindings([ROW], [ver('a', { contentSha1: 'aa' }), ver('b', { contentSha1: 'bb' })]);
+    expect(d.kind).toBe('needs_download');
+  });
+  it('no version, or none of the manifest size → refused, nothing bound', () => {
+    expect(planColdBindings([ROW], [])[0].kind).toBe('refused');
+    expect(planColdBindings([ROW], [ver('v1', { contentLength: 9 })])[0]).toMatchObject({ kind: 'refused', reason: expect.stringMatching(/no version .* has the manifest's 13901237 bytes/) });
+  });
+  it('a hide marker is not a version', () => {
+    expect(planColdBindings([ROW], [ver('h', { action: 'hide' })])[0].kind).toBe('refused');
+  });
+  it('orphans are only ever in the DawnTrader namespaces - the shared bucket token-watch and canary objects are never orphans', () => {
+    const vs = [
+      ver('v1'),
+      ver('o1', { fileName: 'disk_file.diagnostic_reports/phase-41F-L-trace.ndjson.jsonl.gz' }),
+      ver('p1', { fileName: '_proof/t/2026-06.jsonl.gz' }),
+      ver('c1', { fileName: '_liveness/canary-x.txt' }),
+      ver('t1', { fileName: 'token-watch/cold/provenance-follow-up-2026-08-31.jsonl.gz' }),
+    ];
+    const claimed = new Set([coldPathOf(ROW.storage_uri)!.path]);
+    const own = new Set(['context_bridge_log', 'disk_file.diagnostic_reports', '_proof']);
+    expect(orphanVersions(vs, claimed, own).map((v) => v.fileId)).toEqual(['o1', 'p1']);
+    expect(Object.fromEntries(otherOwnerCounts(vs, own))).toEqual({ _liveness: 1, 'token-watch': 1 });
+  });
+});
+
+describe('3b item 3 — listColdFileVersions pages to the end, and a failed page FAILS the listing (C-2)', () => {
+  it('follows nextFileName/nextFileId across pages and returns every version', async () => {
+    const pages = [
+      { files: [ver('a')], nextFileName: 'n2', nextFileId: 'i2' },
+      { files: [ver('b'), ver('c')], nextFileName: null, nextFileId: null },
+    ];
+    const bodies: unknown[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit = {}) => {
+      if (url.endsWith('/b2_authorize_account')) return new Response(JSON.stringify({ accountId: 'acct', authorizationToken: 'tok', apiInfo: { storageApi: { apiUrl: 'https://api.fake', downloadUrl: 'https://dl.fake' } } }));
+      bodies.push(JSON.parse(String(init.body)));
+      return new Response(JSON.stringify(pages.shift()));
+    }));
+    const r = await client().listColdFileVersions('dt-archive-cold', '');
+    expect(r.pages).toBe(2);
+    expect(r.versions.map((v) => v.fileId)).toEqual(['a', 'b', 'c']);
+    expect(bodies[1]).toMatchObject({ startFileName: 'n2', startFileId: 'i2' });
+  });
+  it('a page that keeps failing throws — never a partial (low) inventory', async () => {
+    let n = 0;
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url.endsWith('/b2_authorize_account')) return new Response(JSON.stringify({ accountId: 'acct', authorizationToken: 'tok', apiInfo: { storageApi: { apiUrl: 'https://api.fake', downloadUrl: 'https://dl.fake' } } }));
+      n++;
+      if (n === 1) return new Response(JSON.stringify({ files: [ver('a')], nextFileName: 'n2', nextFileId: 'i2' }));
+      return new Response(JSON.stringify({ code: 'service_unavailable' }), { status: 503 });
+    }));
+    await expect(client().listColdFileVersions('dt-archive-cold', '')).rejects.toThrow(/503/);
+  });
+});
+
+describe('3b item 3 — the takeover itself is exclusive (Langston item 2 finding)', () => {
+  it('a dead holder is taken over and the file names OUR pid', () => {
+    const f = path.join(tmp(), 'lock');
+    fs.writeFileSync(f, JSON.stringify({ pid: 999_999, host: os.hostname(), started_at: new Date().toISOString() }));
+    expect(acquireRotatorLock(f, () => false).kind).toBe('taken_over');
+    expect(JSON.parse(fs.readFileSync(f, 'utf-8')).pid).toBe(process.pid);
+  });
+  it('if another run creates the file between our remove and our create, we read it as HELD', () => {
+    const f = path.join(tmp(), 'lock');
+    fs.writeFileSync(f, JSON.stringify({ pid: 999_999, host: os.hostname(), started_at: new Date().toISOString() }));
+    const realWrite = fs.writeFileSync;
+    vi.spyOn(fs, 'writeFileSync').mockImplementation(((file: fs.PathOrFileDescriptor, data: string | NodeJS.ArrayBufferView, opts?: fs.WriteFileOptions) => {
+      if (typeof opts === 'object' && opts && (opts as { flag?: string }).flag === 'wx' && file === f && !fs.existsSync(f)) {
+        realWrite(f, JSON.stringify({ pid: 777, host: os.hostname(), started_at: new Date().toISOString() })); // the other run wins
+        const e = new Error('EEXIST') as NodeJS.ErrnoException;
+        e.code = 'EEXIST';
+        throw e;
+      }
+      return realWrite(file, data, opts);
+    }) as typeof fs.writeFileSync);
+    const r = acquireRotatorLock(f, () => false);
+    expect(r.kind).toBe('held');
+    expect(r.kind === 'held' && r.holder).toMatch(/"pid":777/);
+  });
+});

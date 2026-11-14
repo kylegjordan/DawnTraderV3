@@ -931,6 +931,53 @@ export class StorageClient {
   }
 
   /**
+   * 3b item 3 — every stored VERSION under `prefix` (b2_list_file_versions), paged until B2 returns no next marker
+   * (plan r2 binding C-2: a listing that cannot finish FAILS — it never returns a partial, low inventory). Each page is
+   * an idempotent metadata read, so it is retried like the other JSON calls. Returns the versions and the page count.
+   */
+  async listColdFileVersions(
+    bucket: string,
+    prefix: string,
+    setupMs?: number,
+  ): Promise<{ versions: B2ListedVersion[]; pages: number }> {
+    const bucketId = await this.b2ResolveBucketId(bucket, setupMs);
+    const versions: B2ListedVersion[] = [];
+    let startFileName: string | null = null;
+    let startFileId: string | null = null;
+    let pages = 0;
+    for (;;) {
+      const page = await withB2Retry('list_file_versions', async () => {
+        const auth = await this.b2Authorize(setupMs);
+        const res = await fetch(`${auth.apiUrl}/b2api/v3/b2_list_file_versions`, {
+          method: 'POST',
+          headers: { Authorization: auth.accountAuthToken, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            bucketId,
+            prefix,
+            maxFileCount: 1000,
+            ...(startFileName !== null ? { startFileName } : {}),
+            ...(startFileId !== null ? { startFileId } : {}),
+          }),
+          ...(setupMs !== undefined ? { signal: AbortSignal.timeout(setupMs) } : {}),
+        });
+        if (!res.ok) throw await b2Error('list_file_versions', res);
+        return (await res.json()) as { files: B2ListedVersion[]; nextFileName: string | null; nextFileId: string | null };
+      }, {
+        ...B2_RETRY_DEFAULTS,
+        ...(setupMs !== undefined ? { retryAfterCapMs: setupMs } : {}),
+        reauth: () => this.b2Reauthorize(setupMs),
+        onAttempt: this.b2AttemptLog,
+      });
+      pages++;
+      versions.push(...page.files);
+      if (!page.nextFileName && !page.nextFileId) break;
+      startFileName = page.nextFileName;
+      startFileId = page.nextFileId;
+    }
+    return { versions, pages };
+  }
+
+  /**
    * Deletes ONE file version by id (amendment 4 C-1: the 3a proof objects; 3b: the P10 orphan). Needs the `deleteFiles`
    * capability, which the narrowed key of 3d will not have — so this is usable only until 3d step 5.
    */
@@ -1064,6 +1111,16 @@ export interface B2FileVersion {
   fileId: string;
   contentSha1: string;
   contentLength: number;
+}
+
+/** One row of b2_list_file_versions (3b item 3). `action` is 'upload' for a stored version, 'hide' for a hide marker. */
+export interface B2ListedVersion {
+  fileId: string;
+  fileName: string;
+  action: string;
+  contentLength: number;
+  contentSha1: string | null;
+  uploadTimestamp: number;
 }
 
 /** Throws unless the version is exactly the one sent (Coltrane 1-2). Exported for tests. */

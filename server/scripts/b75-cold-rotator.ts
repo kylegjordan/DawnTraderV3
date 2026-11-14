@@ -751,7 +751,18 @@ function acquireRotatorLockImpl(
     alive = false;
   }
   if (alive) return { kind: 'held', holder };
-  fs.writeFileSync(file, me, { mode: 0o600 });
+  // Takeover is itself exclusive (Langston, item 2 finding — folded into item 3): remove the dead holder's file, then
+  // create ours with O_EXCL. Two runs that both judged the holder dead race here; exactly one create succeeds, and the
+  // loser reads the winner's file as HELD. A read-back of our own pid confirms the win.
+  fs.rmSync(file, { force: true });
+  try {
+    fs.writeFileSync(file, me, { flag: 'wx', mode: 0o600 });
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e;
+    return { kind: 'held', holder: fs.readFileSync(file, 'utf-8') };
+  }
+  const back = JSON.parse(fs.readFileSync(file, 'utf-8')) as { pid?: unknown };
+  if (back.pid !== process.pid) return { kind: 'held', holder: JSON.stringify(back) };
   return { kind: 'taken_over', holder };
 }
 
