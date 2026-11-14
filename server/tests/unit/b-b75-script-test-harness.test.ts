@@ -24,6 +24,7 @@ import {
 } from '../../scripts/b75-retention-sweep.js';
 import {
   exportAndUploadContextMonth,
+  isWarmTooLarge,
   finalizeContextDeletion,
   runContextBridgeCycle,
   runContextBridgeLogTtlCli,
@@ -513,6 +514,36 @@ describe('retention executable gates', () => {
 });
 
 describe('context lane deletion fence', () => {
+  it('3b item 5 r1: isWarmTooLarge reads only a real size rejection, never a stray "413"', () => {
+    expect(isWarmTooLarge(new Error('[B75 storage-client] warm upload (file, small) failed: 413 Payload Too Large — x'))).toBe(true);
+    expect(isWarmTooLarge(new Error('413 Payload Too Large'))).toBe(true);
+    expect(isWarmTooLarge(new Error('The object exceeded the maximum allowed size'))).toBe(true);
+    expect(isWarmTooLarge(new Error('refused the read-back copy — 4130 bytes free, need 5000'))).toBe(false);
+    expect(isWarmTooLarge(new Error('checksum mismatch local=ab413c upload=ab413c readback=ff'))).toBe(false);
+  });
+  it('3b item 5 r1: with cold configured, a space refusal or a checksum mismatch containing "413" never falls back to cold', async () => {
+    const ctl = { query: vi.fn(async (sql: string) => {
+      if (sql.includes('SELECT id, state')) return { rows: [] };
+      if (sql.includes('INSERT INTO data_archive_manifest')) return { rows: [{ id: 'ctx-4' }] };
+      return { rows: [], rowCount: 1 };
+    }) };
+    const exportRes = { localPath: 'fake.gz', checksum: 'ck413', sourceRowCount: 1, rowCount: 1, bytesCompressed: 4130, minTs: month.start, maxTs: new Date('2026-01-01T00:00:01Z') };
+    const storage = {
+      uploadWarmFile: vi.fn().mockResolvedValue({ checksum: 'ck413', bytes: 4130, uri: 'supabase://warm/x' }),
+      downloadWarmFile: vi.fn(),
+      isColdConfigured: vi.fn().mockReturnValue(true),
+      uploadColdFile: vi.fn(),
+    };
+    const cfg = { ...contextCfg, freeFloorBytes: 413 };
+    // (a) the space refusal: its numbers contain 413
+    const tight = contextDeps({ exportPartition: vi.fn().mockResolvedValue(exportRes), getStorageClient: vi.fn().mockReturnValue(storage), freeBytes: () => 4130 });
+    await expect(exportAndUploadContextMonth({} as never, ctl as never, cfg, month, tight)).rejects.toThrow(/refused the read-back copy/);
+    // (b) a read-back checksum mismatch whose digests contain 413
+    storage.downloadWarmFile.mockResolvedValue({ checksum: 'zz413', bytes: 4130 });
+    const roomy = contextDeps({ exportPartition: vi.fn().mockResolvedValue(exportRes), getStorageClient: vi.fn().mockReturnValue(storage), freeBytes: () => 1e12 });
+    await expect(exportAndUploadContextMonth({} as never, ctl as never, cfg, month, roomy)).rejects.toThrow(/checksum mismatch/);
+    expect(storage.uploadColdFile).not.toHaveBeenCalled();
+  });
   it('3b item 5: the read-back copy is refused before any download when free space is under bytes + floor', async () => {
     const ctl = { query: vi.fn(async (sql: string) => {
       if (sql.includes('SELECT id, state')) return { rows: [] };

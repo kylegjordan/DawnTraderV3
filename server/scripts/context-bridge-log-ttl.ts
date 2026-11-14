@@ -182,6 +182,15 @@ async function listDeletePopulationLabels(client: pg.Client, cutoff: Date): Prom
   return r.rows.map((row) => String(row.label));
 }
 
+/**
+ * 3b item 5 r1: whether a warm UPLOAD error is the size rejection that routes to cold. The status sits after "failed: "
+ * in storage-client's messages; a bare "413" anywhere in the text (a byte count, a digest) is not one.
+ */
+export function isWarmTooLarge(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /failed: 413\b/.test(msg) || /Payload Too Large|Maximum size exceeded|exceeded the maximum allowed size/i.test(msg);
+}
+
 export interface ContextMonthDependencies {
   exportPartition: typeof exportPartition;
   getStorageClient: () => StorageClient;
@@ -304,13 +313,23 @@ export async function exportAndUploadContextMonth(
   let actualTier: 'warm' | 'cold' = 'warm';
   let actualUri = storageUri;
 
+  // 3b item 5 r1 (Langston): ONLY an error from the warm UPLOAD may route to the cold fallback. This block used to wrap
+  // the upload, the free-space check and the checksum comparison in one try whose catch read any message containing
+  // "413" as a warm 413 — so a refusal or a checksum mismatch whose numbers or digests happened to contain "413" (~1 % /
+  // ~4 % by arithmetic) silently became a cold upload marked verified. The upload's error is now the only input.
+  let warmErr: unknown = null;
   try {
     // exportRes.checksum is deliberately NOT passed in: uploadWarmFile hashes the file itself, so the comparison below
     // stays a real check of what was uploaded rather than a tautology. Do not "optimise" this away.
     upload = await storage.uploadWarmFile(actualBucket, actualPath, exportRes.localPath);
-    // 3b item 5 (Langston r4): the read-back writes a SECOND full copy beside the export. The export is already on disk,
-    // so the check is free >= bytes + floor here — the rotator's `need = 2 x bytes + floor` counted from before the
-    // export (two concurrent local copies). A missing / non-numeric / <= 0 floor already refused at loadConfig.
+  } catch (e) {
+    warmErr = e;
+  }
+  if (warmErr === null) {
+    // 3b item 5: the read-back writes a SECOND full copy beside the export. The export is already on disk, so the check
+    // is free >= bytes + floor here — the rotator's `need = 2 x bytes + floor` counted from before the export (two
+    // concurrent local copies). A missing / non-numeric / <= 0 floor already refused at loadConfig. A refusal THROWS:
+    // it never reaches the cold fallback.
     const needVerify = Number(exportRes.bytesCompressed) + cfg.freeFloorBytes;
     const freeVerify = deps.freeBytes(verifyPath);
     if (!Number.isFinite(needVerify) || !Number.isFinite(freeVerify) || freeVerify < needVerify) {
@@ -325,16 +344,16 @@ export async function exportAndUploadContextMonth(
     } finally {
       fs.rmSync(verifyPath, { force: true });
     }
-    if (upload.checksum !== exportRes.checksum || readBack.checksum !== exportRes.checksum) {
+    if (upload!.checksum !== exportRes.checksum || readBack.checksum !== exportRes.checksum) {
       throw new Error(
         `[B75 ctx-bridge] ${month.label}: checksum mismatch ` +
-          `local=${exportRes.checksum} upload=${upload.checksum} readback=${readBack.checksum}`,
+          `local=${exportRes.checksum} upload=${upload!.checksum} readback=${readBack.checksum}`,
       );
     }
-  } catch (err) {
+  } else {
+    const err = warmErr;
     const msg = err instanceof Error ? err.message : String(err);
-    const is413 = msg.includes('413') || msg.includes('Payload Too Large') || msg.includes('Maximum size exceeded') || msg.includes('exceeded the maximum allowed size');
-    if (!is413 || !storage.isColdConfigured()) {
+    if (!isWarmTooLarge(err) || !storage.isColdConfigured()) {
       throw err;
     }
     console.log(

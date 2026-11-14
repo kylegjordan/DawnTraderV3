@@ -506,3 +506,10 @@ Tests: 3b 73/73; tsc 324 = 324.
   - Reachable only on a hand run: the job has never been scheduled (`#169`).
 - **Fence** (harness): 1,500 free against 1,000 + 600 → refused, and `downloadWarmFile` is never called; 1,600 free → the read-back is reached. Mutation (check removed) → red.
 - Tests: harness 44/44; 3b, 3a and amendment2 127/127; tsc 324 = 324.
+- **Item 5 r1 fold (Langston, Discord `1571127273078268005`) — a defect this item exposed, and an older one beside it:**
+  - The space check sat inside the try whose catch read any message containing "413" as a warm 413. A refusal whose byte counts contained "413" (about 1 %) would have become a cold upload marked `verified`, a silent tier switch into the population item 4's deleter reads. The same catch also swallowed a read-back checksum mismatch whose digests contained "413" (about 4 %, pre-existing).
+  - **Fixed structurally:** only the warm UPLOAD's own error may route to cold. The space check and the checksum comparison now run outside that path and throw.
+  - The discriminator is a pure `isWarmTooLarge`: `failed: 413` in the status position, or the size phrases — never a bare "413".
+  - Fences (cold configured, the case the earlier fixture could not see): a refusal at 4,130 bytes and a mismatch on `zz413` both throw, and `uploadColdFile` is never called. `isWarmTooLarge` unit cases.
+  - Mutations: the loose `includes('413')` → red. The old structure restored from `055ed387e` → red: it entered the cold fallback on the "413" inside the refusal.
+  - Tests: harness 46/46.
