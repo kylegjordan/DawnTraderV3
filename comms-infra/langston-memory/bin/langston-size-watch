@@ -199,12 +199,25 @@ def measure_archive():
     return {"path": ARCHIVE_DIR, "present": True, "bytes": total, "files": count, "unreadable": unreadable}
 
 
+class StateUnreadable(Exception):
+    """The state file EXISTS and cannot be used (unparseable, or valid JSON that is not an object)."""
+
+
 def load_state():
+    """None ONLY when the state file does not exist (the first run seeds). A state file that exists and cannot be read
+    raises StateUnreadable. ⛔ It used to return None for both, and run() then RE-SEEDED: the ceiling was reset to
+    whatever the set measured that day (possibly higher - a raise the ratchet forbids) and the history and alert ids
+    were overwritten. Found by Infra Claude while folding Langston's 1c (B-LANGSTON-CLAUDEMD-RESIDUAL, 2026-11-14)."""
     try:
         with open(STATE, encoding="utf-8") as fh:
-            return json.load(fh)
-    except Exception:
+            st = json.load(fh)
+    except FileNotFoundError:
         return None
+    except Exception as e:
+        raise StateUnreadable("%s is unreadable (%s)" % (STATE, type(e).__name__))
+    if not isinstance(st, dict):
+        raise StateUnreadable("%s holds valid JSON that is not an object (%s)" % (STATE, type(st).__name__))
+    return st
 
 
 def save_state(st):
@@ -446,9 +459,12 @@ def guard_check(st):
         g["blind"].append("%s unreadable (%s)" % (GUARD_PATH, type(e).__name__))
     try:
         with open(CLI_PACKAGE, encoding="utf-8") as fh:
-            g["running"] = json.load(fh).get("version")
+            pkg = json.load(fh)
+        # (Langston 1c) valid JSON that is not an object has no .get - report it blind, never raise
+        g["running"] = pkg.get("version") if isinstance(pkg, dict) else None
         if not g["running"]:
-            g["blind"].append("%s has no version key" % CLI_PACKAGE)
+            g["blind"].append("%s has no version key%s" % (CLI_PACKAGE, "" if isinstance(pkg, dict)
+                                                            else " (it is not a JSON object)"))
     except (OSError, ValueError) as e:
         g["blind"].append("%s unreadable (%s)" % (CLI_PACKAGE, type(e).__name__))
     g["cli_established"] = bool(g["enumerated"] and g["running"])
@@ -557,6 +573,9 @@ def rules_check(target=None, record=None, mirror=None, upstream=None, installer=
     except Exception as e:
         out["unknown"].append("the install record %s is unreadable (%s)" % (record, type(e).__name__))
         return out
+    if not isinstance(rec, dict):                       # (Langston 1c) a record that is not an object: unknown, not a raise
+        out["unknown"].append("the install record %s is not a JSON object (%s)" % (record, type(rec).__name__))
+        return out
     out["record"] = {k: rec.get(k) for k in ("commit", "blob", "sha256", "installed_at")}
     try:
         fd = os.open(target, os.O_RDONLY | os.O_NOFOLLOW)
@@ -619,7 +638,16 @@ def run(quiet=False, injected_total=None, injected_archive_bytes=None, drill_sto
         archive = dict(archive, bytes=injected_archive_bytes, present=True, injected=True)
     archive["threshold_bytes"] = ARCHIVE_THRESHOLD_BYTES
     archive["over"] = archive["bytes"] > ARCHIVE_THRESHOLD_BYTES
-    st = load_state()
+    try:
+        st = load_state()
+    except StateUnreadable as e:
+        # ⛔ NEVER RE-SEED OVER AN EXISTING STATE. Refuse, write nothing, and exit non-zero: the unit fails, the
+        #    heartbeat is not re-armed, so the absence of a good run pages within 26 h. Restore the state from its
+        #    backup or recreate it deliberately with --set-ceiling's history in hand.
+        print(json.dumps({"ts": iso(), "status": "STATE-UNREADABLE", "reason": str(e),
+                          "note": "the ceiling is not re-seeded over an existing state; nothing was written"},
+                         indent=2, ensure_ascii=False))
+        return 2
 
     if st is None:
         # ⛔⛔ BLOCKER-1 (Langston, Step-4). SEEDING IS REFUSED WHILE ANY FILE IS MISSING,
@@ -874,7 +902,11 @@ def set_ceiling(new, by):
         print("REFUSED: --by must be one of: " + ", ".join(ACTORS))
         print("A free-text actor produces a history nobody can attribute (#987, #656).")
         return 2
-    st = load_state()
+    try:
+        st = load_state()
+    except StateUnreadable as e:
+        print("REFUSED: " + str(e) + " - fix the state before changing its ceiling.")
+        return 2
     if st is None:
         print("REFUSED: no state yet — run the watch once so a ceiling exists to lower.")
         return 2
@@ -920,7 +952,11 @@ def self_test():
     """★ POSITIVE CONTROL. A watch that has never alarmed and a watch that CANNOT alarm
     look identical from outside, and only one of them is doing its job. This drives a
     synthetic overage through the real run path with delivery suppressed."""
-    st = load_state()
+    try:
+        st = load_state()
+    except StateUnreadable as e:
+        print("REFUSED: " + str(e))
+        return 2
     if st is None:
         print("no state yet — run the watch once first")
         return 2
@@ -973,7 +1009,10 @@ def main():
     if _refuse_unknown_flags():
         return 2
     if "--status" in sys.argv:
-        st = load_state()
+        try:
+            st = load_state()
+        except StateUnreadable as e:
+            st = {"unreadable": str(e)}
         files, total, missing = measure()
         print(json.dumps({"state": st, "measured_total": total, "missing": missing,
                           "files": files, "archive": dict(measure_archive(), threshold_bytes=ARCHIVE_THRESHOLD_BYTES,
@@ -989,7 +1028,11 @@ def main():
         #    actually reach a person. An instrument that detects perfectly and cannot
         #    reach anyone is indistinguishable, from outside, from one that never fired.
         #    This injects a breach and REALLY posts, labelled so nobody acts on it.
-        st = load_state()
+        try:
+            st = load_state()
+        except StateUnreadable as e:
+            print("REFUSED: " + str(e))
+            return 2
         if st is None:
             print("no state yet — run the watch once first")
             return 2

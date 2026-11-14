@@ -492,6 +492,20 @@ def test_guard(tmp):
     check("G9d and the offset now covers the line", state(m).get("guard_log_offset"), os.path.getsize(m.GUARD_LOG))
     store.hand_resolve(GB)
 
+    # G10. 1c: a package.json that is valid JSON but not an object is a blind row, never a raise
+    with open(m.CLI_PACKAGE, "w", encoding="utf-8") as fh:
+        fh.write("[]")
+    try:
+        rc10 = m.run(quiet=True)
+    except Exception as exc:
+        rc10 = "raised %s" % type(exc).__name__
+    check("G10 a non-object package.json does not crash the run", rc10, 1)
+    check("G10 and it raises a blind row naming it", len(store.active(GB)) == 1
+          and "not a JSON object" in store.active(GB)[0]["body"], True)
+    cli("2.1.400")
+    m.run(quiet=True)
+    store.hand_resolve(GB)
+
     # G8. C-2: the reader blind on each input raises its own row; back to readable resolves it
     os.remove(m.CLI_PACKAGE)
     rc = m.run(quiet=True)
@@ -518,6 +532,36 @@ def test_guard(tmp):
     else:
         print("SKIP  G8d (running as root: a 0-mode file is still readable)")
     os.chmod(m.GUARD_LOG, 0o600)
+
+
+def test_state(tmp):
+    """1c + the re-seed defect: an EXISTING state that cannot be used is refused, never re-seeded over."""
+    m, store, world, paths = langston_world(tmp)
+    sizes(paths, 300, 300, 100)
+    for label, body in (("non-object", "123"), ("unparseable", "{not json"), ("empty", "")):
+        with open(m.STATE, "w", encoding="utf-8") as fh:
+            fh.write(body)
+        try:
+            rc = m.run(quiet=True)
+        except Exception as exc:
+            rc = "raised %s" % type(exc).__name__
+        check("S-%s state: the run refuses with exit 2" % label, rc, 2)
+        check("S-%s state: the file is untouched (no re-seed)" % label, open(m.STATE, encoding="utf-8").read(), body)
+        check("S-%s state: no alert row was written" % label, len(store.calls), 0)
+    os.remove(m.STATE)
+    rc = m.run(quiet=True)
+    check("S-missing state: the first run still seeds (exit 0)", (rc, state(m).get("ceiling_bytes")), (0, 700))
+    # rules record that is valid JSON but not an object -> unknown, not a raise
+    real = load(SIZE_WATCH, "lsw_rules_%d" % len(os.listdir(tmp)))
+    rec = os.path.join(tmp, "record.json")
+    with open(rec, "w", encoding="utf-8") as fh:
+        fh.write("[1]")
+    try:
+        r = real.rules_check(target=os.path.join(tmp, "CLAUDE.md"), record=rec)
+        got = any("not a JSON object" in u for u in r.get("unknown", []))
+    except Exception as exc:
+        got = "raised %s" % type(exc).__name__
+    check("S-rules a non-object install record is unknown, not a raise", got, True)
 
 
 # ─────────────────────────────── coltrane-size-watch ───────────────────────────────
@@ -590,8 +634,10 @@ def main():
         t1 = os.path.join(base, "langston"); os.makedirs(t1)
         t2 = os.path.join(base, "coltrane"); os.makedirs(t2)
         t3 = os.path.join(base, "guard"); os.makedirs(t3)
+        t4 = os.path.join(base, "state"); os.makedirs(t4)
         test_langston(t1)
         test_guard(t3)
+        test_state(t4)
         test_coltrane(t2)
     finally:
         shutil.rmtree(base, ignore_errors=True)
