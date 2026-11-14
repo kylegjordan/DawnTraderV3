@@ -1,6 +1,6 @@
 # B-GUARDRAIL-FAIL-CLOSED — Completion Report
 
-**Status:** **PENDING STEP-11 CONFIRMATION (Langston).**
+**Status:** **CLOSED 2026-11-14** — Langston Step 11 CONFIRMED 2026-11-14 (Discord `1571012928830963773`).
 
 **Scope items left open:** **NONE within `#1081`.** All four objectives are met. Out of scope, already homed: `#1084` `B-GUARDRAIL-ROUTE-LEGACY` (Phase-19 row `4.b1`) and `#1086` `B-GUARDRAIL-POLICY-ORPHAN` (row `4.b2`).
 
@@ -20,7 +20,7 @@
 | OBJ-3 | census of every catch / early pass on an error path in the guardrail call graph | **YES** | in the pre-audit; Step 4 approved. |
 | OBJ-4 | no behaviour change today | **YES — zero fires, which is UNEXERCISED, not a pass** | `CHECK_THREW` = 0 in every error-log file 2026-10-31 00:00:03Z → 2026-11-14 ~04:30Z (15 files); `console.error` positive control, measured by Langston: 466 `[8a-P3][VTS_NO_TRIGGER_ESCALATION]` lines in the same files. Per Langston's read, `execution_attempt_audit` holds 0 `GUARDRAIL_READ_FAIL` rows across all 491,715 rows (2025-12-02 → 2026-11-14), with 1,974 BLOCKED rows 10-06 → 10-31 as control. Live `GET /api/diagnostics/rtb-metrics`: `GUARDRAIL_READ_FAIL 0`, `CORRELATION_EXPOSURE 0`, `OTHER 0`, `COOLDOWN 1`. |
 
-**UI:** no surface — no client file reads the RTB metrics or the new code (control: `api/diagnostics` is read by three client files).
+**UI:** no surface — no client file reads the RTB metrics or the new code (control: `api/diagnostics` is read by six distinct client files — `AuditLogViewer`, `ConfigSnapshotViewer`, `OverrideFrequencyChart`, `goals/aj17-diagnostic-card`, `system/enhanced-system-monitoring`, `pages/analytics`; count corrected from three by Langston at Step 11).
 
 ## 2. Honest residual
 - **The catches have never fired live**, so their behaviour rests on the tests, not on an observed refusal.
@@ -39,7 +39,7 @@ CHANGE-CLASS: non_architecture
 |---|---|---|
 | SCOPE | ✅ R | written Step 1 (2026-09-28), unchanged |
 | PRE_AUDIT | ✅ R | written Step 2, unchanged |
-| COMPLETION_REPORT | ✅ R | this file |
+| COMPLETION_REPORT | ✅ R | this file (closed at Step 11) |
 | BATCH_CATALOG | ✅ R | new entry |
 | PHASE_HISTORY | ✅ R | new entry |
 | SYSTEM_MANUAL | ✅ judged | §6 Trade Safety: fail-closed bullet, scoped to the two checks (LPCP and AJ19 named as not fail-closed) |
@@ -73,4 +73,4 @@ CHANGE-CLASS: non_architecture
 | Change list | ✅ | Step 6/7/8 sections + the Step-6 correction |
 
 ## 6. Reviewer record
-Step 1 approved 2026-09-28 · Step 2 cleared (one condition) · Step 4 APPROVED at `551e13bc1` (C1-C3, NIT-1/2 folded at `bcfdee7a0`) · Step 8 October row 2 · Step 8 PROCEED 2026-11-14 (`1571008697415508011`, C4-C6 folded) · Step 11: pending.
+Step 1 approved 2026-09-28 · Step 2 cleared (one condition) · Step 4 APPROVED at `551e13bc1` (C1-C3, NIT-1/2 folded at `bcfdee7a0`) · Step 8 October row 2 · Step 8 PROCEED 2026-11-14 (`1571008697415508011`, C4-C6 folded) · **Step 11 CONFIRMED 2026-11-14** (Discord `1571012928830963773`; doc set, code, tests 7+17+3, OBJ-4 re-measured over 16 files, CI 4/4 at `6943b7e3e`/`079c684b4`/`6f43c31c6`, Langston load 143,646 / 143,856; one figure corrected — the UI control count). **His §13:** the checker minted nothing for this batch in 46 days open (09-29 → 11-14) — added to `#744` `B-GATE-GUARD` (owner CC-A), §9.4 disposition 2.
