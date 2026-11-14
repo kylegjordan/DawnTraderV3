@@ -3752,6 +3752,7 @@ Provides helper functions for building settings from guardrails_v2:
 - **Position Size uses preComputedNotional**: The notional value is computed upstream in P2 stage and passed in via `trade.preComputedNotional`, preventing drift between sizing and execution.
 - **AJ19 dry-run mode**: For MAX_POSITION blocks, logs the block but allows the trade through (development diagnostic mode)
 - **RTB metrics tracking**: Passes/blocks are recorded via `rtbMetricsService` as source of truth
+- **Fail-closed (`B-GUARDRAIL-FAIL-CLOSED`, `#1081`, 2026-10-02)**: the cooldown (#4) and total-exposure (#8) checks refuse the trade with `GUARDRAIL_READ_FAIL` when the check itself throws (before, both passed). `GUARDRAIL_READ_FAIL` is also what the position-cap and exposure checks return for an unreadable setting or open-position value (`P19-B8.8`, `B-SIZING-DEC-RESTORE`). This is not a claim that every check is fail-closed: LPCP (#6) is dormant by design and the AJ19 dry-run lets a MAX_POSITION block through.
 - **Diagnostic integration**: Heavy logging through AJ16, AJ19, B4, B5, I1, I5 diagnostic tags (SLAL retired P19-B8.10)
 
 ---

@@ -775,6 +775,7 @@ Kill-switch is **DB-backed per-mode**: `isKillSwitchTripped(mode)` (`guardrail-p
 - **Downstream**: Paper Execution Engine (allow/deny)
 - **Blast Radius**: **HIGH** — blocks or allows every trade
 - **Money-held gate:** `checkPositionSizeCap` and `checkMaxTotalExposure` refuse a null/non-finite held balance; the exposure numerator refuses invalid open-position price/quantity and a candidate without `preComputedNotional` instead of silently counting zero exposure or one share. A typed failure is recorded as `MONEY_HELD_UNAVAILABLE`.
+- **Fail-closed on a throw (`B-GUARDRAIL-FAIL-CLOSED`, `#1081`, live since 2026-10-02):** `checkSymbolCooldown` and `checkMaxTotalExposure` refuse with `GUARDRAIL_READ_FAIL` when the check itself throws (log tag `[B-GUARDRAIL-FAIL-CLOSED][CHECK_THREW check=…]`). ⚠️ **The `GUARDRAIL_READ_FAIL` RTB count is not a diagnosis** — it aggregates seven emitters at `6943b7e3e` (`trade-safety.ts`): `:314` cooldown threw · `:364` `maxPositionPercent` unreadable · `:395` `maxTotalExposurePct` unreadable at the position cap · `:640` the same at the exposure check · `:663` an open position with unreadable quantity/price · `:675` an unsized candidate with `maxPositionPercent` unreadable · `:698` exposure read threw; read the log tag to tell them apart. The RTB metrics are process-lifetime (no DB write); the durable record of an active-path refusal is `execution_attempt_audit.block_reason`, written by the active-engine caller only.
 
 ### 6.5 Trailing Exit Controller
 - **File**: Referenced in Phase 5 (Directive 9.2.A)
