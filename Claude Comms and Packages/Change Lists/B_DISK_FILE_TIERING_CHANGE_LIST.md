@@ -478,3 +478,13 @@ Tests at r1 (`0f7960de7`): 3b 60/60; 3a, harness and amendment2 93/93; tsc 324 =
   3. the report again;
   4. `--delete-residue` with the two printed ids — **only after Kyle's explicit yes in chat**, because the deletion is permanent.
 Tests: 3b 73/73; tsc 324 = 324.
+- **Item 4 r1 fold (Langston CHANGES at `415eacf09`, Discord `1571114353594339470`):**
+  - **C-1:** a named id on a name whose manifest row is still UNBOUND is refused ("run `--apply` first"). This is keyed on the manifest, not the plan; orphans have no row, so they stay deletable. It is the pre-audit's bind-then-delete order (`:325`, `:368`), now enforced in code.
+  - **C-2:** `residueDeleteSet` also removes every version the plan KEEPS (a bind's chosen version) and every undecided `needs_download` candidate. The test asserts the exact set (`['p10']`) — the old `not.toContain` form passed while the set held the chosen version.
+  - **C-3:** a refusal names every refused id, by reason.
+  - **C-4:** the delete branch runs after the report loop, so the delete run's own output shows the plan.
+  - **Nit-5:** a stray argument after the id list refuses.
+  - The read-back holder text says "unreadable", not a mechanism it did not measure.
+  - The refusal logic is a pure `deleteRefusals`, fenced behaviourally (before `--apply` the duplicate is refused and the orphan is not; after `--apply` both may go). Mutations: `unproven` emptied → red; chosen-version exclusion removed → red.
+  - Tests: 3b 76/76.
+  - **Step-10 carry (Langston (ii)):** the System Manual takes the named-and-computed delete contract and its window (closing at 3d step 5); the System Impact Map takes the cross-cutting entry.

@@ -153,8 +153,36 @@ export function residueDeleteSet(
   for (const v of versions) {
     if (v.action === 'upload' && boundNames.has(v.fileName) && !boundIds.has(v.fileId)) out.set(v.fileId, v);
   }
+  // never a version this run's plan KEEPS (a bind's chosen version) nor any candidate still undecided (needs_download)
+  // — the sibling path alone would nominate the chosen version of a name whose bound id is a different row's
+  // (Langston item 4 C-2: two cold rows resolving to one path is not ruled out by the schema)
+  for (const d of decisions) {
+    if (d.kind === 'bind') out.delete(d.version.fileId);
+    if (d.kind === 'needs_download') for (const v of d.candidates) out.delete(v.fileId);
+  }
   for (const id of boundIds) out.delete(id);
   return [...out.values()];
+}
+
+/**
+ * Pure: why a --delete-residue run must refuse — every named id that is listed but outside the computed set, bound to a
+ * manifest row, or on a name whose manifest row is still UNBOUND (nothing proven to keep yet; Langston item 4 C-1 —
+ * keyed on the manifest, not the plan; an orphan has no row, so it is never in `unboundPaths`). Empty = may delete.
+ */
+export function deleteRefusals(
+  deleteIds: Set<string>,
+  delSet: B2ListedVersion[],
+  listing: B2ListedVersion[],
+  boundIds: Set<string>,
+  unboundPaths: Set<string>,
+): { notInSet: string[]; bound: string[]; unproven: string[] } {
+  const inSet = new Set(delSet.map((v) => v.fileId));
+  const listed = new Map(listing.map((v) => [v.fileId, v]));
+  return {
+    notInSet: [...deleteIds].filter((id) => listed.has(id) && !inSet.has(id)),
+    bound: [...deleteIds].filter((id) => boundIds.has(id)),
+    unproven: [...deleteIds].filter((id) => unboundPaths.has(listed.get(id)?.fileName ?? '')),
+  };
 }
 
 /** Pure: stored VERSIONS (uploads only — hide markers are not versions) outside the archive namespaces, counted by
@@ -173,6 +201,9 @@ async function main(): Promise<void> {
   const apply = process.argv.includes('--apply');
   const delIdx = process.argv.indexOf('--delete-residue');
   const deleteIds = delIdx >= 0 ? new Set((process.argv[delIdx + 1] ?? '').split(',').map((x) => x.trim()).filter(Boolean)) : null;
+  if (delIdx >= 0 && process.argv.slice(delIdx + 2).some((a) => !a.startsWith('--'))) {
+    throw new Error('[B75 cold-bind] --delete-residue takes ONE comma-separated list; a stray argument would be silently dropped');
+  }
   if (deleteIds && apply) throw new Error('[B75 cold-bind] --apply and --delete-residue are separate runs');
   if (deleteIds && deleteIds.size === 0) throw new Error('[B75 cold-bind] --delete-residue needs the ids the report printed');
   const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
@@ -214,27 +245,6 @@ async function main(): Promise<void> {
     const delSet = residueDeleteSet(listing.versions, claimed, ownPrefixes, decisions, boundIds);
     for (const v of delSet) {
       console.log(`[B75 cold-bind] DELETE-SET ${v.fileName} id=${v.fileId} bytes=${v.contentLength} uploaded=${new Date(v.uploadTimestamp).toISOString()}`);
-    }
-    if (deleteIds) {
-      // item 4: the intersection of what the operator named and what this run computed — nothing else, ever
-      const byId = new Map(delSet.map((v) => [v.fileId, v]));
-      const listed = new Set(listing.versions.map((v) => v.fileId));
-      const refused = [...deleteIds].filter((id) => !byId.has(id) && listed.has(id));
-      if (refused.length > 0 || [...deleteIds].some((id) => boundIds.has(id))) {
-        console.error(`[B75 cold-bind] REFUSED — not in the computed delete set (or bound to a manifest row): ${refused.join(', ')}. Nothing deleted.`);
-        process.exitCode = 1;
-        return;
-      }
-      let deleted = 0;
-      for (const id of deleteIds) {
-        const v = byId.get(id);
-        if (!v) { console.log(`[B75 cold-bind] ${id}: no longer listed — already gone, skipped`); continue; }
-        await storage.deleteColdVersion(v.fileName, v.fileId);
-        deleted++;
-        console.log(`[B75 cold-bind] DELETED ${v.fileName} id=${v.fileId} bytes=${v.contentLength}`);
-      }
-      console.log(`[B75 cold-bind] DONE deleted=${deleted} named=${deleteIds.size}`);
-      return;
     }
     let failures = 0;
     for (const d of decisions) {
@@ -284,6 +294,33 @@ async function main(): Promise<void> {
       );
       if (u.rowCount !== 1) { failures++; console.error(`[B75 cold-bind] ${name}: the row changed underneath (updated ${u.rowCount})`); continue; }
       console.log(`[B75 cold-bind] ${name}: BOUND`);
+    }
+    if (deleteIds) {
+      // item 4, after the report loop so the delete run's own output shows the plan it deletes against (C-4). With
+      // apply false that loop wrote nothing and downloaded nothing.
+      const byId = new Map(delSet.map((v) => [v.fileId, v]));
+      // C-1: a name whose manifest row is still UNBOUND has nothing proven to keep — none of its versions may go yet.
+      const unboundPaths = new Set(r.rows.map((x) => coldPathOf(x.storage_uri)?.path).filter((x): x is string => !!x));
+      const { notInSet, bound, unproven } = deleteRefusals(deleteIds, delSet, listing.versions, boundIds, unboundPaths);
+      if (notInSet.length > 0 || bound.length > 0 || unproven.length > 0) {
+        // C-3: a refusal names everything it refused, by reason
+        console.error(
+          `[B75 cold-bind] REFUSED — nothing deleted. not in the computed set: [${notInSet.join(', ')}]; ` +
+            `bound to a manifest row: [${bound.join(', ')}]; its name's row is not yet bound (run --apply first): [${unproven.join(', ')}]`,
+        );
+        process.exitCode = 1;
+        return;
+      }
+      let deleted = 0;
+      for (const id of deleteIds) {
+        const v = byId.get(id);
+        if (!v) { console.log(`[B75 cold-bind] ${id}: no longer listed — already gone, skipped`); continue; }
+        await storage.deleteColdVersion(v.fileName, v.fileId);
+        deleted++;
+        console.log(`[B75 cold-bind] DELETED ${v.fileName} id=${v.fileId} bytes=${v.contentLength}`);
+      }
+      console.log(`[B75 cold-bind] DONE deleted=${deleted} named=${deleteIds.size}`);
+      return;
     }
     console.log(`[B75 cold-bind] DONE failures=${failures} apply=${apply}`);
     if (failures > 0) process.exitCode = 1;

@@ -797,7 +797,7 @@ function acquireRotatorLockImpl(
       back = JSON.parse(fs.readFileSync(file, 'utf-8')) as { pid?: unknown };
     } catch {
       // gone between our create and our read-back: not ours to claim (Langston item 3 carry — never throw unpaged)
-      return { kind: 'held', holder: '(the lock vanished during takeover)' };
+      return { kind: 'held', holder: '(the lock file was unreadable after our create — missing or not ours)' };
     }
     if (back.pid !== process.pid) return { kind: 'held', holder: JSON.stringify(back) };
     return { kind: 'taken_over', holder };

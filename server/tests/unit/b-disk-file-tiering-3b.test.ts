@@ -475,7 +475,7 @@ describe('3b item 2 — Langston r3 carries', () => {
 });
 
 // ── 3b item 3: bind the pre-3a cold rows to exact versions; the inventory; the exclusive takeover ────────────────────
-import { COLD_NON_ARCHIVE_PREFIXES, coldPathOf, orphanVersions, otherOwnerCounts, ownColdPrefixes, planColdBindings, residueDeleteSet, type UnboundColdRow } from '../../scripts/b75-cold-bind';
+import { COLD_NON_ARCHIVE_PREFIXES, coldPathOf, orphanVersions, otherOwnerCounts, ownColdPrefixes, planColdBindings, residueDeleteSet, deleteRefusals, type UnboundColdRow } from '../../scripts/b75-cold-bind';
 import type { B2ListedVersion } from '../../services/data-archive/storage-client';
 
 const ROW: UnboundColdRow = { id: 'r1', source_table: 'context_bridge_log', partition_label: '2026-01', storage_uri: 'b2://dt-archive-cold/context_bridge_log/2026-01.jsonl.gz', bytes_compressed: 13901237, checksum: 'sha256-x' };
@@ -658,13 +658,38 @@ describe('3b item 4 — the residue delete set: our orphans and non-chosen versi
   });
   it('a bound id is removed even if something else nominated it', () => {
     const decisions = planColdBindings([ROW], vs);
-    const ids = residueDeleteSet(vs, claimed, own, decisions, new Set(['old'])).map((v) => v.fileId);
-    expect(ids).not.toContain('old');
+    // exact set (Langston C-2: the not.toContain form passed while the set held the CHOSEN version 'new')
+    const ids = residueDeleteSet(vs, claimed, own, decisions, new Set(['old'])).map((v) => v.fileId).sort();
+    expect(ids).toEqual(['p10']);
   });
-  it('the delete run deletes only the intersection of the named ids and the computed set, and refuses otherwise', () => {
+  it('an undecided candidate (needs_download) is never in the set — the plan has not chosen what to keep', () => {
+    const vs2 = [ver('a', { contentSha1: 'aa' }), ver('b', { contentSha1: 'bb' }), ver('p10', { fileName: 'disk_file.diagnostic_reports/x.gz' })];
+    const decisions = planColdBindings([ROW], vs2);
+    expect(residueDeleteSet(vs2, claimed, own, decisions, new Set()).map((v) => v.fileId)).toEqual(['p10']);
+  });
+  it('deleteRefusals: before --apply the duplicate is refused (its row is unbound); the orphan never is; after, both may go', () => {
+    const decisions = planColdBindings([ROW], vs);
+    const set = residueDeleteSet(vs, claimed, own, decisions, new Set());
+    const unboundBefore = new Set([coldPathOf(ROW.storage_uri)!.path]);
+    expect(deleteRefusals(new Set(['old', 'p10']), set, vs, new Set(), unboundBefore))
+      .toEqual({ notInSet: [], bound: [], unproven: ['old'] });
+    expect(deleteRefusals(new Set(['p10']), set, vs, new Set(), unboundBefore))
+      .toEqual({ notInSet: [], bound: [], unproven: [] });
+    // after --apply: 2026-01 is bound to 'new', so its row is no longer in unboundPaths
+    const after = residueDeleteSet(vs, claimed, own, [], new Set(['new']));
+    expect(deleteRefusals(new Set(['old', 'p10']), after, vs, new Set(['new']), new Set()))
+      .toEqual({ notInSet: [], bound: [], unproven: [] });
+  });
+  it('deleteRefusals: a bound id and an id outside the set are each named', () => {
+    const after = residueDeleteSet(vs, claimed, own, [], new Set(['new']));
+    expect(deleteRefusals(new Set(['new', 'tw']), after, vs, new Set(['new']), new Set()))
+      .toEqual({ notInSet: ['new', 'tw'], bound: ['new'], unproven: [] });
+  });
+  it('the delete run: argument hygiene and ordering', () => {
     const src = read('server/scripts/b75-cold-bind.ts');
-    expect(src).toMatch(/const refused = \[\.\.\.deleteIds\]\.filter\(\(id\) => !byId\.has\(id\) && listed\.has\(id\)\)/);
-    expect(src).toMatch(/\[\.\.\.deleteIds\]\.some\(\(id\) => boundIds\.has\(id\)\)/);
     expect(src).toContain("'[B75 cold-bind] --apply and --delete-residue are separate runs'");
+    expect(src).toMatch(/a stray argument would be silently dropped/);
+    // C-4: the delete branch sits AFTER the report loop
+    expect(src.indexOf('if (deleteIds) {')).toBeGreaterThan(src.indexOf('for (const d of decisions) {'));
   });
 });
