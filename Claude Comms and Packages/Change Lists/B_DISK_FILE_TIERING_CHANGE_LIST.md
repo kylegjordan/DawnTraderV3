@@ -550,3 +550,15 @@ Tests: 3b 73/73; tsc 324 = 324.
   - no fit refusal;
   - `_proof` counted as archive;
   - a `state` filter on the manifest read.
+
+### 3c — Step 4 r1 (`b42cc90a2`): Langston CHANGES C-1..C-3 folded; Langston PROCEED on the code (Discord `1571175646363787325`)
+- **The CI failure at `ec916a2a6`:** two `amendment1` H-3 tests held an exact list of archival-health checks and a check-to-script map. Both now carry `b75-cold-audit`, and the cold-audit header writes its cron line in the two-line form.
+- **C-1:** reconcile pages are keyed per object, capped at 25 per kind, plus one overflow page. The oversize page is keyed per row.
+- **C-2:** the bytes of a partial attempt are charged in the `finally`.
+- **C-3:** a free-space refusal ends the leg (`budget_stop 'disk'`).
+- The read-back leg is extracted as `runReadBack`, and every arm runs under test. 3c 34/34; six mutants RED.
+- **Two items Langston dissolved, §13 disposition 5, no work:**
+  - **The overflow key is set-wide, so its "N in all" freezes at its first mint.** The first 25 per kind still page per object, and the true count is in the DONE line and the meter row's columns.
+  - **The oversize page is uncapped, and it is the one arm with no deadline check.** Staging holds 4 cold rows, none over the 500 MB budget, the largest 99,870,161 B. So the page is bounded by 4, and reachable only if `cold_readback_daily_bytes` is set under ~100 MB.
+- **OWED on this batch:** flip the CheckSpec's `onMissing` to `'alert'` once the first run is recorded.
+- **Push gate:** a literal 4/4 per job at a ref whose 3c files equal `b42cc90a2`'s. Two runs were all-cancelled by later pushes; the green run is cited in the next line when it lands.
