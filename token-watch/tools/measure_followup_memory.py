@@ -23,7 +23,7 @@ SUBCOMMANDS, each run as `tokenwatch`:
            Writes <run dir>/PREPARE.json; `run` carries it into its result, so the tree a run used is on record.
 
   run      --arm {all_shed,live,x4,xn,sept} --run-root <run dir> --bodies <bodies.sqlite> --now <ISO> --out <result.json>
-           [--trace <dir>] [--min-served-share 0.95]
+           [--trace <dir>] [--sample <file> [--sample-interval 5]] [--min-served-share 0.95]
            Meant for `systemd-run -p MemoryMax=512M -p IPAddressDeny=any -p CPUQuota=40% --uid=tokenwatch`
            (tools/run_followup_arm.sh records the unit's own Result, which is how a KILL is recorded).
            ⛔ THREE CONTROLS BEFORE ANYTHING IS MEASURED, each voiding the run with its own exit code:
@@ -65,6 +65,20 @@ SUBCOMMANDS, each run as `tokenwatch`:
            around summary.build, and around `summary._identity_map` (A2's 321 MB site — summary binds it at import
            as `from store import identity_map as _identity_map`, so that name is the one wrapped). A wrap target
            that does not exist RAISES rather than skipping.
+
+           --sample (P2a, Langston's ruling on the traced reruns, Discord 1571210672413343797): a side file of
+           JSON lines, each os.write() on an O_APPEND fd so a SIGKILL loses nothing already written - the deciding
+           reading must survive the kill (his R3 C-2). A thread samples every --sample-interval seconds (default 5,
+           his A-1); MARKERS are written at stage boundaries (his A-4: inside summary.build at _fold,
+           tombstone_path (the local dead-set build that follows it), _oldest_survivors, _latest_observations,
+           _identity_map) and every 1,000 loop entries. tombstone_path also fires inside _fold (summary.py:153), so
+           the dead-set read's marker is the tombstone_path one that FOLLOWS after-summary._fold. Every line carries memory.current, memory.peak (exact
+           high-water: its delta between markers brackets the peak to a stage, A-2), memory.stat anon / file /
+           file_dirty / file_writeback / slab_reclaimable / slab_unreclaimable / kernel_stack / pagetables /
+           pgscan / pgsteal, and memory.events max / oom / oom_kill. Markers add sys.getallocatedblocks(),
+           len(prev) (the `last_seen` dict the loop grows) and len(store._DEAD_CACHE["set"]) (A-3). No tracemalloc:
+           its tables scale with the traced objects and inflate the charge being measured. Combinable with --trace,
+           but a P2a run uses --sample alone.
 
   lookup-baseline --run-root <run dir> --bodies <bodies.sqlite> --out <result.json>
            The harness's own read-path footprint: fetches every distinct mint of the 48 buckets from the index,
@@ -599,6 +613,74 @@ def _egress_control(probes: list[str]) -> tuple[bool, str]:
     return True, "; ".join(notes)
 
 
+_STAT_KEYS = ("anon", "file", "file_dirty", "file_writeback", "slab_reclaimable", "slab_unreclaimable",
+              "kernel_stack", "pagetables", "pgscan", "pgsteal")
+
+
+class Sampler:
+    """P2a: the kill-surviving side file (see the module doc, --sample). One JSON object per line, written with a
+    single os.write on an O_APPEND fd: the kernel holds each line the moment the call returns, so a SIGKILL after it
+    loses nothing. A line the kill interrupts is the only possible partial, and it is the last line."""
+
+    def __init__(self, path: str, cg: str | None, interval: float):
+        import threading
+        self.cg, self.interval, self.seq = cg, interval, 0
+        self.fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o644)
+        self.lock = threading.Lock()
+        self.stop = threading.Event()
+        self.probes = {}                                # name -> zero-arg callable, read at every MARKER
+        self.thread = threading.Thread(target=self._loop, name="p2a-sampler", daemon=True)
+
+    def read(self) -> dict:
+        out = {"memory_current": None, "memory_peak": None, "stat": {}, "events": {}}
+        if not self.cg:
+            return out
+        for key, name in (("memory_current", "memory.current"), ("memory_peak", "memory.peak")):
+            v = _read(os.path.join(self.cg, name))
+            out[key] = int(v) if v and v.isdigit() else v
+        st = _read(os.path.join(self.cg, "memory.stat")) or ""
+        for line in st.splitlines():
+            k, _, v = line.partition(" ")
+            if k in _STAT_KEYS and v.isdigit():
+                out["stat"][k] = int(v)
+        ev = _read(os.path.join(self.cg, "memory.events")) or ""
+        for line in ev.splitlines():
+            k, _, v = line.partition(" ")
+            if k in ("max", "oom", "oom_kill") and v.isdigit():
+                out["events"][k] = int(v)
+        return out
+
+    def write(self, kind: str, **extra) -> None:
+        import time
+        rec = {"t": round(time.time(), 3), "kind": kind, **self.read(), **extra}
+        with self.lock:
+            self.seq += 1
+            rec["seq"] = self.seq
+            os.write(self.fd, (json.dumps(rec, sort_keys=True, default=str) + "\n").encode("utf-8"))
+
+    def mark(self, stage: str, **extra) -> None:
+        probes = {"allocated_blocks": sys.getallocatedblocks()}
+        for name, fn in self.probes.items():
+            try:
+                probes[name] = fn()
+            except Exception as exc:                    # a probe that cannot answer says so; it never stops the run
+                probes[name] = "unreadable: %s" % type(exc).__name__
+        self.write("mark", stage=stage, **probes, **extra)
+
+    def _loop(self) -> None:
+        while not self.stop.wait(self.interval):
+            self.write("sample")
+
+    def start(self) -> None:
+        self.write("start", interval_s=self.interval)
+        self.thread.start()
+
+    def close(self) -> None:
+        self.stop.set()
+        self.write("end")
+        os.close(self.fd)
+
+
 def cmd_run(a) -> int:
     _refuse_production(a.run_root)
     if os.path.realpath(os.environ.get("TOKEN_WATCH_ROOT", "")) != os.path.realpath(a.run_root):
@@ -643,6 +725,11 @@ def cmd_run(a) -> int:
                 fh.write("traced current %d peak %d\n" % (cur, peak))
                 for st in s.statistics("lineno")[:10]:
                     fh.write("%s\n" % st)
+
+    sampler = None
+    if a.sample:
+        sampler = Sampler(a.sample, cg, a.sample_interval)
+        sampler.start()
 
     sys.path.insert(0, HERE)
     import budget, follow_up, promote, provenance, providers, store, summary  # noqa: E401,E402
@@ -780,6 +867,54 @@ def cmd_run(a) -> int:
                 c.in_loop = False
     follow_up.providers = CallSite()
 
+    if sampler:
+        held = {}                                       # the `last_seen` dict run_hour loads and grows (A-3, F-4)
+        real_load_state = follow_up.load_state
+
+        def load_state_seen(name, *args, **kw):
+            v = real_load_state(name, *args, **kw)
+            if name == "last_seen":
+                held["prev"] = v
+            return v
+        follow_up.load_state = load_state_seen
+        sampler.probes["len_prev"] = lambda: len(held["prev"]) if "prev" in held else None
+        sampler.probes["len_dead_cache"] = lambda: (len(store._DEAD_CACHE["set"])
+                                                    if store._DEAD_CACHE.get("set") is not None else None)
+        real_entries = follow_up._entries_across
+
+        def entries_marked(*args, **kw):
+            n = 0
+            for n, entry in enumerate(real_entries(*args, **kw)):
+                if n % 1000 == 0:
+                    sampler.mark("loop", entries=n)
+                yield entry
+            sampler.mark("loop-end", entries=n + 1 if n else 0)
+        follow_up._entries_across = entries_marked
+
+        def mwrap(mod, name, before=True, after=True):
+            fn = getattr(mod, name)                    # a missing target RAISES, as the tracer's wrap does
+
+            def w(*args, **kw):
+                if before:
+                    sampler.mark("before-%s.%s" % (mod.__name__, name))
+                try:
+                    return fn(*args, **kw)
+                finally:
+                    if after:
+                        sampler.mark("after-%s.%s" % (mod.__name__, name))
+            setattr(mod, name, w)
+        mwrap(budget, "fold_pending")
+        mwrap(follow_up, "dead_set")
+        mwrap(promote, "run")
+        mwrap(summary, "build")
+        mwrap(summary, "_fold")
+        # called twice in build: inside _fold (summary.py:153, the new-tombstone offset read) and just before build's
+        # own local dead-set loop (:379, F-1) - the second is the one AFTER the after-summary._fold marker
+        mwrap(summary, "tombstone_path", after=False)
+        mwrap(summary, "_oldest_survivors")
+        mwrap(summary, "_latest_observations")
+        mwrap(summary, "_identity_map")
+
     if tracer:
         def wrap(mod, name, before=True, after=True):
             fn = getattr(mod, name)                    # a missing target RAISES: a silent skip misses A2's site
@@ -825,7 +960,10 @@ def cmd_run(a) -> int:
         "parses": c.parses, "loop_alive": c.loop_alive, "pad_copies": pad_copies, "n": a.n,
         "loop_synthetic_helius_calls": c.loop_synthetic,
         "bodies_file_bytes": os.path.getsize(a.bodies),   # page cache is in memory.peak; the term differs by arm (m3)
+        "sample_file": a.sample,
     }
+    if sampler:
+        sampler.close()
     if a.arm == "sept":
         # built BEFORE the void chain (Langston r2 tidy): a sept run voided at 15 or 12 still publishes its
         # templates and sources, which are exactly what that void needs to be read
@@ -986,6 +1124,8 @@ def main(argv=None) -> int:
     r.add_argument("--now", required=True)
     r.add_argument("--out", required=True)
     r.add_argument("--trace")
+    r.add_argument("--sample", help="P2a: the kill-surviving JSON-lines side file (see the module doc)")
+    r.add_argument("--sample-interval", type=float, default=5.0)
     r.add_argument("--min-served-share", type=float, default=0.95)
     r.add_argument("--egress-probe", action="append", help="host:port; repeatable (tests point it at a live socket)")
     r.add_argument("--cgroup-dir", help="TEST ONLY: read memory.* from here instead of this process's cgroup")

@@ -3,7 +3,7 @@
 # (B-TOKEN-WATCH-FOLLOWUP-MEMORY P1; answers Langston's Step-4 r1 question (iii): a kill is recorded by the unit's
 #  own Result, never inferred from a missing output file.)
 #
-#   bash tools/run_followup_arm.sh <arm> <run dir> <bodies.sqlite> <now ISO> <result dir> [--trace] [--n N] [--shape FILE]
+#   bash tools/run_followup_arm.sh <arm> <run dir> <bodies.sqlite> <now ISO> <result dir> [--trace] [--sample] [--n N] [--shape FILE]
 #   arm xn needs --n (the derived N, written down before the run); arm sept needs --shape (the reference day's shape).
 #   (Step 7, 2026-11-14: the runner accepted only all_shed|live|x4, so the two §6 arms could not be run through it.)
 #
@@ -22,6 +22,7 @@ EXTRA=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --trace) EXTRA+=(--trace "$OUT/$ARM-trace"); shift ;;
+    --sample) EXTRA+=(--sample "$OUT/$ARM-samples.jsonl"); shift ;;
     --n|--shape) [[ $# -ge 2 && -n "$2" ]] || { echo "REFUSED: $1 needs a value" >&2; exit 2; }; EXTRA+=("$1" "$2"); shift 2 ;;
     *) echo "REFUSED: unknown option $1" >&2; exit 2 ;;
   esac

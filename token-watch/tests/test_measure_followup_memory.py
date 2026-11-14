@@ -389,6 +389,67 @@ check("T1 exit 0", p.returncode == 0, p.stderr[-1500:])
 check("T1 identity map bracketed", any("before-summary._identity_map" in n for n in names)
       and any("after-summary._identity_map" in n for n in names), str(names))
 
+# ── S1: --sample (P2a) - markers at every stage Langston named, cgroup fields parsed, start/end bracket ───────────
+print("S1 expect: --sample writes start, samples, the stage markers in order (incl. inside summary.build) and end")
+cgs = os.path.join(WORK, "cg-sample")
+os.makedirs(cgs)
+open(os.path.join(cgs, "memory.max"), "w").write("536870912\n")
+open(os.path.join(cgs, "memory.current"), "w").write("123456789\n")
+open(os.path.join(cgs, "memory.peak"), "w").write("234567890\n")
+open(os.path.join(cgs, "memory.events"), "w").write("low 0\nhigh 0\nmax 7\noom 0\noom_kill 0\n")
+open(os.path.join(cgs, "memory.stat"), "w").write(
+    "anon 1000\nfile 2000\nkernel_stack 30\npagetables 40\nshmem 5\nfile_dirty 6\nfile_writeback 7\n"
+    "slab_reclaimable 8\nslab_unreclaimable 9\npgscan 10\npgsteal 11\n")
+run_root_s, _ = prepare("run-sample")
+sfile = os.path.join(WORK, "samples.jsonl")
+p, res = run("live", run_root_s, "--cgroup-dir", cgs, "--sample", sfile, "--sample-interval", "0.02", skip_memory=False)
+lines = [json.loads(x) for x in open(sfile, encoding="utf-8")] if os.path.exists(sfile) else []
+marks = [x.get("stage") for x in lines if x.get("kind") == "mark"]
+check("S1 exit 0", p.returncode == 0, p.stderr[-1500:])
+check("S1 first line is start, last is end", lines and lines[0]["kind"] == "start" and lines[-1]["kind"] == "end",
+      str([x.get("kind") for x in lines[:2] + lines[-2:]]))
+check("S1 seq is 1..n with no gap", [x["seq"] for x in lines] == list(range(1, len(lines) + 1)))
+want = ["after-follow_up.dead_set", "before-summary.build", "after-summary._fold", "before-summary.tombstone_path",
+        "before-summary._oldest_survivors", "after-summary._oldest_survivors", "before-summary._latest_observations",
+        "before-summary._identity_map", "after-summary._identity_map", "after-summary.build"]
+check("S1 every named stage marker present", all(w in marks for w in want), str([w for w in want if w not in marks]))
+# in ORDER: each stage searched for after the previous one. tombstone_path is also called inside _fold
+# (summary.py:153, the new-tombstone offset read), so the dead-set read's marker is the one AFTER after-summary._fold.
+pos, at = [], -1
+for w in want[1:5] + want[9:]:
+    at = marks.index(w, at + 1) if w in marks[at + 1:] else -1
+    pos.append(at)
+    if at < 0:
+        break
+check("S1 inside summary.build in order: _fold, the dead-set read, _oldest_survivors, ... build ends", -1 not in pos,
+      str(pos))
+loops = [x for x in lines if x.get("stage") == "loop"]
+ends = [x for x in lines if x.get("stage") == "loop-end"]
+check("S1 a loop marker at entry 0 and a loop-end carrying the entry count", loops and loops[0].get("entries") == 0
+      and ends and ends[0].get("entries") == res.get("stats", {}).get("due"),
+      "loop0=%s end=%s due=%s" % (loops[:1], ends[:1], res.get("stats", {}).get("due")))
+m0 = next((x for x in lines if x.get("stage") == "after-summary.build"), {})
+check("S1 a marker carries the cgroup reads", m0.get("memory_current") == 123456789 and m0.get("memory_peak") == 234567890
+      and m0.get("events") == {"max": 7, "oom": 0, "oom_kill": 0}, str({k: m0.get(k) for k in ("memory_current", "memory_peak", "events")}))
+check("S1 memory.stat: exactly the ten named keys, shmem not among them", m0.get("stat") == {
+    "anon": 1000, "file": 2000, "kernel_stack": 30, "pagetables": 40, "file_dirty": 6, "file_writeback": 7,
+    "slab_reclaimable": 8, "slab_unreclaimable": 9, "pgscan": 10, "pgsteal": 11}, str(m0.get("stat")))
+check("S1 a marker carries the Python counters (A-3)", isinstance(m0.get("allocated_blocks"), int)
+      and isinstance(m0.get("len_prev"), int) and isinstance(m0.get("len_dead_cache"), int),
+      str({k: m0.get(k) for k in ("allocated_blocks", "len_prev", "len_dead_cache")}))
+check("S1 the result names the side file", res.get("sample_file") == sfile, str(res.get("sample_file")))
+
+# ── S2: a line written before a SIGKILL survives it (the reason the sampler uses os.write, R3 C-2) ─────────────────
+print("S2 expect: a process that writes two lines and then SIGKILLs itself leaves both lines whole")
+kfile = os.path.join(WORK, "killed.jsonl")
+code = ("import os, signal, sys; sys.path.insert(0, %r); import measure_followup_memory as m; "
+        "s = m.Sampler(%r, None, 3600); s.write('start'); s.mark('before-kill'); os.kill(os.getpid(), signal.SIGKILL)"
+        % (os.path.join(HERE, "tools"), kfile))
+pk = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+klines = [json.loads(x) for x in open(kfile, encoding="utf-8")] if os.path.exists(kfile) else []
+check("S2 the process was killed", pk.returncode == -9, "rc=%s %s" % (pk.returncode, pk.stderr[-300:]))
+check("S2 both lines survive, whole", [x.get("kind") for x in klines] == ["start", "mark"], str(klines))
+
 # ── B1: the read-path baseline ─────────────────────────────────────────────────────────────────────────────────────
 print("B1 expect: lookup-baseline fetches the 144 distinct mints, finds 134")
 out = os.path.join(WORK, "baseline.json")
