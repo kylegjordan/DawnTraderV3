@@ -416,11 +416,19 @@ else
        # WHICH off-branch (#1181, Langston condition 2): a commit on another mirror branch, or one
        # on NO branch the mirror holds — pushed since the last all-branch sync, or force-pushed away
        # (origin serves those too, measured). Local only; 0.01-0.03 s over 135 heads, measured.
-       ob=$(git --git-dir="$REPO" for-each-ref --count=1 --format='%(refname:short)' --contains "$SHA" refs/heads/ 2>"$TMPD/fe")
+       # EVERY holder is counted (Langston Step-4 condition 2): naming one of four, unqualified, would
+       # read as "the" branch. Up to five are named; past that, the count and the first five.
+       ob=$(git --git-dir="$REPO" for-each-ref --format='%(refname:short)' --contains "$SHA" refs/heads/ 2>"$TMPD/fe")
        orc=$?
        [ $orc -eq 0 ] && [ ! -s "$TMPD/fe" ] || broken "could not tell which mirror branch holds $SHA (for-each-ref exit $orc)" "$(cat "$TMPD/fe")"
-       if [ -n "$ob" ]; then
-         WHERE="it is on mirror branch $ob"
+       nob=$(printf '%s\n' "$ob" | grep -c .)
+       named=$(printf '%s\n' "$ob" | sed -n '1,5p' | tr '\n' ' '); named=${named% }
+       if [ "$nob" -eq 1 ]; then
+         WHERE="it is on mirror branch $named"
+       elif [ "$nob" -ge 2 ] && [ "$nob" -le 5 ]; then
+         WHERE="it is on $nob mirror branches: $named"
+       elif [ "$nob" -gt 5 ]; then
+         WHERE="it is on $nob mirror branches, including $named"
        else
          WHERE="it is on NO branch the mirror holds (all-branch sync $(age "$SYNC_PASS")): pushed since that sync, or force-pushed away; the mirror cannot tell which"
        fi

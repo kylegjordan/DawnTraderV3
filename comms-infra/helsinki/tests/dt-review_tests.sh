@@ -425,6 +425,12 @@ run "$T/dtp" show "$S" CLAUDE.md
 $PM_ update-ref refs/heads/side2 "$S"
 run "$T/dtp" show "$S" CLAUDE.md; L1=$(sed -n 1p "$T/o")
 [ $RC -eq 0 ] && echo "$L1" | grep -q "^OFF-BRANCH: $S is not an ancestor of $B; it is on mirror branch side2 — " && ok "T2: a commit on a mirror branch names that branch" || bad T2-on "rc=$RC l1=${L1:0:200}"
+$PM_ update-ref refs/heads/side3 "$S"
+run "$T/dtp" show "$S" CLAUDE.md; L1=$(sed -n 1p "$T/o")
+[ $RC -eq 0 ] && echo "$L1" | grep -q "^OFF-BRANCH: $S is not an ancestor of $B; it is on 2 mirror branches: side2 side3 — " && ok "T2: a commit on two mirror branches is counted and both are named (Step-4 condition 2)" || bad T2-two "rc=$RC l1=${L1:0:200}"
+for n in 4 5 6 7 8; do $PM_ update-ref "refs/heads/side$n" "$S"; done
+run "$T/dtp" show "$S" CLAUDE.md; L1=$(sed -n 1p "$T/o")
+[ $RC -eq 0 ] && echo "$L1" | grep -q "^OFF-BRANCH: $S is not an ancestor of $B; it is on 7 mirror branches, including side2 side3 side4 side5 side6 — " && ok "T2: past five holders, the count and the first five" || bad T2-many "rc=$RC l1=${L1:0:220}"
 
 # T3 — a made-up FULL id: origin did not serve it. Never "does not have".
 F=0123456789abcdef0123456789abcdef01234567
@@ -449,12 +455,14 @@ mkpm; absent "$S" && ok "T5 pre: $S absent" || bad T5-pre present
 run "$T/dtp_fail" show "$S" CLAUDE.md
 [ $RC -eq 1 ] && echo "$ERR" | grep -q "^REFUSED: $S is not in the mirror, and no origin check was made: the branch fetch was FAILED (" && ! echo "$ERR" | grep -q "origin did not serve" && ok "T5: unreachable origin -> 'no origin check was made'" || bad T5 "rc=$RC ${ERR:0:220}"
 
-# T6 — the pin fetch times out: the timeout wording, never origin's refusal; and the lock is FREE
-# right after (no git child kept fd 9 — Langston C-1).
+# T6 — the pin fetch times out: the timeout wording, never origin's refusal; and the lock is free
+# right after. NOTE (Langston, Step 4): this does NOT show `9>&-` — coreutils `timeout` group-kills, so
+# the lock frees even when fd 9 IS inherited (he measured flock -n succeeding in both arms). T11 is
+# the case that discriminates.
 mkpm; absent "$S" && ok "T6 pre: $S absent" || bad T6-pre present
 run "$T/dtp_to" show "$S" CLAUDE.md
 [ $RC -eq 1 ] && echo "$ERR" | grep -q "^REFUSED: $S is not in the mirror, and the origin check timed out after 0.001s (" && ! echo "$ERR" | grep -q "origin did not serve" && ok "T6: pin fetch timeout -> timeout wording" || bad T6 "rc=$RC ${ERR:0:220}"
-flock -n "$PM/dt-fetch.lock" true && ok "T6/C-1: the fetch lock is free immediately after the timed-out call" || bad T6-lock "lock still held"
+flock -n "$PM/dt-fetch.lock" true && ok "T6: the fetch lock is free immediately after the timed-out call (liveness only; T11 shows 9>&-)" || bad T6-lock "lock still held"
 
 # T7 — the anchor survives gc and dt-backup-sync's prune; the mirror never goes shallow.
 mkpm; absent "$S" && ok "T7 pre: $S absent" || bad T7-pre present
@@ -478,6 +486,29 @@ PF=$(grep -B2 'refs/dt-review/pins/$PIN" 2>&1 9>&-)' "$T/src/dt-review")
 echo "$PF" | grep -q "GIT_SSH_COMMAND='ssh -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=2'" \
   && echo "$PF" | grep -q 'timeout "$PIN_FETCH_TIMEOUT"' && echo "$PF" | grep -q -- '--no-tags' \
   && ! echo "$PF" | grep -q -- '--depth' && ok "T10: the pin fetch has GIT_SSH_COMMAND, its timeout, --no-tags, 9>&-, and no --depth" || bad T10 "${PF:0:300}"
+
+# T11 — `9>&-` reaches the ssh GRANDCHILD (Langston Step-4 condition 1). A stand-in `ssh` first on PATH
+# records its own open fds, then runs git's remote command locally. The ssh:// remote makes git go
+# through it for BOTH fetches (branch, then pin). No line may show fd 9 (the lock). CONTROL: the same
+# copy with `9>&-` removed from the PIN fetch line only — its line must show fd 9.
+mkdir -p "$T/fakebin"
+cat > "$T/fakebin/ssh" <<'STUB'
+#!/bin/sh
+printf '%s\n' "$(ls /proc/$$/fd | tr '\n' ' ')" >> "$FDLOG"
+for a; do last=$a; done
+exec sh -c "$last"
+STUB
+chmod +x "$T/fakebin/ssh"
+mk_pin dtp_ssh "ssh://stub$PO" 60 "$T/src/dt-review"
+sed 's#"$PIN:refs/dt-review/pins/$PIN" 2>&1 9>&-)#"$PIN:refs/dt-review/pins/$PIN" 2>\&1)#' "$T/dtp_ssh" > "$T/dtp_ssh_leak"; chmod +x "$T/dtp_ssh_leak"
+cmp -s "$T/dtp_ssh" "$T/dtp_ssh_leak" && bad T11-mut "the control mutation did not apply"
+mkpm; absent "$S" && ok "T11 pre: $S absent" || bad T11-pre present
+rm -f "$T/fd.log"; FDLOG=$T/fd.log PATH="$T/fakebin:$PATH" run "$T/dtp_ssh" show "$S" CLAUDE.md
+NL=$(grep -c . "$T/fd.log"); L9=$(grep -cw 9 "$T/fd.log")
+[ $RC -eq 0 ] && [ "$NL" -eq 2 ] && [ "$L9" -eq 0 ] && ok "T11: both ssh grandchildren (branch + pin fetch) were started WITHOUT fd 9 ($(tr '\n' '|' < "$T/fd.log"))" || bad T11 "rc=$RC lines=$NL with-9=$L9 log=$(cat "$T/fd.log") err=${ERR:0:160}"
+mkpm; rm -f "$T/fd.log"; FDLOG=$T/fd.log PATH="$T/fakebin:$PATH" run "$T/dtp_ssh_leak" show "$S" CLAUDE.md
+[ "$(sed -n 2p "$T/fd.log" | grep -cw 9)" -eq 1 ] && [ "$(sed -n 1p "$T/fd.log" | grep -cw 9)" -eq 0 ] && ok "T11 CONTROL: without 9>&- on the pin fetch, its ssh grandchild holds fd 9" || bad T11-ctl "log=$(cat "$T/fd.log")"
+rm -rf "$T/fakebin" "$T/fd.log"
 rm -rf "$PO" "$PM" "$PW"
 
 echo "DTR SUMMARY: $PASSN pass, $FAILN fail"

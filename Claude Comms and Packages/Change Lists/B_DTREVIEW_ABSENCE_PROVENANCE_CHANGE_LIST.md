@@ -85,7 +85,7 @@ The prefix up to `not an ancestor of <branch>` is unchanged, so the bridge promp
 | T3 | made-up full id: "origin did not serve commit id … (git: … not our ref …)", never "does not have"; no pin ref | r6 "not in the mirror" |
 | T4 | 12-char prefix of an absent commit: "no origin check was made: a short id…"; no fetch, no ref | r6 bare "not in the mirror" |
 | T5 / d4 | unreachable origin: "no origin check was made: the branch fetch was FAILED (", never "did not serve" | — |
-| T6 | `PIN_FETCH_TIMEOUT=0.001`: timeout wording; `flock -n` on the lock succeeds immediately after | — |
+| T6 | `PIN_FETCH_TIMEOUT=0.001`: timeout wording; `flock -n` on the lock succeeds immediately after. ⚠️ **Corrected at Step 4 (Langston condition 1): this shows lock LIVENESS only, NOT `9>&-`.** coreutils `timeout` group-kills, so he measured `flock -n` succeeding even with fd 9 inherited. T11 is the discriminating case. | — |
 | T7 | `reflog expire --expire=now --all` + `gc --prune=now` keep the pinned commit; not shallow; a `--prune "+refs/heads/*:refs/heads/*"` fetch keeps the pin ref | pin ref removed → the same expiry + gc drops it |
 | T8 | full id of a present blob → "names a blob" (exit 2), no pin ref | — |
 | T10 | the shipped fetch line carries `GIT_SSH_COMMAND`, `timeout "$PIN_FETCH_TIMEOUT"`, `--no-tags`, `9>&-`, no `--depth` | — |
@@ -97,3 +97,12 @@ The prefix up to `not an ancestor of <branch>` is unchanged, so the bridge promp
 1. **T6 asserts the lock is free after a `timeout`-killed fetch.** That shows `9>&-` holds for git's direct child on a local `file://` origin. Over SSH the grandchild is `ssh`; T10 checks the text, not that behaviour. Is the text check enough, or do you want a forced-hang SSH case?
 2. **The `served`/`present` → exit 3 arms** have no test. They are reachable only by a race (an object gone between the fetch and the resolve) or a non-commit served by id. Is a refusal-free `broken` the right class for both?
 3. **`age "$SYNC_PASS"` in the no-branch header** quotes only the all-branch stamp, deliberately, because `DT_REVIEW_FETCH_OK` refreshes only the review branch.
+
+## Step-4 amendment (Langston APPROVE WITH CONDITIONS, Discord `1571135217438167187`)
+| cond | change | evidence |
+|---|---|---|
+| 1 | T6's claim corrected above. **T11 added:** a stand-in `ssh` first on PATH records its own open fds, and an `ssh://` remote sends both fetches through it. | Both grandchildren started without fd 9 (`0 1 10 2 3` each). CONTROL: the same copy with `9>&-` removed from the pin fetch line only, and that line's grandchild holds fd 9. |
+| 2 | `--count=1` dropped. Every holder is counted: one → `it is on mirror branch <b>`; 2-5 → `it is on N mirror branches: <all>`; >5 → `it is on N mirror branches, including <first five>`. | T2: one branch, two branches (`side2 side3`), seven branches (count + first five). Existing `b` (one branch) unchanged. |
+| 3 | System Impact Map + `LANGSTON_ARCHITECTURE.md` + his memory's two facts | Step 10 (before close), with the P8 fold verbatim and the sentence that nothing alarms on the pin count. |
+| 4 | Pre-audit §B2 C-2 pointer corrected to T1/C-2. | — |
+**Re-run on Helsinki, 2026-11-14: 132 pass, 0 fail.** `dt-review` sha256 `42c8ec1c…`, tests `d8c7d993…` (byte-identical to the amendment commit's blobs).
