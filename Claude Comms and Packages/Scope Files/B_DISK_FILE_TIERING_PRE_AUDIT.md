@@ -743,3 +743,53 @@ His rulings: (a) **yes**, no rule on archive prefixes, for the reason in C-2. (b
 - **(4b)** The re-list at least 2 days later: both ids gone, otherwise stop.
 - **(5)** CC-A as root deletes the wide key, confirms it no longer authorizes, and shreds the retired file.
 - **At close:** `deleteColdVersion` and `--delete-residue` removed and archived.
+
+### Amendment 4 — 3d plan r3: Langston on r2 (Discord `1571201605842509860`, graded at `575eb432e`) — C-2, C-4, C-5, (b), (c), the runbook line and the Infra post PROCEED; C-1 and C-3 folded here; no further Step-2 round, he grades step 1's diff
+**Discharged by him, and it would have stopped the batch:** the narrow key has no `listBuckets`, but `b2ResolveBucketId` returns `auth.bucketId` from the authorize response first (`storage-client.ts:654-658`), and a bucket-restricted key fills it. Three capabilities are sufficient.
+
+**C-3, refolded — the meter is built, not assumed:**
+1. **The data:** a `countByOwner` (upload versions per owner class), persisted as `versions_by_owner jsonb` in 3d's migration beside `bytes_by_owner`.
+2. **The page:** a ceiling page in `meterPages` for `_liveness/` and `_proof/`. A ceiling also **fires on the first run**, where the byte delta cannot (no previous row).
+3. **The envelope a WORKING rule leaves:** the Monday 04:00Z canary hides its object minutes before the 04:10Z audit, so that run sees 1 upload version. B2 sweeps once a day, so one lagging deletion can make it 2. A failed round-trip's object is hidden after 1 day by `daysFromUploadingToHiding` and deleted 1 day later, gone before the next Monday.
+   - **Ceiling = 2:** more than 2 versions pages.
+   - **A dead rule adds 1 a week,** so it pages at the 3rd version: **14-21 days after it dies.** r2's "about two weeks" was wrong.
+4. **ONE detector, not two.** Nothing runs the 3a proof on a schedule, so a dead `_proof/` rule is invisible until a proof runs. The `_proof/` ceiling is kept but not claimed as a second instrument.
+5. **Step 4's two objects have two clocks, read DAILY from day 1:**
+   - **The hidden one:** deleted at least 1 day after its hide. **FAIL only if still present at the day-3 re-list.**
+   - **The deliberately-unhidden one:** hidden at ≥ 1 day, deleted at least 1 day after that; day 2 is the earliest possible. **FAIL only if still present at the day-4 re-list.**
+   - Step 5 waits for both.
+6. **Step 2's read-back asserts the stored rules EQUAL what was sent, field by field, for both rules.** Both day settings are set, which is NOT the "keep only the last version" preset (that one has `daysFromUploadingToHiding: null`).
+7. **Baseline, MEASURED 16:3xZ** (read-only `b2_list_file_versions` on staging, all actions): `_liveness/` **0** versions, `_proof/` **0**.
+   - **Positive control, same instrument and run:** `token-watch/` 108 uploads + 1 hide marker; `context_bridge_log/` 4 uploads, the 3 rows plus the known duplicate. So the canary's delete has been working and nothing has accumulated.
+   - Re-counted at step 2.
+
+**C-1, the full census — 8 sites:**
+- **the three delete call sites:** `b75-cold-liveness.ts:122`, `b75-cold-proof.ts:103`, `b75-cold-bind.ts:328`;
+- **`b75-cold-proof.ts:57`:** `ProofDependencies.storage`'s `Pick<…>` gains `hideColdFile`, or the call does not typecheck;
+- **`b-disk-file-tiering-3a.test.ts:250`:** the second deps literal, in the checksum-drift block;
+- **the re-pointed fences:** `3a.test.ts:234`/`:239` and `3b.test.ts:433-440`.
+
+Three more things:
+- **`:239` loses its version-targeting, stated, not hidden.** It asserted `cold.fileId`, but `b2_hide_file` has no file-id parameter: it hides the CURRENT version of a name. The proof writes a name unique to its run, so the current version IS the proof object. The fence asserts that name, not a file id.
+- **`ProofDependencies.coldLimits` is required (`:60`), but neither 3a deps literal passes one,** so `deps.coldLimits.setupMs` would throw there. Both literals gain real limits, and the boundedness fence asserts the real value, not `undefined`.
+- **`setupMs` is REQUIRED on `hideColdFile(bucket, path, setupMs)`.** `deleteCold`'s optional parameter is how the canary's path went unbounded in the first place.
+
+**§13, folded, no new slot — `#431`** (`RUNNING_ISSUES.md:438`, re-homed three times, still OPEN): *"on the checksum-mismatch path it throws BEFORE the delete, so failed round-trips can leave `_liveness/canary-*.txt` objects accumulating."* Steps 1-2 plus the ceiling cover all three of its named options, including "bound the canary object count". **Closed at Step 10, with the step-4b re-list as evidence.**
+
+**(b), the allowlist, as it will be built:**
+- **The key:** `cold_residue_kept_file_ids` joins `loadAuditConfig`'s key list.
+- **The accessor:** a new `strArray()` with its own refusal text. An empty array is legal; a missing row or a non-array refuses.
+- **The seed:** the migration seeds `'[]'::jsonb`, so a missing row refuses rather than defaulting.
+- **The filter sits at the page site only** (`each(rc.untracked, …)`). `rc.untracked.length` stays whole in the DONE line and the meter row, and a new `kept` counter is added to both.
+
+**DEPLOY_WINDOWS — no row at Step 2, by Langston's ruling** (KD-56; the `workflow-02` rule, step 5). The window's start is gated on Kyle's residue decision, which has no date. A Step-2 row would most likely go STALE before the observation began, and a stale window stops blocking (`scripts/obs-windows.py` header, J3). It would read as "observation running" while nothing is.
+- **The row is filed at step 4 and pushed to the branch head BEFORE the step-4 objects are uploaded**:
+  - `until_event` = "the day-3 / day-4 re-lists of the two step-4 `_liveness/` objects";
+  - `expected_by` = step 4 + 4 days;
+  - `review_by` = step 4 + 5 days, from the unhidden arm's clock;
+  - `disturbs` = "nothing a deploy does; only a change to the bucket's lifecycle rules".
+- **Its purpose is the `review_by` raise** through `dt-install-drift`, the one carrier that notices if the 4b re-list never happens. Langston checks for the row at step 4; its absence is CHANGES-NEEDED.
+
+**The Infra post gains one line:** after step 5, no DawnTrader key on staging holds `writeBucketLifecycleRules` either, so a future `token-watch/` lifecycle rule needs Kyle's account, as a new key would.
+
+**Withdrawn, no work:** `deleteColdVersion` is unbounded (`storage-client.ts:1009-1020`), but it is deleted at close.
