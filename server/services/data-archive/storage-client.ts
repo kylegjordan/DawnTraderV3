@@ -684,7 +684,7 @@ export class StorageClient {
     return match.bucketId;
   }
 
-  async uploadCold(bucket: string, path: string, data: Buffer): Promise<UploadResult> {
+  async uploadCold(bucket: string, path: string, data: Buffer, setupMs?: number): Promise<UploadResult> {
     if (!this.isColdConfigured()) {
       throw new Error(
         '[B75 storage-client] cold storage not configured: set B2_KEY_ID, B2_APPLICATION_KEY, B2_BUCKET in env',
@@ -693,8 +693,10 @@ export class StorageClient {
     const checksum = sha256Hex(data);
     const sha1 = crypto.createHash('sha1').update(data).digest('hex');
 
-    const auth = await this.b2Authorize();
-    const bucketId = await this.b2ResolveBucketId(bucket);
+    // 3b item 2 (Langston r3 carry): with `setupMs` (the liveness canary passes cold_upload_setup_ms) every call on
+    // this Buffer path is bounded, as on the file path. Small payloads only, so setupMs bounds the body too.
+    const auth = await this.b2Authorize(setupMs);
+    const bucketId = await this.b2ResolveBucketId(bucket, setupMs);
 
     // Get upload URL (per-upload single-use)
     const upUrlRes = await fetch(`${auth.apiUrl}/b2api/v3/b2_get_upload_url`, {
@@ -704,6 +706,7 @@ export class StorageClient {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ bucketId }),
+      ...(setupMs !== undefined ? { signal: AbortSignal.timeout(setupMs) } : {}),
     });
     if (!upUrlRes.ok) {
       const body = await upUrlRes.text().catch(() => '');
@@ -722,6 +725,7 @@ export class StorageClient {
         'Content-Length': String(data.length),
       },
       body: data,
+      ...(setupMs !== undefined ? { signal: AbortSignal.timeout(setupMs) } : {}),
     });
     if (!upRes.ok) {
       const body = await upRes.text().catch(() => '');
@@ -734,15 +738,16 @@ export class StorageClient {
     };
   }
 
-  async downloadCold(bucket: string, path: string): Promise<DownloadResult> {
+  async downloadCold(bucket: string, path: string, setupMs?: number): Promise<DownloadResult> {
     if (!this.isColdConfigured()) {
       throw new Error('[B75 storage-client] cold storage not configured');
     }
-    const auth = await this.b2Authorize();
+    const auth = await this.b2Authorize(setupMs);
     const url = `${auth.downloadUrl}/file/${bucket}/${encodePath(path)}`;
     const res = await fetch(url, {
       method: 'GET',
       headers: { Authorization: auth.accountAuthToken },
+      ...(setupMs !== undefined ? { signal: AbortSignal.timeout(setupMs) } : {}),
     });
     if (!res.ok) {
       const body = await res.text().catch(() => '');
@@ -840,7 +845,12 @@ export class StorageClient {
   }
 
   /** Streams a cold object (by NAME) to a local file; SHA-256 by a second streamed pass (AP-4 C-1). */
-  async downloadColdFile(bucket: string, path: string, localPath: string): Promise<{ bytes: number; checksum: string; fileId: string | null }> {
+  async downloadColdFile(
+    bucket: string,
+    path: string,
+    localPath: string,
+    expectedFileId?: string,
+  ): Promise<{ bytes: number; checksum: string; fileId: string | null }> {
     if (!this.isColdConfigured()) {
       throw new Error('[B75 storage-client] cold storage not configured');
     }
@@ -854,9 +864,48 @@ export class StorageClient {
       throw new Error(`[B75 storage-client] B2 download (file) failed: ${res.status} — ${body}`);
     }
     if (!res.body) throw new Error('[B75 storage-client] B2 download (file): response has no body stream');
+    // 3b (Coltrane 4): a by-NAME read can return a different version than the one the manifest bound; when the caller
+    // knows the id, the response's id must equal it, checked before a byte is written.
+    const gotId = res.headers.get('x-bz-file-id');
+    if (expectedFileId !== undefined && gotId !== expectedFileId) {
+      await res.body.cancel().catch(() => {});
+      throw new Error(`[B75 storage-client] B2 download by name returned version ${gotId ?? 'none'}, expected ${expectedFileId}`);
+    }
     await pipeline(Readable.fromWeb(res.body as Parameters<typeof Readable.fromWeb>[0]), fs.createWriteStream(localPath, { mode: 0o600 }));
     const checksum = await sha256HexStream(fs.createReadStream(localPath));
-    return { bytes: fs.statSync(localPath).size, checksum, fileId: res.headers.get('x-bz-file-id') };
+    return { bytes: fs.statSync(localPath).size, checksum, fileId: gotId };
+  }
+
+  /**
+   * 3b item 2 — the exact-version read (plan r2 OBJ-3b): streams the stored version `fileId` (b2_download_file_by_id) to
+   * a 0600 local file; SHA-256 by a second streamed pass. The response's `x-bz-file-id` must equal `fileId`.
+   * NOT retried (A-5): a download spends the shared daily B2 budget, and 3c's scheduler owns re-tries. Bounded by
+   * `limits` when given (setup + bytes ÷ floor), like the warm read.
+   */
+  async downloadColdFileById(
+    fileId: string,
+    localPath: string,
+    bound?: { expectedBytes: number; limits: ColdTransferLimits },
+  ): Promise<{ bytes: number; checksum: string; fileId: string }> {
+    if (!this.isColdConfigured()) {
+      throw new Error('[B75 storage-client] cold storage not configured');
+    }
+    const auth = await this.b2Authorize(bound?.limits.setupMs);
+    const res = await fetch(`${auth.downloadUrl}/b2api/v3/b2_download_file_by_id?fileId=${encodeURIComponent(fileId)}`, {
+      method: 'GET',
+      headers: { Authorization: auth.accountAuthToken },
+      ...(bound ? { signal: AbortSignal.timeout(phaseBudgetMs(bound.expectedBytes, bound.limits)) } : {}),
+    });
+    if (!res.ok) throw await b2Error('download_file_by_id', res);
+    if (!res.body) throw new Error('[B75 storage-client] B2 download by id: response has no body stream');
+    const gotId = res.headers.get('x-bz-file-id');
+    if (gotId !== fileId) {
+      await res.body.cancel().catch(() => {});
+      throw new Error(`[B75 storage-client] B2 download by id returned version ${gotId ?? 'none'}, expected ${fileId}`);
+    }
+    await pipeline(Readable.fromWeb(res.body as Parameters<typeof Readable.fromWeb>[0]), fs.createWriteStream(localPath, { mode: 0o600 }));
+    const checksum = await sha256HexStream(fs.createReadStream(localPath));
+    return { bytes: fs.statSync(localPath).size, checksum, fileId };
   }
 
   /** `b2_get_file_info` by file id — metadata only, no file bytes. */
@@ -898,12 +947,12 @@ export class StorageClient {
     }
   }
 
-  async deleteCold(bucket: string, path: string): Promise<void> {
+  async deleteCold(bucket: string, path: string, setupMs?: number): Promise<void> {
     // B2 deletes go by fileId, not by name. Need to first list_file_versions to get fileId.
     if (!this.isColdConfigured()) {
       throw new Error('[B75 storage-client] cold storage not configured');
     }
-    const auth = await this.b2Authorize();
+    const auth = await this.b2Authorize(setupMs);
     // Find the file's fileId
     const listRes = await fetch(`${auth.apiUrl}/b2api/v3/b2_list_file_names`, {
       method: 'POST',
@@ -912,10 +961,11 @@ export class StorageClient {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        bucketId: await this.b2ResolveBucketId(bucket),
+        bucketId: await this.b2ResolveBucketId(bucket, setupMs),
         startFileName: path,
         maxFileCount: 1,
       }),
+      ...(setupMs !== undefined ? { signal: AbortSignal.timeout(setupMs) } : {}),
     });
     if (!listRes.ok) {
       const body = await listRes.text().catch(() => '');
@@ -931,6 +981,7 @@ export class StorageClient {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ fileId: file.fileId, fileName: path }),
+      ...(setupMs !== undefined ? { signal: AbortSignal.timeout(setupMs) } : {}),
     });
     if (!delRes.ok) {
       const body = await delRes.text().catch(() => '');

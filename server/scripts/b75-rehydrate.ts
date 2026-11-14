@@ -132,6 +132,8 @@ export interface RehydrateManifestRow {
   completeness_basis: string | null;
   format: string;
   original_partition_size_bytes: number | null;
+  /** 3b item 2: the exact B2 version a cold row is bound to (null on a warm row, and on a cold row not yet bound) */
+  provider_file_id?: string | null;
   cursor_contract?: string | null;
   selector_contract?: string | null;
   selector_version?: number | null;
@@ -153,7 +155,7 @@ async function queryManifest(
             manifest.storage_uri, manifest.row_count, manifest.bytes_compressed,
             manifest.min_ts, manifest.max_ts, manifest.checksum,
             manifest.completeness_basis, manifest.format,
-            manifest.original_partition_size_bytes,
+            manifest.original_partition_size_bytes, manifest.provider_file_id,
             evidence.cursor_contract, evidence.selector_contract, evidence.selector_version,
             evidence.frozen_cutoff_at, evidence.ranking_observed_at,
             evidence.keep_floor_rows, evidence.day_start, evidence.day_end,
@@ -392,7 +394,7 @@ export function finishRehydrateRun(
 export async function rehydrateChosenObject(
   args: RehydrateArgs,
   choice: LabelChoice<RehydrateManifestRow>,
-  storage: Pick<StorageClient, 'downloadWarmFile' | 'isColdConfigured' | 'downloadColdFile'>,
+  storage: Pick<StorageClient, 'downloadWarmFile' | 'isColdConfigured' | 'downloadColdFile' | 'downloadColdFileById'>,
 ): Promise<RehydrateObjectResult> {
   const { label, download, all } = choice;
   if (all.length > 1) {
@@ -441,8 +443,14 @@ export async function rehydrateChosenObject(
       return { kind: 'skipped-cold', bytes: 0, rowCount: 0 };
     }
     // B-DISK-FILE-TIERING 3a (AP-4 C-2): a restore from cold streams to the file — a streaming rotator with a buffered
-    // restore would send to cold an object that cannot come back on this box. (By-id reads are increment 3b.)
-    const cold = await storage.downloadColdFile(m[1], m[2], localPath);
+    // restore would send to cold an object that cannot come back on this box.
+    // 3b item 2 — the attestation-column READER (Langston's Step-4 carry): a bound row is restored by its exact version
+    // (`provider_file_id`, b2_download_file_by_id). A row not yet bound (the 4 pre-3a rows until 3b binds them) falls
+    // back to the by-name read and says so; a by-name read can return another version of the same name.
+    const cold = download.provider_file_id
+      ? await storage.downloadColdFileById(download.provider_file_id, localPath)
+      : (console.warn(`[B75 rehydrate] ${label} (cold): no bound file id yet — reading by NAME (any version of the name)`),
+        await storage.downloadColdFile(m[1], m[2], localPath));
     bytes = cold.bytes;
     checksumOk = cold.checksum === download.checksum;
   }

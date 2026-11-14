@@ -27,13 +27,15 @@
 import 'dotenv/config';
 import pg from 'pg';
 import { getStorageClient, sha256Hex } from '../services/data-archive/storage-client.js';
+import { loadColdLimits } from '../services/data-archive/cold-limits.js';
 import { addAlert } from '../services/system-alerts.js';
 
 const { Client } = pg;
 const LIVENESS_PREFIX = '_liveness';
 
-async function loadColdBucket(): Promise<string> {
-  // Single source of truth: data_lifecycle.cold_bucket (no hard-coded fallback per CLAUDE.md §11).
+async function loadColdBucket(): Promise<{ bucket: string; setupMs: number }> {
+  // Single source of truth: data_lifecycle.cold_bucket (no hard-coded fallback per CLAUDE.md §11), and — 3b item 2,
+  // Langston r3 carry — data_lifecycle.cold_upload_setup_ms, which bounds every B2 call on the canary's Buffer path.
   const c = new Client({ connectionString: process.env.DATABASE_URL });
   await c.connect();
   try {
@@ -44,7 +46,8 @@ async function loadColdBucket(): Promise<string> {
     if (typeof v !== 'string' || v.length === 0) {
       throw new Error('missing or non-string data_lifecycle.cold_bucket');
     }
-    return v;
+    const limits = await loadColdLimits(c, 'cold-liveness');
+    return { bucket: v, setupMs: limits.setupMs };
   } finally {
     await c.end();
   }
@@ -84,8 +87,9 @@ async function main(): Promise<void> {
   }
 
   let coldBucket: string;
+  let setupMs: number;
   try {
-    coldBucket = await loadColdBucket();
+    ({ bucket: coldBucket, setupMs } = await loadColdBucket());
   } catch (err) {
     const msg = `Could not resolve cold bucket config: ${err instanceof Error ? err.message : String(err)}`;
     console.error(`[cold-liveness] ${msg}`);
@@ -104,9 +108,9 @@ async function main(): Promise<void> {
 
   try {
     // 1. upload
-    await storage.uploadCold(coldBucket, objPath, payload);
+    await storage.uploadCold(coldBucket, objPath, payload, setupMs);
     // 2. re-download + verify
-    const dl = await storage.downloadCold(coldBucket, objPath);
+    const dl = await storage.downloadCold(coldBucket, objPath, setupMs);
     if (dl.checksum !== expected) {
       throw new Error(
         `checksum mismatch on readback: expected=${expected} got=${dl.checksum} (bytes=${dl.bytes})`,
@@ -114,7 +118,7 @@ async function main(): Promise<void> {
     }
     // 3. delete (best-effort cleanup; a failed delete self-reveals as a stale _liveness object)
     try {
-      await storage.deleteCold(coldBucket, objPath);
+      await storage.deleteCold(coldBucket, objPath, setupMs);
     } catch (delErr) {
       console.warn(
         `[cold-liveness] round-trip OK but cleanup delete failed (non-fatal): ${delErr instanceof Error ? delErr.message : String(delErr)}`,

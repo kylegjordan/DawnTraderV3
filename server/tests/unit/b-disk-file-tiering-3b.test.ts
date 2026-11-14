@@ -337,13 +337,13 @@ describe('3b — the rotator lock: refuse a live holder, take over a dead one, n
   });
   it('the locked body RETURNS its exit code — it never calls process.exit, so the lock is always released (Step 4 C-1)', () => {
     const src = read('server/scripts/b75-cold-rotator.ts');
-    const start = src.indexOf('async function runColdRotatorBodyLocked()');
+    const start = src.indexOf('async function runColdRotatorBodyLocked(');
     const end = src.indexOf('\nfunction parseSupabaseUri', start);
     expect(start).toBeGreaterThan(0);
     const body = src.slice(start, end > 0 ? end : undefined).split(/\r?\n(?=\/\*\*|export |async function |function )/)[0];
     expect(body).toMatch(/return failed > 0 \? 1 : 0;/);
     expect(body).not.toMatch(/process\.exit\(/);
-    expect(src).toMatch(/code = await runColdRotatorBodyLocked\(\);[\s\S]*?releaseRotatorLock\(ROTATOR_LOCK_PATH\);[\s\S]*?if \(code !== 0\) process\.exit\(code\);/);
+    expect(src).toMatch(/code = await runColdRotatorBodyLocked\(cfg, startedAt\);[\s\S]*?releaseRotatorLock\(ROTATOR_LOCK_PATH\);[\s\S]*?if \(code !== 0\) process\.exit\(code\);/);
   });
   it('a holder on ANOTHER host is held, never taken over', () => {
     const f = path.join(tmp(), 'lock');
@@ -372,5 +372,83 @@ describe('3b — the limits come from data_lifecycle and the migration seeds the
     const manifest = read('drizzle/migrations/MANIFEST.txt').split(/\r?\n/).map((l) => l.trim());
     expect(manifest).toContain('2026-11-14-b-disk-file-tiering-cold-retry.sql');
     expect(manifest).not.toContain('2026-11-14-b-disk-file-tiering-cold-retry-rollback.sql');
+  });
+});
+
+// ── 3b item 2: exact-version reads, the attestation-column reader, and Langston's three r3 carries ──────────────────
+function dlFetch(body: Buffer, idHeader: string | null, status = 200) {
+  const calls: Array<{ url: string; signalled: boolean }> = [];
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit = {}) => {
+    calls.push({ url, signalled: !!init.signal });
+    if (url.endsWith('/b2_authorize_account')) {
+      return new Response(JSON.stringify({ accountId: 'acct', authorizationToken: 'tok', apiInfo: { storageApi: { apiUrl: 'https://api.fake', downloadUrl: 'https://dl.fake' } } }), { status: 200 });
+    }
+    const headers: Record<string, string> = {};
+    if (idHeader !== null) headers['x-bz-file-id'] = idHeader;
+    return new Response(body, { status, headers });
+  }));
+  return calls;
+}
+
+describe('3b item 2 — downloadColdFileById reads the exact stored version (plan r2 OBJ-3b, Coltrane 4)', () => {
+  it('streams the version, checks the response id, and hashes the file', async () => {
+    const data = crypto.randomBytes(5000);
+    const calls = dlFetch(data, 'file-v7');
+    const out = path.join(tmp(), 'o.gz');
+    const r = await client().downloadColdFileById('file-v7', out);
+    expect(r).toEqual({ bytes: 5000, checksum: crypto.createHash('sha256').update(data).digest('hex'), fileId: 'file-v7' });
+    expect(calls.some((c) => c.url.includes('b2_download_file_by_id?fileId=file-v7'))).toBe(true);
+  });
+  it('a response naming another version throws BEFORE any byte is written', async () => {
+    dlFetch(crypto.randomBytes(100), 'file-OTHER');
+    const out = path.join(tmp(), 'o.gz');
+    await expect(client().downloadColdFileById('file-v7', out)).rejects.toThrow(/returned version file-OTHER, expected file-v7/);
+    expect(fs.existsSync(out)).toBe(false);
+  });
+  it('is NOT retried — a 503 throws on the first call (A-5: a download spends the shared budget)', async () => {
+    const calls = dlFetch(Buffer.from(JSON.stringify({ code: 'service_unavailable' })), null, 503);
+    await expect(client().downloadColdFileById('file-v7', path.join(tmp(), 'o.gz'))).rejects.toThrow(/503/);
+    expect(calls.filter((c) => c.url.includes('b2_download_file_by_id')).length).toBe(1);
+  });
+  it('a by-NAME read with an expected id refuses another version', async () => {
+    dlFetch(crypto.randomBytes(100), 'file-OTHER');
+    await expect(client().downloadColdFile('dt-archive-cold', 'x/a.jsonl.gz', path.join(tmp(), 'o.gz'), 'file-v7'))
+      .rejects.toThrow(/by name returned version file-OTHER, expected file-v7/);
+  });
+});
+
+describe('3b item 2 — the restore reads the attestation column (the reader, Langston Step-4 carry)', () => {
+  it('rehydrate selects provider_file_id and restores a bound row by id, an unbound row by name', () => {
+    const src = read('server/scripts/b75-rehydrate.ts');
+    expect(src).toContain('manifest.provider_file_id');
+    expect(src).toMatch(/download\.provider_file_id\s*\?\s*await storage\.downloadColdFileById\(download\.provider_file_id, localPath\)/);
+    expect(src).toMatch(/no bound file id yet — reading by NAME/);
+  });
+});
+
+describe('3b item 2 — Langston r3 carries', () => {
+  it('the liveness canary bounds every call on its Buffer path with cold_upload_setup_ms', async () => {
+    const src = read('server/scripts/b75-cold-liveness.ts');
+    expect(src).toContain("loadColdLimits(c, 'cold-liveness')");
+    expect(src).toContain('storage.uploadCold(coldBucket, objPath, payload, setupMs)');
+    expect(src).toContain('storage.downloadCold(coldBucket, objPath, setupMs)');
+    expect(src).toContain('storage.deleteCold(coldBucket, objPath, setupMs)');
+    // and the Buffer forms really carry the signal when given setupMs
+    const calls = dlFetch(Buffer.from('hello'), 'file-1');
+    await client().downloadCold('dt-archive-cold', '_liveness/x.txt', 60_000);
+    expect(calls.filter((c) => !c.signalled)).toEqual([]);
+  });
+  it('the dry-run exit writes a RUN line before its DONE line', () => {
+    const src = read('server/scripts/b75-cold-rotator.ts');
+    expect(src).toContain('[B75 rotator] RUN elapsed_ms=${Date.now() - startedAt.getTime()} candidates_done=0');
+    expect(src).toMatch(/dry_run=true`,\s*\);\s*console\.log\(\s*`\[B75 rotator\] DONE candidates=\$\{candidates\.length\} rotated=0 failed=0 bytes_moved=0 deferred=\$\{capDeferred\}/);
+  });
+  it('a holder older than the run deadline is taken over even on another host; a fresh one is held', () => {
+    const f = path.join(tmp(), 'lock');
+    const now = Date.parse('2026-12-01T03:00:00Z');
+    fs.writeFileSync(f, JSON.stringify({ pid: 1, host: 'renamed-host', started_at: '2026-11-01T03:00:00Z' }));
+    expect(acquireRotatorLock(f, () => true, 72_000_000, now).kind).toBe('taken_over');
+    fs.writeFileSync(f, JSON.stringify({ pid: 1, host: 'renamed-host', started_at: '2026-12-01T02:00:00Z' }));
+    expect(acquireRotatorLock(f, () => true, 72_000_000, now).kind).toBe('held');
   });
 });

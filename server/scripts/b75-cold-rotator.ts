@@ -510,39 +510,40 @@ export async function runColdRotatorCli(
 async function runColdRotatorCliBody(): Promise<void> {
   // 3b plan r4 1b: one rotator at a time, and a refusal or a dead-holder takeover is LOUD (it pages) — a silent refusal
   // would invent a third shape beside "0 candidates" and "crashed" that reads like the first.
-  const lock = acquireRotatorLock(ROTATOR_LOCK_PATH);
-  if (lock.kind === 'held') {
-    console.error(`[B75 rotator] REFUSED — the rotator lock is held: ${lock.holder}`);
-    await pageRotatorLock('refused', `Another cold rotator holds ${ROTATOR_LOCK_PATH}: ${lock.holder}. This run did nothing.`);
-    process.exit(1);
-  }
-  if (lock.kind === 'taken_over') {
-    console.error(`[B75 rotator] TOOK OVER a dead holder's lock: ${lock.holder}`);
-    await pageRotatorLock('taken_over', `The cold rotator lock ${ROTATOR_LOCK_PATH} was left by a dead process (${lock.holder}); this run took it over. The previous run crashed or was killed.`);
-  }
-  // Langston 3b Step 4 C-1: process.exit inside the try would skip this finally (Node runs no pending finally through
-  // exit), leaving the lock for next month to "take over" and page a crash that never happened. The body RETURNS its
-  // exit code; the lock is released; only then does the process exit.
-  let code = 0;
-  try {
-    code = await runColdRotatorBodyLocked();
-  } finally {
-    releaseRotatorLock(ROTATOR_LOCK_PATH);
-  }
-  if (code !== 0) process.exit(code);
-}
-
-async function runColdRotatorBodyLocked(): Promise<number> {
+  // 3b item 2: the config is read FIRST (read-only), so the lock knows the run deadline — a holder older than it cannot
+  // be live on any host and is taken over (a hostname change would otherwise make this box's own lock permanent).
   const startedAt = new Date();
   const ctl = new Client({ connectionString: process.env.DATABASE_URL });
   await ctl.connect();
-
   let cfg: ColdRotatorConfig;
   try {
     cfg = await loadConfig(ctl);
   } finally {
     await ctl.end();
   }
+  const lock = acquireRotatorLock(ROTATOR_LOCK_PATH, undefined, cfg.runDeadlineMs);
+  if (lock.kind === 'held') {
+    console.error(`[B75 rotator] REFUSED — the rotator lock is held: ${lock.holder}`);
+    await pageRotatorLock('refused', `Another cold rotator holds ${ROTATOR_LOCK_PATH}: ${lock.holder}. This run did nothing.`);
+    process.exit(1);
+  }
+  if (lock.kind === 'taken_over') {
+    console.error(`[B75 rotator] TOOK OVER a dead or stale holder's lock: ${lock.holder}`);
+    await pageRotatorLock('taken_over', `The cold rotator lock ${ROTATOR_LOCK_PATH} was left by a dead process, or one older than the run deadline (${lock.holder}); this run took it over. The previous run crashed or was killed.`);
+  }
+  // Langston 3b Step 4 C-1: process.exit inside the try would skip this finally (Node runs no pending finally through
+  // exit), leaving the lock for next month to "take over" and page a crash that never happened. The body RETURNS its
+  // exit code; the lock is released; only then does the process exit.
+  let code = 0;
+  try {
+    code = await runColdRotatorBodyLocked(cfg, startedAt);
+  } finally {
+    releaseRotatorLock(ROTATOR_LOCK_PATH);
+  }
+  if (code !== 0) process.exit(code);
+}
+
+async function runColdRotatorBodyLocked(cfg: ColdRotatorConfig, startedAt: Date): Promise<number> {
 
   // B-STORAGE-HARDEN OBJ-1: optional CLI overrides (bounded/controlled rotation).
   const argv = process.argv.slice(2);
@@ -623,6 +624,12 @@ async function runColdRotatorBodyLocked(): Promise<number> {
     // "always print one terminal DONE" invariant). A dry-run is a completed run
     // that rotated nothing; the watchdog reads it as healthy. (The creds-missing
     // dry-run case is independently alerted by the cold-liveness canary.)
+    // 3b item 2 (Langston r3 carry): a RUN line on the dry-run exit too, so a cap deferral paged from this DONE line
+    // points the reader at a line that exists.
+    console.log(
+      `[B75 rotator] RUN elapsed_ms=${Date.now() - startedAt.getTime()} candidates_done=0 bytes_moved=0 body_ms=0 ` +
+        `overhead_ms_per_candidate=n/a run_deadline_ms=${cfg.runDeadlineMs} max_candidates_per_run=${cfg.maxCandidatesPerRun} dry_run=true`,
+    );
     console.log(
       `[B75 rotator] DONE candidates=${candidates.length} rotated=0 failed=0 bytes_moved=0 deferred=${capDeferred} duration_ms=${Date.now() - startedAt.getTime()}`,
     );
@@ -672,14 +679,29 @@ export type RotatorLock = { kind: 'acquired' } | { kind: 'held'; holder: string 
  * is HELD (refuse and page), never taken over. `isAlive` is injectable for tests. */
 export function acquireRotatorLock(
   file: string,
-  isAlive: (pid: number) => boolean = (pid) => {
-    try {
-      process.kill(pid, 0);
-      return true;
-    } catch (e) {
-      return (e as NodeJS.ErrnoException).code === 'EPERM';
-    }
-  },
+  isAlive: (pid: number) => boolean = rotatorPidAlive,
+  /** 3b item 2 (Langston r1 (b)): a holder whose started_at is older than this cannot be a live run on ANY host (the
+   *  run deadline bounds a run), so it is taken over even across a hostname change. Omitted ⇒ no age bound. */
+  staleAfterMs?: number,
+  nowMs: number = Date.now(),
+): RotatorLock {
+  return acquireRotatorLockImpl(file, isAlive, staleAfterMs, nowMs);
+}
+
+function rotatorPidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code === 'EPERM';
+  }
+}
+
+function acquireRotatorLockImpl(
+  file: string,
+  isAlive: (pid: number) => boolean,
+  staleAfterMs: number | undefined,
+  nowMs: number,
 ): RotatorLock {
   const me = JSON.stringify({ pid: process.pid, host: os.hostname(), started_at: new Date().toISOString() });
   try {
@@ -692,8 +714,10 @@ export function acquireRotatorLock(
   let alive = false;
   try {
     holder = fs.readFileSync(file, 'utf-8');
-    const h = JSON.parse(holder) as { pid?: unknown; host?: unknown };
+    const h = JSON.parse(holder) as { pid?: unknown; host?: unknown; started_at?: unknown };
     if (typeof h.pid === 'number') alive = h.host !== os.hostname() ? true : isAlive(h.pid);
+    const startedMs = typeof h.started_at === 'string' ? Date.parse(h.started_at) : NaN;
+    if (alive && staleAfterMs !== undefined && Number.isFinite(startedMs) && nowMs - startedMs > staleAfterMs) alive = false;
   } catch {
     alive = false;
   }
