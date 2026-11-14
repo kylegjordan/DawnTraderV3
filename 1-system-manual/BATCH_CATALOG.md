@@ -1595,7 +1595,7 @@ Kyle decided the retention windows: **2026-09-23** none change, because August's
 
 **RESULT.** The supervised backlog archived and removed 2,163,663 fifteen-minute rows in 100 verified objects and 573,523 sixty-minute rows in 111 verified objects. The frozen selector then returned zero eligible rows against 495-symbol controls, both writers advanced, the next run deleted zero, and availability/event waits stayed unchanged. A final 211-object census found zero proof mismatches, and the scheduled entry was corrected to the checked-in kernel-lock launcher. Ordinary vacuum makes freed pages reusable but does not promise immediate relation-file shrink.
 
-## B-CRON-MISSED-CATCHUP (CC-C / ANALYST Codex, pre-sprint Stage 3 order 7; `#691`) — change-class `architecture` — STEP 10 OF THE SECOND STEP-11 REPAIR COMPLETE 2026-11-14 (deployed `9591ba8c2`; Langston Step 8 PROCEED, Discord `1570982569284083793`; record `Change Lists/B_CRON_MISSED_CATCHUP_STEP11_REPAIR.md` §11-§17; Step 11 completion report pending)
+## B-CRON-MISSED-CATCHUP (CC-C / ANALYST Codex, pre-sprint Stage 3 order 7; `#691`) — change-class `architecture` — ✅ CLOSED 2026-11-14 (deployed `9591ba8c2`; Langston Step 11 CONFIRMED 2026-11-14 (Discord `1570987475885760533`); report `Batch Completion/B_CRON_MISSED_CATCHUP_COMPLETION_REPORT.md`; record `Change Lists/B_CRON_MISSED_CATCHUP_STEP11_REPAIR.md` §11-§17)
 
 **WHAT IT FIXED.** A short wall-clock step or blocked event loop could make node-cron discard a scheduled occurrence. The registry could detect stale work but had no safe way to establish whether the missed job already started, replay it once, or explain why replay would be dishonest.
 
