@@ -271,3 +271,4 @@ Driver `tw-p1-traced-driver-r2` (installed `80ad52922`, the r9 runner), log `/va
 - Not settled: how much of the 512M charge is page cache. The R3 ruling (in-cgroup `memory.peak` with `ru_maxrss` beside it) is still owed, and these runs did not read either: the kill took the process before the harness's end-of-run reads.
 
 **NEXT:** P2 plan to Langston with the R3 instrument ruling. Proposed there: (1) the dead set as a structure sized for membership (not a Python set of 1M strings); (2) before any fix is claimed, a measurement that can see inside the sweep and inside `summary.build` — periodic in-cgroup `memory.current` samples (no tracemalloc overhead) plus `memory.stat` anon/file split at each sample.
+- **The driver's updater-window refusal never fired in these runs** (every arm's allowed span cleared the next 06:00-07:00Z draw), so per Langston's r9 caveat it stays **proven synthetically only**: its evidence is the stand-in test, not a live refusal.
