@@ -494,3 +494,7 @@ Tests: 3b 73/73; tsc 324 = 324.
   - **The "already gone" wording is withdrawn:** a named id not in the listing is "not in this listing — skipped (already deleted, or mistyped)".
   - **CI:** Langston verified the transfer himself — `f0cc55331` to `4ee9b3069` is RUNNING_ISSUES plus SPRINT_TO_LIVE_PLAN only, and run 43587462857 is 4/4.
   - Tests: 3b 77/77.
+- **Item 4 Step 4: Langston PROCEED at `f2787f82a`** (Discord `1571123183124488345`). He re-derived the CI (run 43588492133, 4/4, the sha is the branch head), both anchors' uniqueness, and the population of the unparseable leg. On staging: 4 of 4 cold rows parse and all four are still UNBOUND, so before `--apply` every residue id on them refuses as `unproven`. The board card's Review → Approved. **Both carries folded:**
+  - **CARRY-1:** the ordering fence is anchored on the report loop's TERMINAL statement (`` `[B75 cold-bind] ${name}: BOUND` ``, 1×). His one-line-window mutant (the block between `let failures = 0;` and the loop) → red.
+  - **CARRY-2:** `claimed` is built from EVERY manifest row, whatever its tier, so a non-cold row's object in the cold bucket can never read as an orphan. Staging today: 0 non-cold rows carry `b2://` — latent. The unparseable-uri refusal still reads cold rows only, because `supabase://` does not parse as a cold path.
+  - 3b 77/77; tsc 324 = 324.

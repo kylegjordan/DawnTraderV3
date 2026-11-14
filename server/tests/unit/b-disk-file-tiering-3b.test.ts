@@ -697,8 +697,13 @@ describe('3b item 4 — the residue delete set: our orphans and non-chosen versi
     // C-4: the delete branch sits AFTER the report loop
     // anchored on a string UNIQUE to the report loop (Langston item 4 r2: the old anchor occurs three times and indexOf
     // took the first, inside residueDeleteSet — the fence passed with the delete branch moved above the loop)
-    expect(src.split('let failures = 0;').length).toBe(2);
+    // anchored on the report loop's TERMINAL statement (Langston item 4 r3 CARRY-1: 'let failures = 0;' sits before the
+    // loop, so the delete block could slip between it and the loop and stay green)
+    const loopEnd = '`[B75 cold-bind] ${name}: BOUND`';
+    expect(src.split(loopEnd).length).toBe(2);
     expect(src.split('if (deleteIds) {').length).toBe(2);
-    expect(src.indexOf('if (deleteIds) {')).toBeGreaterThan(src.indexOf('let failures = 0;'));
+    expect(src.indexOf('if (deleteIds) {')).toBeGreaterThan(src.indexOf(loopEnd));
+    // and every manifest row claims its object, whatever its tier (CARRY-2)
+    expect(src).toContain('`SELECT tier, storage_uri, provider_file_id FROM data_archive_manifest`');
   });
 });

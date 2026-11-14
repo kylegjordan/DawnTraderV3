@@ -219,8 +219,11 @@ async function main(): Promise<void> {
     if (typeof c.rows[0]?.value !== 'string') throw new Error('[B75 cold-bind] missing data_lifecycle.cold_bucket');
     const bucket: string = c.rows[0].value;
     const limits = await loadColdLimits(client, 'B75 cold-bind');
-    const all = await client.query<{ storage_uri: string; provider_file_id: string | null }>(
-      `SELECT storage_uri, provider_file_id FROM data_archive_manifest WHERE tier = 'cold'`,
+    // EVERY manifest row claims its object, whatever its tier (Langston item 4 r3 CARRY-2: a non-cold row whose object
+    // sat in the cold bucket would otherwise read as an orphan). A supabase:// uri does not parse as a cold path, so the
+    // widening costs nothing; the unparseable-uri refusal still looks at COLD rows only.
+    const all = await client.query<{ tier: string; storage_uri: string; provider_file_id: string | null }>(
+      `SELECT tier, storage_uri, provider_file_id FROM data_archive_manifest`,
     );
     const boundIds = new Set(all.rows.map((r) => r.provider_file_id).filter((x): x is string => !!x));
     const claimed = new Set(all.rows.map((r) => coldPathOf(r.storage_uri)?.path).filter((x): x is string => !!x));
@@ -306,7 +309,7 @@ async function main(): Promise<void> {
       // C-1: a name whose manifest row is still UNBOUND has nothing proven to keep — none of its versions may go yet.
       const unboundPaths = new Set(r.rows.map((x) => coldPathOf(x.storage_uri)?.path).filter((x): x is string => !!x));
       const { notInSet, bound, unproven, unparseableUris } = deleteRefusals(
-        deleteIds, delSet, listing.versions, boundIds, unboundPaths, all.rows.map((x) => x.storage_uri),
+        deleteIds, delSet, listing.versions, boundIds, unboundPaths, all.rows.filter((x) => x.tier === 'cold').map((x) => x.storage_uri),
       );
       if (notInSet.length > 0 || bound.length > 0 || unproven.length > 0 || unparseableUris.length > 0) {
         // C-3: a refusal names everything it refused, by reason
