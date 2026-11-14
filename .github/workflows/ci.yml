@@ -140,6 +140,7 @@ jobs:
         run: |
           python3 token-watch/tests/test_due_storage.py
           python3 token-watch/tests/mutate_due_storage.py
+          python3 token-watch/tests/test_measure_followup_memory.py
           pwsh -NoProfile -Command '$e=$null;[Management.Automation.Language.Parser]::ParseFile("comms-infra/laptop/ssh-keyholder/install.ps1",[ref]$null,[ref]$e)>$null;if($e){$e|% Message;exit 1}'
           pwsh -NoProfile -Command '$e=$null;[Management.Automation.Language.Parser]::ParseFile("comms-infra/laptop/ssh-keyholder/capture_caller_processes.ps1",[ref]$null,[ref]$e)>$null;if($e){$e|% Message;exit 1}'
           pwsh -NoProfile -Command '$e=$null;[Management.Automation.Language.Parser]::ParseFile("comms-infra/laptop/ssh-keyholder/rollback.ps1",[ref]$null,[ref]$e)>$null;if($e){$e|% Message;exit 1}'

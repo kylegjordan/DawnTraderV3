@@ -661,17 +661,21 @@ class Sampler:
                 out["events"][k] = int(v)
         return out
 
-    def write(self, kind: str, **extra) -> None:
+    def write(self, kind: str, _final: bool = False, **extra) -> None:
         import time
         rec = {"t": round(time.time(), 3), "kind": kind, **self.read(), **extra}
         with self.lock:
             if self.closed:                             # FOLD-2: after close() the fd number may belong to another file
                 return
+            if _final:                                  # the `end` line: written AND the file closed in one lock hold,
+                self.closed = True                      # so no sampler write can land after it (Langston FINDING-2)
             self.seq += 1
             rec["seq"] = self.seq
             data = (json.dumps(rec, sort_keys=True, default=str) + "\n").encode("utf-8")
             while data:                                 # a short write is retried, never left as a partial line
                 data = data[os.write(self.fd, data):]
+            if _final:
+                os.close(self.fd)
 
     def mark(self, stage: str, **extra) -> None:
         probes = {"allocated_blocks": sys.getallocatedblocks()}
@@ -700,10 +704,9 @@ class Sampler:
             self.thread.join(timeout=max(5.0, 2 * self.interval))
         # FOLD-2 (Langston): a join that timed out must not read as healthy - `joined` says whether the thread stopped
         joined = self.thread.ident is None or not self.thread.is_alive()
-        self.write("end", thread_alive=alive, thread_error=self.thread_error, joined=joined)
-        with self.lock:                                 # no sampler write can land on a reused fd number after this
-            self.closed = True
-            os.close(self.fd)
+        # one lock hold writes `end`, sets `closed` and closes the fd: nothing can follow `end`, and no write can land
+        # on a reused fd number (Langston FINDING-2: writing `end` before taking the lock let a surviving thread append)
+        self.write("end", _final=True, thread_alive=alive, thread_error=self.thread_error, joined=joined)
 
 
 def cmd_run(a) -> int:

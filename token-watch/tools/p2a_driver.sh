@@ -17,6 +17,18 @@ LOG=/var/lib/token-watch-p1-runs/p2a-driver.log
 ALLOW_S=$((40*60))         # untraced arms ran 5-19 min at Step 7 (his A-1 reading); 40 min allowed + the margin below
 MARGIN_S=$((15*60))
 [[ $EUID -eq 0 ]] || { echo "REFUSED: run as root" >&2; exit 2; }
+# ONE cleanup for every way out (Langston FINDING-1): both updater exits, a failed prepare (cmd_prepare refuses AFTER
+# its copytree, leaving the dir) and a kill of this driver. A run dir left behind wedges every later invocation,
+# because prepare refuses an existing run root. A removal that fails is logged, never silent.
+RUN=
+cleanup() {
+  if [ -n "$RUN" ] && [ -e "$RUN" ]; then
+    if rm -rf --one-file-system "$RUN"; then echo "$(date -u +%FT%TZ) removed $RUN" >> "$LOG"
+    else echo "$(date -u +%FT%TZ) FAILED to remove $RUN - remove it by hand before the next run" >> "$LOG"; fi
+  fi
+}
+trap cleanup EXIT
+trap 'exit 143' TERM INT
 install -d -o tokenwatch -g tokenwatch -m 0700 "$RES"
 for arm in all_shed live; do
   if [ -e "$RES/$arm-unit.txt" ] && grep -q '^Result=' "$RES/$arm-unit.txt"; then
@@ -25,14 +37,13 @@ for arm in all_shed live; do
   RUN=/var/lib/token-watch-p1-runs/run-$arm-p2a   # set before updater_ok: it is read there under set -u (FOLD-1)
   updater_ok() {   # (Langston nit) checked again right before the arm: prepare runs inside the margin and eats it
     NEXT=$(systemctl show apt-daily-upgrade.timer -p NextElapseUSecRealtime --value)
+    # an EMPTY elapse (a masked or absent timer returns "" with rc 0) parses as today's midnight: unreadable, not "near"
+    [ -n "$NEXT" ] || { echo "$(date -u +%FT%TZ) STOP: the updater's next elapse is empty (timer masked or absent?)" >> "$LOG"; exit 1; }
     NEXT_S=$(date -u -d "$NEXT" +%s 2>/dev/null) || { echo "$(date -u +%FT%TZ) STOP: cannot read the updater's next elapse ('$NEXT')" >> "$LOG"; exit 1; }
     END_S=$(( $(date -u +%s) + ALLOW_S + MARGIN_S ))
     if [ "$NEXT_S" -le "$END_S" ]; then
       echo "$(date -u +%FT%TZ) REFUSED $arm ($1): apt-daily-upgrade next elapse $NEXT falls inside this arm's window (ends $(date -u -d @$END_S +%FT%TZ))" >> "$LOG"
-      # FOLD-1 (Langston): prepare REFUSES an existing --run-root, so a refusal after prepare must remove the run dir or
-      # every later invocation stops at the prepare guard until someone deletes it by hand
-      if [ -e "$RUN" ]; then rm -rf --one-file-system "$RUN" && echo "$(date -u +%FT%TZ) removed $RUN after the refusal" >> "$LOG"; fi
-      exit 3
+      exit 3                                     # the EXIT trap removes $RUN if prepare made it
     fi
   }
   updater_ok "before prepare"
@@ -51,7 +62,7 @@ for arm in all_shed live; do
   rc=$?
   echo "$(date -u +%FT%TZ) END p2a $arm rc=$rc samples=$(wc -l < "$RES/$arm-samples.jsonl" 2>/dev/null || echo none) free=$(df -B1 --output=avail / | tail -1)" >> "$LOG"
   cp "$RUN/PREPARE.json" "$RES/$arm-PREPARE.json" 2>>"$LOG"
-  rm -rf --one-file-system "$RUN" && echo "$(date -u +%FT%TZ) removed $RUN" >> "$LOG"
+  cleanup
   case $rc in 0|137) ;; *) echo "$(date -u +%FT%TZ) STOP: p2a $arm rc=$rc" >> "$LOG"; exit 1;; esac
 done
 echo "$(date -u +%FT%TZ) ALL DONE" >> "$LOG"

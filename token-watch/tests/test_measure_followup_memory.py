@@ -487,6 +487,24 @@ check("S4 end carries joined=false", l4 and l4[-1].get("kind") == "end" and l4[-
 check("S4 nothing after end", [x["kind"] for x in l4][-1] == "end", str([x["kind"] for x in l4]))
 s4.stop.__class__.set(s4.stop)                          # let the daemon thread finish
 
+# ── S5: FINDING-2 - with a sampler still writing every millisecond, `end` is the LAST line (ordering, not timing) ──
+print("S5 expect: a sampler that survives the join and keeps writing never lands a line after end")
+s5f = os.path.join(WORK, "s5.jsonl")
+s5 = mfm.Sampler(s5f, None, 0.001)
+s5.start()
+s5.stop.set = lambda: None                              # it never sees the stop
+real_join5 = s5.thread.join
+s5.thread.join = lambda timeout=None: real_join5(timeout=0.02)
+s5.close()
+import time as _t  # noqa: E402
+_t.sleep(0.1)                                           # the thread keeps trying to write for 100 ms after close
+l5 = [json.loads(x) for x in open(s5f, encoding="utf-8")]
+check("S5 end is the last line although the thread kept running", bool(l5) and l5[-1].get("kind") == "end"
+      and sum(1 for x in l5 if x.get("kind") == "end") == 1, str([x.get("kind") for x in l5[-3:]]))
+check("S5 and the thread was still alive (the premise held)", s5.thread.is_alive(), "thread stopped early")
+check("S5 end says joined=false", bool(l5) and l5[-1].get("joined") is False, str(l5[-1:]))
+s5.stop.__class__.set(s5.stop)
+
 # ── S3: an existing sample file is refused, never appended to (C-3); a zero interval is refused (nit) ─────────────
 print("S3 expect: --sample at an existing path -> exit 2, file untouched; --sample-interval 0 -> exit 2")
 before = open(sfile, "rb").read()
