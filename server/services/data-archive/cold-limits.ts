@@ -29,7 +29,8 @@ export function coldLimitsFromMap(map: Map<string, unknown>, who: string): ColdT
 export async function loadColdLimits(client: pg.Client | pg.PoolClient, who: string): Promise<ColdTransferLimits> {
   const r = await client.query(
     `SELECT constant_name, value FROM module_constants
-      WHERE module_name = 'data_lifecycle' AND constant_name = ANY($1::text[])`,
+      WHERE module_name = 'data_lifecycle' AND constant_name = ANY($1::text[])
+        AND exchange = '*' AND asset_class = '*' AND strategy = '*' AND regime = '*'`,
     [Object.values(COLD_LIMIT_KEYS)],
   );
   const map = new Map<string, unknown>();

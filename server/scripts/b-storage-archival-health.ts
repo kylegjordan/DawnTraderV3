@@ -539,8 +539,10 @@ async function checkColdRotationSignals(): Promise<boolean> {
           severity: 'warning',
           title: `Cold upload failed and is unresolved: ${row.source_table}/${row.partition_label}`,
           body:
-            `The cold rotator failed to upload ${row.path} on all its attempts (${row.failure_count} failed run(s), last ` +
-            `${new Date(row.last_failed_at).toISOString()}). The warm copy is kept and nothing was deleted. A failed ` +
+            `The cold rotator failed to upload ${row.path} on all its attempts (as of this alert's first raise: ` +
+            `${row.failure_count} failed run(s), last ${new Date(row.last_failed_at).toISOString()} — these numbers are ` +
+            `frozen at mint; the live count and time are in data_archive_cold_upload_failure). The warm copy is kept ` +
+            `and nothing was deleted. A failed ` +
             `attempt may have left a stored B2 version under that name with no manifest row — the 3b bucket listing ` +
             `reconciles it. The next monthly run retries the partition and resolves this row on success.`,
           metadata: { source: 'b-storage-archival-health', batch: 'B-DISK-FILE-TIERING', check: 'cold-upload-failure', path: row.path, failure_count: Number(row.failure_count) },

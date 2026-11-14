@@ -59,7 +59,7 @@ export function classifyB2(status: number | null, code: string | null): B2Dispos
 export interface B2RetryOptions {
   attempts: number; // total attempts, including the first
   backoffMs: number[]; // wait before attempt i+1 (index i); the last value repeats if short
-  retryAfterCapMs: number; // a 429's Retry-After is honoured up to this
+  retryAfterCapMs: number; // a Retry-After (any retryable status) is honoured up to this; callers with limits pass setupMs
   sleep?: (ms: number) => Promise<void>;
   jitter?: () => number; // 0..1, scales up to +25 % of the wait
   reauth?: () => Promise<void>; // called before retrying a 401 expired_auth_token
@@ -84,7 +84,7 @@ export async function withB2Retry<T>(op: string, call: (attempt: number) => Prom
   for (let attempt = 1; attempt <= opts.attempts; attempt++) {
     try {
       const v = await call(attempt);
-      opts.onAttempt?.({ op, attempt, ok: true, status: 200, code: null });
+      opts.onAttempt?.({ op, attempt, ok: true, status: null, code: null });
       return v;
     } catch (err) {
       last = err;

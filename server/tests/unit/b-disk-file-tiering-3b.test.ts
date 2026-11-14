@@ -118,7 +118,7 @@ describe('3b — withB2Retry: bounded, ordered, and honest about what it retries
  * error body; 'ok' stores and attests; 'badsha' answers 200 with a wrong contentSha1.
  */
 async function fakeB2(uploadScript: Array<number | 'ok' | 'badsha'>, infoScript: Array<number | 'ok'> = ['ok']) {
-  const seen = { uploadUrls: 0, uploads: 0, infos: 0, authorizes: 0 };
+  const seen = { uploadUrls: 0, uploads: 0, infos: 0, authorizes: 0, unsignalled: [] as string[] };
   let stored: { fileName: string; sha1: string; len: number } | null = null;
   const server = http.createServer((req, res) => {
     seen.uploads++;
@@ -142,7 +142,8 @@ async function fakeB2(uploadScript: Array<number | 'ok' | 'badsha'>, infoScript:
   servers.push(server);
   await new Promise<void>((z) => server.listen(0, '127.0.0.1', () => z()));
   const uploadUrl = `http://127.0.0.1:${(server.address() as { port: number }).port}/upload`;
-  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit = {}) => {
+    if (!init.signal) seen.unsignalled.push(url.slice(url.lastIndexOf('/') + 1));
     const json = (o: unknown, status = 200) => new Response(JSON.stringify(o), { status, headers: { 'content-type': 'application/json' } });
     if (url.endsWith('/b2_authorize_account')) {
       seen.authorizes++;
@@ -183,6 +184,12 @@ describe('3b — uploadColdFile retries the upload with a FRESH upload URL each 
     expect(seen.uploadUrls).toBe(3);
     expect(seen.uploads).toBe(3);
     expect(seen.infos).toBe(1);
+  });
+  it('every B2 JSON call on the upload path carries the setup deadline (Langston Step 4 C-2)', async () => {
+    const seen = await fakeB2(['ok']);
+    await client().uploadColdFile('dt-archive-cold', 'x/a.jsonl.gz', file(), LIMITS);
+    expect(seen.authorizes).toBeGreaterThan(0);
+    expect(seen.unsignalled).toEqual([]);
   });
   it('500 three times → throws, no further call', async () => {
     const seen = await fakeB2([500, 500, 500, 'ok']);
@@ -262,7 +269,7 @@ describe('3b — the rotator records a final upload failure durably, resolves it
     const s = {
       recorded: [] as unknown[],
       resolved: [] as string[],
-      priorFailures: vi.fn(async () => prior),
+      openFailures: vi.fn(async () => new Map(prior > 0 ? [['t/p1', prior]] : [])),
       recordFailure: vi.fn(async (c: ColdRotationCandidate, f: ColdUploadFailed['attempt']) => { s.recorded.push({ c: c.partition_label, ...f }); }),
       resolve: vi.fn(async (c: ColdRotationCandidate) => { s.resolved.push(c.partition_label); }),
     };
@@ -318,6 +325,16 @@ describe('3b — the rotator lock: refuse a live holder, take over a dead one, n
     expect(acquireRotatorLock(f, () => false).kind).toBe('taken_over');
     releaseRotatorLock(f);
     expect(fs.existsSync(f)).toBe(false);
+  });
+  it('the locked body RETURNS its exit code — it never calls process.exit, so the lock is always released (Step 4 C-1)', () => {
+    const src = read('server/scripts/b75-cold-rotator.ts');
+    const start = src.indexOf('async function runColdRotatorBodyLocked()');
+    const end = src.indexOf('\nfunction parseSupabaseUri', start);
+    expect(start).toBeGreaterThan(0);
+    const body = src.slice(start, end > 0 ? end : undefined).split(/\r?\n(?=\/\*\*|export |async function |function )/)[0];
+    expect(body).toMatch(/return failed > 0 \? 1 : 0;/);
+    expect(body).not.toMatch(/process\.exit\(/);
+    expect(src).toMatch(/code = await runColdRotatorBodyLocked\(\);[\s\S]*?releaseRotatorLock\(ROTATOR_LOCK_PATH\);[\s\S]*?if \(code !== 0\) process\.exit\(code\);/);
   });
   it('a holder on ANOTHER host is held, never taken over', () => {
     const f = path.join(tmp(), 'lock');

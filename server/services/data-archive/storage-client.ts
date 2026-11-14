@@ -600,7 +600,7 @@ export class StorageClient {
     );
   }
 
-  private async b2Authorize(): Promise<NonNullable<StorageClient['b2Auth']>> {
+  private async b2Authorize(setupMs?: number): Promise<NonNullable<StorageClient['b2Auth']>> {
     // Cache for 23h (B2 tokens valid 24h; refresh early)
     if (this.b2Auth && this.b2Auth.expiresAt > Date.now()) {
       return this.b2Auth;
@@ -613,6 +613,7 @@ export class StorageClient {
       const res = await fetch('https://api.backblazeb2.com/b2api/v3/b2_authorize_account', {
         method: 'GET',
         headers: { Authorization: `Basic ${basic}` },
+        ...(setupMs !== undefined ? { signal: AbortSignal.timeout(setupMs) } : {}),
       });
       if (!res.ok) throw await b2Error('authorize', res);
       return (await res.json()) as {
@@ -633,10 +634,10 @@ export class StorageClient {
   }
 
   /** Drops the cached token and authorizes again (a 401 expired_auth_token, amendment 5). Keeps a resolved bucket id. */
-  private async b2Reauthorize(): Promise<void> {
+  private async b2Reauthorize(setupMs?: number): Promise<void> {
     const keep = this.b2Auth?.bucketId ?? null;
     this.b2Auth = null;
-    const a = await this.b2Authorize();
+    const a = await this.b2Authorize(setupMs);
     if (keep && !a.bucketId) a.bucketId = keep;
   }
 
@@ -646,8 +647,8 @@ export class StorageClient {
     console.log(`[B75 storage-client] b2 ${r.op} attempt=${r.attempt} ok=${r.ok} status=${r.status ?? 'none'}${r.code ? ` code=${r.code}` : ''}${r.disposition ? ` disposition=${r.disposition}` : ''}`);
   };
 
-  private async b2ResolveBucketId(bucketName: string): Promise<string> {
-    const auth = await this.b2Authorize();
+  private async b2ResolveBucketId(bucketName: string, setupMs?: number): Promise<string> {
+    const auth = await this.b2Authorize(setupMs);
     if (auth.bucketId) return auth.bucketId;
     // Allow B2_BUCKET_ID env override to skip list_buckets entirely (faster + works
     // even with bucket-restricted application keys that lack list-buckets capability)
@@ -659,7 +660,7 @@ export class StorageClient {
     // 3b (A-5): in the enumerated retry set. Off the staging live path today — the env value above returns first while
     // the key is unrestricted, and a bucket-restricted key fills auth.bucketId (3d) — but retried for any env without it.
     const j = await withB2Retry('list_buckets', async () => {
-      const a = await this.b2Authorize();
+      const a = await this.b2Authorize(setupMs);
       const res = await fetch(`${a.apiUrl}/b2api/v3/b2_list_buckets`, {
         method: 'POST',
         headers: {
@@ -670,10 +671,11 @@ export class StorageClient {
           accountId: a.accountId,
           bucketName,
         }),
+        ...(setupMs !== undefined ? { signal: AbortSignal.timeout(setupMs) } : {}),
       });
       if (!res.ok) throw await b2Error('list_buckets', res);
       return (await res.json()) as { buckets: Array<{ bucketId: string; bucketName: string }> };
-    }, { ...B2_RETRY_DEFAULTS, reauth: () => this.b2Reauthorize(), onAttempt: this.b2AttemptLog });
+    }, { ...B2_RETRY_DEFAULTS, reauth: () => this.b2Reauthorize(setupMs), onAttempt: this.b2AttemptLog });
     const match = j.buckets.find((b) => b.bucketName === bucketName);
     if (!match) {
       throw new Error(`[B75 storage-client] B2 bucket not found: ${bucketName}`);
@@ -780,18 +782,19 @@ export class StorageClient {
       throw new Error('[B75 storage-client] cold storage not configured: set B2_KEY_ID, B2_APPLICATION_KEY, B2_BUCKET in env');
     }
     const { bytes, sha256, sha1 } = await hashFileSha256Sha1(localPath);
-    const bucketId = await this.b2ResolveBucketId(bucket);
+    const bucketId = await this.b2ResolveBucketId(bucket, limits.setupMs);
     // The body's budget is setup + bytes ÷ floor, like the warm read's: the body phase also carries fixed costs that do
     // not scale with size (the connection to the upload URL, and B2 hashing and answering after the last byte). A pure
     // bytes ÷ floor gave a 10-byte body 10 ms and aborted every small object (caught by the 3a attestation test at Step 3).
     const bodyBudgetMs = phaseBudgetMs(bytes, limits);
     // 3b — the bounded retry (KD-34, amendments 1-9). Every attempt fetches a FRESH upload URL (B2's contract for a
-    // 5xx), re-opens the file (postFileStream takes a path), and has its own per-phase budgets: setup (authorize +
-    // get_upload_url) under `limits.setupMs`, the body under bytes ÷ floor. A 401 expired_auth_token re-authorizes
+    // 5xx), re-opens the file (postFileStream takes a path), and has its own per-phase budgets: each JSON call
+    // (authorize, list_buckets, get_upload_url, get_file_info) under `limits.setupMs`, the body under setup + bytes ÷
+    // floor (`phaseBudgetMs`). A Retry-After is honoured up to `limits.setupMs`. A 401 expired_auth_token re-authorizes
     // inside the same 3 attempts. The attestation below runs OUTSIDE the retry: a 200 that does not attest throws at
     // once (amendment 8). A final throw is fail-closed — the caller writes no manifest row and never deletes warm.
     const up = await withB2Retry('upload', async (attempt) => {
-      const auth = await this.b2Authorize();
+      const auth = await this.b2Authorize(limits.setupMs);
       const upUrlRes = await fetch(`${auth.apiUrl}/b2api/v3/b2_get_upload_url`, {
         method: 'POST',
         headers: { Authorization: auth.accountAuthToken, 'Content-Type': 'application/json' },
@@ -827,11 +830,11 @@ export class StorageClient {
       } finally {
         onPhase?.(phaseLog('upload_body', attempt, outcome === 'ok' ? bytes : null, Date.now() - t0, bodyBudgetMs, outcome));
       }
-    }, { ...B2_RETRY_DEFAULTS, reauth: () => this.b2Reauthorize(), onAttempt: this.b2AttemptLog });
+    }, { ...B2_RETRY_DEFAULTS, retryAfterCapMs: limits.setupMs, reauth: () => this.b2Reauthorize(limits.setupMs), onAttempt: this.b2AttemptLog });
     // Coltrane 1: the response names the version that was stored — check every field we sent.
     assertB2Version('upload response', up, { action: 'upload', bucketId, fileName: path, sha1, bytes });
     // Coltrane 2: read the SAME version back by its id (metadata) and check again.
-    const info = await this.b2GetFileInfo(up.fileId);
+    const info = await this.b2GetFileInfo(up.fileId, limits.setupMs);
     assertB2Version('b2_get_file_info', info, { action: 'upload', bucketId, fileName: path, sha1, bytes });
     return { bytes, checksum: sha256, sha1, fileId: up.fileId, uri: `b2://${bucket}/${path}` };
   }
@@ -857,19 +860,25 @@ export class StorageClient {
   }
 
   /** `b2_get_file_info` by file id — metadata only, no file bytes. */
-  async b2GetFileInfo(fileId: string): Promise<B2FileVersion> {
+  async b2GetFileInfo(fileId: string, setupMs?: number): Promise<B2FileVersion> {
     // 3b amendment 1: retried — an idempotent metadata read; a 503 here after an attested upload must not throw that
     // upload away and manufacture an orphan.
     return withB2Retry('get_file_info', async () => {
-      const auth = await this.b2Authorize();
+      const auth = await this.b2Authorize(setupMs);
       const res = await fetch(`${auth.apiUrl}/b2api/v3/b2_get_file_info`, {
         method: 'POST',
         headers: { Authorization: auth.accountAuthToken, 'Content-Type': 'application/json' },
         body: JSON.stringify({ fileId }),
+        ...(setupMs !== undefined ? { signal: AbortSignal.timeout(setupMs) } : {}),
       });
       if (!res.ok) throw await b2Error('get_file_info', res);
       return (await res.json()) as B2FileVersion;
-    }, { ...B2_RETRY_DEFAULTS, reauth: () => this.b2Reauthorize(), onAttempt: this.b2AttemptLog });
+    }, {
+      ...B2_RETRY_DEFAULTS,
+      ...(setupMs !== undefined ? { retryAfterCapMs: setupMs } : {}),
+      reauth: () => this.b2Reauthorize(setupMs),
+      onAttempt: this.b2AttemptLog,
+    });
   }
 
   /**
@@ -940,8 +949,10 @@ export function sha256Hex(buf: Buffer): string {
 
 /**
  * The cold transfer limits (3b plan r4/r5), read from `data_lifecycle` by every caller — never a literal (A-4):
- * `cold_upload_setup_ms` bounds authorize + get_upload_url per attempt; `cold_body_min_bytes_per_s` sets each body
- * phase's budget at bytes ÷ floor (the warm read once, the upload body per attempt). Per phase, not one envelope.
+ * `cold_upload_setup_ms` bounds each B2 JSON call (authorize, list_buckets, get_upload_url, get_file_info) and caps a
+ * Retry-After; each BODY phase (the warm read once, the upload body per attempt) gets setup + bytes ÷
+ * `cold_body_min_bytes_per_s` — the setup term covers the connect and the server's answer, which do not scale with
+ * size. Per phase, not one envelope.
  */
 export interface ColdTransferLimits {
   setupMs: number;
@@ -959,7 +970,7 @@ export interface TransferPhaseLog {
   outcome: 'ok' | 'deadline' | 'refused' | 'error';
 }
 
-/** A body phase's budget: setup + bytes ÷ floor for the warm read (one fetch carries both), bytes ÷ floor for a body. */
+/** A body phase's budget, for the warm read and for every upload body alike: setup + bytes ÷ floor. */
 export function phaseBudgetMs(bytes: number, limits: ColdTransferLimits): number {
   return limits.setupMs + Math.ceil((bytes / limits.minBytesPerSec) * 1000);
 }

@@ -373,8 +373,9 @@ export async function rotateColdCandidate(
 
 /** 3b plan r4 1c: the durable failed-upload record (`data_archive_cold_upload_failure`). Injectable for tests. */
 export interface ColdFailureStore {
-  /** unresolved prior failures for this partition (0 when none) */
-  priorFailures(c: ColdRotationCandidate): Promise<number>;
+  /** every unresolved failure, keyed `source_table/partition_label` → failure_count — read ONCE per run (Langston: not
+   *  a pg connection per candidate) */
+  openFailures(): Promise<Map<string, number>>;
   /** upsert the failure: one row per partition, attempts appended, count incremented */
   recordFailure(c: ColdRotationCandidate, f: ColdUploadFailed['attempt'], error: string): Promise<void>;
   /** a later success resolves the partition's open failure */
@@ -391,7 +392,9 @@ export interface ColdRunResult {
   elapsedMs: number;
   candidatesDone: number;
   bodyMs: number;
-  fixedMsPerCandidate: number | null;
+  /** elapsed minus measured body time, per candidate: per-attempt setup, backoff sleeps, the local hashes (which scale
+   *  with bytes), the manifest writes and pg connects — NOT a size-independent constant, hence "overhead" */
+  overheadMsPerCandidate: number | null;
 }
 
 export async function runColdRotationCandidates(
@@ -401,6 +404,7 @@ export async function runColdRotationCandidates(
 ): Promise<ColdRunResult> {
   const now = deps.nowMs ?? Date.now;
   const runStart = now();
+  const open = deps.failures ? await deps.failures.openFailures() : new Map<string, number>();
   let rotated = 0;
   let failed = 0;
   let bytesMoved = 0;
@@ -413,7 +417,7 @@ export async function runColdRotationCandidates(
     const itemStart = now();
     const phases: TransferPhaseLog[] = [];
     try {
-      const prior = deps.failures ? await deps.failures.priorFailures(candidate) : 0;
+      const prior = open.get(`${candidate.source_table}/${candidate.partition_label}`) ?? 0;
       console.log(
         `[B75 rotator] rotating ${candidate.source_table}/${candidate.partition_label} (${candidate.bytes_compressed} bytes)` +
           (prior > 0 ? ` — retrying a previously failed candidate, ${prior} prior failure(s)` : ''),
@@ -451,7 +455,7 @@ export async function runColdRotationCandidates(
     elapsedMs,
     candidatesDone: done,
     bodyMs,
-    fixedMsPerCandidate: done > 0 ? Math.round((elapsedMs - bodyMs) / done) : null,
+    overheadMsPerCandidate: done > 0 ? Math.round((elapsedMs - bodyMs) / done) : null,
   };
 }
 
@@ -471,7 +475,7 @@ export async function runColdRotationPlan(
 ): Promise<{ dryRun: boolean } & ColdRunResult> {
   const dryRun = cfg.coldRotatorDryRun || !coldConfigured;
   if (dryRun) {
-    return { dryRun: true, rotated: 0, failed: 0, bytesMoved: 0, deferred: 0, elapsedMs: 0, candidatesDone: 0, bodyMs: 0, fixedMsPerCandidate: null };
+    return { dryRun: true, rotated: 0, failed: 0, bytesMoved: 0, deferred: 0, elapsedMs: 0, candidatesDone: 0, bodyMs: 0, overheadMsPerCandidate: null };
   }
   const result = await deps.runCandidates(candidates, cfg, deps.rotationDependencies);
   return { dryRun: false, ...result };
@@ -516,14 +520,19 @@ async function runColdRotatorCliBody(): Promise<void> {
     console.error(`[B75 rotator] TOOK OVER a dead holder's lock: ${lock.holder}`);
     await pageRotatorLock('taken_over', `The cold rotator lock ${ROTATOR_LOCK_PATH} was left by a dead process (${lock.holder}); this run took it over. The previous run crashed or was killed.`);
   }
+  // Langston 3b Step 4 C-1: process.exit inside the try would skip this finally (Node runs no pending finally through
+  // exit), leaving the lock for next month to "take over" and page a crash that never happened. The body RETURNS its
+  // exit code; the lock is released; only then does the process exit.
+  let code = 0;
   try {
-    await runColdRotatorBodyLocked();
+    code = await runColdRotatorBodyLocked();
   } finally {
     releaseRotatorLock(ROTATOR_LOCK_PATH);
   }
+  if (code !== 0) process.exit(code);
 }
 
-async function runColdRotatorBodyLocked(): Promise<void> {
+async function runColdRotatorBodyLocked(): Promise<number> {
   const startedAt = new Date();
   const ctl = new Client({ connectionString: process.env.DATABASE_URL });
   await ctl.connect();
@@ -583,9 +592,9 @@ async function runColdRotatorBodyLocked(): Promise<void> {
     // monthly steady state for ~10 months (nothing crosses the 365d warm retention
     // until ~2027), so the empty path MUST print DONE like every other exit.
     console.log(
-      `[B75 rotator] DONE candidates=0 rotated=0 failed=0 bytes_moved=0 duration_ms=${Date.now() - startedAt.getTime()}`,
+      `[B75 rotator] DONE candidates=0 rotated=0 failed=0 bytes_moved=0 deferred=0 duration_ms=${Date.now() - startedAt.getTime()}`,
     );
-    return;
+    return 0;
   }
 
   console.log(`[B75 rotator] candidates=${candidates.length}`);
@@ -615,9 +624,9 @@ async function runColdRotatorBodyLocked(): Promise<void> {
     // that rotated nothing; the watchdog reads it as healthy. (The creds-missing
     // dry-run case is independently alerted by the cold-liveness canary.)
     console.log(
-      `[B75 rotator] DONE candidates=${candidates.length} rotated=0 failed=0 bytes_moved=0 duration_ms=${Date.now() - startedAt.getTime()}`,
+      `[B75 rotator] DONE candidates=${candidates.length} rotated=0 failed=0 bytes_moved=0 deferred=${capDeferred} duration_ms=${Date.now() - startedAt.getTime()}`,
     );
-    return;
+    return 0;
   }
 
   // Phase 2: real rotation. For each candidate (B-DISK-FILE-TIERING 3a — streamed, attested; L-2):
@@ -639,18 +648,18 @@ async function runColdRotatorBodyLocked(): Promise<void> {
   const deferred = plan.deferred + capDeferred;
 
   // 3b r5 edit 1: the run gate's deciding quantity on EVERY real run, completed or deferred — elapsed, done, bytes and
-  // the derived fixed per-candidate cost (elapsed minus measured body time, per candidate). archival-health reads
+  // the derived per-candidate overhead (elapsed minus measured body time, per candidate). archival-health reads
   // `deferred=` from the DONE line: it pages on the FIRST deferring run and escalates on two consecutive (r5 edit 2).
   console.log(
     `[B75 rotator] RUN elapsed_ms=${plan.elapsedMs} candidates_done=${plan.candidatesDone} bytes_moved=${bytesMoved} ` +
-      `body_ms=${plan.bodyMs} fixed_ms_per_candidate=${plan.fixedMsPerCandidate ?? 'n/a'} run_deadline_ms=${cfg.runDeadlineMs} ` +
+      `body_ms=${plan.bodyMs} overhead_ms_per_candidate=${plan.overheadMsPerCandidate ?? 'n/a'} run_deadline_ms=${cfg.runDeadlineMs} ` +
       `max_candidates_per_run=${cfg.maxCandidatesPerRun}`,
   );
   console.log(
     `[B75 rotator] DONE candidates=${candidates.length} rotated=${rotated} failed=${failed} ` +
       `bytes_moved=${bytesMoved} deferred=${deferred} duration_ms=${Date.now() - startedAt.getTime()}`,
   );
-  if (failed > 0) process.exit(1);
+  return failed > 0 ? 1 : 0;
 }
 
 /** 0600, under deploy's home — never /tmp (1777, shared; #979). */
@@ -731,14 +740,13 @@ export function pgColdFailureStore(createClient: () => pg.Client): ColdFailureSt
     }
   }
   return {
-    priorFailures: (cand) =>
+    openFailures: () =>
       withClient(async (c) => {
-        const r = await c.query<{ failure_count: number }>(
-          `SELECT failure_count FROM data_archive_cold_upload_failure
-            WHERE source_table = $1 AND partition_label = $2 AND resolved_at IS NULL`,
-          [cand.source_table, cand.partition_label],
+        const r = await c.query<{ source_table: string; partition_label: string; failure_count: number }>(
+          `SELECT source_table, partition_label, failure_count FROM data_archive_cold_upload_failure
+            WHERE resolved_at IS NULL`,
         );
-        return r.rows[0] ? Number(r.rows[0].failure_count) : 0;
+        return new Map(r.rows.map((row) => [`${row.source_table}/${row.partition_label}`, Number(row.failure_count)]));
       }),
     recordFailure: (cand, f, error) =>
       withClient(async (c) => {

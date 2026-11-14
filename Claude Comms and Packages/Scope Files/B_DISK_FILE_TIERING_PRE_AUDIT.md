@@ -410,3 +410,16 @@ There is no single envelope, so a candidate running exactly at the floor on both
    - That fixed per-candidate cost is **unmeasured**: the 4 cold rows carry no `tier_changed_at`, and no rotation run exists in history. Decomposing today's two attested uploads bounds it anywhere from 2.6 s to 13.6 s, and the top of that range exceeds 12.65 s.
    - So the data cannot rule out the 20 h limit failing to serve N = 6,000 in the backfill month. Edit 2's first-run page is what catches that if it happens.
    - The 2026-12-01 rotator run is the first to measure it: 0 candidates, so the component is undefined until candidates exist. Then 3b's function arm (one candidate). The first real backlog month is 2027-11.
+
+### Amendment 4 — 3b item 1, Step 4 r1 (Langston CHANGES at `2084d6d53`, Discord `1571078737800208387`): the arithmetic and two carries
+**PREVIOUSLY STATED → NOW (the per-candidate worst case):**
+- **Previously** — r5: 37.1 min, `510.6 + 3 × (60 + 510.6) + 5`. The 2084d6d53 commit message: 40.1 min.
+- **Now: 2,468.7 s ≈ 41.1 min**, `570.6 + 3 × (60 + 570.6) + 6.25`.
+- **Reason:** the warm read's budget is also `phaseBudgetMs` = setup + bytes ÷ floor = 570.6 s, which both earlier figures omitted. Each upload attempt costs `get_upload_url` (setup) plus a body of setup + bytes ÷ floor. The backoff includes 25 % jitter.
+- **Thresholds unchanged:** 20 h ÷ 41.1 min = 29 candidates at worst case, against the 6,000 cap. Every B2 JSON call is now bounded by `cold_upload_setup_ms` (C-2): authorize, list_buckets, get_upload_url and get_file_info.
+
+**Carries (Langston, non-blocking):**
+- **Lock staleness bound** — a follow-on inside 3b, not a block. A holder whose `started_at` is older than `cold_rotator_run_deadline_ms` cannot be a live run on any host. The realistic trigger is a hostname change, which would otherwise make this box's own lock impossible to take over. It folds into 3b's next increment.
+- **A 429 with a non-JSON body is fatal** under amendment 3 — exactly a proxy or CDN 429. Taxonomy outcome (2), working as designed but unaddressed: a scope decision for 3c (the budget-aware scheduler), not a fix here.
+
+**Step 11 must say, in these words:** everything in 3b item 1 — the retry, the lock, the deferral page and the failure page — is fence-only. No live silence from any of them is evidence that it fires (#661 leg 3).

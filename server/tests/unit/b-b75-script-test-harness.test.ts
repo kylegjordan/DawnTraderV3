@@ -755,7 +755,7 @@ describe('cold rotation state machine', () => {
     await expect(runColdRotationPlan([candidate], dryRunCfg, true, {
       runCandidates,
       rotationDependencies: { storage: {} as never, createClient: vi.fn() },
-    })).resolves.toEqual({ dryRun: true, rotated: 0, failed: 0, bytesMoved: 0, deferred: 0, elapsedMs: 0, candidatesDone: 0, bodyMs: 0, fixedMsPerCandidate: null });
+    })).resolves.toEqual({ dryRun: true, rotated: 0, failed: 0, bytesMoved: 0, deferred: 0, elapsedMs: 0, candidatesDone: 0, bodyMs: 0, overheadMsPerCandidate: null });
     expect(runCandidates).not.toHaveBeenCalled();
   });
 
