@@ -109,6 +109,8 @@ def _parse_ts(line: str):
         rec = json.loads(line)
     except (ValueError, TypeError):
         return None
+    if not isinstance(rec, dict):          # valid JSON that is not a row: counted bad by the caller, never raised
+        return None
     raw = rec.get("first_seen_at")
     if not raw:
         return None

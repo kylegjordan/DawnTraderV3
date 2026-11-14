@@ -234,6 +234,11 @@ def _drain_previous_month(now: datetime) -> dict:
                     break
                 offset = fh.tell()
                 continue
+            # valid JSON that is not an object (`123`, `[]`, `null`) is not a spend row: skipped like a complete
+            # unparseable line, never `.get` on it (B-TOKEN-WATCH-FOLLOWUP-MEMORY item, Langston 2026-11-14)
+            if not isinstance(rec, dict):
+                offset = fh.tell()
+                continue
             k = rec.get("kind")
             if k in CREDITS and CREDITS[k] > 0:
                 bucket[k] = bucket.get(k, 0) + rec.get("n", 0) * CREDITS[k]
@@ -355,6 +360,13 @@ def fold_pending(now: datetime | None = None) -> dict:
                 bad_lines += 1
                 LOG.error("journal line unparseable at offset %d — SKIPPED, "
                           "spend from this line is lost: %.120s", offset, line)
+                offset = fh.tell()
+                continue
+            # valid JSON that is not an object is interior corruption too: counted, logged, skipped - a `.get` on it
+            # raised AttributeError and stopped the fold at the same offset every hour (Langston 2026-11-14)
+            if not isinstance(rec, dict):
+                bad_lines += 1
+                LOG.error("journal line is not an object at offset %d — SKIPPED: %.120s", offset, line)
                 offset = fh.tell()
                 continue
             k = rec.get("kind")

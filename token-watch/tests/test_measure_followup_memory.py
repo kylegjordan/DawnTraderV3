@@ -409,7 +409,7 @@ check("S1 exit 0", p.returncode == 0, p.stderr[-1500:])
 check("S1 first line is start, last is end", lines and lines[0]["kind"] == "start" and lines[-1]["kind"] == "end",
       str([x.get("kind") for x in lines[:2] + lines[-2:]]))
 check("S1 seq is 1..n with no gap", [x["seq"] for x in lines] == list(range(1, len(lines) + 1)))
-want = ["after-follow_up.dead_set", "before-summary.build", "after-summary._fold", "before-summary.tombstone_path",
+want = ["after-follow_up.dead_set", "before-summary.build", "after-summary._fold", "before-summary.dead_set",
         "before-summary._oldest_survivors", "after-summary._oldest_survivors", "before-summary._latest_observations",
         "before-summary._identity_map", "after-summary._identity_map", "after-summary.build"]
 check("S1 every named stage marker present", all(w in marks for w in want), str([w for w in want if w not in marks]))
@@ -438,6 +438,20 @@ check("S1 a marker carries the Python counters (A-3)", isinstance(m0.get("alloca
       and isinstance(m0.get("len_prev"), int) and isinstance(m0.get("len_dead_cache"), int),
       str({k: m0.get(k) for k in ("allocated_blocks", "len_prev", "len_dead_cache")}))
 check("S1 the result names the side file", res.get("sample_file") == sfile, str(res.get("sample_file")))
+# P2b-0: markers INSIDE _oldest_survivors and a per-file open mark, each carrying blocks beside anon
+inside = ["before-summary._correction_index", "after-summary._correction_index", "before-summary.store_census",
+          "before-store.creator_stake_index", "after-store.creator_stake_index", "before-store.read_census_uncorrected",
+          "after-summary.store_census"]
+check("S1 P2b-0: the markers inside _oldest_survivors are present", all(w in marks for w in inside),
+      str([w for w in inside if w not in marks]))
+opens = [x for x in lines if str(x.get("stage", "")).startswith("open:")]
+check("S1 P2b-0: births and observations file opens are marked with their size",
+      any("births/" in x["stage"] for x in opens) and any("observations/" in x["stage"] for x in opens)
+      # file_bytes is None for a file opened to be CREATED (an append before it exists); every mark carries the key
+      and all("file_bytes" in x for x in opens) and any(isinstance(x.get("file_bytes"), int) for x in opens),
+      str(sorted(set(x["stage"] for x in opens))))
+check("S1 P2b-0: every inside marker carries allocated_blocks (R2: retained vs transient)",
+      all(isinstance(x.get("allocated_blocks"), int) for x in lines if x.get("stage") in inside), "missing blocks")
 # C-2: the periodic stream itself - at least two samples, one of them BETWEEN two named markers
 seq_of = {x.get("stage"): x["seq"] for x in lines if x.get("kind") == "mark"}
 samples = [x["seq"] for x in lines if x.get("kind") == "sample"]

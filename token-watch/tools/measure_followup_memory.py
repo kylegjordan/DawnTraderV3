@@ -75,7 +75,10 @@ SUBCOMMANDS, each run as `tokenwatch`:
            the dead-set read's marker is the tombstone_path one that FOLLOWS after-summary._fold. Every line carries memory.current, memory.peak (exact
            high-water: its delta between markers brackets the peak to a stage, A-2), memory.stat anon / file /
            file_dirty / file_writeback / shmem / slab_reclaimable / slab_unreclaimable / kernel_stack / pagetables /
-           pgscan / pgsteal, and memory.events max / oom / oom_kill. Markers add sys.getallocatedblocks(),
+           pgscan / pgsteal, and memory.events max / oom / oom_kill. P2b-0 adds markers inside _oldest_survivors
+           (_correction_index, store_census, store.creator_stake_index, store.read_census_uncorrected) and an
+           `open:<dir>/<file>` mark (with file_bytes) for every births / observations / creator-stake file store
+           opens. Markers add sys.getallocatedblocks(),
            len(prev) (the `last_seen` dict the loop grows) and len(store._DEAD_CACHE["set"]) (A-3). No tracemalloc:
            its tables scale with the traced objects and inflate the charge being measured. Combinable with --trace,
            but a P2a run uses --sample alone.
@@ -957,12 +960,38 @@ def cmd_run(a) -> int:
         mwrap(promote, "run")
         mwrap(summary, "build")
         mwrap(summary, "_fold")
-        # called twice in build: inside _fold (summary.py:153, the new-tombstone offset read) and just before build's
-        # own local dead-set loop (:379, F-1) - the second is the one AFTER the after-summary._fold marker
-        mwrap(summary, "tombstone_path", after=False)
+        # P2b F-a: build takes store's dead set (no second copy); the marker is that call, bound by name in summary
+        mwrap(summary, "dead_set")
         mwrap(summary, "_oldest_survivors")
+        # ⭐ P2b-0 (Langston, P2a ruling (3) + P2b R2): INSIDE _oldest_survivors. summary binds _correction_index and
+        #    census (as store_census) by name, so those names are wrapped in summary; census itself calls
+        #    creator_stake_index and read_census_uncorrected through store's globals, so those are wrapped in store.
+        #    Every mark carries allocated_blocks beside anon: a before/after pair whose blocks fall back is a TRANSIENT
+        #    freed inside the call; blocks that stay up are RETAINED by something still referenced (R2).
+        mwrap(summary, "_correction_index")
+        mwrap(summary, "store_census")
+        mwrap(store, "creator_stake_index")
+        mwrap(store, "read_census_uncorrected")
         mwrap(summary, "_latest_observations")
         mwrap(summary, "_identity_map")
+        # ⭐ P2b-0: INSIDE the reads themselves - every births day file, observation day file or creator-stake file
+        #    store opens is marked with its size, so the growth inside _latest_observations (both P2a kills) and inside
+        #    each census call is located per file. store resolves `open` through its globals, so a module-level `open`
+        #    in store shadows the builtin for store's own calls only.
+        import builtins
+        real_open = builtins.open
+
+        def marked_open(file, *args, **kw):
+            path = str(file)
+            if "/observations/" in path or "/births/" in path or "creator-stake" in path:
+                try:
+                    size = os.path.getsize(path)
+                except OSError:
+                    size = None
+                sampler.mark("open:%s/%s" % (os.path.basename(os.path.dirname(path)), os.path.basename(path)),
+                             file_bytes=size)
+            return real_open(file, *args, **kw)
+        store.open = marked_open
 
     if tracer:
         def wrap(mod, name, before=True, after=True):

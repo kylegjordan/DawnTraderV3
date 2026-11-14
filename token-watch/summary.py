@@ -48,7 +48,8 @@ from datetime import datetime, timedelta, timezone
 from config import (BIRTHS_DIR, DISPLAY_AGES, GRID, GRID_LABELS,
                     OBSERVATIONS_DIR, ROOT)
 from store import (census as store_census, identity_map as _identity_map, load_state, save_state,
-                   tombstone_path, _correction_index)
+                   tombstone_path, _correction_index, dead_set, dead_set_status,
+                   latest_observations_uncorrected)
 
 UTC = timezone.utc
 LOG = logging.getLogger("token-watch.summary")
@@ -182,25 +183,9 @@ def _latest_observations(mints: set, max_files: int = 3) -> dict:
     ⚠️ A TOKEN NOT OBSERVED WITHIN THAT WINDOW SHOWS BLANKS RATHER THAN STALE
        NUMBERS. A blank says "not looked at recently"; a stale number says
        "this is how it is", and only one of those is true.
+    ⭐ The read itself is store.latest_observations_uncorrected (P2b F-c): streamed, never a whole file as a list.
     """
-    want = set(mints)
-    found = {}
-    files = (sorted(os.listdir(OBSERVATIONS_DIR), reverse=True)
-             if os.path.isdir(OBSERVATIONS_DIR) else [])
-    for name in files[:max_files]:
-        if not want:
-            break
-        try:
-            with open(os.path.join(OBSERVATIONS_DIR, name), encoding="utf-8") as fh:
-                rows = [json.loads(x) for x in fh if x.strip()]
-        except (OSError, ValueError):
-            continue
-        for r in reversed(rows):            # newest first within the file
-            m = r.get("mint")
-            if m in want and r.get("observed"):
-                found[m] = r
-                want.discard(m)
-    return found
+    return latest_observations_uncorrected(mints, max_files)
 
 
 def _oldest_survivors(dead: set, limit: int, now: datetime) -> list:
@@ -264,8 +249,8 @@ def _oldest_survivors(dead: set, limit: int, now: datetime) -> list:
                 "follow_reason": r.get("follow_reason"),
             })
             if len(out) >= limit:
-                return _enrich(out)
-    return _enrich(out)
+                return _enrich(out), _unresolved
+    return _enrich(out), _unresolved
 
 
 def _enrich(rows: list) -> list:
@@ -375,19 +360,25 @@ def build(now: datetime = None) -> dict:
     # ── WHERE THEY DIED — straight off the record, no derivation ────────────
     died_by_age = {label: st["deaths_by_age"].get(label, 0) for label in GRID_LABELS}
 
-    dead = set()
-    tomb = tombstone_path()
-    if os.path.exists(tomb):
-        try:
-            with open(tomb, encoding="utf-8") as fh:
-                for line in fh:
-                    if line.strip():
-                        try:
-                            dead.add(json.loads(line)["mint"])
-                        except (ValueError, KeyError):
-                            continue
-        except OSError:
-            pass
+    # ⭐ ONE DEAD SET (P2b F-a). build used to re-read the whole tombstone file into its own set here, beside
+    #    store's cached one - a second full copy, +99..111 MiB measured (P2a), in the follow-up unit that runs it.
+    # ⛔ AN UNREADABLE TOMBSTONE FILE IS NOT "NOTHING IS DEAD" (Langston R3, absent-as-valid #546). The old loop caught
+    #    OSError and carried on with an empty set, which listed corpses as the oldest survivors. Now the table is
+    #    WITHHELD (empty) and the reason is published beside it.
+    try:
+        dead = dead_set()
+        dead_note = None
+        bad = dead_set_status()["bad_lines"]
+        if bad:
+            dead_note = ("%d tombstone line(s) could not be read; a token whose death is on one of them may be "
+                         "listed as a survivor" % bad)
+    except OSError as exc:
+        dead = None
+        dead_note = "survivor table withheld: the tombstone file could not be read (%s)" % type(exc).__name__
+    if dead is None:
+        survivors, unresolved = [], 0
+    else:
+        survivors, unresolved = _oldest_survivors(dead, OLDEST_N, now)
 
     payload = {
         "generated_at": now.isoformat(),
@@ -425,7 +416,11 @@ def build(now: datetime = None) -> dict:
                     "recorded. 'faded' and 'liquidity_pulled' are recorded "
                     "separately and never collapsed into one column.",
         },
-        "oldest_survivors": _oldest_survivors(dead, OLDEST_N, now),
+        "oldest_survivors": survivors,
+        # the table's own caveats: why it may be withheld or incomplete, and how many census rows were NOT listed
+        # because they record a quote currency that could not be repaired (counted, never silently dropped - R4)
+        "oldest_survivors_note": dead_note,
+        "oldest_survivors_unresolved_excluded": unresolved,
         "display_ages": list(DISPLAY_AGES),
         # ⛔ THE ORDER OF THE CHECKPOINTS, CARRIED EXPLICITLY. The payload is
         #    written with sort_keys=True, so `by_age_at_death` comes back

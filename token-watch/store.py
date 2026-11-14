@@ -708,14 +708,130 @@ def record_death(mint: str, when: datetime, death_class: str, age_label: str,
             _DEAD_CACHE["mtime"] = None  # fall back to a re-read; never guess
 
 
-_DEAD_CACHE = {"mtime": None, "set": set()}
+# ⭐ THE DEAD SET, HELD COMPACTLY (B-TOKEN-WATCH-FOLLOWUP-MEMORY P2b F-b, Langston's design rulings). As a Python set
+#    of 766,794 mint strings it cost ~106 MiB of anon - a fifth of the follow-up unit's 512 MiB cap - before the sweep
+#    did any work (P2a, measured). Here every mint read from the tombstone file is stored as its ASCII bytes, right-padded
+#    with NUL to a FIXED 44-BYTE STRIDE, in ONE sorted contiguous buffer (~34 MB for that population), and looked up by
+#    bisection. NOT decoded from base58 (Langston R1): decoding saves ~9 MiB but needs a decoder this tree does not have,
+#    creates an undecodable class, and would route every fixture mint ('MINT_A', 'M12', 'DEAD1' - none decodes) to the
+#    overflow set, so no test would ever reach the bisect path. A mint that cannot take the stride - non-ASCII, empty,
+#    longer than 44, or containing NUL - goes to the overflow set as a string; it is never dropped.
+#    Deaths recorded during the run go to the overflow set too, IN PLACE (record_death), so `add` stays O(1) and a
+#    reference taken BEFORE the death sees it - the contract store.py's comment above `_DEAD_CACHE` states.
+_STRIDE = 44
 
 
-def dead_set() -> set:
+def _dead_key(mint):
+    """The fixed-stride key for a mint, or None when it must live in the overflow set."""
+    if not isinstance(mint, str) or not mint:
+        return None
+    try:
+        b = mint.encode("ascii")
+    except UnicodeEncodeError:
+        return None
+    if len(b) > _STRIDE or b"\x00" in b:
+        return None
+    return b.ljust(_STRIDE, b"\x00")
+
+
+class DeadSet:
+    """Membership-only set of dead mints: `in`, `not in`, `add`, `len`. Built once per tombstone mtime."""
+
+    __slots__ = ("_buf", "_n", "_extra")
+
+    def __init__(self):
+        self._buf = b""          # n sorted, de-duplicated 44-byte keys, concatenated
+        self._n = 0
+        self._extra = set()      # mints that cannot take the stride, and every in-run death
+
+    @classmethod
+    def from_mints(cls, mints):
+        ds = cls()
+        keys = []
+        for m in mints:
+            k = _dead_key(m)
+            if k is None:
+                if isinstance(m, str) and m:
+                    ds._extra.add(m)
+            else:
+                keys.append(k)
+        keys.sort()
+        out, last = [], None
+        for k in keys:
+            if k != last:
+                out.append(k)
+                last = k
+        del keys
+        ds._buf = b"".join(out)
+        ds._n = len(out)
+        return ds
+
+    def __contains__(self, mint):
+        if mint in self._extra:
+            return True
+        k = _dead_key(mint)
+        if k is None or not self._n:
+            return False
+        buf, lo, hi = self._buf, 0, self._n
+        while lo < hi:
+            mid = (lo + hi) // 2
+            if buf[mid * _STRIDE:(mid + 1) * _STRIDE] < k:
+                lo = mid + 1
+            else:
+                hi = mid
+        return lo < self._n and buf[lo * _STRIDE:(lo + 1) * _STRIDE] == k
+
+    def add(self, mint):
+        if mint not in self:
+            self._extra.add(mint)
+
+    def __len__(self):
+        return self._n + len(self._extra)
+
+    def buffer_bytes(self):
+        """The contiguous buffer's size - reported by the memory harness, not used for decisions."""
+        return len(self._buf)
+
+
+_DEAD_CACHE = {"mtime": None, "set": DeadSet()}
+# lines of the tombstone file the last build could not use (unparseable, not an object, or no mint). A bad line is
+# COUNTED, never raised (Langston R4): one bad line must not stop the hourly sweep - but the count reaches the
+# follow-up's stats and makes the run exit non-zero, because that mint's membership test is now wrong for the run.
+_DEAD_STATUS = {"bad_lines": 0}
+
+
+def dead_set_status() -> dict:
+    """{bad_lines} from the last tombstone read. Read it after dead_set()."""
+    return dict(_DEAD_STATUS)
+
+
+def _read_dead_mints(path):
+    bad = 0
+    with open(path, "r", encoding="utf-8") as fh:        # an OSError here PROPAGATES: unreadable is not "nothing dead"
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                r = json.loads(line)
+            except ValueError:
+                bad += 1
+                continue
+            m = r.get("mint") if isinstance(r, dict) else None
+            if not isinstance(m, str) or not m:
+                bad += 1
+                continue
+            yield m
+    _DEAD_STATUS["bad_lines"] = bad
+
+
+def dead_set() -> DeadSet:
     """Dead mints, cached on the tombstone file's mtime.
 
     The cache is invalidated by mtime rather than by a timer, so a death
     recorded by this same process is visible to the next lookup within it.
+    Returns a DeadSet (membership only). A tombstone file that EXISTS but cannot be read raises OSError - the caller
+    decides what an unreadable record means; it is never silently an empty set.
     """
     path = tombstone_path()
     if not os.path.exists(path):
@@ -727,13 +843,52 @@ def dead_set() -> set:
         #    cold cache at the top of EVERY hour until the file exists.
         if _DEAD_CACHE["mtime"] is None:
             _DEAD_CACHE["mtime"] = 0
-            _DEAD_CACHE["set"] = set()
+            _DEAD_CACHE["set"] = DeadSet()
+            _DEAD_STATUS["bad_lines"] = 0
         return _DEAD_CACHE["set"]
     mtime = os.path.getmtime(path)
     if _DEAD_CACHE["mtime"] in (None, 0) or _DEAD_CACHE["mtime"] != mtime:
-        _DEAD_CACHE["set"] = {r["mint"] for r in _read(path)}
+        _DEAD_CACHE["set"] = DeadSet.from_mints(_read_dead_mints(path))
         _DEAD_CACHE["mtime"] = mtime
     return _DEAD_CACHE["set"]
+
+
+def latest_observations_uncorrected(mints, max_files: int = 3) -> dict:
+    """mint -> its most recent observation row, from the newest `max_files` day files, `pool_sol` AS RECORDED.
+
+    UNCORRECTED, and named so (store.py's rule: a bypass of the correcting read path is a greppable name, not an
+    omission). Its one caller, summary's display table, reads only sol_usd / name / symbol / market_cap_usd /
+    buys_h24 / sells_h24 / chart_url / socials / observed_at - never pool_sol (Langston, P2b R5).
+    ⭐ STREAMED (P2b F-c). It used to be summary's `[json.loads(x) for x in fh]` over a whole day file, which with the
+       memory harness's pinned clock is every observation of the run (~512k rows) held as a list - the site where both
+       P2a arms were killed. Now each file is read once, line by line, keeping only rows for mints still WANTED.
+    Semantics kept exactly (R5): files are taken NEWEST FIRST and a mint found in a newer file is dropped from `want`
+    at the FILE boundary, so an older file never overwrites it; within a file "newest" is POSITIONAL - the last
+    matching row, which is what `reversed(rows)` picked - not an observed_at compare. A file that cannot be read or
+    holds an unparseable line contributes NOTHING, as before (the old list comprehension raised before any row).
+    """
+    want = set(mints)
+    found = {}
+    files = (sorted(os.listdir(OBSERVATIONS_DIR), reverse=True)
+             if os.path.isdir(OBSERVATIONS_DIR) else [])
+    for name in files[:max_files]:
+        if not want:
+            break
+        hit = {}
+        try:
+            with open(os.path.join(OBSERVATIONS_DIR, name), encoding="utf-8") as fh:
+                for x in fh:
+                    if not x.strip():
+                        continue
+                    r = json.loads(x)
+                    m = r.get("mint")
+                    if m in want and r.get("observed"):
+                        hit[m] = r                     # a later line replaces an earlier one: positional newest
+        except (OSError, ValueError):
+            continue
+        found.update(hit)
+        want.difference_update(hit)
+    return found
 
 
 # ─────────────────────────────────────────────────────────────────────────────

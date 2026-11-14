@@ -28,6 +28,7 @@ import providers
 from store import (
     _append as store_append,
     dead_set,
+    dead_set_status,
     due_path,
     due_now,
     ensure_dirs,
@@ -288,6 +289,13 @@ def run_hour(now: datetime | None = None) -> dict:
         #    death is recorded by the branch below and applies from the next run,
         #    so no observation is ever attributed to the wrong side of a death.
         dead_now = dead_set()
+        # ⛔ A TOMBSTONE LINE THE READ COULD NOT USE IS AN ERROR FOR THIS RUN (Langston, P2b R4). It is counted, not
+        #    raised, so one bad line cannot stop the sweep - but that mint's membership test is wrong for the whole run
+        #    (a dead token re-observed and counted alive), so the count reaches stats and the run exits non-zero.
+        stats["tombstone_bad_lines"] = dead_set_status()["bad_lines"]
+        if stats["tombstone_bad_lines"]:
+            LOG.error("tombstone file: %d line(s) could not be read", stats["tombstone_bad_lines"])
+            stats["errors"] += 1
         for entry in _entries_across(buckets):
             stats["due"] += 1
             mint, age = entry["mint"], entry["age"]
