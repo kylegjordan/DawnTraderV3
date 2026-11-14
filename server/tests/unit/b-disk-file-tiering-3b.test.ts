@@ -671,25 +671,34 @@ describe('3b item 4 — the residue delete set: our orphans and non-chosen versi
     const decisions = planColdBindings([ROW], vs);
     const set = residueDeleteSet(vs, claimed, own, decisions, new Set());
     const unboundBefore = new Set([coldPathOf(ROW.storage_uri)!.path]);
-    expect(deleteRefusals(new Set(['old', 'p10']), set, vs, new Set(), unboundBefore))
-      .toEqual({ notInSet: [], bound: [], unproven: ['old'] });
-    expect(deleteRefusals(new Set(['p10']), set, vs, new Set(), unboundBefore))
-      .toEqual({ notInSet: [], bound: [], unproven: [] });
+    expect(deleteRefusals(new Set(['old', 'p10']), set, vs, new Set(), unboundBefore, [ROW.storage_uri]))
+      .toEqual({ notInSet: [], bound: [], unproven: ['old'], unparseableUris: [] });
+    expect(deleteRefusals(new Set(['p10']), set, vs, new Set(), unboundBefore, [ROW.storage_uri]))
+      .toEqual({ notInSet: [], bound: [], unproven: [], unparseableUris: [] });
     // after --apply: 2026-01 is bound to 'new', so its row is no longer in unboundPaths
     const after = residueDeleteSet(vs, claimed, own, [], new Set(['new']));
-    expect(deleteRefusals(new Set(['old', 'p10']), after, vs, new Set(['new']), new Set()))
-      .toEqual({ notInSet: [], bound: [], unproven: [] });
+    expect(deleteRefusals(new Set(['old', 'p10']), after, vs, new Set(['new']), new Set(), [ROW.storage_uri]))
+      .toEqual({ notInSet: [], bound: [], unproven: [], unparseableUris: [] });
+  });
+  it('deleteRefusals: a cold row whose storage_uri does not parse refuses the whole run (its object would read as an orphan)', () => {
+    const after = residueDeleteSet(vs, claimed, own, [], new Set(['new']));
+    expect(deleteRefusals(new Set(['p10']), after, vs, new Set(['new']), new Set(), [ROW.storage_uri, 'b2:/x/y']).unparseableUris)
+      .toEqual(['b2:/x/y']);
   });
   it('deleteRefusals: a bound id and an id outside the set are each named', () => {
     const after = residueDeleteSet(vs, claimed, own, [], new Set(['new']));
-    expect(deleteRefusals(new Set(['new', 'tw']), after, vs, new Set(['new']), new Set()))
-      .toEqual({ notInSet: ['new', 'tw'], bound: ['new'], unproven: [] });
+    expect(deleteRefusals(new Set(['new', 'tw']), after, vs, new Set(['new']), new Set(), [ROW.storage_uri]))
+      .toEqual({ notInSet: ['new', 'tw'], bound: ['new'], unproven: [], unparseableUris: [] });
   });
   it('the delete run: argument hygiene and ordering', () => {
     const src = read('server/scripts/b75-cold-bind.ts');
     expect(src).toContain("'[B75 cold-bind] --apply and --delete-residue are separate runs'");
     expect(src).toMatch(/a stray argument would be silently dropped/);
     // C-4: the delete branch sits AFTER the report loop
-    expect(src.indexOf('if (deleteIds) {')).toBeGreaterThan(src.indexOf('for (const d of decisions) {'));
+    // anchored on a string UNIQUE to the report loop (Langston item 4 r2: the old anchor occurs three times and indexOf
+    // took the first, inside residueDeleteSet — the fence passed with the delete branch moved above the loop)
+    expect(src.split('let failures = 0;').length).toBe(2);
+    expect(src.split('if (deleteIds) {').length).toBe(2);
+    expect(src.indexOf('if (deleteIds) {')).toBeGreaterThan(src.indexOf('let failures = 0;'));
   });
 });

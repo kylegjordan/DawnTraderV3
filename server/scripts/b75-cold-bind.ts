@@ -175,13 +175,17 @@ export function deleteRefusals(
   listing: B2ListedVersion[],
   boundIds: Set<string>,
   unboundPaths: Set<string>,
-): { notInSet: string[]; bound: string[]; unproven: string[] } {
+  coldUris: string[],
+): { notInSet: string[]; bound: string[]; unproven: string[]; unparseableUris: string[] } {
   const inSet = new Set(delSet.map((v) => v.fileId));
   const listed = new Map(listing.map((v) => [v.fileId, v]));
   return {
     notInSet: [...deleteIds].filter((id) => listed.has(id) && !inSet.has(id)),
     bound: [...deleteIds].filter((id) => boundIds.has(id)),
     unproven: [...deleteIds].filter((id) => unboundPaths.has(listed.get(id)?.fileName ?? '')),
+    // Langston item 4 r2: a cold row whose storage_uri does not parse drops out of BOTH the claimed set and the
+    // unbound set, so the object it references would read as an orphan and be deletable. Any such row refuses the run.
+    unparseableUris: coldUris.filter((u) => coldPathOf(u) === null),
   };
 }
 
@@ -301,12 +305,15 @@ async function main(): Promise<void> {
       const byId = new Map(delSet.map((v) => [v.fileId, v]));
       // C-1: a name whose manifest row is still UNBOUND has nothing proven to keep — none of its versions may go yet.
       const unboundPaths = new Set(r.rows.map((x) => coldPathOf(x.storage_uri)?.path).filter((x): x is string => !!x));
-      const { notInSet, bound, unproven } = deleteRefusals(deleteIds, delSet, listing.versions, boundIds, unboundPaths);
-      if (notInSet.length > 0 || bound.length > 0 || unproven.length > 0) {
+      const { notInSet, bound, unproven, unparseableUris } = deleteRefusals(
+        deleteIds, delSet, listing.versions, boundIds, unboundPaths, all.rows.map((x) => x.storage_uri),
+      );
+      if (notInSet.length > 0 || bound.length > 0 || unproven.length > 0 || unparseableUris.length > 0) {
         // C-3: a refusal names everything it refused, by reason
         console.error(
           `[B75 cold-bind] REFUSED — nothing deleted. not in the computed set: [${notInSet.join(', ')}]; ` +
-            `bound to a manifest row: [${bound.join(', ')}]; its name's row is not yet bound (run --apply first): [${unproven.join(', ')}]`,
+            `bound to a manifest row: [${bound.join(', ')}]; its name's row is not yet bound (run --apply first): [${unproven.join(', ')}]; ` +
+            `cold manifest rows whose storage_uri does not parse: [${unparseableUris.join(', ')}]`,
         );
         process.exitCode = 1;
         return;
@@ -314,7 +321,7 @@ async function main(): Promise<void> {
       let deleted = 0;
       for (const id of deleteIds) {
         const v = byId.get(id);
-        if (!v) { console.log(`[B75 cold-bind] ${id}: no longer listed — already gone, skipped`); continue; }
+        if (!v) { console.log(`[B75 cold-bind] ${id}: not in this listing — skipped (already deleted, or mistyped)`); continue; }
         await storage.deleteColdVersion(v.fileName, v.fileId);
         deleted++;
         console.log(`[B75 cold-bind] DELETED ${v.fileName} id=${v.fileId} bytes=${v.contentLength}`);

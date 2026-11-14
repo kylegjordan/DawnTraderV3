@@ -488,3 +488,9 @@ Tests: 3b 73/73; tsc 324 = 324.
   - The refusal logic is a pure `deleteRefusals`, fenced behaviourally (before `--apply` the duplicate is refused and the orphan is not; after `--apply` both may go). Mutations: `unproven` emptied → red; chosen-version exclusion removed → red.
   - Tests: 3b 76/76.
   - **Step-10 carry (Langston (ii)):** the System Manual takes the named-and-computed delete contract and its window (closing at 3d step 5); the System Impact Map takes the cross-cutting entry.
+- **Item 4 r2 fold (Langston CHANGES on one line at `f0cc55331`, Discord `1571118424321556593`):**
+  - **The C-4 fence did not fence C-4:** its anchor occurs three times and `indexOf` took the first, inside `residueDeleteSet`, so the delete branch moved above the report loop stayed green. Now it is anchored on `let failures = 0;`, with both anchors asserted unique. Langston's own mutant (the whole delete block moved above the loop) → red.
+  - **An unparseable cold `storage_uri` refuses the delete run:** such a row drops out of both the claimed and the unbound sets, so its object would read as an orphan and be deletable. Staging: 4 of 4 cold rows parse today — latent, not live. `deleteRefusals` returns `unparseableUris`; mutation → red.
+  - **The "already gone" wording is withdrawn:** a named id not in the listing is "not in this listing — skipped (already deleted, or mistyped)".
+  - **CI:** Langston verified the transfer himself — `f0cc55331` to `4ee9b3069` is RUNNING_ISSUES plus SPRINT_TO_LIVE_PLAN only, and run 43587462857 is 4/4.
+  - Tests: 3b 77/77.
