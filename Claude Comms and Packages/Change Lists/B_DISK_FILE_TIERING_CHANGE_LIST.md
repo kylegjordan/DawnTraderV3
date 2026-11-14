@@ -337,3 +337,28 @@ Before the fix, the same two objects peaked at 252.5 and 604.5 MiB. SHA-256 and 
 **First exercise of the `https` arm (#661 leg 3):** both uploads went through `postFileStream` to real B2 over https. B2 accepted each body against `X-Bz-Content-Sha1`, `assertB2Version` passed on the upload response and on `b2_get_file_info` (the proof would have thrown otherwise), and both proof versions were deleted by file id. `data_archive_manifest` and the warm objects were untouched.
 
 **UI surface: none.** The cold path is a scheduled script with no page, and nothing in the app reads the attestation columns yet (that reader is 3b's).
+
+### 3a Step 8 — Langston PROCEED on AP-5 (Discord `1571061632950345749`)
+Langston re-derived the deploy at four read-sites and the CI from the Actions API. He then re-ran the proof at both sizes with a gap-free instrument, `/usr/bin/time -v` (the kernel's `getrusage` high-water mark):
+- 171 MB object: 132,580 kB (129.5 MiB);
+- 535 MB object: 133,880 kB (130.7 MiB);
+- **1.27 MiB apart**, against my sampler's 10.6 and his sampler's 13.68. All three PASS.
+
+The script's 250 ms sampler under-read the 171 MB peak by 12.7 MB. The gap-free figure is the one to cite.
+
+Further checks:
+- His run shas equal the manifest rows' `checksum` and `bytes_compressed`.
+- `b2_list_file_versions` on `_proof/` returns 0 versions; unprefixed, the control returns 115.
+- Containment: 4 cold rows, 6,417 warm rows. **At Step 10 say it as a state split: 6,414 `active` + 3 `migrated`.**
+- The https arm is exercised. His first 535 MB attempt got a real B2 `500 internal_error` and failed closed: it threw at `:766`, with no manifest write, no `deleteWarm`, and the temp file removed.
+
+**Findings, with dispositions:**
+- **FINDING-1 — `uploadColdFile` does not retry a B2 5xx** (B2's contract: a fresh upload URL, then retry; `b2_get_upload_url` and `b2Authorize` are unretried too). It fails closed, so a monthly rotator abandons that candidate on a transient. Outcome (2), a scope decision for Kyle. DISPOSITION: decision required — proposed as an item on 3b, owner CC-A, a bounded retry with a fresh upload URL and the fail-closed guarantee unchanged; it waits on Kyle's agreement.
+- **FINDING-2 — a second residue version:** `context_bridge_log/2026-01.jsonl.gz` has two `upload` versions (13,901,237 B each, 2026-07-07, 5 m 34 s apart) against one manifest row. The mechanism is a HYPOTHESIS. DISPOSITION: added to 3b's existing listing/cleanup step (delete by id before 3d step 5), owner CC-A, alongside the P10 orphan and any `proof_deleted:false` survivors.
+
+**Unchanged carries:**
+- No app reader of the attestation columns yet (3b).
+- The context bridge's `.verify` copy has no free-space check (3b).
+- AP-5's **function arm** belongs to 3b; this gate discharged the **flatness arm** only.
+
+**3a (AP-4 + the attestation + AP-5 flatness) is verified.** The batch continues with 3b, 3c and 3d, then amendment 3, P9 (after 2026-11-18) and Steps 10-11.
