@@ -605,3 +605,30 @@ This retires r1's three workarounds: the `upload_failed` probe, the rotator-lock
 **The nit — schedule moved to `30 4 * * *` UTC.** archival-health grades at 05:00Z, so a failed run is visible the same morning instead of about 23 hours later. 04:30Z is clear of the canary (Mon 04:00Z, seconds long) and before token-watch's 05:30Z run. Its read-back competes with ours for the day's budget, which is what `budget_stop=cap` records; the upload does not.
 
 **N, re-stated (arithmetic, a lower bound; MEASURED per run once 3c runs):** 30 days today; the budget binds from the 2027-09-01 rotation (28.2 GB, N ≈ 56); it passes the 90-day page at 2027-11-01 (48.5 GB, N ≈ 97). That crossing goes to Kyle as a decision (outcome 2), not a defect.
+
+### Amendment 4 — 3c plan r3: Langston PROCEED on r2 (Discord `1571165004999426089`, graded at `5721175c7`) with six edits, folded here, no further round
+1. **The run has a deadline, and the loader enforces it.** archival-health pages `incomplete` on a run with a start line and no DONE (`server/scripts/b-storage-archival-health.ts:359-365`). Its own fire is `0 5 * * *` in ROOT's crontab, line 9 — read by me on staging today (`crontab -l` as root, 13:3xZ).
+   - **Cron moves to `10 4 * * *` UTC**, which leaves a 50-minute gap to the 05:00Z grade. The Mon 04:00Z canary takes seconds.
+   - **Worst case, term by term:**
+     - the listing, `pages × cold_upload_setup_ms`;
+     - `D × cold_upload_setup_ms` for D downloads;
+     - `bytes_read ÷ cold_body_min_bytes_per_s`.
+   - **D is now bounded** by a new `reqNum` setting, `cold_readback_max_objects_per_run` (proposed 10).
+   - **A new `reqNum` setting, `cold_audit_run_deadline_ms`** (proposed 2,400,000 = 40 min), is the run's own deadline.
+   - **The loader refuses** a configuration whose read-back worst case does not fit inside the deadline less a listing allowance of 5 × `cold_upload_setup_ms`. The read-back worst case is `cold_readback_daily_bytes ÷ floor × 1000 + max_objects × setup_ms` ms.
+     - At the proposed values: 476,837 + 600,000 = 1,076,837 ms, against 2,400,000 − 300,000 = 2,100,000 ms. It fits.
+   - **At run time:** the read-back also stops before any object whose own worst case (`setup + bytes ÷ floor`) would cross the deadline. That stop is recorded as `budget_stop=time` and counted in `deferred_budget`.
+   - **The DONE line is written on every exit path** (`finally`), so a failure reads as FAILED, never as `incomplete`.
+2. **`_proof/` ids are persisted.** The meter row carries `proof_ids text[]`, the `_proof/` upload file ids seen by this run. C-1's "same id in two consecutive runs" is the intersection of this run's ids with the previous row's.
+3. **The manifest read takes every cold row with no `state` filter.** The rotator writes `active`; the context bridge writes `pending`, then `verified`. A run that fails between the cold bind and the verify leaves a bound cold row at `pending`, and a state filter would page it as `untracked`.
+   - **The in_flight window covers uploads, not deletions.** A version deleted mid-run has no `uploadTimestamp` left to test, so it pages `missing`.
+   - The one deleter in the repo, `b75-cold-bind.ts --delete-residue`, refuses any bound id (`deleteRefusals`). So a manifest-bound object can only go missing outside our code, which is what the page is for.
+4. **C-4's retention, corrected.** No retention key and no sweep is claimed. The measured bound instead: at most `cold_readback_max_objects_per_run` + 1 read-back rows per run, each with at most 2,048 B of `cause_detail`. That is ≤ 11 rows and ≤ 22.5 KB of captured body a day, about 8.2 MB a year at the ceiling. Too small to tier; a sweep can join a later retention pass if it ever matters.
+   - **The pre-existing leak, stated and not claimed away:** `B2CallError`'s message already embeds `text.slice(0, 500)` (`server/services/data-archive/b2-retry.ts:28`). So up to 500 bytes of any failing B2 body reaches the job's log, at the log's retention.
+5. **An unbound row pages.** `skipped_unbound > 0` for `cold_readback_stall_days` consecutive runs pages "a cold row that will not bind is never read back". The coverage page cannot see it, and the orphan report is hand-run, so it cannot carry it.
+6. **Minor.**
+   - **N is undefined when `bytes_read` = 0**, the stall case. The DONE line prints `N=undefined`, and the stall page carries that case.
+   - **The bound-refusal log moves INTO `downloadColdFileById`:** an `outcome` set in `catch` (`deadline` on TimeoutError / AbortError) and a `phaseLog('cold_read_by_id', …)` emitted in a `finally` through the `bound.onPhase` hook. This mirrors `downloadWarmFile` (`server/services/data-archive/storage-client.ts:472-500`), so every present and future bounded caller logs it, not only the two today.
+   - **Paths cited in full:** amendment 3's `fatal` for a 429 whose `code` is `null` is `server/services/data-archive/b2-retry.ts:56`. Line `:55` declines the retry.
+
+**Settings, final (9, all `reqNum`, all seeded in the one migration with a rollback in git):** `cold_meter_warn_bytes` 100,000,000,000 · `cold_meter_tokenwatch_growth_warn_bytes_per_day` 350,000,000 · `cold_meter_liveness_growth_warn_bytes` 10,000,000 · `cold_readback_daily_bytes` 500,000,000 · `cold_readback_min_interval_days` 30 · `cold_readback_stall_days` 3 · `cold_readback_max_age_days` 90 · `cold_readback_max_objects_per_run` 10 · `cold_audit_run_deadline_ms` 2,400,000.
