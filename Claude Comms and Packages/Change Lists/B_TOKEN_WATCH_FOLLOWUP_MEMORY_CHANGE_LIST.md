@@ -385,3 +385,16 @@ Beside the verdict (no verdict of their own): four-term C-1(ii) sum all_shed 532
 - **The new dominant term, never reached before because both P2a arms died earlier: `summary._identity_map` +328.4 MiB and +4.15M blocks** (all_shed: 165.1 → 493.5, freed after build; live: killed inside it from 270.3). `store.identity_map()` (`store.py:609`) builds `mint -> {name, symbol}` for EVERY row of `study/identity.jsonl` (**179,009,175 B, 1,883,655 lines**, live store) so `_enrich` can look up ≤ `OLDEST_N` (100) mints (`summary.py:293`).
 - live loop: `prev` +124 MiB (71.3 → 194.7), `len(prev)` 64,784 → 398,262 — unchanged from P2a, as expected (F-e not yet built).
 **A harness cost found by this run (fix in P2b-2's harness):** the `/observations/` open mark fired on every observation APPEND — 501,923 marks per arm, sample files 285 / 295 MB (in the cgroup's page cache) and the live arm 25 min against P2a's 19. The open marks must be read-mode only.
+
+### P2b-1 finding for Langston — R3's liveness clause 2 is reached by PAGE CACHE, not by the job's memory (gate A, asked before the P2b-2 plan)
+**Object:** the 0.5 s samples of both P2b-1 arms; readable copies with the 501,923 / 501,923 `open:observations` marks removed (peaks re-derived equal) at `/home/deploy/p2b1-results-20261114/<arm>-samples.no-obs-opens.jsonl`, reader `p2b_peaks.py` beside them. `memory_peak` = the cgroup's `memory.peak`; `events.max` = `memory.events` `max`.
+| arm | t | stage | memory.peak | anon | file | events.max |
+|---|---|---|---|---|---|---|
+| all_shed | 10.9 s | after-follow_up.dead_set | 362.5 MiB | 70.6 | 163.1 | 0 |
+| all_shed | 361.2 s | loop | 423.1 | **70.6** | 345.9 | 0 |
+| all_shed | 486.4 s | sample | 483.3 | **70.6** | 404.3 | 0 |
+| all_shed | 518.5 s | after-promote.run | **512.0 (= MemoryMax)** | 83.3 | 375.0 | 95 (first) |
+| live | 605.7 s | sample | 507.6 | 128.6 | 371.9 | 0 |
+| live | 617.9 s | open:dead/dead.jsonl (an append) | **512.0** | 129.0 | 376.1 | first |
+**Reading:** through the all_shed loop anon is FLAT at 70.6 MiB while `memory.peak` climbs 362 → 483 MiB in step with `file` (the observation appends' and reads' page cache, charged to the cgroup). Both arms reach `MemoryMax` with anon at 83 and 129 MiB. ⇒ **no anon fix can make clause 2 ("`memory.peak` strictly under MemoryMax") pass while a run moves more than ~(512 − anon) MiB of file data**; it measures cache, which the kernel reclaims at the limit by design (`events.max` counts those reclaims). Clause 1 (`oom_kill == 0`) and the headroom leg (four-term < 256 MiB, unreclaimable only) are unaffected.
+**Options:** (i) replace clause 2 with a pressure measure — the sampler records `memory.pressure` (PSI) `some`/`full` totals at start and end, and liveness = `oom_kill == 0` AND `full` stall under a stated bound; (ii) keep clause 2 and add a P2b-2 item that drops the job's own file cache after each large read/append (`posix_fadvise(DONTNEED)`, after `fsync` for appended files). **Recommendation: (i)** — clean cache reaching a cgroup limit is the kernel working; the harm clause 2 was meant to catch (the job stalling or dying for memory) is what PSI `full` and `oom_kill` measure directly, and (ii) spends disk reads to satisfy an instrument.
