@@ -106,3 +106,23 @@ The prefix up to `not an ancestor of <branch>` is unchanged, so the bridge promp
 | 3 | System Impact Map + `LANGSTON_ARCHITECTURE.md` + his memory's two facts | Step 10 (before close), with the P8 fold verbatim and the sentence that nothing alarms on the pin count. |
 | 4 | Pre-audit §B2 C-2 pointer corrected to T1/C-2. | — |
 **Re-run on Helsinki, 2026-11-14: 132 pass, 0 fail.** `dt-review` sha256 `42c8ec1c…`, tests `d8c7d993…` (byte-identical to the amendment commit's blobs).
+
+## Step 4 delta — APPROVED (Langston, Discord `1571141255281508527`)
+He re-derived C-2 by driving holder counts 0-8 under `dash` and `bash`, ran his own fd census for C-1 (`0 1 10 2 3` with `9>&-`, `0 1 10 2 3 9` without), and timed `for-each-ref --contains` without `--count=1` at 0.00-0.02 s over 135 heads. **Record correction:** the delta is `dt-review` **+11/−3** and tests **+34/−3** (`numstat 18a10e7e8..87966ab3e`). My dispatch said +12/−2 and +35/−2; those figures are wrong and not used elsewhere. Latent T11 flake noted by him: the clean arm would false-fail if a shell ever gave the stub's pipe fd 9 (measured as fd 10 in both runs). The CONTROL arm carries the proof.
+
+## Step 5 — CI
+Run `43593983548` at `87966ab3e`: TypeScript Check (baseline gate) ✅ · Test Suite ✅ · Build ✅ · Docker Build ✅ (per job).
+
+## Step 6 — install (2026-11-14 12:34:51Z, Helsinki)
+Installer `deploy.sh` taken from `87966ab3e`; its bytes hashed on the box to blob `d4787047…` = the blob at the sha. Then `bash /root/deploy-87966ab3e….sh --sha 87966ab3e189f289556053e4648621a670862438 --only readers` exited 0: *"install-verify: all 2 installed files equal their verified blobs"*. **`/usr/local/bin/dt-review` sha256 before `d5ee2e2f…` (= `445b6a505`), after `42c8ec1c…` (= the blob at `87966ab3e`).** `dt-backup-sync.sh` is unchanged (`4ed74176…` before and after, equal to its blob). Attributed per `#1004`: a repo-tracked executable installed outside the tree by the reviewed installer, from the reviewed sha.
+
+## Step 7 — first pass on the LIVE tool (as langston, the real mirror, 12:35Z)
+| case | result |
+|---|---|
+| (a) on-branch pinned read at the head `3f8e5ecb4` | rc 0, 594 lines, provenance unchanged |
+| (b) made-up full id | rc 1, `REFUSED: origin did not serve commit id 0123…67 (git: fatal: remote error: upload-pack: not our ref 0123…67); the mirror does not hold it either (…)` |
+| (c) short absent id `0000000deadbeef` | rc 1, `… no origin check was made: a short id cannot be fetched by id — give the full 40-character id (…)` |
+| (d) side-branch tip `28f3c91d5` | `OFF-BRANCH: … it is on 2 mirror branches: migration/b-agent-invoke-failure-notice-4c review/b-agent-invoke-failure-notice-4c — …` |
+| (e) reflog-only commit `05e95c195` (on no head) | rc 0, `OFF-BRANCH: … it is on NO branch the mirror holds (all-branch sync 5m ago (DT_SYNC_PASS)): pushed since that sync, or force-pushed away; the mirror cannot tell which — …` |
+| pin refs after (a)-(e) | 0 (correct: every object was already held, so origin was not asked) |
+**UNPROVEN LIVE, stated:** a real by-id fetch of a side-branch commit inside the 15-minute gap (the `served` arm). At 12:36Z all 135 origin branch tips were already in the mirror (`ls-remote --heads` against `cat-file -e`), so there was nothing to fetch. It is carried by T1 on the synthetic origin and by case (b), which runs the same by-id negotiation against GitHub. The first natural side-branch review inside the gap exercises it. Its evidence is a `refs/dt-review/pins/<sha>` ref, counted with `git --git-dir=/srv/dawntrader-backup.git for-each-ref refs/dt-review/pins | wc -l`.
