@@ -1501,7 +1501,7 @@ The xStock feed's stall watchdog no longer false-fires at the Sunday reopen: on 
 
 **2026-11-13/14 — second Step-11 repair.** The completion reader showed that a row at the exact boundary could vouch for a current occurrence without carrying that occurrence's identity; exact evidence now has to carry it (deployed `77f6fd598`). Langston's carries followed: only the runner writes a fire row's five identity keys, written after the job's own metadata and reserved by type (deployed `9591ba8c2`; 9 of 9 post-restart rows correct, six of six jobs healthy, Langston Step 8 PROCEED). Record: `Change Lists/B_CRON_MISSED_CATCHUP_STEP11_REPAIR.md` §11-§17.
 
-### 2026-11-13 — B-SIZE-WATCH-BREACH-ALARM (Infra Claude, sprint §0 Infra order 10; `#1215`) — Step 10 of 11 (Langston Step 8 PROCEED 2026-11-14)
+### 2026-11-13 — B-SIZE-WATCH-BREACH-ALARM (Infra Claude, sprint §0 Infra order 10; `#1215`) — ✅ CLOSED 2026-11-14 (Langston Step 11 CONFIRMED 2026-11-14 (Discord `1571047140409745584`); report `Batch Completion/B_SIZE_WATCH_BREACH_ALARM_COMPLETION_REPORT.md`)
 
 **The size checks on Langston's and Coltrane's instructions now page when the instructions are too big, not only when the check stops running.** Before, a check that found Langston's always-loaded files over their ceiling raised nothing, so a breach looked exactly like a pass. Now each condition (too big, a file missing, and for Langston an oversized archive or a changed rules file) raises one alert that clears itself when the condition ends, and the history of breaches is kept. Installed 2026-11-13; the first scheduled runs on 2026-11-14 behaved as designed. None of the alarm conditions has happened for real yet, so they are proved by tests and a drill.
 
