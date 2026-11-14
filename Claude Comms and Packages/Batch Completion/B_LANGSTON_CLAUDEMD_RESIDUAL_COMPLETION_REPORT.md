@@ -13,7 +13,7 @@ Langston's rules file loaded on every request and existed only on his box: no hi
 ## Objectives
 | # | objective | result | evidence |
 |---|---|---|---|
-| OBJ-1 | version his rules file; installed only by a reviewed commit by hash; privacy check `excluded` measured before and predicted after | **YES** | `comms-infra/langston/LANGSTON_CLAUDE.md` = `/home/langston/CLAUDE.md` = `36dbd2e9…`, root:root 0644 `chattr +i` (Langston re-derived at Step 8 against the graded head); `langston-rules-install` installs from a reviewed commit (installed 2026-11-05 08:21:08Z from `e319f34cf`). Privacy check `excluded` = 18 on 2026-10-20 (before the commit) and 18 on 2026-10-21 (ref `573adb268`, after it) — unchanged, as predicted (`/opt/langston-memory/state/privacy-check.jsonl` archives). |
+| OBJ-1 | version his rules file; installed only by a reviewed commit by hash; privacy check `excluded` measured before and predicted after | **YES** | `comms-infra/langston/LANGSTON_CLAUDE.md` = `/home/langston/CLAUDE.md` = `36dbd2e9…`, root:root 0644 `chattr +i` (Langston re-derived at Step 8 against the graded head); `langston-rules-install` installs from a reviewed commit (installed 2026-11-05 08:21:08Z from `e319f34cf` (57,095 B), then superseded on 2026-11-06 01:47:42Z by `B-WAKE-OPENING-LIST`'s install from `3f6c38510` (net −46 B, 57,049 B, sha256 `36dbd2e9…`, `/etc/langston/rules-installed`) — the file live today). Privacy check `excluded` = 18 on 2026-10-20 (before the commit) and 18 on 2026-10-21 (ref `573adb268`, after it) — unchanged, as predicted (`/opt/langston-memory/state/privacy-check.jsonl` archives). **What that instrument evidences, narrowly (Langston, Step 11):** its population is `MEMORY.md` lines present on the review branch, scanning `/tmp` — so it shows no private memory line became branch-visible across the rules-file commit, not that the commit exposed nothing. |
 | OBJ-2 | disposition the 20 paths in `Claude Comms and Packages/Langston/` | **YES** | 19 superseded files deleted and archived (`DELETED_COMPONENTS_LOG`, 2026-10-21); `langston-call.sh` kept with its warning line (Langston confirmed at Step 8). |
 | OBJ-3 | per-section census, every row placed and ruled | **YES** | `comms-infra/langston/SECTION_CENSUS.md`: 26 rows summing to 67,896 B (`5700ae562`), placed by his core test and rulings (i)-(x). |
 | OBJ-4 | retire and compress first; modules only where non-reading is detectable | **YES** | three ruling groups (`2fb233209`, `de3d45a25`, `d4b607938`); no module shipped. |
@@ -25,7 +25,7 @@ Langston's rules file loaded on every request and existed only on his box: no hi
 
 ## Steps
 - Step 1 scope r3 (`80ba70062`); Step 2 pre-audit r2 (`3fdb1f68f`); Step 3 in parts (rules file, census, trims, installer); Step 4 in parts, Langston PROCEED at each (part 2b r3 `e319f34cf`).
-- Step 5 CI 41983941191 at `e319f34cf`, 4/4 per job. Step 6 rules file installed 2026-11-05 08:21:08Z (`581740e74`). Step 7: size watch UNDER on the scheduled 11-06 and 11-07 runs.
+- Step 5 CI 41983941191 at `e319f34cf`, 4/4 per job. Step 6 rules file installed 2026-11-05 08:21:08Z (`581740e74`); superseded 2026-11-06 01:47:42Z by `B-WAKE-OPENING-LIST`'s install from `3f6c38510` (57,049 B), the file live at close. Step 7: size watch UNDER on the scheduled 11-06 and 11-07 runs.
 - Rider: Step 1-2 `1d5651dac`, Option A ruled `9f9e28d31`, P10 control `53e608e36`; Step 3 `f32b5c9d4`; Step 4 PROCEED at `5a40fc1f4`, then R-3 and fold-ins 1a-1d to `2c349956`; Step 5 CI 43627860862, 4/4 per job; Step 6 installed 19:05:33Z; Step 7 live arms (pre-audit §5.5); Step 8 CONFIRMED.
 - Step 9: no objective needed iteration after Step 8.
 - Step 10 governance `63edb35fd` (CI 43632090307, 4/4 per job).
@@ -35,7 +35,7 @@ Langston's rules file loaded on every request and existed only on his box: no hi
 Guard 28/0, guard mutants 8/8; size watch 136/0, its mutants 35/35 — all re-run by the installer from the staged blobs, as langston, before installing. Every mutant is judged by exit code with its patch asserted applied.
 
 ## Numeric deltas
-- **PREVIOUSLY STATED (scope OBJ-5): `CLAUDE.md` ≤ 55,000 B with 4,645 B of headroom. NOW: 57,049 B; headroom 449 B at close. REASON:** the trims reached 57,049 (Langston-approved at Step 6); his memory's kept-lines section then grew ~458 B/day.
+- **PREVIOUSLY STATED (scope OBJ-5): `CLAUDE.md` ≤ 55,000 B with 4,645 B of headroom. NOW: 57,049 B; headroom 449 B at close. REASON:** this batch installed 57,095 B (Langston-approved at Step 6); `B-WAKE-OPENING-LIST` re-installed it at 57,049 B on 2026-11-06; his memory's kept-lines section then grew ~458 B/day.
 - **PREVIOUSLY STATED (plan row, 2026-11-05): 1,138 B under. NOW: 449 B under. REASON:** his memory grew since; the index guard now refuses any growing index save past the ceiling.
 
 ## Governance files changed — copied from the Step 10 ledger (`63edb35fd` commit message)
@@ -73,6 +73,8 @@ CHANGE-CLASS: non_architecture
 | T2 | DELETED_COMPONENTS_LOG.md | ✅ (2026-10-21) | the 19 superseded Langston persona files |
 | T2 | MISTAKE_PATTERNS.md | N/A | no MISTAKE trailer this batch |
 | T2 | GOVERNANCE_EXCEPTIONS.md | ✅ | row :54 flips open to open-retired at this close, before its nag is resolved |
+
+**Added at close (Langston's Step 11 conditions):** the rules-file install is named as both events (F1); `#1256` opened for a Coltrane ratchet-state inconsistency (F2); `#1197` stays OPEN on its one Kyle-decision bullet (F3).
 | T2 | ALERT_HANDLING_PROTOCOL.md | ✅ | CC-INFRA owner row for the size-watch and the four guard keys, inside the table |
 | T2 | DELIVERY_BOARD_PROTOCOL.md | N/A | unchanged |
 | T2 | CLAUDE_CODE_FEATURE_WATCH.md | N/A | not this batch |
