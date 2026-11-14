@@ -353,7 +353,7 @@ Further checks:
 - The https arm is exercised. His first 535 MB attempt got a real B2 `500 internal_error` and failed closed: it threw at `:766`, with no manifest write, no `deleteWarm`, and the temp file removed.
 
 **Findings, with dispositions:**
-- **FINDING-1 — `uploadColdFile` does not retry a B2 5xx** (B2's contract: a fresh upload URL, then retry; `b2_get_upload_url` and `b2Authorize` are unretried too). It fails closed, so a monthly rotator abandons that candidate on a transient. Outcome (2), a scope decision for Kyle. DISPOSITION: decision required — proposed as an item on 3b, owner CC-A, a bounded retry with a fresh upload URL and the fail-closed guarantee unchanged; it waits on Kyle's agreement.
+- **FINDING-1 — `uploadColdFile` does not retry a B2 5xx** (B2's contract: a fresh upload URL, then retry; `b2_get_upload_url` and `b2Authorize` are unretried too). It fails closed, so a monthly rotator abandons that candidate on a transient. Outcome (2). DISPOSITION: under KD-34 a technical choice inside agreed work, settled by CC-A + Langston, not Kyle (`PM_CLAUDE_RULES.md:18`, `:23`; PM Claude confirmed 2026-11-14). Folded into 3b, owner CC-A, as agreed below ("3b item — bounded B2 retry").
 - **FINDING-2 — a second residue version:** `context_bridge_log/2026-01.jsonl.gz` has two `upload` versions (13,901,237 B each, 2026-07-07, 5 m 34 s apart) against one manifest row. The mechanism is a HYPOTHESIS. DISPOSITION: added to 3b's existing listing/cleanup step (delete by id before 3d step 5), owner CC-A, alongside the P10 orphan and any `proof_deleted:false` survivors.
 
 **Unchanged carries:**
@@ -362,3 +362,35 @@ Further checks:
 - AP-5's **function arm** belongs to 3b; this gate discharged the **flatness arm** only.
 
 **3a (AP-4 + the attestation + AP-5 flatness) is verified.** The batch continues with 3b, 3c and 3d, then amendment 3, P9 (after 2026-11-18) and Steps 10-11.
+
+### 3b item — bounded B2 retry (FINDING-1), agreed CC-A + Langston under KD-34 (Langston AMEND → PROCEED on recording, Discord `1571064181191614507`)
+**Base, accepted:** at most 3 attempts per call, with backoff of 1 s then 4 s plus jitter. Each upload attempt discards the upload URL and fetches a fresh one. The full attestation runs on every attempt. Fail-closed is unchanged: a final throw means no manifest row and no `deleteWarm`. A `400` or `cap_exceeded` throws as today.
+
+**Langston's amendments — all part of this item:**
+1. **`b2GetFileInfo` is in the retry set.** It is an idempotent metadata read, and a 503 there after an attested upload must not throw that upload away or manufacture an orphan. Fence: `b2_get_file_info` 503 then 200 → one success, no second upload.
+2. **`b2_list_buckets` is on the live path.** A fresh auth sets `bucketId` null; the auth expires at 23 h. Either retry it, or read and state that `B2_BUCKET_ID` is set in the staging env. Do not infer it.
+3. **Classify on the pair (HTTP status, B2 `code`), never on the status alone.** `postFileStream` returns `{status, text}`, so parse `code`. A 401 `expired_auth_token` and a 401 `unauthorized` diverge. An unparseable body is non-retryable, except on 500 or 503.
+4. **A 429 `too_many_requests` retries**, honouring `Retry-After` capped at the backoff ceiling.
+5. **A 401 `expired_auth_token` on `b2_upload_file` itself** re-authorizes and fetches a fresh upload URL, inside the same 3 attempts.
+6. **Any rejection from `postFileStream` is retryable and may have left an orphan.** That covers a request error, the 300 s idle destroy, a pipeline failure and a response error, all of which reject with no status. "Before any response" is not knowable, so it is dropped.
+7. **Worst-case wall clock, stated at Step 2:** 3 full re-streams of the largest object, each under its own 300 s idle ceiling, plus about 5 s of backoff. Check it against the rotator's overlap guard and against the B2 download and transaction caps (`RUNNING_ISSUES` `#10799`: the 2026-11-04 off-box run ended on `download_cap_exceeded`).
+8. **An attestation failure never retries.** A 200 that fails `assertB2Version` is a correctness failure against a server that is answering; it throws at once.
+9. This section corrects the FINDING-1 disposition line above: it no longer waits on Kyle.
+
+**The orphan leg (Langston), part of this item:**
+- **Retry succeeded:** the orphan is a superseded version of the same name. Whether a `daysFromHidingToDeleting` lifecycle rule reaches a version superseded without an explicit hide is a **HYPOTHESIS**. Confirm it against B2's lifecycle documentation and `prove_cold_key.py`'s measured capability before building on it. If it holds, the rule is set with the WIDE key at KD-54 step 2, before the narrowing — an addition to that agreed step, not a new slot.
+- **All attempts failed:** the orphan is the current version of a name with no manifest row. No lifecycle rule can reach it safely, and `deleteColdVersion` loses its right at 3d step 5. ⇒ **(a)** On a final throw, the caller records the attempted `(bucket, path, sha1, bytes, attempt timestamps)` durably and raises a page. **(b) 3d step 5 is gated on settling the sequencing with CC-INFRA**, whose version census and orphan reconciler (`RUNNING_ISSUES` `#10799`, `B-TOKEN-WATCH-FOLLOWUP-MEMORY`, `SPRINT_TO_LIVE_PLAN` §0a Infra order 5) need the same delete right.
+- FINDING-2's duplicate `context_bridge_log/2026-01` version is this class already in the bucket. The durable record, not a one-off listing, is the instrument going forward.
+
+**Fences:**
+- 429 → retried.
+- 401 `unauthorized` → no retry; 401 `expired_auth_token` → one re-auth and a fresh URL.
+- 503, 503, then 200 → one success, three upload URLs, one failed-attempt record per discarded attempt.
+- 200 with a bad `contentSha1` → throws, no retry.
+- `b2_get_file_info` 503 then 200 → one success, no second upload.
+- 500 three times → throws and writes the durable record.
+- 400 → no retry.
+
+**Mutations:**
+- Retry removed → the 503/503/200 case goes red.
+- **The classifier made to retry on 400 → the 400 fence goes red** (a classifier that retries everything must not pass).
