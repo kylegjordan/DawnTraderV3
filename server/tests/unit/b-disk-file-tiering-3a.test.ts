@@ -225,19 +225,24 @@ describe('3a — uploadColdFile streams the file and attests the stored version 
 
 describe('3a — the memory-proof harness touches no manifest and no warm object (Langston C-2, C-1)', () => {
   const row = { id: 'm1', storage_uri: 'supabase://warm/archive/t/2026-06.jsonl.gz', checksum: 'ck', source_table: 't', partition_label: '2026-06' };
-  it('downloads, uploads under _proof/, deletes that version by id, removes its temp folder, reports the peak', async () => {
+  it('downloads, uploads under _proof/ with a per-run name, HIDES that name (bounded), removes its temp folder, reports the peak', async () => {
     const tempRoot = tmp();
     let local = '';
     const storage = {
       downloadWarmFile: vi.fn(async (_b: string, _p: string, l: string) => { local = l; fs.writeFileSync(l, 'x'); return { checksum: 'ck', bytes: 1 }; }),
       uploadColdFile: vi.fn(async () => ({ checksum: 'ck', sha1: 's1', fileId: 'f1', bytes: 1, uri: 'b2://c/_proof/t/2026-06.jsonl.gz' })),
-      deleteColdVersion: vi.fn(async () => {}),
+      hideColdFile: vi.fn(async () => {}),
     };
     let rss = 100_000;
-    const r = await runColdProof(row, { storage, coldBucket: 'c', tempRoot, rssKb: () => (rss += 10), memAvailableKb: () => 2_000_000 });
-    expect(storage.uploadColdFile.mock.calls[0][1]).toBe('_proof/t/2026-06.jsonl.gz');
-    expect(storage.deleteColdVersion).toHaveBeenCalledWith('_proof/t/2026-06.jsonl.gz', 'f1');
-    expect(r).toMatchObject({ proof_deleted: true, proof_file_id: 'f1', bytes: 1, min_memavailable_kb: 2_000_000 });
+    // 3d r3 C-1: real limits, so the boundedness assertion below checks a value and not undefined
+    const coldLimits = { setupMs: 60_000, minBytesPerSec: 1_048_576 };
+    const r = await runColdProof(row, { storage, coldBucket: 'c', coldLimits, tempRoot, rssKb: () => (rss += 10), memAvailableKb: () => 2_000_000 });
+    const proofPath = storage.uploadColdFile.mock.calls[0][1] as string;
+    // a name UNIQUE to this run: b2_hide_file has no file-id parameter, so the NAME is what targets this object (it
+    // replaces the fileId this fence asserted when the proof deleted by id; that version-targeting is not available)
+    expect(proofPath).toMatch(/^_proof\/t\/2026-06\.\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z\.jsonl\.gz$/);
+    expect(storage.hideColdFile).toHaveBeenCalledWith('c', proofPath, 60_000);
+    expect(r).toMatchObject({ proof_hidden: true, proof_file_id: 'f1', bytes: 1, min_memavailable_kb: 2_000_000 });
     expect(r.peak_rss_kb).toBeGreaterThan(100_000);
     expect(fs.existsSync(local)).toBe(false);
     // by construction: its dependencies hold no database client and no deleteWarm
@@ -247,9 +252,10 @@ describe('3a — the memory-proof harness touches no manifest and no warm object
     const tempRoot = tmp();
     const storage = {
       downloadWarmFile: vi.fn(async (_b: string, _p: string, l: string) => { fs.writeFileSync(l, 'x'); return { checksum: 'other', bytes: 1 }; }),
-      uploadColdFile: vi.fn(), deleteColdVersion: vi.fn(),
+      uploadColdFile: vi.fn(), hideColdFile: vi.fn(),
     };
-    await expect(runColdProof(row, { storage: storage as never, coldBucket: 'c', tempRoot })).rejects.toThrow(/drift/);
+    await expect(runColdProof(row, { storage: storage as never, coldBucket: 'c', coldLimits: { setupMs: 60_000, minBytesPerSec: 1_048_576 }, tempRoot })).rejects.toThrow(/drift/);
+    expect(storage.hideColdFile).not.toHaveBeenCalled();
     expect(storage.uploadColdFile).not.toHaveBeenCalled();
     expect(fs.readdirSync(tempRoot)).toEqual([]);
   });

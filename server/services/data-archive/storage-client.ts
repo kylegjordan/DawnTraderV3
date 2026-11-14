@@ -1019,46 +1019,37 @@ export class StorageClient {
     }
   }
 
-  async deleteCold(bucket: string, path: string, setupMs?: number): Promise<void> {
-    // B2 deletes go by fileId, not by name. Need to first list_file_versions to get fileId.
+  /**
+   * B-DISK-FILE-TIERING 3d step 1 — HIDE the current version of a name (`b2_hide_file`). Replaces `deleteCold` (rule 18):
+   * after 3d the cold key holds listFiles/readFiles/writeFiles only, and a hide is a WRITE — the bucket's lifecycle rule
+   * on `_liveness/` and `_proof/` (daysFromHidingToDeleting 1) then deletes the hidden version. b2_hide_file has no
+   * file-id parameter: it hides whatever version of `path` is current, so a caller that must target one object writes a
+   * name unique to it. `setupMs` is REQUIRED (Langston 3d r3 C-1: deleteCold's optional bound is how the canary's path
+   * went unbounded). Retried like the other metadata calls — a hide is idempotent.
+   */
+  async hideColdFile(bucket: string, path: string, setupMs: number): Promise<void> {
     if (!this.isColdConfigured()) {
       throw new Error('[B75 storage-client] cold storage not configured');
     }
-    const auth = await this.b2Authorize(setupMs);
-    // Find the file's fileId
-    const listRes = await fetch(`${auth.apiUrl}/b2api/v3/b2_list_file_names`, {
-      method: 'POST',
-      headers: {
-        Authorization: auth.accountAuthToken,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        bucketId: await this.b2ResolveBucketId(bucket, setupMs),
-        startFileName: path,
-        maxFileCount: 1,
-      }),
-      ...(setupMs !== undefined ? { signal: AbortSignal.timeout(setupMs) } : {}),
+    await withB2Retry('hide_file', async () => {
+      const auth = await this.b2Authorize(setupMs);
+      const res = await fetch(`${auth.apiUrl}/b2api/v3/b2_hide_file`, {
+        method: 'POST',
+        headers: { Authorization: auth.accountAuthToken, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bucketId: await this.b2ResolveBucketId(bucket, setupMs), fileName: path }),
+        signal: AbortSignal.timeout(setupMs),
+      });
+      if (!res.ok) throw await b2Error('hide_file', res);
+      const j = (await res.json()) as { action?: string; fileName?: string };
+      if (j.action !== 'hide' || j.fileName !== path) {
+        throw new Error(`[B75 storage-client] B2 hide_file returned action=${j.action ?? 'none'} name=${j.fileName ?? 'none'}, expected a hide of ${path}`);
+      }
+    }, {
+      ...B2_RETRY_DEFAULTS,
+      retryAfterCapMs: setupMs,
+      reauth: () => this.b2Reauthorize(setupMs),
+      onAttempt: this.b2AttemptLog,
     });
-    if (!listRes.ok) {
-      const body = await listRes.text().catch(() => '');
-      throw new Error(`[B75 storage-client] B2 list_file_names failed: ${listRes.status} — ${body}`);
-    }
-    const lj = (await listRes.json()) as { files: Array<{ fileId: string; fileName: string }> };
-    const file = lj.files.find((f) => f.fileName === path);
-    if (!file) return; // already gone
-    const delRes = await fetch(`${auth.apiUrl}/b2api/v3/b2_delete_file_version`, {
-      method: 'POST',
-      headers: {
-        Authorization: auth.accountAuthToken,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ fileId: file.fileId, fileName: path }),
-      ...(setupMs !== undefined ? { signal: AbortSignal.timeout(setupMs) } : {}),
-    });
-    if (!delRes.ok) {
-      const body = await delRes.text().catch(() => '');
-      throw new Error(`[B75 storage-client] B2 delete failed: ${delRes.status} — ${body}`);
-    }
   }
 }
 

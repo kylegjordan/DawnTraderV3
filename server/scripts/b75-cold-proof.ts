@@ -5,14 +5,15 @@
  *
  * Runs the streamed cold path on ONE real warm object and measures memory across all of it, WITHOUT rotating anything:
  *   warm downloadWarmFile → a private 0700 temp file → uploadColdFile under `_proof/` → (inside it) the upload response
- *   and b2_get_file_info by the returned file id → delete that proof version by id → remove the temp file.
+ *   and b2_get_file_info by the returned file id → HIDE the proof object (a name unique to this run) → remove the temp file.
  * It NEVER writes data_archive_manifest and NEVER calls deleteWarm: the warm object and its manifest row are untouched.
  * The real rotator cannot be used for this — its dry run returns before any I/O, and a real rotation of a large month
  * would write a cold row and delete a live warm object months early.
  *
  * B2 download spend: zero bytes. Warm is Supabase; the upload is free; b2_get_file_info is metadata (Langston, plan r2).
- * Cleanup: the proof version is deleted by file id with the current (wide) key — usable only until amendment 4's 3d
- * step 5 removes every delete right (Langston C-1 on plan r2).
+ * Cleanup (3d step 1): the proof object is HIDDEN with b2_hide_file, a write the narrowed key keeps; the bucket's
+ * `_proof/` lifecycle rule deletes it a day later, and hides it anyway after a day if this hide never ran. The wide key's
+ * delete-by-id (plan r2 C-1) is gone with that key.
  *
  * PASS (AP-5, verbatim): peak RSS FLAT in object size — run at 170,761,082 B (the trace) and 535,409,768 B (the largest
  * warm object), each under 1 GiB RSS and MemAvailable >= 512 MiB, and the two peaks within 64 MiB of each other.
@@ -48,13 +49,14 @@ export interface ProofResult {
   sha256: string;
   sha1: string;
   proof_file_id: string;
-  proof_deleted: boolean;
+  /** 3d step 1: the proof object is HIDDEN (the `_proof/` lifecycle rule deletes it), never deleted by this key */
+  proof_hidden: boolean;
   download_ms: number;
   upload_ms: number;
 }
 
 export interface ProofDependencies {
-  storage: Pick<StorageClient, 'downloadWarmFile' | 'uploadColdFile' | 'deleteColdVersion'>;
+  storage: Pick<StorageClient, 'downloadWarmFile' | 'uploadColdFile' | 'hideColdFile'>;
   coldBucket: string;
   /** 3b: per-phase transfer limits from data_lifecycle */
   coldLimits: ColdTransferLimits;
@@ -94,20 +96,24 @@ export async function runColdProof(
     if (warm.checksum !== row.checksum) {
       throw new Error(`[B75 cold-proof] warm checksum drift: manifest=${row.checksum} actual=${warm.checksum}`);
     }
-    const proofPath = `${PROOF_PREFIX}/${row.source_table}/${row.partition_label}.jsonl.gz`;
+    // 3d step 1: a name UNIQUE to this run — b2_hide_file hides the current version of a name and has no file-id
+    // parameter, so a per-partition name would let a later run's hide target the wrong object (Langston 3d r3 C-1)
+    const runStamp = new Date(t0).toISOString().replace(/[:.]/g, '-');
+    const proofPath = `${PROOF_PREFIX}/${row.source_table}/${row.partition_label}.${runStamp}.jsonl.gz`;
     const cold = await deps.storage.uploadColdFile(deps.coldBucket, proofPath, local, deps.coldLimits);
     const t2 = Date.now();
     sample();
-    let deleted = false;
+    let hidden = false;
     try {
-      await deps.storage.deleteColdVersion(proofPath, cold.fileId);
-      deleted = true;
+      await deps.storage.hideColdFile(deps.coldBucket, proofPath, deps.coldLimits.setupMs);
+      hidden = true;
     } catch (err) {
-      console.error(`[B75 cold-proof] proof version NOT deleted (${proofPath} ${cold.fileId}) — delete it by id:`, err);
+      // the `_proof/` rule's daysFromUploadingToHiding hides it anyway; the cold audit's `_proof/` ceiling pages if not
+      console.error(`[B75 cold-proof] proof object NOT hidden (${proofPath} ${cold.fileId}) — the _proof/ lifecycle rule hides it after a day:`, err);
     }
     return {
       manifest_id: row.id, bytes: cold.bytes, peak_rss_kb: peakRss, min_memavailable_kb: minAvail,
-      sha256: cold.checksum, sha1: cold.sha1, proof_file_id: cold.fileId, proof_deleted: deleted,
+      sha256: cold.checksum, sha1: cold.sha1, proof_file_id: cold.fileId, proof_hidden: hidden,
       download_ms: t1 - t0, upload_ms: t2 - t1,
     };
   } finally {

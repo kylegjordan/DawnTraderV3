@@ -436,7 +436,8 @@ describe('3b item 2 — Langston r3 carries', () => {
     expect(src).toContain("loadColdLimits(c, 'cold-liveness')");
     expect(src).toContain('storage.uploadCold(coldBucket, objPath, payload, setupMs)');
     expect(src).toContain('storage.downloadCold(coldBucket, objPath, setupMs)');
-    expect(src).toContain('storage.deleteCold(coldBucket, objPath, setupMs)');
+    expect(src).toContain('storage.hideColdFile(coldBucket, objPath, setupMs)'); // 3d r3 C-1: re-pointed from deleteCold, still a boundedness fence
+    expect(src).not.toContain('deleteCold(');
     // and the Buffer forms really carry the signal when given setupMs
     const calls = dlFetch(Buffer.from('hello'), 'file-1');
     await client().downloadCold('dt-archive-cold', '_liveness/x.txt', 60_000);

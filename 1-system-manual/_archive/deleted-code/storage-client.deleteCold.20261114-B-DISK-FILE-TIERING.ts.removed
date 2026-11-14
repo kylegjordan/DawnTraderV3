@@ -1,0 +1,41 @@
+  async deleteCold(bucket: string, path: string, setupMs?: number): Promise<void> {
+    // B2 deletes go by fileId, not by name. Need to first list_file_versions to get fileId.
+    if (!this.isColdConfigured()) {
+      throw new Error('[B75 storage-client] cold storage not configured');
+    }
+    const auth = await this.b2Authorize(setupMs);
+    // Find the file's fileId
+    const listRes = await fetch(`${auth.apiUrl}/b2api/v3/b2_list_file_names`, {
+      method: 'POST',
+      headers: {
+        Authorization: auth.accountAuthToken,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        bucketId: await this.b2ResolveBucketId(bucket, setupMs),
+        startFileName: path,
+        maxFileCount: 1,
+      }),
+      ...(setupMs !== undefined ? { signal: AbortSignal.timeout(setupMs) } : {}),
+    });
+    if (!listRes.ok) {
+      const body = await listRes.text().catch(() => '');
+      throw new Error(`[B75 storage-client] B2 list_file_names failed: ${listRes.status} — ${body}`);
+    }
+    const lj = (await listRes.json()) as { files: Array<{ fileId: string; fileName: string }> };
+    const file = lj.files.find((f) => f.fileName === path);
+    if (!file) return; // already gone
+    const delRes = await fetch(`${auth.apiUrl}/b2api/v3/b2_delete_file_version`, {
+      method: 'POST',
+      headers: {
+        Authorization: auth.accountAuthToken,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ fileId: file.fileId, fileName: path }),
+      ...(setupMs !== undefined ? { signal: AbortSignal.timeout(setupMs) } : {}),
+    });
+    if (!delRes.ok) {
+      const body = await delRes.text().catch(() => '');
+      throw new Error(`[B75 storage-client] B2 delete failed: ${delRes.status} — ${body}`);
+    }
+  }

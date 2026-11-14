@@ -571,7 +571,9 @@ describe('context lane deletion fence', () => {
     // the infix may hold a colon (Langston's fold: `[^:`]*` silently skipped a "failed [bucket: x]: ${status}" template,
     // and the >= 17 count still passed); `[^`]` keeps a match inside one template literal
     const infixes = [...src.matchAll(/failed([^`]*?): \$\{/g)].map((m) => m[1]);
-    expect(infixes.length).toBeGreaterThanOrEqual(17); // census at c5c0ed83d: 17 templates, two with the PATCH infix
+    // census: 17 templates at c5c0ed83d; 15 since 3d step 1 removed deleteCold and its two (list_file_names, delete).
+    // Two carry the PATCH infix. A floor, so a broken extractor that finds nothing cannot pass.
+    expect(infixes.length).toBeGreaterThanOrEqual(15);
     for (const infix of infixes) {
       const rendered = `[B75 storage-client] op failed${infix.replace(/\$\{[^}]*\}/g, '6291456')}: 413  — {}`;
       expect(isWarmTooLarge(new Error(rendered)), rendered).toBe(true);

@@ -1642,3 +1642,15 @@ Archive: git history is authoritative (this is a field-retirement within live fi
 **RESTORE PATH:** re-add from git at `ec916a2a6`. A restored `createSystemAlert` must go through the conflict-aware insert or it reintroduces the crash; a restored `cleanupOldAlerts` must age rows by something other than the refreshed `timestamp`.
 **ARCHIVE:** none — two short functions, recoverable from git at `ec916a2a6`; no file was removed.
 **COMMIT:** the B-ALERT-INSERT-CONTRACT Step-3 commit.
+
+## 2026-11-14 — `StorageClient.deleteCold` — B-DISK-FILE-TIERING amendment 4, 3d step 1 (pre-audit "3d plan r2/r3"), CC-A
+| removed | where (pre-removal, at `f187b1862`) | what it was |
+|---|---|---|
+| `deleteCold(bucket, path, setupMs?)` | `server/services/data-archive/storage-client.ts:1022-1062` | delete a cold object by NAME: `b2_list_file_names` for the file id, then `b2_delete_file_version` |
+
+**WHY:** rule 18. 3d narrows the cold key to `listFiles`/`readFiles`/`writeFiles` (KD-54), so a delete stops working at step 5. Its one caller, the weekly liveness canary (`b75-cold-liveness.ts:122`), now HIDES its object with the new `hideColdFile` (a write the narrow key keeps), and the bucket's `_liveness/` lifecycle rule (3d step 2) deletes the hidden version a day later. Its `setupMs` was optional, which is how the canary's path went unbounded before 3b; `hideColdFile` makes it required (Langston 3d r3 C-1).
+**BLAST RADIUS (§9.5(a-ii)):** at the ref, `deleteCold(` has one caller (`b75-cold-liveness.ts:122`) and one test probe (`b-disk-file-tiering-3b.test.ts:439`, a boundedness fence — re-pointed to `hideColdFile`, not deleted). No route, service or app-process importer: every `getStorageClient` caller is a cron script under `server/scripts/`. tsc baseline unchanged.
+**LEFT INTENTIONALLY (until 3d's close):** `deleteColdVersion` and `b75-cold-bind.ts --delete-residue` — the residue deletion still needs them with the wide key, BEFORE step 4 and only on Kyle's yes. Both are removed at 3d's close and logged then, with the disaster-recovery procedure: Kyle mints a temporary delete-capable key → restore the archived code → run it → delete the temporary key.
+**RESTORE PATH:** the archived copy below, or git at `f187b1862`. A restored `deleteCold` cannot run once the wide key is deleted (3d step 5); it needs a delete-capable key Kyle mints.
+**ARCHIVE:** `1-system-manual/_archive/deleted-code/storage-client.deleteCold.20261114-B-DISK-FILE-TIERING.ts.removed`.
+**COMMIT:** the B-DISK-FILE-TIERING 3d step-1 Step-3 commit.

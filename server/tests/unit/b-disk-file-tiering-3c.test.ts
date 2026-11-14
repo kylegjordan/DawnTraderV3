@@ -46,7 +46,8 @@ const SEED = new Map<string, unknown>([
   ['cold_body_min_bytes_per_s', 1048576],
   ['cold_meter_warn_bytes', 100_000_000_000],
   ['cold_meter_tokenwatch_growth_warn_bytes_per_day', 350_000_000],
-  ['cold_meter_liveness_growth_warn_bytes', 10_000_000],
+  ['cold_meter_liveness_max_versions', 2],
+  ['cold_residue_kept_file_ids', []],
   ['cold_readback_daily_bytes', 500_000_000],
   ['cold_readback_min_interval_days', 30],
   ['cold_readback_stall_days', 3],
@@ -75,6 +76,49 @@ describe('B-DISK-FILE-TIERING 3c — config', () => {
     const ok = new Map(SEED); ok.set('cold_readback_max_objects_per_run', 27); // 476,838 + 1,620,000 = 2,096,838
     expect(() => auditConfigFromMap(ok)).not.toThrow();
   });
+  it('3d (b): the kept-residue allowlist — an EMPTY array is legal, a missing row or a non-array refuses', () => {
+    expect(auditConfigFromMap(SEED).keptFileIds.size).toBe(0);
+    const k = new Map(SEED); k.set('cold_residue_kept_file_ids', ['f-dup']);
+    expect([...auditConfigFromMap(k).keptFileIds]).toEqual(['f-dup']);
+    for (const bad of [undefined, 'f-dup', [1], ['']]) {
+      const m = new Map(SEED);
+      if (bad === undefined) m.delete('cold_residue_kept_file_ids'); else m.set('cold_residue_kept_file_ids', bad);
+      expect(() => auditConfigFromMap(m)).toThrow(/cold_residue_kept_file_ids is missing or not an array/);
+    }
+  });
+});
+
+describe('B-DISK-FILE-TIERING 3d step 1 — the kept-residue allowlist and the hide', () => {
+  it('a kept id is filtered at the PAGE site only: no page, while the reconcile still counts it untracked', () => {
+    const rc = { untracked: [ver('dup', 'context_bridge_log/2026-01.jsonl.gz'), ver('leak', 'context_bridge_log/2026-03.jsonl.gz')], missing: [], sizeMismatch: [], inFlight: [] };
+    expect(reconcilePages(rc, new Set(['dup'])).map((p) => p.key)).toEqual(['cold-reconcile-untracked-leak']);
+    expect(rc.untracked).toHaveLength(2);
+    const src = read('server/scripts/b75-cold-audit.ts');
+    expect(src).toContain('untracked: rc.untracked.length, kept: rc.untracked.filter((v) => kept.has(v.fileId)).length,');
+    expect(src).toContain('reconcilePages(rc, kept)');
+  });
+  it('hideColdFile: b2_hide_file by name, bounded by a REQUIRED setupMs, retried, and it checks the answer is a hide', () => {
+    const sc = read('server/services/data-archive/storage-client.ts');
+    const fn = sc.slice(sc.indexOf('async hideColdFile('), sc.indexOf('async hideColdFile(') + 2200);
+    expect(fn).toMatch(/async hideColdFile\(bucket: string, path: string, setupMs: number\)/);
+    expect(fn).toContain("withB2Retry('hide_file'");
+    expect(fn).toContain('signal: AbortSignal.timeout(setupMs)');
+    expect(fn).toContain("j.action !== 'hide' || j.fileName !== path");
+    expect(sc).not.toContain('async deleteCold(');
+  });
+  it('the canary and the proof hide; neither script deletes anything any more', () => {
+    for (const f of ['server/scripts/b75-cold-liveness.ts', 'server/scripts/b75-cold-proof.ts']) {
+      const src = read(f);
+      expect(src).toContain('hideColdFile(');
+      expect(src).not.toMatch(/deleteCold(Version)?\(/);
+    }
+  });
+  it('the 3d migration follows the 3c one in the manifest, and its rollback is in git but not in the manifest', () => {
+    const m = read('drizzle/migrations/MANIFEST.txt');
+    expect(m.indexOf('2026-11-14-b-disk-file-tiering-cold-key-step1.sql')).toBeGreaterThan(m.indexOf('2026-11-14-b-disk-file-tiering-cold-audit.sql'));
+    expect(m).not.toContain('cold-key-step1-rollback');
+    expect(fs.existsSync(path.join(ROOT, 'drizzle/migrations/2026-11-14-b-disk-file-tiering-cold-key-step1-rollback.sql'))).toBe(true);
+  });
 });
 
 describe('B-DISK-FILE-TIERING 3c — the meter', () => {
@@ -95,6 +139,8 @@ describe('B-DISK-FILE-TIERING 3c — the meter', () => {
     expect(t.versions).toBe(5);
     expect(t.bytes).toBe(1069);
     expect(t.byOwner).toEqual({ archive: 1000, proof: 10, liveness: 0, 'token-watch': 50, unknown: 9 });
+    // 3d r3 C-3: upload VERSIONS per owner; the hide marker under _liveness/ is not a version
+    expect(t.countByOwner).toEqual({ archive: 1, proof: 2, liveness: 0, 'token-watch': 1, unknown: 1 });
     expect(t.proofIds).toEqual(['p1', 'p2']);
     expect(t.unknownNames).toEqual(['mystery/x']);
   });
@@ -125,10 +171,12 @@ describe('B-DISK-FILE-TIERING 3c — the meter', () => {
     expect(rc.untracked.map((v) => v.fileId)).toEqual(['x']);
     expect(rc.missing.map((r) => r.id)).toEqual(['a']);
   });
-  const cfgM = { warnBytes: 1_000, tokenWatchGrowthPerDay: 350, livenessGrowth: 10 };
-  const totals = (o: Partial<Record<'archive' | 'proof' | 'liveness' | 'token-watch' | 'unknown', number>>, proofIds: string[] = []) => {
+  const cfgM = { warnBytes: 1_000, tokenWatchGrowthPerDay: 350, livenessMaxVersions: 2 };
+  type Own = 'archive' | 'proof' | 'liveness' | 'token-watch' | 'unknown';
+  const totals = (o: Partial<Record<Own, number>>, proofIds: string[] = [], counts: Partial<Record<Own, number>> = {}) => {
     const byOwner = { archive: 0, proof: 0, liveness: 0, 'token-watch': 0, unknown: 0, ...o };
-    return { versions: 1, bytes: Object.values(byOwner).reduce((a, b) => a + b, 0), byOwner, proofIds, unknownNames: o.unknown ? ['m/x'] : [] };
+    const countByOwner = { archive: 0, proof: 0, liveness: 0, 'token-watch': 0, unknown: 0, ...counts };
+    return { versions: 1, bytes: Object.values(byOwner).reduce((a, b) => a + b, 0), byOwner, countByOwner, proofIds, unknownNames: o.unknown ? ['m/x'] : [] };
   };
   const prev = (o: Partial<Record<string, number>>, proof_ids: string[] = []): MeterHistoryRow => ({
     run_at: new Date(NOW - DAY), bytes_by_owner: o, proof_ids, due: 0, readback_ok: 0, budget_cause: null, skipped_unbound: 0,
@@ -136,14 +184,18 @@ describe('B-DISK-FILE-TIERING 3c — the meter', () => {
   it('first run is a baseline: no growth judgement', () => {
     expect(meterPages(totals({ 'token-watch': 900 }), null, NOW, cfgM).map((p) => p.key)).toEqual([]);
   });
-  it('growth pages on token-watch per day and on _liveness, not on the archive class', () => {
-    const keys = meterPages(totals({ 'token-watch': 400, liveness: 20, archive: 500 }), prev({ 'token-watch': 0, liveness: 0, archive: 0 }), NOW, cfgM).map((p) => p.key);
-    expect(keys).toEqual(['cold-meter-tokenwatch-growth', 'cold-meter-liveness-growth']);
+  it('growth pages on token-watch per day only; _liveness bytes no longer page (3d r3 C-3)', () => {
+    const keys = meterPages(totals({ 'token-watch': 400, liveness: 500 }), prev({ 'token-watch': 0, liveness: 0 }), NOW, cfgM).map((p) => p.key);
+    expect(keys).toEqual(['cold-meter-tokenwatch-growth']);
     expect(meterPages(totals({ 'token-watch': 300 }), prev({ 'token-watch': 0 }), NOW, cfgM)).toEqual([]);
   });
-  it('a _proof id present in two consecutive runs pages; a fresh one does not', () => {
-    expect(meterPages(totals({}, ['p1']), prev({}, ['p0']), NOW, cfgM)).toEqual([]);
-    expect(meterPages(totals({}, ['p1', 'p2']), prev({}, ['p1']), NOW, cfgM).map((p) => p.key)).toEqual(['cold-meter-proof-survivor']);
+  it('3d r3 C-3: the _liveness/ and _proof/ COUNT ceiling pages above 2 versions — and on the FIRST run, with no prev', () => {
+    expect(meterPages(totals({}, [], { liveness: 2, proof: 2 }), null, NOW, cfgM)).toEqual([]); // a working rule's envelope
+    expect(meterPages(totals({}, [], { liveness: 3 }), null, NOW, cfgM).map((p) => p.key)).toEqual(['cold-meter-liveness-ceiling']);
+    expect(meterPages(totals({}, [], { proof: 3 }), prev({}), NOW, cfgM).map((p) => p.key)).toEqual(['cold-meter-proof-ceiling']);
+  });
+  it('3d: a hidden _proof object seen at two consecutive runs no longer pages (the rule deletes it a day after its hide)', () => {
+    expect(meterPages(totals({}, ['p1'], { proof: 1 }), prev({}, ['p1']), NOW, cfgM)).toEqual([]);
   });
   it('the total and an unknown prefix page on any run, first included', () => {
     expect(meterPages(totals({ archive: 1_000 }), null, NOW, cfgM).map((p) => p.key)).toEqual(['cold-meter-total']);

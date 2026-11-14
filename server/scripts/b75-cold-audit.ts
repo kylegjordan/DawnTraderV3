@@ -63,7 +63,8 @@ export const CAUSE_DETAIL_MAX_BYTES = 2048;
 export const AUDIT_SETTING_KEYS = {
   warnBytes: 'cold_meter_warn_bytes',
   tokenWatchGrowthPerDay: 'cold_meter_tokenwatch_growth_warn_bytes_per_day',
-  livenessGrowth: 'cold_meter_liveness_growth_warn_bytes',
+  /** 3d r3 C-3: a COUNT ceiling for `_liveness/` and `_proof/` (upload versions), replacing the byte delta */
+  livenessMaxVersions: 'cold_meter_liveness_max_versions',
   dailyBytes: 'cold_readback_daily_bytes',
   minIntervalDays: 'cold_readback_min_interval_days',
   stallDays: 'cold_readback_stall_days',
@@ -72,13 +73,18 @@ export const AUDIT_SETTING_KEYS = {
   runDeadlineMs: 'cold_audit_run_deadline_ms',
 } as const;
 
+/** 3d (b): the kept-residue allowlist, written only on Kyle's recorded decision; seeded '[]' so a missing row refuses */
+export const KEPT_KEY = 'cold_residue_kept_file_ids';
+
 export interface AuditConfig {
   coldBucket: string;
   freeFloorBytes: number;
   limits: ColdTransferLimits;
   warnBytes: number;
   tokenWatchGrowthPerDay: number;
-  livenessGrowth: number;
+  livenessMaxVersions: number;
+  /** 3d (b): ids Kyle decided to keep — reported `kept`, counted, never paged. A missing row refuses; [] is legal. */
+  keptFileIds: Set<string>;
   dailyBytes: number;
   minIntervalDays: number;
   stallDays: number;
@@ -99,6 +105,14 @@ export function auditConfigFromMap(map: Map<string, unknown>): AuditConfig {
     if (!Number.isFinite(n) || n <= 0) throw new Error(`${TAG} REFUSED — data_lifecycle.${key} is missing, non-numeric or <= 0 (${JSON.stringify(v)})`);
     return n;
   };
+  // 3d (b): a JSON string array; EMPTY IS LEGAL (unlike num's > 0), a missing row or any non-string element refuses
+  const strArray = (key: string): string[] => {
+    const v = map.get(key);
+    if (!Array.isArray(v) || v.some((x) => typeof x !== 'string' || x.length === 0)) {
+      throw new Error(`${TAG} REFUSED — data_lifecycle.${key} is missing or not an array of non-empty strings (${JSON.stringify(v)})`);
+    }
+    return v as string[];
+  };
   const bucket = map.get('cold_bucket');
   if (typeof bucket !== 'string' || bucket.length === 0) throw new Error(`${TAG} REFUSED — data_lifecycle.cold_bucket is missing`);
   const limits = coldLimitsFromMap(map, 'B75 cold-audit');
@@ -108,7 +122,8 @@ export function auditConfigFromMap(map: Map<string, unknown>): AuditConfig {
     limits,
     warnBytes: num(AUDIT_SETTING_KEYS.warnBytes),
     tokenWatchGrowthPerDay: num(AUDIT_SETTING_KEYS.tokenWatchGrowthPerDay),
-    livenessGrowth: num(AUDIT_SETTING_KEYS.livenessGrowth),
+    livenessMaxVersions: num(AUDIT_SETTING_KEYS.livenessMaxVersions),
+    keptFileIds: new Set(strArray(KEPT_KEY)),
     dailyBytes: num(AUDIT_SETTING_KEYS.dailyBytes),
     minIntervalDays: num(AUDIT_SETTING_KEYS.minIntervalDays),
     stallDays: num(AUDIT_SETTING_KEYS.stallDays),
@@ -133,7 +148,7 @@ export function readBackWorstCaseMs(cfg: Pick<AuditConfig, 'dailyBytes' | 'maxOb
 }
 
 async function loadAuditConfig(client: pg.Client): Promise<AuditConfig> {
-  const keys = ['cold_bucket', 'disk_file_free_floor_bytes', ...Object.values(COLD_LIMIT_KEYS), ...Object.values(AUDIT_SETTING_KEYS)];
+  const keys = ['cold_bucket', 'disk_file_free_floor_bytes', KEPT_KEY, ...Object.values(COLD_LIMIT_KEYS), ...Object.values(AUDIT_SETTING_KEYS)];
   const r = await client.query<{ constant_name: string; value: unknown }>(
     `SELECT constant_name, value FROM module_constants
       WHERE module_name = 'data_lifecycle' AND constant_name = ANY($1::text[])
@@ -162,6 +177,8 @@ export interface MeterTotals {
   versions: number;
   bytes: number;
   byOwner: Record<OwnerClass, number>;
+  /** 3d r3 C-3: UPLOAD versions per owner (hide markers are not versions) — what the `_liveness/` ceiling reads */
+  countByOwner: Record<OwnerClass, number>;
   proofIds: string[];
   unknownNames: string[];
 }
@@ -169,6 +186,7 @@ export interface MeterTotals {
 /** Pure: upload-version totals by owner (hide markers are not stored bytes). */
 export function meterTotals(versions: B2ListedVersion[], archivePrefixes: Set<string>): MeterTotals {
   const byOwner: Record<OwnerClass, number> = { archive: 0, proof: 0, liveness: 0, 'token-watch': 0, unknown: 0 };
+  const countByOwner: Record<OwnerClass, number> = { archive: 0, proof: 0, liveness: 0, 'token-watch': 0, unknown: 0 };
   const proofIds: string[] = [];
   const unknownNames: string[] = [];
   let n = 0;
@@ -180,10 +198,11 @@ export function meterTotals(versions: B2ListedVersion[], archivePrefixes: Set<st
     bytes += len;
     const o = ownerOf(v.fileName, archivePrefixes);
     byOwner[o] += len;
+    countByOwner[o] += 1;
     if (o === 'proof') proofIds.push(v.fileId);
     if (o === 'unknown') unknownNames.push(v.fileName);
   }
-  return { versions: n, bytes, byOwner, proofIds: proofIds.sort(), unknownNames };
+  return { versions: n, bytes, byOwner, countByOwner, proofIds: proofIds.sort(), unknownNames };
 }
 
 export interface ColdManifestRow {
@@ -254,7 +273,7 @@ export interface Page {
 }
 
 /** Pure: the meter's pages from this run's totals and the previous meter row (null on the first run = baseline). */
-export function meterPages(cur: MeterTotals, prev: MeterHistoryRow | null, nowMs: number, cfg: Pick<AuditConfig, 'warnBytes' | 'tokenWatchGrowthPerDay' | 'livenessGrowth'>): Page[] {
+export function meterPages(cur: MeterTotals, prev: MeterHistoryRow | null, nowMs: number, cfg: Pick<AuditConfig, 'warnBytes' | 'tokenWatchGrowthPerDay' | 'livenessMaxVersions'>): Page[] {
   const pages: Page[] = [];
   if (cur.bytes >= cfg.warnBytes) {
     pages.push({ key: 'cold-meter-total', severity: 'warning', title: 'Cold bucket past its warning size (alerted, uncapped)',
@@ -264,22 +283,22 @@ export function meterPages(cur: MeterTotals, prev: MeterHistoryRow | null, nowMs
     pages.push({ key: 'cold-meter-unknown', severity: 'warning', title: 'Cold bucket holds objects under an UNKNOWN prefix',
       body: `${cur.unknownNames.length} stored version(s), ${cur.byOwner.unknown} bytes, sit under a prefix that is neither an archive table nor a known owner: ${cur.unknownNames.slice(0, 10).join(', ')}` });
   }
+  // 3d r3 C-3: the `_liveness/` and `_proof/` COUNT ceiling. A working lifecycle rule leaves at most 2 upload versions
+  // (the Monday canary's, hidden minutes before the 04:10Z audit, plus one lagging daily sweep); a dead rule adds one a
+  // week and pages at the 3rd, 14-21 days after it dies. Unlike a delta it fires on the FIRST run (no prev needed).
+  // ONE detector: nothing runs the 3a proof on a schedule, so `_proof/`'s ceiling sees a dead rule only after a proof.
+  for (const [owner, prefix] of [['liveness', '_liveness/'], ['proof', '_proof/']] as const) {
+    if (cur.countByOwner[owner] > cfg.livenessMaxVersions) {
+      pages.push({ key: `cold-meter-${owner}-ceiling`, severity: 'warning', title: `${prefix} in the cold bucket holds more versions than a working lifecycle rule leaves`,
+        body: `${prefix} holds ${cur.countByOwner[owner]} upload versions (${cur.byOwner[owner]} bytes), above cold_meter_liveness_max_versions ${cfg.livenessMaxVersions}. The bucket's ${prefix} lifecycle rule hides and deletes them within about two days; more than this means it is not running.` });
+    }
+  }
   if (prev) {
     const days = Math.max((nowMs - prev.run_at.getTime()) / DAY_MS, 1 / 24);
     const tw = cur.byOwner['token-watch'] - Number(prev.bytes_by_owner['token-watch'] ?? 0);
     if (tw / days > cfg.tokenWatchGrowthPerDay) {
       pages.push({ key: 'cold-meter-tokenwatch-growth', severity: 'warning', title: 'token-watch/ in the cold bucket is growing faster than its baseline',
         body: `token-watch/ grew ${tw} bytes over ${days.toFixed(2)} days (${Math.round(tw / days)} B/day), above cold_meter_tokenwatch_growth_warn_bytes_per_day ${cfg.tokenWatchGrowthPerDay}. Its owner is CC-INFRA.` });
-    }
-    const lv = cur.byOwner.liveness - Number(prev.bytes_by_owner.liveness ?? 0);
-    if (lv > cfg.livenessGrowth) {
-      pages.push({ key: 'cold-meter-liveness-growth', severity: 'warning', title: '_liveness/ in the cold bucket grew past its bound',
-        body: `_liveness/ grew ${lv} bytes since the last meter run, above cold_meter_liveness_growth_warn_bytes ${cfg.livenessGrowth}. The canary's object is 104 bytes.` });
-    }
-    const survivors = cur.proofIds.filter((id) => prev.proof_ids.includes(id));
-    if (survivors.length > 0) {
-      pages.push({ key: 'cold-meter-proof-survivor', severity: 'warning', title: 'A _proof/ object outlived its proof',
-        body: `${survivors.length} _proof/ version(s) were present at two consecutive meter runs: ${survivors.join(', ')}. A 3a proof deletes its objects at its end.` });
     }
   }
   return pages;
@@ -293,7 +312,7 @@ export const RECONCILE_PAGE_CAP = 25;
  * row unchanged for a dedupe key, so a single set-wide key would let the first (e.g. day-1 residue awaiting Kyle's
  * delete) mute every later object. Capped at RECONCILE_PAGE_CAP per kind, plus one overflow page with the count.
  */
-export function reconcilePages(rc: Reconcile): Page[] {
+export function reconcilePages(rc: Reconcile, kept: Set<string> = new Set()): Page[] {
   const pages: Page[] = [];
   const each = <T>(items: T[], kind: string, severity: Page['severity'], title: string, idOf: (x: T) => string, bodyOf: (x: T) => string) => {
     for (const x of items.slice(0, RECONCILE_PAGE_CAP)) pages.push({ key: `cold-reconcile-${kind}-${idOf(x)}`, severity, title, body: bodyOf(x) });
@@ -302,7 +321,8 @@ export function reconcilePages(rc: Reconcile): Page[] {
         body: `${items.length} in all; the first ${RECONCILE_PAGE_CAP} have their own alert, the rest are in the run's log.` });
     }
   };
-  each(rc.untracked, 'untracked', 'warning', 'A cold archive object that no manifest row binds', (v) => v.fileId,
+  // 3d (b): a kept id is filtered HERE only — rc.untracked stays whole for the DONE line and the meter row
+  each(rc.untracked.filter((v) => !kept.has(v.fileId)), 'untracked', 'warning', 'A cold archive object that no manifest row binds', (v) => v.fileId,
     (v) => `${v.fileName} id=${v.fileId} bytes=${v.contentLength} uploaded=${new Date(v.uploadTimestamp).toISOString()} sits in our archive prefixes and matches no bound cold row: an upload the manifest does not know, or residue.`);
   each(rc.missing, 'missing', 'critical', 'A cold manifest row whose bound object is NOT in the bucket', (r) => r.provider_file_id as string,
     (r) => `${r.storage_uri} is bound to file id ${r.provider_file_id}, which the bucket listing does not hold.`);
@@ -522,7 +542,7 @@ async function main(): Promise<number> {
   const startedAt = new Date();
   console.log(`${TAG} started at ${startedAt.toISOString()} pid=${process.pid}`);
   const t0 = Date.now();
-  const done: Record<string, string | number> = { versions: 0, bytes: 0, due: 0, bytes_due: 0, read: 0, bytes_read: 0, deferred_budget: 0, readback_ok: 0, readback_failed: 0, budget_stop: 'none', skipped_unbound: 0, untracked: 0, missing: 0, size_mismatch: 0, in_flight: 0 };
+  const done: Record<string, string | number> = { versions: 0, bytes: 0, due: 0, bytes_due: 0, read: 0, bytes_read: 0, deferred_budget: 0, readback_ok: 0, readback_failed: 0, budget_stop: 'none', skipped_unbound: 0, untracked: 0, kept: 0, missing: 0, size_mismatch: 0, in_flight: 0 };
   let failed = false;
   const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
   let tmpDir: string | null = null;
@@ -547,8 +567,9 @@ async function main(): Promise<number> {
     const totals = meterTotals(listing.versions, archivePrefixes);
     const rc = reconcileArchive(rows, listing.versions, archivePrefixes, startedAt.getTime(), coldPath);
     const unbound = rows.filter((r) => !r.provider_file_id).length;
-    Object.assign(done, { versions: totals.versions, bytes: totals.bytes, untracked: rc.untracked.length, missing: rc.missing.length, size_mismatch: rc.sizeMismatch.length, in_flight: rc.inFlight.length, skipped_unbound: unbound });
-    console.log(`${TAG} METER pages=${listing.pages} versions=${totals.versions} bytes=${totals.bytes} by_owner=${JSON.stringify(totals.byOwner)} cold_rows=${rows.length} unbound=${unbound}`);
+    const kept = cfg.keptFileIds;
+    Object.assign(done, { versions: totals.versions, bytes: totals.bytes, untracked: rc.untracked.length, kept: rc.untracked.filter((v) => kept.has(v.fileId)).length, missing: rc.missing.length, size_mismatch: rc.sizeMismatch.length, in_flight: rc.inFlight.length, skipped_unbound: unbound });
+    console.log(`${TAG} METER pages=${listing.pages} versions=${totals.versions} bytes=${totals.bytes} by_owner=${JSON.stringify(totals.byOwner)} versions_by_owner=${JSON.stringify(totals.countByOwner)} cold_rows=${rows.length} unbound=${unbound}`);
     for (const v of rc.inFlight) console.log(`${TAG} IN_FLIGHT ${v.fileName} id=${v.fileId} uploaded=${new Date(v.uploadTimestamp).toISOString()} (not paged; pages next run if still unbound)`);
     const prevRes = await client.query<MeterHistoryRow>(
       `SELECT run_at, bytes_by_owner, proof_ids, due, readback_ok, budget_cause, skipped_unbound
@@ -556,14 +577,14 @@ async function main(): Promise<number> {
     );
     const prev = prevRes.rows[0] ?? null;
     if (!prev) console.log(`${TAG} first run: baseline recorded, no growth judgement`);
-    for (const p of [...meterPages(totals, prev, startedAt.getTime(), cfg), ...reconcilePages(rc)]) {
+    for (const p of [...meterPages(totals, prev, startedAt.getTime(), cfg), ...reconcilePages(rc, kept)]) {
       console.log(`${TAG} PAGE ${p.key}: ${p.body}`);
       await page(p);
     }
     const meterId = (await client.query<{ id: string }>(
-      `INSERT INTO data_archive_cold_meter (run_at, versions, bytes, bytes_by_owner, proof_ids, untracked, missing, size_mismatch, in_flight, skipped_unbound)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`,
-      [startedAt, totals.versions, totals.bytes, JSON.stringify(totals.byOwner), totals.proofIds, rc.untracked.length, rc.missing.length, rc.sizeMismatch.length, rc.inFlight.length, unbound],
+      `INSERT INTO data_archive_cold_meter (run_at, versions, bytes, bytes_by_owner, versions_by_owner, proof_ids, untracked, kept, missing, size_mismatch, in_flight, skipped_unbound)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id`,
+      [startedAt, totals.versions, totals.bytes, JSON.stringify(totals.byOwner), JSON.stringify(totals.countByOwner), totals.proofIds, rc.untracked.length, done.kept, rc.missing.length, rc.sizeMismatch.length, rc.inFlight.length, unbound],
     )).rows[0].id;
 
     // 4. read-back
