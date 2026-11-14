@@ -544,3 +544,64 @@ Langston's re-derivation at today's values (S = 60 s, F = 1 MiB/s, B = 535,409,7
 - **(a)** The exact-reconcile growth check for our own prefixes, in place of a single growth threshold. Can the manifest-created interval drift from the listing's view? For example, a rotation running across the meter's listing.
 - **(b)** Is 500 MB/day the right read-back share, given that token-watch's read-back already hit `download_cap_exceeded` on its 11-04 first run?
 - **(c)** Should a non-JSON 429 on a download count as `budget_exhausted` (my recommendation), or as `error`?
+
+### Amendment 4 — 3c plan r2: Langston CHANGES on r1 folded (Discord `1571161845325111409`, graded at `96328cd37`)
+r1 stands except as amended here. Langston's PROCEED list stands as he wrote it: item 1's listing, the first-run baseline, UNKNOWN on any bytes, the mismatch and listing splits, the fences, `onMissing`, the seven `reqNum` settings, and the rollback in git.
+
+**C-1 — `_proof/` gets its own meter class, `ours-untracked`, decided meter-side.** `ownColdPrefixes` seeds `_proof` into the own set (`b75-cold-bind.ts:73`). A 3a proof writes no manifest row and deletes its object at the end, so the r1 reconcile would have paged twice on a legitimate proof.
+- `_proof/` is expected empty. It pages only when the same file id is present in **two consecutive runs**: a proof object that outlived its proof, the real leak.
+- `COLD_NON_ARCHIVE_PREFIXES` is NOT edited. That map also feeds the orphan report and `residueDeleteSet`, so moving `_proof` there would change 3b's deleter's reach.
+
+**C-2 — the reconcile is a SET reconcile on file id, not a byte delta over an interval.** r1's question (a) asked whether the two could drift; they can, three ways:
+- a delta cancels: an unrecorded upload and an unrecorded deletion of equal size pass clean;
+- the rotator's cold row is an UPSERT that keeps `created_at` on a re-rotation (`b75-cold-rotator.ts:285-289`);
+- the context bridge's cold row is an UPDATE of an earlier warm-pending row (`context-bridge-log-ttl.ts:386-392`).
+
+So each run does this:
+1. **Read the manifest FIRST**: every cold row with `provider_file_id`, `provider_bytes`, `storage_uri`, and the time it was bound.
+2. **List SECOND**, the whole bucket, paged. Only versions with `action === 'upload'` count toward bytes and version counts: hide markers are not stored bytes, and `_liveness/` collects them after 3d.
+3. **Reconcile the two sets on file id**, over our archive prefixes only:
+   - **listed, no manifest row**: an untracked object;
+   - **manifest row, not listed**: a missing object;
+   - **matched, but `provider_bytes ≠ contentLength`**: a size mismatch.
+
+   Each difference is enumerated by name and id.
+4. **The run's own window:** a difference whose `uploadTimestamp` (listed side) or bound time (manifest side) falls inside this run's own start-to-listing window is logged `in_flight` and not paged. It pages at the next run if it is still there. Reading the manifest before listing means an object uploaded mid-run can only appear as listed-without-row, never the reverse.
+5. **Unbound cold rows** (no `provider_file_id`) are counted and reported, never reconciled. There are none after tonight's `--apply`.
+6. **The delta form stays only where we track no objects:** `token-watch/` (> 350 MB/day) and `_liveness/` (> 10 MB). UNKNOWN still pages on any bytes.
+
+This retires r1's three workarounds: the `upload_failed` probe, the rotator-lock check, and the previous-interval comparison.
+
+**C-3 — the run logs the quantities N is measured from.**
+- The DONE line becomes: `DONE versions=V bytes=B due=D bytes_due=BD read=R bytes_read=BR deferred_budget=DB readback_ok=K readback_failed=F budget_stop=<none|own|cap> skipped_unbound=U untracked=X missing=M size_mismatch=S in_flight=I`.
+- `deferred_budget` counts the due objects left unread because the run's own 500 MB budget would have been crossed.
+- With those per run, N is MEASURED as `bytes_due ÷ bytes_read`, and the arithmetic table below is the lower bound to compare against, not the estimate.
+- The same counters land in the `data_archive_cold_meter` row, so N's trend can be queried.
+- **C-3 from 3b, corrected while here:** `downloadColdFileById` already has one bounded caller, `b75-cold-bind.ts:278`, which landed with item 3 after the C-3 note. So the read-back is the second bounded caller, not the first.
+- The refusal side still logs nothing (`storage-client.ts:897-901`: the `AbortSignal.timeout` throws with no line). The read-back catches the timeout and logs id, expected bytes, bound and elapsed time. The cold-bind caller gets the same one-line catch in this increment, so neither bounded caller is silent.
+
+**C-4 — the 429 split, stated against amendment 3.**
+- The read-back branches on `status === 429 && b2ErrorCode(body) === null` (`b2-retry.ts:34-41` returns `null` on a non-JSON body).
+- **This ends the read-back LEG; it does not reverse amendment 3.** For the RETRY decision the same input stays `fatal` (`b2-retry.ts:55`). Downloads are never retried in any case (A-5), so the two rules answer different questions about the same response: whether to retry it, and whether to end the leg.
+- Every leg-ending refusal records `cause` ∈ {`download_cap_exceeded`, `transaction_cap_exceeded`, `throttled_429_unidentified`}, with `Retry-After`.
+- **Body capture follows `#1117`'s rule** (`dt-deploy-drift.sh:184`, `capture_failed_compare`): only a non-empty body that failed JSON decoding is kept. It is bounded to the first 2,048 bytes and stored in the read-back row's `cause_detail`, so its retention is the table's. Every other response keeps nothing.
+- **The stall page has two triggers:** 3 consecutive runs with due objects and zero `ok` rows, OR 3 consecutive runs whose cause is `throttled_429_unidentified`, **regardless of any `ok` row**. One success per run must not hide a persistent throttle until the 90-day page.
+
+**C-5 — the coverage clock does not page on legacy state.** Measured ages at 2026-11-14, read-only on staging at 13:4xZ (`RULED ON REPORTED FACT` until re-derived at Step 4): `context_bridge_log/2025-12` verified 2026-05-06 (192 days); `/2026-01` and `/2026-02` 2026-07-07 (130 days); `exit_decision_archive/2026-05` 2026-07-08 (129 days). All four exceed 90, so r1's rule would page on run 1.
+- **The rule:** the coverage age is now minus the LATEST of three times — the row's last `ok` read-back, its `verified_at`, and the first recorded 3c run (the earliest `data_archive_cold_meter.run_at`).
+- So a pre-3c row starts its clock at 3c's first run. A new row starts it at its own attestation.
+- The four legacy rows are read first anyway (never-read rows sort first), so in practice they clear on run 1.
+- **`STORAGE_POLICY` wording, at Step 10:** `verified_at` is the B2 SHA-1 ATTESTATION time for rows written since 3a, not an end-to-end SHA-256 read-back. The 90-day page measures OUR read-back, so it is not to be read as "verified end to end".
+
+**(b) — 500 MB stands, labelled.** token-watch's 0.10-0.12 GB/day is **BORROWED** (Infra Claude's P15 addendum, its own measurement window) and not measured here. The N table is arithmetic on today's rows and never reads as a measurement.
+- **The gap, named:** nothing measures account-wide download spend. B2 caps are read on Kyle's dashboard, not through the API, so this budget runs without feedback against a shared resource. The cap refusal and the stall page are the only closed-loop signals.
+- **The census Langston asked for — every B2 download in the repo** (callers of the three download functions, tests excluded, at `de583aae3`):
+  - `b75-cold-liveness.ts:114`: the canary, 104 B weekly (Mon 04:00Z);
+  - `b75-cold-bind.ts:278`: `needs_download` only, one-time, inside `--apply` (tonight: none expected, all four rows bind by SHA-1);
+  - `b75-rehydrate.ts:451/:453`: hand-run restores. A real restore needs Kyle's cap raise first (3d's runbook line);
+  - `context-bridge-log-ttl.ts`: no cold download — its read-back is WARM (Supabase, not B2).
+- So steady state is 3c (≤ 500 MB) + token-watch (borrowed 0.10-0.12 GB) + 104 B a week, about 0.62 GB of the 1 GB daily cap.
+
+**The nit — schedule moved to `30 4 * * *` UTC.** archival-health grades at 05:00Z, so a failed run is visible the same morning instead of about 23 hours later. 04:30Z is clear of the canary (Mon 04:00Z, seconds long) and before token-watch's 05:30Z run. Its read-back competes with ours for the day's budget, which is what `budget_stop=cap` records; the upload does not.
+
+**N, re-stated (arithmetic, a lower bound; MEASURED per run once 3c runs):** 30 days today; the budget binds from the 2027-09-01 rotation (28.2 GB, N ≈ 56); it passes the 90-day page at 2027-11-01 (48.5 GB, N ≈ 97). That crossing goes to Kyle as a decision (outcome 2), not a defect.
