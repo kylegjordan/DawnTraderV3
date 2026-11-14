@@ -30,6 +30,8 @@
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import http from 'node:http';
+import https from 'node:https';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 
@@ -748,25 +750,22 @@ export class StorageClient {
       throw new Error(`[B75 storage-client] B2 get_upload_url failed: ${upUrlRes.status} — ${body}`);
     }
     const upUrl = (await upUrlRes.json()) as { uploadUrl: string; authorizationToken: string };
-    // A stream body needs `duplex: 'half'` under Node's fetch (undici rejects it otherwise); Content-Length is set so
-    // B2 receives a sized body, never chunked.
-    const upRes = await fetch(upUrl.uploadUrl, {
-      method: 'POST',
-      headers: {
-        Authorization: upUrl.authorizationToken,
-        'X-Bz-File-Name': encodePath(path),
-        'X-Bz-Content-Sha1': sha1,
-        'Content-Type': 'application/gzip',
-        'Content-Length': String(bytes),
-      },
-      body: Readable.toWeb(fs.createReadStream(localPath)) as unknown as BodyInit,
-      duplex: 'half',
-    } as RequestInit & { duplex: 'half' });
-    if (!upRes.ok) {
-      const body = await upRes.text().catch(() => '');
-      throw new Error(`[B75 storage-client] B2 upload failed: ${upRes.status} — ${body}`);
+    // The body goes through `postFileStream` (node:https + stream.pipeline), NOT fetch: with a streamed request body,
+    // Node's fetch keeps what it has sent live until the request ends, so memory grows to the file size — 3a Step 7
+    // measured 614 MB peak RSS uploading a 535 MB file, and 632 MB against a 25 MB/s local sink where node:http stayed
+    // at 111 MB. (Measured behaviour; where inside fetch the chunks are held is not established.)
+    // Content-Length is set so B2 receives a sized body, never chunked.
+    const upRes = await postFileStream(upUrl.uploadUrl, {
+      Authorization: upUrl.authorizationToken,
+      'X-Bz-File-Name': encodePath(path),
+      'X-Bz-Content-Sha1': sha1,
+      'Content-Type': 'application/gzip',
+      'Content-Length': String(bytes),
+    }, localPath);
+    if (upRes.status < 200 || upRes.status >= 300) {
+      throw new Error(`[B75 storage-client] B2 upload failed: ${upRes.status} — ${upRes.text}`);
     }
-    const up = (await upRes.json()) as B2FileVersion;
+    const up = JSON.parse(upRes.text) as B2FileVersion;
     // Coltrane 1: the response names the version that was stored — check every field we sent.
     assertB2Version('upload response', up, { action: 'upload', bucketId, fileName: path, sha1, bytes });
     // Coltrane 2: read the SAME version back by its id (metadata) and check again.
@@ -924,6 +923,45 @@ export async function hashFileSha256Sha1(localPath: string): Promise<{ bytes: nu
     bytes += (chunk as Buffer).length;
   }
   return { bytes, sha256: h256.digest('hex'), sha1: h1.digest('hex') };
+}
+
+/**
+ * POSTs a local file as the request body WITH backpressure: `stream.pipeline` reads the next chunk only when the
+ * socket drains, so memory stays at a few chunks whatever the file size (3a Step 7; see uploadColdFile). Resolves with
+ * the response status and body text; a socket idle for 300 s is destroyed (fetch's own body timeout). Only https, or
+ * http to a loopback host (the unit tests' slow local sink) — any other URL is refused.
+ */
+export async function postFileStream(
+  url: string,
+  headers: Record<string, string>,
+  localPath: string,
+): Promise<{ status: number; text: string }> {
+  const u = new URL(url);
+  const loopback = u.hostname === '127.0.0.1' || u.hostname === 'localhost';
+  if (u.protocol !== 'https:' && !(u.protocol === 'http:' && loopback)) {
+    throw new Error(`[B75 storage-client] refusing a non-https upload URL: ${u.protocol}//${u.host}`);
+  }
+  const transport = u.protocol === 'https:' ? https : http;
+  return await new Promise((resolve, reject) => {
+    let settled = false;
+    const done = (err: Error | null, v?: { status: number; text: string }) => {
+      if (settled) return;
+      settled = true;
+      if (err) reject(err);
+      else resolve(v!);
+    };
+    const req = transport.request(u, { method: 'POST', headers }, (res) => {
+      const chunks: Buffer[] = [];
+      res.on('data', (c: Buffer) => chunks.push(c));
+      res.on('end', () => done(null, { status: res.statusCode ?? 0, text: Buffer.concat(chunks).toString('utf8') }));
+      res.on('error', (e) => done(e));
+    });
+    req.setTimeout(300_000, () => req.destroy(new Error('[B75 storage-client] upload socket idle for 300 s')));
+    req.on('error', (e) => done(e));
+    // A receiver that answers early (e.g. a 400 before the body ends) can make the pipeline fail after the response
+    // has settled the promise; that error is then moot. Before it, it rejects.
+    pipeline(fs.createReadStream(localPath), req).catch((e) => done(e as Error));
+  });
 }
 
 export async function sha256HexStream(stream: Readable): Promise<string> {

@@ -266,7 +266,7 @@ So the upload holds the object.
 - Node 20.20.0 `fetch` with the exact `uploadColdFile` body (`Readable.toWeb(fs.createReadStream)`, `duplex: 'half'`, `Content-Length`): peak **632,304 kB**.
 - `node:http` request + `stream.pipeline` at the same rate: peak **110,844 kB**.
 
-A second control isolates the wrapper. `Readable.toWeb` read by a slow consumer, no network: 106,728 kB. So the wrapper applies backpressure; Node's `fetch` request-body path does not. It reads the file ahead into memory when the receiver is slower than the disk. The exact internal line is a HYPOTHESIS, not cited. The behaviour is measured.
+A second control isolates the wrapper. `Readable.toWeb` read by a slow consumer, no network: 106,728 kB. So the wrapper applies backpressure, and the memory is held inside Node's `fetch` request-body path. ⚠ **Corrected at Step 9: it does NOT read the file ahead.** Measured with the Step-9 fence on Node 20.20.0, the body stream's `bytesRead` ran only 7.4 MB ahead of the receiver. What happens is that fetch keeps the chunks it has already SENT live until the request ends: 95.9 MiB live after forced collections on a 96 MiB upload. Where inside fetch they are held is not established.
 
 **Exposure today: none.** The scheduled rotator has 0 cold candidates until ~2027-05 (365-day warm retention). `uploadColdFile`'s `duplex` body is the only streamed-`fetch` upload in `server/` and `scripts/` (`git grep` at the ref).
 
@@ -275,3 +275,19 @@ A second control isolates the wrapper. `Readable.toWeb` read by a slow consumer,
 - **Mutation:** put `fetch` back. The fence must fail.
 
 Then CI, deploy, and re-run the proof at both sizes.
+
+### 3a Step 9 — the fix (for Langston's Step 4)
+`uploadColdFile` now sends the body through a new `postFileStream` (node:https `request` + `stream.pipeline`, a 300 s idle-socket timeout, https only except http to loopback), in `server/services/data-archive/storage-client.ts`. The headers, the `assertB2Version` checks on the response and the `b2_get_file_info` read-back are unchanged.
+
+**The old AP-6 fence could not see the defect.** It stubbed `fetch` and consumed the body itself, so the real sender never ran.
+
+**The new fence** (`b-disk-file-tiering-3a.test.ts`): the upload goes to a real local HTTP receiver. Every 8 MiB received, it forces a collection (`--expose-gc` set at runtime) and records the ArrayBuffer memory still live. Bound: < 40 MiB on a 96 MiB file.
+
+| runtime | this sender | the mutation (deployed 3a `fetch` body restored) |
+|---|---|---|
+| Node 20.20.0 (staging; CI and Docker are `node-version: 20` / `node:20-slim`) | 4.4–16.1 MiB over 6 runs | **95.9 MiB → FAILS** |
+| Node 22.18.0 (laptop) | 14.4 MiB | **101.6 MiB → FAILS** |
+
+The first fence form, read-ahead (`bytesRead` minus received), did NOT fail the mutation: 7.4 MB on Node 20. That is how the mechanism correction above was found.
+
+Checks: the 3a file passes 16/16, and the `tsc` baseline gate stays at 324 = 324. The Node 20 runs used a private mirror at `/home/deploy/.m3a` (deleted after); the deploy clone was untouched.

@@ -1,12 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
+import v8 from 'node:v8';
+import vm from 'node:vm';
 import {
   StorageClient,
   assertB2Version,
   hashFileSha256Sha1,
+  postFileStream,
 } from '../../services/data-archive/storage-client';
 import { readMemAvailableKb, runColdProof } from '../../scripts/b75-cold-proof';
 
@@ -27,41 +31,71 @@ function tmp(): string {
   return d;
 }
 
-/** A fake B2 behind global fetch. The upload handler READS THE BODY STREAM chunk by chunk, sampling Buffer memory. */
-function fakeB2(opts: { tamper?: Partial<Record<'action' | 'fileName' | 'contentSha1' | 'contentLength', unknown>> } = {}) {
-  const seen = { uploads: 0, infoCalls: 0, peakArrayBuffers: 0, bodyWasStream: false };
+const realFetch = globalThis.fetch;
+const servers: http.Server[] = [];
+afterEach(async () => {
+  vi.restoreAllMocks();
+  await Promise.all(servers.splice(0).map((s) => new Promise<void>((z) => s.close(() => z()))));
+});
+
+// A real collector for the retention fence below: `--expose-gc` set at runtime, `gc` taken from a fresh context.
+v8.setFlagsFromString('--expose-gc');
+const gc = vm.runInNewContext('gc') as () => void;
+
+/**
+ * A fake B2. The JSON API calls go through a global-fetch stub; the UPLOAD goes to a REAL local HTTP receiver, because
+ * the 3a Step-7 failure lived in the sender's network path, and a fake that consumes the body itself can never see it
+ * (the old fence here did exactly that and passed). `heldBytes` records, at its max, the ArrayBuffer memory still LIVE
+ * after a forced collection, sampled every 8 MiB the receiver takes: what the sender is holding on to, not garbage.
+ */
+async function fakeB2(opts: {
+  tamper?: Partial<Record<'action' | 'fileName' | 'contentSha1' | 'contentLength', unknown>>;
+} = {}) {
+  const seen = { uploads: 0, infoCalls: 0, maxHeldBytes: 0 };
   let stored: { fileName: string; sha1: string; len: number } | null = null;
-  vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit & { duplex?: string } = {}) => {
+  const server = http.createServer((req, res) => {
+    seen.uploads++;
+    gc();
+    const base = process.memoryUsage().arrayBuffers;
+    const h1 = crypto.createHash('sha1');
+    let len = 0;
+    let nextSample = 8 * 1024 * 1024;
+    req.on('data', (c: Buffer) => {
+      h1.update(c);
+      len += c.length;
+      if (len >= nextSample) {
+        nextSample += 8 * 1024 * 1024;
+        gc();
+        seen.maxHeldBytes = Math.max(seen.maxHeldBytes, process.memoryUsage().arrayBuffers - base);
+      }
+    });
+    req.on('end', () => {
+      const sha1 = h1.digest('hex');
+      if (sha1 !== req.headers['x-bz-content-sha1']) {
+        res.writeHead(400);
+        res.end('sha1 mismatch');
+        return;
+      }
+      stored = { fileName: decodeURIComponent(String(req.headers['x-bz-file-name'])), sha1, len };
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ action: 'upload', bucketId: 'bucket-id', fileName: stored.fileName, fileId: 'file-v1', contentSha1: sha1, contentLength: len, ...opts.tamper }));
+    });
+  });
+  servers.push(server);
+  await new Promise<void>((z) => server.listen(0, '127.0.0.1', () => z()));
+  const uploadUrl = `http://127.0.0.1:${(server.address() as { port: number }).port}/upload`;
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit = {}) => {
     const json = (o: unknown) => new Response(JSON.stringify(o), { status: 200, headers: { 'content-type': 'application/json' } });
     if (url.endsWith('/b2_authorize_account')) {
       return json({ accountId: 'acct', authorizationToken: 'tok', apiInfo: { storageApi: { apiUrl: 'https://api.fake', downloadUrl: 'https://dl.fake' } } });
     }
-    if (url.endsWith('/b2_get_upload_url')) return json({ uploadUrl: 'https://up.fake/upload', authorizationToken: 'up-tok' });
-    if (url === 'https://up.fake/upload') {
-      seen.uploads++;
-      const body = init.body as ReadableStream<Uint8Array>;
-      seen.bodyWasStream = typeof (body as { getReader?: unknown })?.getReader === 'function';
-      expect(init.duplex).toBe('half');
-      const h1 = crypto.createHash('sha1');
-      let len = 0;
-      const reader = body.getReader();
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        h1.update(value);
-        len += value.length;
-        seen.peakArrayBuffers = Math.max(seen.peakArrayBuffers, process.memoryUsage().arrayBuffers);
-      }
-      const headers = init.headers as Record<string, string>;
-      const sha1 = h1.digest('hex');
-      if (sha1 !== headers['X-Bz-Content-Sha1']) return new Response('sha1 mismatch', { status: 400 });
-      stored = { fileName: decodeURIComponent(headers['X-Bz-File-Name']), sha1, len };
-      return json({ action: 'upload', bucketId: 'bucket-id', fileName: stored.fileName, fileId: 'file-v1', contentSha1: sha1, contentLength: len, ...opts.tamper });
-    }
+    if (url.endsWith('/b2_get_upload_url')) return json({ uploadUrl, authorizationToken: 'up-tok' });
     if (url.endsWith('/b2_get_file_info')) {
       seen.infoCalls++;
       return json({ action: 'upload', bucketId: 'bucket-id', fileName: stored!.fileName, fileId: 'file-v1', contentSha1: stored!.sha1, contentLength: stored!.len });
     }
+    // A sender that reaches the upload URL through fetch (the pre-fix code, i.e. the mutation) gets the real network.
+    if (url === uploadUrl) return realFetch(url, init);
     throw new Error(`unexpected fetch ${url}`);
   }));
   return seen;
@@ -78,25 +112,32 @@ function client(): StorageClient {
 }
 
 describe('3a — uploadColdFile streams the file and attests the stored version (AP-4 C-1, Coltrane 1-2, AP-6)', () => {
-  it('a 128 MiB file uploads with Buffer memory far below the file size (AP-6 memory fence)', async () => {
+  it('a 96 MiB upload holds only a few MiB live at any point (AP-6 memory fence, 3a Step 7)', async () => {
     const dir = tmp();
     const f = path.join(dir, 'big.gz');
     const chunk = crypto.randomBytes(1024 * 1024);
     const fd = fs.openSync(f, 'w');
-    for (let i = 0; i < 128; i++) fs.writeSync(fd, chunk);
+    for (let i = 0; i < 96; i++) fs.writeSync(fd, chunk);
     fs.closeSync(fd);
-    const seen = fakeB2();
-    const before = process.memoryUsage().arrayBuffers;
+    const seen = await fakeB2();
     const r = await client().uploadColdFile('dt-archive-cold', 'x/2026-06.jsonl.gz', f);
-    expect(seen.bodyWasStream).toBe(true);
-    expect(r.bytes).toBe(128 * 1024 * 1024);
+    expect(r.bytes).toBe(96 * 1024 * 1024);
     expect(r.fileId).toBe('file-v1');
+    expect(seen.uploads).toBe(1);
     expect(seen.infoCalls).toBe(1);
-    // A buffered path holds >= the whole 128 MiB at once. The streamed path's live data is a few 64 KiB chunks, but
-    // spent chunks count in `arrayBuffers` until GC runs: measured locally at 32.0-36.9 MiB over 8 runs (2026-11-13).
-    // 64 MiB sits between the two with room on both sides; the buffered mutation measured above it.
-    expect(seen.peakArrayBuffers - before).toBeLessThan(64 * 1024 * 1024);
+    // Measured on Node 20.20.0 (the CI, Docker and staging runtime), 2026-11-14: this sender 4.4-16.1 MiB over 6 runs;
+    // the mutation (the deployed 3a code, Node fetch with a streamed body, restored) 95.9 MiB — it keeps what it has
+    // sent, which is how 3a Step 7 reached 614 MB peak RSS on a 535 MB upload. 40 MiB sits between with room each side.
+    // Node 22.18.0 (a laptop), same day: this sender 14.4 MiB, the mutation 101.6 MiB — the fence discriminates on both.
+    expect(seen.maxHeldBytes).toBeLessThan(40 * 1024 * 1024);
   }, 60_000);
+
+  it('refuses a non-https upload URL that is not loopback', async () => {
+    const dir = tmp();
+    const f = path.join(dir, 'small.gz');
+    fs.writeFileSync(f, 'hello cold');
+    await expect(postFileStream('http://up.example.com/upload', {}, f)).rejects.toThrow(/refusing a non-https upload URL/);
+  });
 
   it('the returned sha256 / sha1 are the file\'s, from one streamed read', async () => {
     const dir = tmp();
@@ -106,7 +147,7 @@ describe('3a — uploadColdFile streams the file and attests the stored version 
     expect(h.sha256).toBe(crypto.createHash('sha256').update('hello cold').digest('hex'));
     expect(h.sha1).toBe(crypto.createHash('sha1').update('hello cold').digest('hex'));
     expect(h.bytes).toBe(10);
-    fakeB2();
+    await fakeB2();
     const r = await client().uploadColdFile('dt-archive-cold', 'x/a.jsonl.gz', f);
     expect(r).toMatchObject({ checksum: h.sha256, sha1: h.sha1, bytes: 10, uri: 'b2://dt-archive-cold/x/a.jsonl.gz' });
   });
@@ -116,7 +157,7 @@ describe('3a — uploadColdFile streams the file and attests the stored version 
     const f = path.join(dir, 'small.gz');
     fs.writeFileSync(f, 'hello cold');
     for (const tamper of [{ fileName: 'other' }, { contentSha1: 'deadbeef' }, { contentLength: 9 }, { action: 'hide' }]) {
-      fakeB2({ tamper });
+      await fakeB2({ tamper });
       await expect(client().uploadColdFile('dt-archive-cold', 'x/a.jsonl.gz', f)).rejects.toThrow(/does not attest/);
     }
   });
