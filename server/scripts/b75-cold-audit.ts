@@ -29,7 +29,8 @@
  * Downloads spend the SHARED 1 GB/day B2 download cap (token-watch reads back on it too) — this job's own budget is
  * `cold_readback_daily_bytes`; nothing measures account-wide spend, so a cap refusal ends the leg, never the run.
  *
- * Cron line (root crontab):  10 4 * * * su - deploy -c "cd /home/deploy/dawntrader && /usr/bin/npx tsx server/scripts/b75-cold-audit.ts" >> /var/log/dawntrader/b75-cold-audit.log 2>&1
+ * Cron line (root crontab on staging — daily 04:10 UTC):
+ *   10 4 * * * su - deploy -c "cd /home/deploy/dawntrader && /usr/bin/npx tsx server/scripts/b75-cold-audit.ts" >> /var/log/dawntrader/b75-cold-audit.log 2>&1
  * ═════════════════════════════════════════════════════════════════════════════
  */
 
@@ -284,21 +285,29 @@ export function meterPages(cur: MeterTotals, prev: MeterHistoryRow | null, nowMs
   return pages;
 }
 
+/** Per-kind cap on minted pages; past it, one overflow summary page carries the count (Langston 3c Step 4 C-1). */
+export const RECONCILE_PAGE_CAP = 25;
+
+/**
+ * Pure: one page PER OBJECT, keyed by its file id (Langston 3c Step 4 C-1). addAlert returns an existing unresolved
+ * row unchanged for a dedupe key, so a single set-wide key would let the first (e.g. day-1 residue awaiting Kyle's
+ * delete) mute every later object. Capped at RECONCILE_PAGE_CAP per kind, plus one overflow page with the count.
+ */
 export function reconcilePages(rc: Reconcile): Page[] {
   const pages: Page[] = [];
-  const fmt = (v: B2ListedVersion) => `${v.fileName} id=${v.fileId} bytes=${v.contentLength}`;
-  if (rc.untracked.length > 0) {
-    pages.push({ key: 'cold-reconcile-untracked', severity: 'warning', title: 'Cold archive objects that no manifest row binds',
-      body: `${rc.untracked.length} stored version(s) in our archive prefixes match no bound cold row (an upload the manifest does not know, or residue): ${rc.untracked.slice(0, 10).map(fmt).join('; ')}` });
-  }
-  if (rc.missing.length > 0) {
-    pages.push({ key: 'cold-reconcile-missing', severity: 'critical', title: 'Cold manifest rows whose bound object is NOT in the bucket',
-      body: `${rc.missing.length} bound cold row(s) name a file id the listing does not hold: ${rc.missing.slice(0, 10).map((r) => `${r.storage_uri} id=${r.provider_file_id}`).join('; ')}` });
-  }
-  if (rc.sizeMismatch.length > 0) {
-    pages.push({ key: 'cold-reconcile-size', severity: 'critical', title: 'Cold objects whose stored size differs from the manifest',
-      body: rc.sizeMismatch.slice(0, 10).map((m) => `${m.row.storage_uri} id=${m.version.fileId}: manifest ${m.row.provider_bytes} B, stored ${m.version.contentLength} B`).join('; ') });
-  }
+  const each = <T>(items: T[], kind: string, severity: Page['severity'], title: string, idOf: (x: T) => string, bodyOf: (x: T) => string) => {
+    for (const x of items.slice(0, RECONCILE_PAGE_CAP)) pages.push({ key: `cold-reconcile-${kind}-${idOf(x)}`, severity, title, body: bodyOf(x) });
+    if (items.length > RECONCILE_PAGE_CAP) {
+      pages.push({ key: `cold-reconcile-${kind}-overflow`, severity, title: `${title} — more than ${RECONCILE_PAGE_CAP}`,
+        body: `${items.length} in all; the first ${RECONCILE_PAGE_CAP} have their own alert, the rest are in the run's log.` });
+    }
+  };
+  each(rc.untracked, 'untracked', 'warning', 'A cold archive object that no manifest row binds', (v) => v.fileId,
+    (v) => `${v.fileName} id=${v.fileId} bytes=${v.contentLength} uploaded=${new Date(v.uploadTimestamp).toISOString()} sits in our archive prefixes and matches no bound cold row: an upload the manifest does not know, or residue.`);
+  each(rc.missing, 'missing', 'critical', 'A cold manifest row whose bound object is NOT in the bucket', (r) => r.provider_file_id as string,
+    (r) => `${r.storage_uri} is bound to file id ${r.provider_file_id}, which the bucket listing does not hold.`);
+  each(rc.sizeMismatch, 'size', 'critical', 'A cold object whose stored size differs from the manifest', (m) => m.version.fileId,
+    (m) => `${m.row.storage_uri} id=${m.version.fileId}: manifest ${m.row.provider_bytes} B, stored ${m.version.contentLength} B.`);
   return pages;
 }
 
@@ -313,7 +322,7 @@ export function selectDue(rows: ColdManifestRow[], lastOk: Map<string, Date>, no
     .sort((a, b) => t(lastOk.get(a.id)) - t(lastOk.get(b.id)) || t(a.verified_at) - t(b.verified_at) || a.id.localeCompare(b.id));
 }
 
-export type StopReason = 'none' | 'own' | 'cap' | 'time';
+export type StopReason = 'none' | 'own' | 'cap' | 'time' | 'disk';
 
 /** Pure: may the next object be read — the own budget, the object count and the run deadline (plan r3 edit 1). */
 export function nextFits(
@@ -374,6 +383,115 @@ export function historyPages(history: MeterHistoryRow[], k: number): Page[] {
       body: `The last ${k} runs each skipped cold rows with no provider_file_id (${last[0].skipped_unbound} now). Run b75-cold-bind.ts to see why they do not bind.` });
   }
   return pages;
+}
+
+// ───────────────────────────────────────────── the read-back leg ─────────────────────────────────────────────
+
+export interface ReadBackRecord {
+  manifestId: string;
+  fileId: string;
+  bytes?: number | null;
+  result: 'ok' | 'mismatch' | 'budget_exhausted' | 'error';
+  sha256?: string | null;
+  cause?: string | null;
+  retryAfterMs?: number | null;
+  detail?: string | null;
+  error?: string | null;
+}
+
+export interface ReadBackDeps {
+  download: (fileId: string, localPath: string, expectedBytes: number, onPhase: (p: TransferPhaseLog) => void) => Promise<{ bytes: number; checksum: string }>;
+  record: (r: ReadBackRecord) => Promise<void>;
+  freeBytes: (dir: string) => number;
+  page: (p: Page) => Promise<void>;
+  elapsedMs: () => number;
+}
+
+export interface ReadBackResult {
+  stop: StopReason;
+  cause: string | null;
+  readOk: number;
+  readFailed: number;
+  readCount: number;
+  bytesRead: number;
+  deferred: number;
+  okIds: string[];
+}
+
+/**
+ * The read-back leg over the due rows, in order. Extracted so every arm runs under test (Langston 3c Step 4: the
+ * oversize, free-space and budget arms were inspection-only). Per object: oversize → page + deferred; nextFits →
+ * stop (own | time); free space → the LEG ends (C-3, `disk`); download → ok | mismatch (critical page); a budget
+ * refusal → the LEG ends (`cap`); any other error → an `error` row. Bytes that landed are charged whether or not the
+ * attempt completed (C-2), so `dailyBytes` is a ceiling.
+ */
+export async function runReadBack(due: ColdManifestRow[], cfg: Pick<AuditConfig, 'dailyBytes' | 'maxObjects' | 'runDeadlineMs' | 'limits' | 'freeFloorBytes'>, tmpDir: string, deps: ReadBackDeps): Promise<ReadBackResult> {
+  const out: ReadBackResult = { stop: 'none', cause: null, readOk: 0, readFailed: 0, readCount: 0, bytesRead: 0, deferred: 0, okIds: [] };
+  for (let i = 0; i < due.length; i++) {
+    const row = due[i];
+    const fileId = row.provider_file_id as string;
+    const bytes = Number(row.provider_bytes ?? row.bytes_compressed);
+    if (bytes > cfg.dailyBytes) {
+      await deps.page({ key: `cold-readback-oversize-${row.id}`, severity: 'warning', title: 'A cold object is larger than the daily read-back budget',
+        body: `${row.storage_uri} (${bytes} B) exceeds cold_readback_daily_bytes ${cfg.dailyBytes}; it is never read back while the budget stands.` });
+      out.deferred++;
+      continue;
+    }
+    const fit = nextFits(bytes, { bytesRead: out.bytesRead, objects: out.readCount, elapsedMs: deps.elapsedMs() }, cfg);
+    if (fit !== 'go') { out.stop = fit; out.deferred += due.length - i; break; }
+    const free = deps.freeBytes(tmpDir);
+    if (!(free >= bytes + cfg.freeFloorBytes)) {
+      // C-3: free space is global, so the leg ends here — one row, not one per due object
+      console.error(`${TAG} REFUSED read-back of ${row.storage_uri}: ${free} bytes free, need ${bytes + cfg.freeFloorBytes}; read-back leg ended (disk)`);
+      out.readFailed++;
+      out.stop = 'disk';
+      out.deferred += due.length - i - 1;
+      await deps.record({ manifestId: row.id, fileId, bytes, result: 'error', error: `free space ${free} < ${bytes + cfg.freeFloorBytes}` });
+      break;
+    }
+    const local = path.join(tmpDir, `${row.id}.gz`);
+    out.readCount++;
+    let charged = false;
+    try {
+      const dl = await deps.download(fileId, local, bytes, (p) => {
+        if (p.outcome !== 'ok') console.warn(`${TAG} ${row.storage_uri} id=${fileId} ${JSON.stringify(p)}`);
+      });
+      out.bytesRead += dl.bytes;
+      charged = true;
+      const ok = dl.checksum === row.checksum;
+      await deps.record({ manifestId: row.id, fileId, bytes: dl.bytes, result: ok ? 'ok' : 'mismatch', sha256: dl.checksum });
+      if (ok) {
+        out.readOk++;
+        out.okIds.push(row.id);
+        console.log(`${TAG} OK ${row.storage_uri} id=${fileId} bytes=${dl.bytes}`);
+      } else {
+        out.readFailed++;
+        console.error(`${TAG} MISMATCH ${row.storage_uri} id=${fileId}: manifest ${row.checksum}, read ${dl.checksum}`);
+        await deps.page({ key: `cold-readback-mismatch-${row.id}`, severity: 'critical', title: 'A cold object read back with the WRONG SHA-256',
+          body: `${row.storage_uri} (version ${fileId}, ${dl.bytes} B): the manifest's SHA-256 is ${row.checksum}; the bytes read back hash to ${dl.checksum}.` });
+      }
+    } catch (err) {
+      const f = classifyDownloadFailure(err);
+      if (f.kind === 'budget') {
+        out.readCount--; // a refusal is not a read; any bytes that landed are still charged below
+        out.stop = 'cap';
+        out.cause = f.cause;
+        out.deferred += due.length - i;
+        console.warn(`${TAG} daily download budget exhausted (${f.cause}) at ${row.storage_uri}; read-back leg ended, the meter stands`);
+        await deps.record({ manifestId: row.id, fileId, result: 'budget_exhausted', cause: f.cause, retryAfterMs: f.retryAfterMs, detail: f.detail });
+        break;
+      }
+      out.readFailed++;
+      console.error(`${TAG} ERROR ${row.storage_uri} id=${fileId}: ${f.message}`);
+      await deps.record({ manifestId: row.id, fileId, bytes, result: 'error', error: f.message.slice(0, 1000) });
+    } finally {
+      // C-2: an attempt that did not complete still spent its bytes at B2 — charge what landed, measured, so the
+      // byte budget is a ceiling and not a count of successes
+      if (!charged && fs.existsSync(local)) out.bytesRead += fs.statSync(local).size;
+      fs.rmSync(local, { force: true });
+    }
+  }
+  return out;
 }
 
 // ───────────────────────────────────────────── run ─────────────────────────────────────────────
@@ -456,82 +574,23 @@ async function main(): Promise<number> {
     const due = selectDue(rows, lastOk, startedAt.getTime(), cfg.minIntervalDays);
     const bytesDue = due.reduce((s, r) => s + Number(r.provider_bytes ?? r.bytes_compressed), 0);
     Object.assign(done, { due: due.length, bytes_due: bytesDue });
-    let stop: StopReason = 'none';
-    let cause: string | null = null;
-    let readOk = 0, readFailed = 0, readCount = 0, bytesRead = 0, deferred = 0;
-    const okNow = new Date();
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'b75-cold-audit-'));
     fs.chmodSync(tmpDir, 0o700);
-    for (let i = 0; i < due.length; i++) {
-      const row = due[i];
-      const bytes = Number(row.provider_bytes ?? row.bytes_compressed);
-      if (bytes > cfg.dailyBytes) {
-        await page({ key: 'cold-readback-oversize', severity: 'warning', title: 'A cold object is larger than the daily read-back budget',
-          body: `${row.storage_uri} (${bytes} B) exceeds cold_readback_daily_bytes ${cfg.dailyBytes}; it is never read back while the budget stands.` });
-        deferred++;
-        continue;
-      }
-      const fit = nextFits(bytes, { bytesRead, objects: readCount, elapsedMs: Date.now() - t0 }, cfg);
-      if (fit !== 'go') { stop = fit; deferred += due.length - i; break; }
-      const st = fs.statfsSync(tmpDir);
-      const free = Number(st.bavail) * Number(st.bsize);
-      if (!(free >= bytes + cfg.freeFloorBytes)) {
-        console.error(`${TAG} REFUSED read-back of ${row.storage_uri}: ${free} bytes free, need ${bytes + cfg.freeFloorBytes}`);
-        readFailed++;
+    const rb = await runReadBack(due, cfg, tmpDir, {
+      download: (fileId, local, bytes, onPhase) => storage.downloadColdFileById(fileId, local, { expectedBytes: bytes, limits: cfg.limits, onPhase }),
+      record: async (r) => {
         await client.query(
-          `INSERT INTO data_archive_cold_readback (manifest_id, file_id, at, bytes, result, error) VALUES ($1, $2, now(), $3, 'error', $4)`,
-          [row.id, row.provider_file_id, bytes, `free space ${free} < ${bytes + cfg.freeFloorBytes}`],
+          `INSERT INTO data_archive_cold_readback (manifest_id, file_id, at, bytes, result, sha256_seen, cause, retry_after_ms, cause_detail, error)
+           VALUES ($1, $2, now(), $3, $4, $5, $6, $7, $8, $9)`,
+          [r.manifestId, r.fileId, r.bytes ?? null, r.result, r.sha256 ?? null, r.cause ?? null, r.retryAfterMs ?? null, r.detail ?? null, r.error ?? null],
         );
-        continue;
-      }
-      const local = path.join(tmpDir, `${row.id}.gz`);
-      readCount++;
-      try {
-        const dl = await storage.downloadColdFileById(row.provider_file_id as string, local, {
-          expectedBytes: bytes,
-          limits: cfg.limits,
-          onPhase: (p: TransferPhaseLog) => { if (p.outcome !== 'ok') console.warn(`${TAG} ${row.storage_uri} id=${row.provider_file_id} ${JSON.stringify(p)}`); },
-        });
-        bytesRead += dl.bytes;
-        const ok = dl.checksum === row.checksum;
-        await client.query(
-          `INSERT INTO data_archive_cold_readback (manifest_id, file_id, at, bytes, result, sha256_seen) VALUES ($1, $2, now(), $3, $4, $5)`,
-          [row.id, row.provider_file_id, dl.bytes, ok ? 'ok' : 'mismatch', dl.checksum],
-        );
-        if (ok) {
-          readOk++;
-          lastOk.set(row.id, okNow); // the coverage check below sees this run's reads
-          console.log(`${TAG} OK ${row.storage_uri} id=${row.provider_file_id} bytes=${dl.bytes}`);
-        } else {
-          readFailed++;
-          console.error(`${TAG} MISMATCH ${row.storage_uri} id=${row.provider_file_id}: manifest ${row.checksum}, read ${dl.checksum}`);
-          await page({ key: `cold-readback-mismatch-${row.id}`, severity: 'critical', title: 'A cold object read back with the WRONG SHA-256',
-            body: `${row.storage_uri} (version ${row.provider_file_id}, ${dl.bytes} B): the manifest's SHA-256 is ${row.checksum}; the bytes read back hash to ${dl.checksum}.` });
-        }
-      } catch (err) {
-        const f = classifyDownloadFailure(err);
-        if (f.kind === 'budget') {
-          readCount--; // a refusal moved no bytes
-          stop = 'cap';
-          cause = f.cause;
-          deferred += due.length - i;
-          console.warn(`${TAG} daily download budget exhausted (${f.cause}) at ${row.storage_uri}; read-back leg ended, the meter stands`);
-          await client.query(
-            `INSERT INTO data_archive_cold_readback (manifest_id, file_id, at, result, cause, retry_after_ms, cause_detail) VALUES ($1, $2, now(), 'budget_exhausted', $3, $4, $5)`,
-            [row.id, row.provider_file_id, f.cause, f.retryAfterMs, f.detail],
-          );
-          break;
-        }
-        readFailed++;
-        console.error(`${TAG} ERROR ${row.storage_uri} id=${row.provider_file_id}: ${f.message}`);
-        await client.query(
-          `INSERT INTO data_archive_cold_readback (manifest_id, file_id, at, bytes, result, error) VALUES ($1, $2, now(), $3, 'error', $4)`,
-          [row.id, row.provider_file_id, bytes, f.message.slice(0, 1000)],
-        );
-      } finally {
-        fs.rmSync(local, { force: true });
-      }
-    }
+      },
+      freeBytes: (dir) => { const st = fs.statfsSync(dir); return Number(st.bavail) * Number(st.bsize); },
+      page,
+      elapsedMs: () => Date.now() - t0,
+    });
+    const { stop, cause, readOk, readFailed, readCount, bytesRead, deferred } = rb;
+    for (const id of rb.okIds) lastOk.set(id, new Date()); // the coverage check below sees this run's reads
     Object.assign(done, { read: readCount, bytes_read: bytesRead, deferred_budget: deferred, readback_ok: readOk, readback_failed: readFailed, budget_stop: stop });
     await client.query(
       `UPDATE data_archive_cold_meter SET due = $2, bytes_due = $3, read_count = $4, bytes_read = $5, deferred_budget = $6,

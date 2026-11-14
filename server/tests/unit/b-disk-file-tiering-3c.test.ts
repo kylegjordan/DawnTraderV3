@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import {
   auditConfigFromMap,
@@ -12,7 +13,10 @@ import {
   ownerOf,
   readBackWorstCaseMs,
   reconcileArchive,
+  reconcilePages,
+  runReadBack,
   selectDue,
+  RECONCILE_PAGE_CAP,
   CAUSE_DETAIL_MAX_BYTES,
   type ColdManifestRow,
   type MeterHistoryRow,
@@ -202,6 +206,96 @@ describe('B-DISK-FILE-TIERING 3c — the read-back', () => {
   });
 });
 
+describe('B-DISK-FILE-TIERING 3c Step 4 C-1 — one alert per object, never one set-wide key', () => {
+  it('two untracked objects mint two keys, so day-1 residue cannot mute a later object', () => {
+    const rc = { untracked: [ver('dup', 'context_bridge_log/2026-01.jsonl.gz'), ver('leak', 'context_bridge_log/2026-03.jsonl.gz')], missing: [row('m', 'b2://b/x', { provider_file_id: 'f-m' })], sizeMismatch: [], inFlight: [] };
+    const keys = reconcilePages(rc).map((p) => p.key);
+    expect(keys).toEqual(['cold-reconcile-untracked-dup', 'cold-reconcile-untracked-leak', 'cold-reconcile-missing-f-m']);
+    expect(reconcilePages(rc).find((p) => p.key === 'cold-reconcile-missing-f-m')?.severity).toBe('critical');
+  });
+  it('past the cap, one overflow page carries the count', () => {
+    const many = Array.from({ length: RECONCILE_PAGE_CAP + 3 }, (_, i) => ver(`u${i}`, `context_bridge_log/x${i}`));
+    const pages = reconcilePages({ untracked: many, missing: [], sizeMismatch: [], inFlight: [] });
+    expect(pages).toHaveLength(RECONCILE_PAGE_CAP + 1);
+    expect(pages[RECONCILE_PAGE_CAP].key).toBe('cold-reconcile-untracked-overflow');
+    expect(pages[RECONCILE_PAGE_CAP].body).toContain(`${RECONCILE_PAGE_CAP + 3} in all`);
+  });
+});
+
+describe('B-DISK-FILE-TIERING 3c Step 4 — the read-back leg, every arm run (runReadBack)', () => {
+  const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'b75-3c-test-'));
+  const cfgL = { dailyBytes: 1_000, maxObjects: 10, runDeadlineMs: 10_000_000, limits: { setupMs: 1, minBytesPerSec: 1_000_000 }, freeFloorBytes: 100 };
+  const rowB = (id: string, bytes: number) => row(id, `b2://b/context_bridge_log/${id}`, { provider_bytes: bytes, bytes_compressed: bytes });
+  const deps = (over: Partial<Parameters<typeof runReadBack>[3]> = {}) => {
+    const records: unknown[] = [];
+    const pages: string[] = [];
+    return {
+      records, pages,
+      d: {
+        download: vi.fn(async (_id: string, local: string, bytes: number) => { fs.writeFileSync(local, Buffer.alloc(bytes)); return { bytes, checksum: `sha-${path.basename(local, '.gz')}` }; }),
+        record: vi.fn(async (r: unknown) => { records.push(r); }),
+        freeBytes: () => 1e12,
+        page: vi.fn(async (p: { key: string }) => { pages.push(p.key); }),
+        elapsedMs: () => 0,
+        ...over,
+      },
+    };
+  };
+  it('all fit: each is read, compared and recorded ok; the temp files are gone', async () => {
+    const dir = tmp();
+    const t = deps();
+    const r = await runReadBack([rowB('a', 300), rowB('b', 300)], cfgL, dir, t.d);
+    expect(r).toMatchObject({ stop: 'none', readOk: 2, readFailed: 0, readCount: 2, bytesRead: 600, deferred: 0, okIds: ['a', 'b'] });
+    expect(fs.readdirSync(dir)).toEqual([]);
+  });
+  it('the own byte budget stops BEFORE the object that would cross it; the rest are deferred', async () => {
+    const t = deps();
+    const r = await runReadBack([rowB('a', 600), rowB('b', 600), rowB('c', 10)], cfgL, tmp(), t.d);
+    expect(r).toMatchObject({ stop: 'own', readCount: 1, bytesRead: 600, deferred: 2 });
+    expect(t.d.download).toHaveBeenCalledTimes(1);
+  });
+  it('C-2: a download that dies mid-body is CHARGED the bytes that landed, so the next object is refused', async () => {
+    const t = deps({
+      download: vi.fn(async (_id: string, local: string) => { fs.writeFileSync(local, Buffer.alloc(900)); throw Object.assign(new Error('The operation was aborted due to timeout'), { name: 'TimeoutError' }); }),
+    });
+    const r = await runReadBack([rowB('a', 950), rowB('b', 200)], cfgL, tmp(), t.d);
+    expect(r).toMatchObject({ readFailed: 1, bytesRead: 900, stop: 'own', deferred: 1 });
+    expect(t.d.download).toHaveBeenCalledTimes(1);
+  });
+  it('C-3: a free-space refusal ends the LEG with one row, not one row per due object', async () => {
+    const t = deps({ freeBytes: () => 50 });
+    const r = await runReadBack([rowB('a', 10), rowB('b', 10), rowB('c', 10)], cfgL, tmp(), t.d);
+    expect(r).toMatchObject({ stop: 'disk', readFailed: 1, readCount: 0, deferred: 2 });
+    expect(t.records).toHaveLength(1);
+    expect(t.d.download).not.toHaveBeenCalled();
+  });
+  it('a cap refusal ends the leg with its cause; a mismatch pages critical and the leg goes on; an error is recorded and the leg goes on', async () => {
+    const t = deps({
+      download: vi.fn(async (id: string, local: string, bytes: number) => {
+        if (id === 'f-bad') { fs.writeFileSync(local, Buffer.alloc(bytes)); return { bytes, checksum: 'WRONG' }; }
+        if (id === 'f-err') throw new Error('socket hang up');
+        if (id === 'f-cap') throw new B2CallError('download_file_by_id', 403, 'download_cap_exceeded', '{}');
+        fs.writeFileSync(local, Buffer.alloc(bytes)); return { bytes, checksum: `sha-${id.slice(2)}` };
+      }),
+    });
+    const r = await runReadBack([rowB('bad', 10), rowB('err', 10), rowB('ok', 10), rowB('cap', 10), rowB('never', 10)], cfgL, tmp(), t.d);
+    expect(r).toMatchObject({ stop: 'cap', cause: 'download_cap_exceeded', readOk: 1, readFailed: 2, readCount: 3, deferred: 2, okIds: ['ok'] });
+    expect(t.pages).toEqual(['cold-readback-mismatch-bad']);
+    expect((t.records as { result: string }[]).map((x) => x.result)).toEqual(['mismatch', 'error', 'ok', 'budget_exhausted']);
+  });
+  it('an object larger than the whole budget pages per row and is deferred; the next one is still read', async () => {
+    const t = deps();
+    const r = await runReadBack([rowB('huge', 5_000), rowB('a', 10)], cfgL, tmp(), t.d);
+    expect(t.pages).toEqual(['cold-readback-oversize-huge']);
+    expect(r).toMatchObject({ readOk: 1, deferred: 1 });
+  });
+  it('the run deadline stops the leg (time)', async () => {
+    const t = deps({ elapsedMs: () => 9_999_999 });
+    const r = await runReadBack([rowB('a', 10)], cfgL, tmp(), t.d);
+    expect(r).toMatchObject({ stop: 'time', deferred: 1, readCount: 0 });
+  });
+});
+
 describe('B-DISK-FILE-TIERING 3c — fences on the wiring', () => {
   const src = read('server/scripts/b75-cold-audit.ts');
   it('the manifest is read FIRST with no state filter, and the listing comes after it', () => {
@@ -218,12 +312,12 @@ describe('B-DISK-FILE-TIERING 3c — fences on the wiring', () => {
     expect(src.indexOf('DONE ${fields}')).toBeGreaterThan(fin);
     expect(src).toContain(": 'undefined';");
   });
-  it('the downloaded file is removed on every path', () => {
-    expect(src).toMatch(/\} finally \{\s*fs\.rmSync\(local, \{ force: true \}\);/);
+  it('the read-back leg runs through runReadBack (the arms are tested behaviourally above)', () => {
+    expect(src).toContain('const rb = await runReadBack(due, cfg, tmpDir, {');
   });
   it('archival-health grades it: schedule equals the header cron line, and both failure counters are captured', () => {
     const ah = read('server/scripts/b-storage-archival-health.ts');
-    const cron = /Cron line \(root crontab\):\s+(\S+ \S+ \S+ \S+ \S+) su - deploy/.exec(src)?.[1];
+    const cron = /^ \*\s+((?:\S+\s+){4}\S+)\s+su - deploy\b/m.exec(src)?.[1];
     expect(cron).toBe('10 4 * * *');
     expect(ah).toContain("name: 'b75-cold-audit'");
     expect(ah).toContain(`schedule: '${cron}'`);

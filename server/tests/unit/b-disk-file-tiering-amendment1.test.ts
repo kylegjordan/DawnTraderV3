@@ -40,7 +40,7 @@ describe('H-3 — the archival-health source', () => {
   const checks = [...src.matchAll(/name: '([a-z0-9-]+)',[\s\S]*?schedule: '([^']+)'/g)].map((m) => ({ name: m[1], schedule: m[2] }));
 
   it('every check carries a schedule and no graceMs remains', () => {
-    expect(checks.map((c) => c.name)).toEqual(['b75-retention', 'b75-cold-rotator', 'b75-cold-liveness', 'disk-file-tiering']);
+    expect(checks.map((c) => c.name)).toEqual(['b75-retention', 'b75-cold-rotator', 'b75-cold-liveness', 'b75-cold-audit', 'disk-file-tiering']);
     expect(src).not.toMatch(/graceMs/);
   });
 
@@ -49,6 +49,7 @@ describe('H-3 — the archival-health source', () => {
       'b75-retention': 'server/scripts/b75-retention-sweep.ts',
       'b75-cold-rotator': 'server/scripts/b75-cold-rotator.ts',
       'b75-cold-liveness': 'server/scripts/b75-cold-liveness.ts',
+      'b75-cold-audit': 'server/scripts/b75-cold-audit.ts',
       'disk-file-tiering': 'server/scripts/b-disk-file-tiering.ts',
     };
     for (const c of checks) {

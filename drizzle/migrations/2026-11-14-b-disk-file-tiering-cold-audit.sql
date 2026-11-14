@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS data_archive_cold_meter (
   deferred_budget  integer,
   readback_ok      integer,
   readback_failed  integer,
-  budget_stop      text CHECK (budget_stop IS NULL OR budget_stop IN ('none', 'own', 'cap', 'time')),
+  budget_stop      text CHECK (budget_stop IS NULL OR budget_stop IN ('none', 'own', 'cap', 'time', 'disk')),
   budget_cause     text,
   finished_at      timestamptz,
   CONSTRAINT data_archive_cold_meter_owner_object_chk CHECK (jsonb_typeof(bytes_by_owner) = 'object')
