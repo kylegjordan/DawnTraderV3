@@ -54,7 +54,7 @@ CHANGE-CLASS: non_architecture
 | shared MEMORY.md | N/A | reviewed — no shared truth changed |
 | MEMORY_CC_C | ✅ | position line |
 | Langston MEMORY | ✅ | one line via `langston-memory-write`, net −12 B |
-| CC_C task list | ✅ ledger row | row added; CC_A / CC_B / CC_INFRA N/A — not mine |
+| CC_C session task list | ✅ ledger row | row added; CC_A / CC_B / CC_INFRA N/A — not mine |
 | Observation column | N/A | nothing waits on an observation window |
 | AUTHORITY_BASELINE | N/A | no constitutional change |
 | STORAGE_POLICY | N/A | no retention change |
