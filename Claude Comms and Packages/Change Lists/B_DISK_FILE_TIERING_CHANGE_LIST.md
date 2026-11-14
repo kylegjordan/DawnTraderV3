@@ -216,5 +216,24 @@ Procedure: copies (`cp -p`, mtimes kept) of the four real logs and the real root
 - Note, no work: a run whose only page is a schedule page (`not_scheduled`, `schedule_unverified`) still ends `all_ok=true`. The value has no reader — the watchdog reads only that a `DONE — all_ok=` line exists (`staging-liveness-watchdog.mjs:321`); the pages are the signal.
 - **Step 7 production leg — the first production run on this build, 2026-11-14 05:00:02Z: PASS as expected.** `/var/log/dawntrader/archival-health.log` lines 1122-1139 (70,770 B, mtime 05:00:03):
   - `b75-retention: OK (age 2.5h)`, `b75-cold-rotator: OK (age 314.0h)`, `b75-cold-liveness: OK (age 121.0h)`, `disk-file-tiering: OK (age 2.2h)`. Daily-runway: 6 OK (14 days ahead), 6 pre-cutover skips. Ends `DONE — all_ok=true checks=5`.
-  - No `schedule_unverified`, `schedule_drift` or `not_scheduled` line: `grep -c "schedule_"` over the whole file = 0. The marker is `[archival-health] schedule_unverified` (`archival-run-check.ts:122`) and it prints on EVERY unreadable run (`b-storage-archival-health.ts:498`), not only the paging 3rd; the plant `unverified` row above is its positive control. Direct read: `sudo -u deploy sudo -n crontab -l` succeeds.
+  - No `schedule_unverified`, `schedule_drift` or `not_scheduled` line, each counted separately over the whole file: 0, 0, 0 (corrected at Step 8: the first version cited one `grep -c "schedule_"`, which cannot match `not_scheduled`). The marker is `[archival-health] schedule_unverified` (`archival-run-check.ts:122`) and it prints on EVERY unreadable run (`b-storage-archival-health.ts:498`), not only the paging 3rd; the plant `unverified` row above is its positive control. Direct read: `sudo -u deploy sudo -n crontab -l` succeeds.
   - So the crontab was read and the box's four schedules match the repo's.
+
+## Amendment 2 (AP-7) — Step 8: Langston PROCEED on the production leg (Discord `1571029624664752149`); plant re-run r2 kept for him, 2026-11-14 05:11:57-05:12:14Z
+Langston ruled the r1 plant rows `RULED ON REPORTED FACT` (the folder had been deleted), so no PROCEED on that leg. r2 re-runs the same nine scenarios on the same build and **keeps** `/home/deploy/.ap7plant` (deploy-owned, `0700`) for him to read; it is deleted after his ruling. Expected results were re-registered in the script header before the run, because "now" was after today's 02:15/02:45 runs:
+- `drift` plants `"50 4 * * *"`, not r1's `"50 1"` (which would grade OK against today's 02:45 run).
+- `notstarted` drops today's tiering run.
+
+| scenario | r2 result (each scenario's own `archival-health.log`) |
+|---|---|
+| base | 4/4 OK, `all_ok=true` |
+| notstarted | `disk-file-tiering/not_started` — last start 2026-11-13T02:45:02 < due 2026-11-14T02:45 |
+| incomplete | `b75-retention/incomplete` — start 2026-11-14T02:15:02 with no completion line |
+| failed | `disk-file-tiering/failed`, quoting `DONE moved=28 failed=2` |
+| drift (F3) | `schedule_drift` names `"50 4 * * *"`, then `stale` against due 2026-11-14T04:50 citing cron `"50 4 * * *"` |
+| notsched | `not_scheduled`, then graded on `"45 2 * * *"` → OK |
+| rotate | real `logrotate -f`: live 0 B, `.1` 737,127 B → OK |
+| rotatemid | OK |
+| unverified | runs 1-2 print the `schedule_unverified` marker only; run 3 `DRY-ALERT crontab/schedule_unverified: 3 consecutive runs` |
+
+Production log after r2: 70,770 B (unchanged), 0 `PLANT` lines. Record correction from Langston folded above (the separate per-reason zeros). His no-work observation: `archival-health.log.1` does not exist on the box, so the rotated arm of `unverifiedStreak` reads a missing file every run (guarded). Not a defect.
