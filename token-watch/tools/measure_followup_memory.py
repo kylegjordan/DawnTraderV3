@@ -29,7 +29,8 @@ SUBCOMMANDS, each run as `tokenwatch`:
            ⛔ THREE CONTROLS BEFORE ANYTHING IS MEASURED, each voiding the run with its own exit code:
               (1) MemoryMax (exit 8): the cgroup's memory.max must be exactly 536,870,912. A run under
                   MemoryMax=infinity returns a clean memory.peak and reads as "it fits".
-              (2) IPAddressDeny (exit 6): a connect to a LITERAL IP must fail with EPERM/EACCES (a DNS failure is
+              (2) IPAddressDeny (exit 6): a UDP send to a LITERAL IP must fail with EPERM/EACCES and no probe may
+                  connect over TCP (under the deny TCP times out, so the UDP refusal is the proof; Step 7) (a DNS failure is
                   not proof: under IPAddressDeny DNS fails too, and so it does with no resolver), and the named
                   host must fail as well. The probe target is a flag so a test can point it at a live socket.
               (3) the clock (exit 10): all seven modules that read `datetime` are frozen at --now, or the run is
@@ -551,18 +552,41 @@ def _freeze_clock(now: datetime, modules) -> list[str]:
 
 
 def _egress_control(probes: list[str]) -> tuple[bool, str]:
-    """True when every probe is refused the deny-shaped way. A literal IP must fail with EPERM/EACCES."""
-    notes = []
+    """True when IPAddressDeny is PROVEN in force: a UDP send to a literal IP is refused EPERM/EACCES, and no probe
+    connects over TCP.
+
+    ⛔ THE PROOF IS THE UDP SEND, NOT THE TCP CONNECT (Step 7, 2026-11-14, measured on staging, kernel 6.8.0-90,
+       systemd 255): under IPAddressDeny=any the cgroup egress filter drops the TCP SYN and `connect` TIMES OUT
+       (errno None), so the first version — which demanded EPERM from a TCP connect — could never pass there and
+       voided the first real run (exit 6). The same unit's UDP `sendto` to 1.1.1.1 fails EPERM at once; with no deny
+       the same probes connect and send. A timeout alone is not proof (a black hole times out too); EPERM from the
+       send is, so a TCP timeout is accepted ONLY beside it.
+    ⛔ AT LEAST ONE LITERAL PROBE IS REQUIRED: a hostname alone proves nothing, since DNS fails under the deny and
+       with no resolver alike."""
+    notes, proven = [], False
     for p in probes:
         host, port = p.rsplit(":", 1)
         literal = all(ch.isdigit() or ch == "." for ch in host)
+        if literal:
+            u = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            try:
+                u.sendto(b"\0", (host, int(port)))
+                return False, "a UDP send to %s SUCCEEDED; IPAddressDeny is not in force" % p
+            except OSError as exc:
+                if exc.errno not in (errno.EPERM, errno.EACCES):
+                    return False, "UDP send to %s failed with %s, not EPERM/EACCES: not proof of a deny" % (
+                        p, errno.errorcode.get(exc.errno, exc.errno))
+                proven = True
+                notes.append("%s UDP send refused (%s)" % (p, errno.errorcode.get(exc.errno)))
+            finally:
+                u.close()
         try:
             socket.create_connection((host, int(port)), timeout=5).close()
             return False, "a connection to %s SUCCEEDED; IPAddressDeny is not in force" % p
         except OSError as exc:
-            if literal and exc.errno not in (errno.EPERM, errno.EACCES):
-                return False, "%s failed with %s, not EPERM/EACCES: not proof of a deny" % (p, errno.errorcode.get(exc.errno, exc.errno))
-            notes.append("%s refused (%s)" % (p, errno.errorcode.get(exc.errno, type(exc).__name__)))
+            notes.append("%s TCP refused (%s)" % (p, errno.errorcode.get(exc.errno, type(exc).__name__)))
+    if not proven:
+        return False, "no literal-IP probe was refused EPERM/EACCES: a failed lookup or a timeout is not proof of a deny"
     return True, "; ".join(notes)
 
 

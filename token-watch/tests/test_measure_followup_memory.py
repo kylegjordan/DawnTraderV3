@@ -250,7 +250,7 @@ check("M1 512M -> exit 0, memory.max and memory.events recorded", p.returncode =
       and res.get("cgroup", {}).get("memory_events") == {"max": 3, "oom": 0, "oom_kill": 0}, str(res.get("cgroup")))
 
 # ── E1: the egress control actually fires ──────────────────────────────────────────────────────────────────────────
-print("E1 expect: a probe that CONNECTS -> VOID exit 6; a literal IP refused the wrong way (ECONNREFUSED) -> VOID exit 6")
+print("E1 expect: with no deny, a literal probe's UDP send goes out -> VOID exit 6 (listener up or down alike)")
 import socket  # noqa: E402
 srv = socket.socket()
 srv.bind(("127.0.0.1", 0))
@@ -258,11 +258,64 @@ srv.listen(1)
 port = srv.getsockname()[1]
 run_root_e, _ = prepare("run-egress")
 p, res = run("live", run_root_e, "--egress-probe", "127.0.0.1:%d" % port, skip_egress=False)
-check("E1 a live connection voids", p.returncode == 6 and "SUCCEEDED" in str(res.get("void")), "rc=%s %s" % (p.returncode, res.get("void")))
+check("E1 no deny, listener up -> void", p.returncode == 6 and "SUCCEEDED" in str(res.get("void")), "rc=%s %s" % (p.returncode, res.get("void")))
 srv.close()
 p, res = run("live", run_root_e, "--egress-probe", "127.0.0.1:%d" % port, skip_egress=False)
-check("E1 ECONNREFUSED on a literal IP is not proof of a deny", p.returncode == 6 and "not EPERM" in str(res.get("void")),
-      "rc=%s %s" % (p.returncode, res.get("void")))
+check("E1 no deny, port closed -> still void (a refused TCP connect is not a deny)",
+      p.returncode == 6 and "SUCCEEDED" in str(res.get("void")), "rc=%s %s" % (p.returncode, res.get("void")))
+
+# ── E2: the control's verdicts, in-process, socket outcomes injected (Step 7: staging's deny = UDP EPERM + TCP timeout)
+print("E2 expect: UDP EPERM + TCP timeout -> proven (staging's measured shape); every other shape -> not proven")
+
+
+class _FakeUdp:
+    def __init__(self, outcome):
+        self.outcome = outcome
+
+    def sendto(self, data, addr):
+        if self.outcome is not None:
+            raise OSError(self.outcome, os.strerror(self.outcome))
+
+    def close(self):
+        pass
+
+
+def _egress_with(udp_errno, tcp, probes=("1.1.1.1:443", "api.dexscreener.com:443")):
+    """udp_errno: None = the send goes out; tcp: 'timeout' | 'connect' | an errno."""
+    real_sock, real_cc = mfm.socket.socket, mfm.socket.create_connection
+    udp_calls = []
+
+    def fake_sock(family=-1, type=-1, *a, **k):
+        udp_calls.append(type)
+        return _FakeUdp(udp_errno)
+
+    def fake_cc(addr, timeout=None):
+        if tcp == "connect":
+            return _FakeUdp(None)
+        if tcp == "timeout":
+            raise TimeoutError("timed out")
+        raise OSError(tcp, os.strerror(tcp))
+    mfm.socket.socket, mfm.socket.create_connection = fake_sock, fake_cc
+    try:
+        return mfm._egress_control(list(probes)), udp_calls
+    finally:
+        mfm.socket.socket, mfm.socket.create_connection = real_sock, real_cc
+
+
+import errno as _errno  # noqa: E402
+(ok, why), calls = _egress_with(_errno.EPERM, "timeout")
+check("E2 UDP EPERM + TCP timeout -> proven", ok and "UDP send refused (EPERM)" in why, why)
+check("E2 the UDP probe is a datagram socket, once (the literal only)", calls == [socket.SOCK_DGRAM], str(calls))
+(ok, why), _ = _egress_with(_errno.EACCES, _errno.EPERM)
+check("E2 UDP EACCES + TCP EPERM -> proven", ok, why)
+(ok, why), _ = _egress_with(_errno.EPERM, "connect")
+check("E2 UDP EPERM but TCP CONNECTS -> not proven", not ok and "SUCCEEDED" in why, why)
+(ok, why), _ = _egress_with(None, "timeout")
+check("E2 UDP send goes out -> not proven", not ok and "UDP send" in why and "SUCCEEDED" in why, why)
+(ok, why), _ = _egress_with(_errno.ENETUNREACH, "timeout")
+check("E2 UDP ENETUNREACH -> not proof of a deny", not ok and "not EPERM" in why, why)
+(ok, why), calls = _egress_with(_errno.EPERM, "timeout", probes=("api.dexscreener.com:443",))
+check("E2 hostname only, TCP timeout -> not proven (no literal probe)", not ok and "no literal-IP probe" in why and calls == [], why)
 
 # ── T1: --trace reaches the identity map ───────────────────────────────────────────────────────────────────────────
 print("T1 expect: --trace writes snapshots, including around summary._identity_map (A2's site)")
