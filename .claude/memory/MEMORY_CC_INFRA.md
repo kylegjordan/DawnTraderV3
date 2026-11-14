@@ -111,7 +111,7 @@ Registered in `cc-wake-filter.py` as **"Infra Claude"** — the `--sender` value
 - **★ EMITTER fix (MINE, B-TOKEN-BURN-CUT amd-1, #1026/#1035; acked CC-A 09-30):** `discord-langston-bridge.py` owner=/blocked-on= templates → 6-way. live `29074992` == repo blob at `5ec1a8227` (measured 10-08: cleanly BEHIND, no reconcile). Head adds my OBJ-4a P4; agreed with OLD Claude: ONE combined install with #1177's change, bridge IDLE only. Still owed: `cadb175b1` set-ratification. Detail = my ack in-channel.
 - **★ PLAN-CENSUS 2026-W40 (OLD Claude handover, in-my-own-time; scope `B_PLAN_CURRENCY_CHECK_CENSUS_2026-W40_HANDOVER.md` `ea4b971d9`):** MY 5 items — PLACE #924, #1027; STRIKE dates keep placed home #681, #682; CLOSE §0 plan line `B-WAKE-LEAD-NAME` (#1040, report exists + Langston confirmed — no Kyle ack needed). Re-reported weekly; do with B-CREDENTIALS.
 
-- **`B-DTREVIEW-ABSENCE-PROVENANCE` (#1181, row 1w1) — STEP: 10 of 11 · NEXT: 11 of 11.** Installed Helsinki 11-14 12:34:51Z from `87966ab3e` (dt-review 42c8ec1c). Step 8 CONFIRM (msg `1571144016815202367`). Step 10 governance landed (SIM, LANGSTON_ARCH, CATALOG, HISTORY, plan, task list, #1181; Langston wrote his own memory). Step 11: report, then flip GOV_EXCEPTIONS open row to open-retired BEFORE resolving its nag; delta counts +11/-3, +34/-3; served arm unproven live.
+- ✅ **`B-DTREVIEW-ABSENCE-PROVENANCE` CLOSED 2026-11-14** (#1181, row 1w1; Langston Step 11 `1571147378969288731`). Served arm unproven live: evidence = a `refs/dt-review/pins` ref.
 
 ## ✅ CLOSED — repo is authoritative
 
