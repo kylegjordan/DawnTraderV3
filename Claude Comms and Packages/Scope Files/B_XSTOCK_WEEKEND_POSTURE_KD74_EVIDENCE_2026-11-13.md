@@ -27,6 +27,8 @@
 **7 positions, all xStock, all in profit. vwap_pullback: 5 positions, +$3.49; strong_bull_trend: 2, +$2.14.** They hold 7 of the 14 open xStock slots. The three from 10-30 have now sat through two weekends.
 
 ## 3. Prior weekends: positions open at the system shutdown, and how long xStock holds lasted
+> **CORRECTED 2026-11-14 01:10Z — two rows were overstated in the 21:01Z read.**
+> **PREVIOUSLY STATED: 10-31 = 16 xStock open (16 still open at restart, median 172.3 h, max 333.0 h); 11-07 = 25 (25, median 164.0 h, max 164.0 h); "16 to 25 from 10-10 on". NOW: 10-31 = 13 (13, 111.8 h, 335.9 h); 11-07 = 18 (18, 96.8 h, 166.9 h); 13 to 20 from 10-10 on. REASON:** the query counted each still-open position twice — `closed_trades` also holds a row (with no close time) for every position that is open, beside its `active_open_positions` row. At 21:01Z the seven positions held over 7 days were still open, so they were counted twice on the weekends they spanned. They were closed under KD-77 at 23:02-23:52Z, and the query now reads only closed rows from `closed_trades` (`w166b.sql` sections 3 and 4). **Control:** re-run after the fix, every other row is identical to the 21:01Z read; the crypto columns and section 4's crypto proxy never involved the doubled xStock rows.
 | weekend (shutdown) | xStock open at shutdown | crypto open | xStock still open at restart | xStock median h held after shutdown | xStock max h |
 |---|---|---|---|---|---|
 | 09-05 | 4 | 1 | 3 | 105.8 | 168.3 |
@@ -37,9 +39,12 @@
 | **10-10** | **16** | 4 | **16** | 109.9 | 421.8 |
 | **10-17** | **19** | 1 | **19** | 85.8 | 309.9 |
 | **10-24** | **20** | 0 | **20** | 85.9 | 236.1 |
-| **10-31** | **16** | 7 | **16** | 172.3 | 333.0 |
-| **11-07** | **25** | 1 | **25** | 164.0 | 164.0 |
-**From 10-10 on, every weekend began with 16 to 25 xStock positions open, and every one of them was still open at the restart.** Before that, 0 to 5. "Hours held after shutdown" counts a still-open position up to the read time, so the newest weekends are lower bounds.
+| **10-31** | **13** | 7 | **13** | 111.8 | 335.9 |
+| **11-07** | **18** | 1 | **18** | 96.8 | 166.9 |
+| **11-14** | **8** | 5 | *read Monday* | — | — |
+**From 10-10 to 11-07, every weekend began with 13 to 20 xStock positions open, and every one of them was still open at the restart.** Before that, 0 to 5. "Hours held after shutdown" counts a still-open position up to the read time, so the newest weekends are lower bounds.
+
+**11-14 (tonight), read 01:03-01:10Z:** the shutdown started at **01:00:07.567Z** (app log, `[B-NEW-36][WEEKEND_SHUTDOWN_START] trigger=poll`). **Open at that moment: 8 xStock and 5 crypto** — down from 14 xStock at 21:01Z because KD-77 closed the seven long-held xStocks (`manual_stop`, 23:02-23:52Z) and PANW opened at 00:42Z; no paper position closed between 23:52Z and the read. None of the 8 xStocks is older than 1.4 days. The shutdown **completed at 01:06:26Z** (`PREWARM_SHUTDOWN OK upserts=139359 errors=0`, then `WEEKEND_SHUTDOWN_DONE suspended=454 prewarm=success scanner=paused`). The 6 min 19 s between start and done is the 14-day OHLC pre-warm the shutdown runs before it pauses the scanner (`session-lifecycle-controller.ts:376-403`); the 30-second reconcile ticks in between logged `POLL_SHUTDOWN_SKIP inFlight=true`, which is the mutex doing its job. The audit row's `fired_at` is the START time (`:369`, written at `:411`), so the earlier weekends' 2-28 s offsets in the table say nothing about how long those shutdowns took. The "still open at restart" cell is read after the Monday 01:00Z restart.
 
 ## 4. Capacity refusals of qualified attempts (they reached the guardrail check after the SQE and RTB)
 **Coverage limit: the `out` logs on disk start 2026-11-08T18:20Z.** So the only weekend covered is the last 6.7 h of the 11-07 weekend, and the earlier weekends have no refusal record at all.
@@ -54,8 +59,8 @@
 - Notional is at current prices; exposure as a percent of the portfolio needs the portfolio value, which I did not read.
 
 ## 6. Follow-up I will add
-- After tonight's 01:00Z shutdown: section 3's row for 11-14, rebuilt from the same tables.
-- **If NEW wants it:** a Sunday read of this weekend's crypto capacity refusals from the logs, which will exist for the whole weekend this time.
+- ~~After tonight's 01:00Z shutdown: section 3's row for 11-14~~ — done 01:10Z (open at shutdown); the still-open-at-restart cell after Monday's restart.
+- **NEW asked for it:** after the Monday 01:00Z restart, this weekend's crypto capacity refusals (`MAX_TOTAL_EXPOSURE`) by class and hour from the logs, with the weekend's crypto entries beside them (reminder alert `fe5b5abd`, 11-16 01:30Z).
 
 ---
 *Queries: `w166b.sql` (sections 0-4 plus the symbol→class map), `w166b_logs.py` (log scan). Run on staging as deploy through a read-only psql session whose password stays in the environment, never in argv.*
@@ -97,7 +102,7 @@ with b as (
     from scheduled_tasks_audit s where s.task_name='weekend_shutdown' and s.status='success'
      and s.fired_at > now() - interval '10 weeks'),
 pos as (
-  select id, asset_class, opened_at, closed_at, close_reason from closed_trades where mode='paper'
+  select id, asset_class, opened_at, closed_at, close_reason from closed_trades where mode='paper' and closed_at is not null
   union all
   select id, asset_class, opened_at, null::timestamptz, null from active_open_positions where mode='paper')
 select b.shut::date as weekend_of, b.shut, b.restart,
@@ -118,7 +123,7 @@ with b as (
     from scheduled_tasks_audit s where s.task_name='weekend_shutdown' and s.status='success'
      and s.fired_at > now() - interval '10 weeks'),
 pos as (
-  select asset_class, opened_at from closed_trades where mode='paper'
+  select asset_class, opened_at from closed_trades where mode='paper' and closed_at is not null
   union all select asset_class, opened_at from active_open_positions where mode='paper')
 select b.shut::date as weekend_of,
        round(count(*) filter (where p.opened_at >= b.shut and p.opened_at < b.restart)
