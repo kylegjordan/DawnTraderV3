@@ -179,5 +179,26 @@ rc, err = f.run("Write", {"file_path": f.index, "content": "line a\nline b\nx x 
 check("10 total == ceiling: exit 0", rc == 0, err)
 f.done()
 
+# 11. B-1: a non-UTF-8 index - a shrink still passes (bytes end to end; the trim is never locked out)
+f = Fx()
+with open(f.index, "wb") as fh:
+    fh.write(b"line a\nbad \xff\xfe byte\nline c\n")
+f.set_ceiling(f.base - 500)
+rc, err = f.run("Write", {"file_path": f.index, "content": "a\n"})
+check("11 non-UTF-8 index, Write shrink: exit 0", rc == 0, "rc=%d %s" % (rc, err))
+rc, err = f.run("Edit", {"file_path": f.index, "old_string": "line c\n", "new_string": ""})
+check("11b non-UTF-8 index, Edit shrink: exit 0", rc == 0, "rc=%d %s" % (rc, err))
+check("11c both logged allowed-no-growth", [x["verdict"] for x in f.rows()] == ["allowed-no-growth"] * 2, str(f.rows()))
+f.done()
+
+# 12. B-2: an allowed write whose log cannot be written - still allowed, but says so on stderr
+f = Fx()
+f.set_ceiling(f.base + 100)
+f.log = os.path.join(f.d, "no-such-dir", "guard.jsonl")
+rc, err = f.run("Write", {"file_path": f.index, "content": "line a\nmore\n"})
+check("12 log unwritable on allow: exit 0", rc == 0, err)
+check("12 says it could not write its log", "could not write its log" in err, repr(err))
+f.done()
+
 print("\n%d pass, %d fail" % (len(PASS), len(FAIL)))
 sys.exit(1 if FAIL else 0)

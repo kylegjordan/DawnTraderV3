@@ -12,12 +12,15 @@ G, W, T = (os.path.join(HERE, n) for n in ("langston-index-guard", "langston-mem
 
 MUTANTS = [
     ("replace_all ignored", "guard",
-     "return text.replace(old, new) if replace_all else text.replace(old, new, 1)", "return text.replace(old, new, 1)"),
+     "return data.replace(old, new) if replace_all else data.replace(old, new, 1)", "return data.replace(old, new, 1)"),
     ("no realpath on the target", "guard", "real = os.path.realpath(path)", "real = path"),
     ("unknown ratchet passes", "guard", "    if r.get(\"unknown\"):\n        return block(", "    if False:\n        return block("),
     ("at-ceiling refused", "guard", "if r[\"total\"] > r[\"ceiling_bytes\"]:", "if r[\"total\"] >= r[\"ceiling_bytes\"]:"),
     ("writer ignores subject", "writer", "        if os.path.realpath(f) == subj:\n            continue",
      "        if os.path.realpath(f) == os.path.realpath(TARGET):\n            continue"),
+    ("allow ignores a log failure", "guard", "    if not log(row):\n        sys.stderr.write(\"langston-index-guard: allowed",
+     "    if False:\n        sys.stderr.write(\"langston-index-guard: allowed"),
+    ("old bytes decoded eagerly", "guard", "= predict(tool, ti, old)", "= predict(tool, ti, old.decode(\"utf-8\") and old)"),
     ("unenumerated tool allowed", "guard", "    if tool not in WRITERS:\n        return block(",
      "    if False:\n        return block("),
 ]

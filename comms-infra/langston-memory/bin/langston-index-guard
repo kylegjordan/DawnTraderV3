@@ -38,8 +38,13 @@ CLI_VERSION_ENUMERATED = "2.1.318"
 # edits notebooks, so a NotebookEdit aimed at the index is refused below as an unmeasurable write.
 WRITERS = ("Write", "Edit")
 # The running CLI version, read only on a matched call and stamped on its row, so a bump is visible in the log. A bump is
-# NOT refused: a NEW writing tool is already refused above as unenumerated, and refusing every save after the daily
-# CLI auto-update would be Option B's cost arriving unannounced. A mismatch is flagged on the row (`cli_mismatch`).
+# NOT refused: a NEW writing tool is already refused above as unenumerated, and refusing every save after a bump would
+# be Option B's cost arriving unannounced. A mismatch is flagged on the row (`cli_mismatch`); langston-size-watch reads
+# the log and alerts on it (Langston Step-4 R-3). The residual a tool-name gate cannot see is an input-SCHEMA change on
+# Write/Edit (an append mode, a multi-replacement field) that mis-predicts permissively.
+# ⛔ BUMP CHECKLIST (re-run at every CLI version change, then update CLI_VERSION_ENUMERATED): (1) the tool list from the
+#    init event; (2) the input schema of Write and Edit; (3) PATH_KEYS below still names every path-bearing input key
+#    (Langston R-2: fail-closed is bounded by the path-key enumeration as well as by the tool list).
 CLI_PACKAGE = os.environ.get("LIG_CLI_PACKAGE") or "/usr/lib/node_modules/@anthropic-ai/claude-code/package.json"
 ORDERING = (" Each call is judged on its own bytes: to make room, remove lines in one call first, then add in the next."
             " Do not route the write another way; ask Infra Claude if the set needs headroom.")
@@ -63,33 +68,40 @@ def cli_running():
         return None
 
 
+# The input keys that carry a target path, enumerated at CLI_VERSION_ENUMERATED (checklist item 3). A future tool that names
+# the index under a key not listed here is NOT matched and passes - stated, not closed (Langston R-2).
+PATH_KEYS = ("file_path", "notebook_path", "path")
+
+
 def target_of(tool_input):
-    for k in ("file_path", "notebook_path", "path"):
+    for k in PATH_KEYS:
         v = tool_input.get(k)
         if isinstance(v, str) and v:
             return v
     return None
 
 
-def apply_edit(text, old, new, replace_all):
-    """The text after one edit, or None when the tool itself would reject it (it then writes nothing)."""
+def apply_edit(data, old, new, replace_all):
+    """The BYTES after one edit, or None when the tool itself would reject it (it then writes nothing). Bytes end to end
+    (Langston Step-4 B-1): a decode of the old file would refuse even a shrink of a non-UTF-8 index."""
     if not isinstance(old, str) or not isinstance(new, str) or old == "":
         return None
-    n = text.count(old)
+    old, new = old.encode("utf-8"), new.encode("utf-8")
+    n = data.count(old)
     if n == 0 or (n > 1 and not replace_all):
         return None
-    return text.replace(old, new) if replace_all else text.replace(old, new, 1)
+    return data.replace(old, new) if replace_all else data.replace(old, new, 1)
 
 
-def predict(tool, ti, old_text):
-    """(new_text, why_passthrough). new_text None + a reason = the tool will reject the call itself."""
+def predict(tool, ti, old):
+    """(new_bytes, why_passthrough). new_bytes None + a reason = the tool will reject the call itself."""
     if tool == "Write":
         c = ti.get("content")
         if not isinstance(c, str):
             raise ValueError("Write without string content")
-        return c, None
+        return c.encode("utf-8"), None
     if tool == "Edit":
-        t = apply_edit(old_text, ti.get("old_string"), ti.get("new_string"), bool(ti.get("replace_all")))
+        t = apply_edit(old, ti.get("old_string"), ti.get("new_string"), bool(ti.get("replace_all")))
         return t, (None if t is not None else "the tool rejects this edit itself")
     raise ValueError("unenumerated tool %r" % tool)
 
@@ -100,6 +112,14 @@ def load_writer():
     mod = importlib.util.module_from_spec(spec)
     loader.exec_module(mod)
     return mod
+
+
+def allow(row):
+    """Log an allowed or passed-through call. A log failure must not lock the index, but it must not be silent either
+    (Langston Step-4 B-2): with no row, "fired and passed" and "never matched" look the same."""
+    if not log(row):
+        sys.stderr.write("langston-index-guard: allowed this write but could not write its log (%s).%s" % (LOG, chr(10)))
+    return 0
 
 
 def block(row, msg):
@@ -137,20 +157,18 @@ def decide(event):
         old = b""
     row["bytes_before"] = len(old)
     try:
-        new_text, passthrough = predict(tool, ti, old.decode("utf-8"))
-    except (ValueError, UnicodeDecodeError) as e:
+        new_bytes, passthrough = predict(tool, ti, old)
+    except (ValueError, UnicodeEncodeError) as e:
         return block(row, "REFUSED by langston-index-guard: could not establish the size after this write (%s)."
                           " Nothing was written.%s" % (e, ORDERING))
-    if new_text is None:
+    if new_bytes is None:
         row.update({"verdict": "passthrough", "why": passthrough})
-        log(row)
-        return 0
-    new_len = len(new_text.encode("utf-8"))
+        return allow(row)
+    new_len = len(new_bytes)
     row["bytes_after"] = new_len
     if new_len <= len(old):
         row["verdict"] = "allowed-no-growth"
-        log(row)
-        return 0
+        return allow(row)
     try:
         r = load_writer().read_ratchet(new_len, subject=INDEX)
     except Exception as e:  # noqa: BLE001 - any failure to read the ratchet is "could not establish", never a pass
@@ -165,8 +183,7 @@ def decide(event):
                           "leave the loaded set at %d B, OVER its ceiling of %d B (row 2.8b - it may only go down). "
                           "Nothing was written.%s" % (new_len - len(old), r["total"], r["ceiling_bytes"], ORDERING))
     row["verdict"] = "allowed-under-ceiling"
-    log(row)
-    return 0
+    return allow(row)
 
 
 def main():

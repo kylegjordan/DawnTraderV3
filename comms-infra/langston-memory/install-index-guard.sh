@@ -49,8 +49,20 @@ echo "== guard suite + mutation check, from the blobs, as langston, on a fixture
 
 # ── 2. C-3: the state readable as langston ──────────────────────────────────
 sudo -u langston test -r "$STATE" || fail "$STATE is not readable as langston - the hook would refuse every growing save"
-sudo -u langston python3 -c "import json,sys; c=json.load(open(sys.argv[1]))['ceiling_bytes']; assert isinstance(c,int) and c>0" "$STATE" \
-  || fail "$STATE has no valid ceiling_bytes as read by langston"
+# R-1 (Langston Step 4): assert the thing itself, not two of its inputs - the staged writer's read_ratchet, run AS
+# LANGSTON against the live home with the index as subject, must establish every leg (state, ceiling, watched list,
+# every watched file present, the subject watched). Any `unknown` here would make the hook refuse every growing save.
+UNK=$(cd "$ST" && sudo -u langston python3 -I -c '
+import importlib.machinery, importlib.util, os, sys
+sys.dont_write_bytecode = True
+l = importlib.machinery.SourceFileLoader("lmw", "langston-memory-write"); s = importlib.util.spec_from_loader(l.name, l)
+m = importlib.util.module_from_spec(s); l.exec_module(m)
+i = "/home/langston/.claude/projects/-home-langston/memory/MEMORY.md"
+r = m.read_ratchet(os.path.getsize(i), subject=i)
+print(r["unknown"] if r["unknown"] else "OK total=%d ceiling=%d" % (r["total"], r["ceiling_bytes"]))') \
+  || fail "read_ratchet as langston did not run"
+echo "read_ratchet as langston, index as subject: $UNK"
+case "$UNK" in OK*) ;; *) fail "the ratchet is not established as langston: $UNK" ;; esac
 
 # ── 3. no live invoke ───────────────────────────────────────────────────────
 pgrep -u langston -f '/usr/bin/claude' >/dev/null && fail "a langston claude process is live - retry when idle"
