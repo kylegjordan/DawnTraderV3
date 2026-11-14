@@ -57,10 +57,13 @@ class FakeStore:
     def __init__(self):
         self.rows, self.calls, self.n = [], [], 0
         self.fail_resolve = False
+        self.fail_add = False
 
     def __call__(self, argv):
         self.calls.append(list(argv))
         if argv[0] == "add":
+            if self.fail_add:
+                return 1, "", "ssh: connect to host 188.245.193.8 port 22: Connection timed out"
             key = argv[argv.index("--dedupe-key") + 1]
             for r in self.rows:
                 if r["key"] == key and r["state"] != "resolved":
@@ -344,6 +347,7 @@ def test_guard(tmp):
     """R-3 (Langston Step 4): the size watch is the reader of the index guard's version and its unenumerated refusals."""
     GC, GT = "langston-index-guard-cli-mismatch", "langston-index-guard-unenumerated-tool"
     GU = "langston-index-guard-could-not-establish"
+    GB = "langston-index-guard-reader-blind"
     m, store, world, paths = langston_world(tmp)
     sizes(paths, 300, 300, 100)                         # 700 < 1000: nothing else is active
 
@@ -421,6 +425,48 @@ def test_guard(tmp):
                              "message": "x is not a tool this guard was enumerated for"}) + "\n")
     m.run(quiet=True)
     check("G5 a shorter log is read from 0", len(store.active(GT)), 1)
+    check("G5 the body names the byte to re-read from", "re-read it from byte 0" in store.active(GT)[0]["body"], True)
+    store.hand_resolve(GT)
+
+    # G7. C-1: a refusal whose alert add FAILED is not skipped - the offset stays, the next healthy run mints it
+    off_before = state(m).get("guard_log_offset")
+    logrow(verdict="refused", tool="FutureWrite", message="FutureWrite is not a tool this guard was enumerated for")
+    store.fail_add = True
+    m.run(quiet=True)
+    check("G7 add failing: no tool row", len(store.active(GT)), 0)
+    check("G7 add failing: the offset did NOT advance", state(m).get("guard_log_offset"), off_before)
+    store.fail_add = False
+    m.run(quiet=True)
+    check("G7b healthy store: the refusal is minted on the next run", len(store.active(GT)), 1)
+    check("G7b and the offset now covers it", state(m).get("guard_log_offset"), os.path.getsize(m.GUARD_LOG))
+    store.hand_resolve(GT)
+
+    # G8. C-2: the reader blind on each input raises its own row; back to readable resolves it
+    os.remove(m.CLI_PACKAGE)
+    rc = m.run(quiet=True)
+    check("G8 package.json gone: a reader-blind row", len(store.active(GB)), 1)
+    check("G8 and the run exits 1", rc, 1)
+    check("G8 the body names package.json", "package.json" in store.active(GB)[0]["body"], True)
+    check("G8 and no FALSE cli-mismatch row (an unread version is not a mismatch)", len(store.active(GC)), 0)
+    cli("2.1.400")
+    m.run(quiet=True)
+    check("G8b readable again: the blind row resolves", len(store.active(GB)), 0)
+    with open(m.GUARD_PATH, "w", encoding="utf-8") as fh:
+        fh.write("CLI_VERSION_ENUMERATED = '2.1.400'  # single quotes break the parse\n")
+    m.run(quiet=True)
+    check("G8c an unparseable guard constant: a reader-blind row", len(store.active(GB)), 1)
+    guard("2.1.400")
+    m.run(quiet=True)
+    off_d = state(m).get("guard_log_offset")
+    os.chmod(m.GUARD_LOG, 0)
+    readable = os.access(m.GUARD_LOG, os.R_OK)          # root can read a 0-mode file: skip the arm, say so
+    m.run(quiet=True)
+    if not readable:
+        check("G8d an unreadable log: a reader-blind row", len(store.active(GB)), 1)
+        check("G8d and the stored offset is untouched", state(m).get("guard_log_offset"), off_d)
+    else:
+        print("SKIP  G8d (running as root: a 0-mode file is still readable)")
+    os.chmod(m.GUARD_LOG, 0o600)
 
 
 # ─────────────────────────────── coltrane-size-watch ───────────────────────────────

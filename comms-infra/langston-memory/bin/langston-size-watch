@@ -118,6 +118,7 @@ CONDITION_ALERTS = {
     "guard_cli": ("guard_cli_alert_id", "langston-index-guard-cli-mismatch"),
     "guard_tool": ("guard_tool_alert_id", "langston-index-guard-unenumerated-tool"),
     "guard_unestablished": ("guard_unestablished_alert_id", "langston-index-guard-could-not-establish"),
+    "guard_blind": ("guard_blind_alert_id", "langston-index-guard-reader-blind"),
 }
 # ⭐ THE INDEX GUARD'S READER (B-LANGSTON-CLAUDEMD-RESIDUAL, Langston Step-4 R-3: a new counter needs a reader).
 #    langston-index-guard refuses a growing save to his auto-memory index that would put the set over the ceiling. It
@@ -131,6 +132,10 @@ CONDITION_ALERTS = {
 #                 ratchet). Refusals are PARTITIONED BY MESSAGE CLASS (re-review (b)): an OVER refusal is the guard
 #                 working and raises nothing; every other refusal that is not unenumerated lands here, so no refusal
 #                 class is invisible. Never auto-resolved.
+#    guard_blind - THIS READER could not read one of its own inputs: the guard's CLI_VERSION_ENUMERATED (the source-text
+#                 parse below), the installed CLI version (package.json), or the guard log. Without it the three rows
+#                 above go silent forever, and a CLI bump - the event guard_cli exists for - is the likeliest thing to
+#                 move package.json (Langston, R-3 C-2). Resolves on the first run that reads all three.
 #    Both are NOT ESTABLISHED (nothing raised, nothing resolved) while the guard is not installed.
 GUARD_PATH = "/opt/langston-memory/bin/langston-index-guard"
 GUARD_LOG = "/var/log/langston-index-guard.jsonl"
@@ -427,20 +432,25 @@ def guard_check(st):
     a log shorter than that offset (rotated or replaced) is read from 0."""
     g = {"installed": os.path.exists(GUARD_PATH), "enumerated": None, "running": None, "cli_established": False,
          "mismatch": False, "unenumerated": [], "unestablished": [], "over": 0, "log_ok": False,
-         "offset_from": None, "offset_to": None}
+         "offset_from": None, "offset_to": None, "blind": []}
     if not g["installed"]:
         return g
     try:
         with open(GUARD_PATH, encoding="utf-8") as fh:
             mm = re.search(r'^CLI_VERSION_ENUMERATED = "([^"]+)"', fh.read(), re.M)
         g["enumerated"] = mm.group(1) if mm else None
-    except OSError:
-        pass
+        if not mm:
+            g["blind"].append("CLI_VERSION_ENUMERATED not found in %s (the parse expects ^CLI_VERSION_ENUMERATED = \"x\")"
+                              % GUARD_PATH)
+    except OSError as e:
+        g["blind"].append("%s unreadable (%s)" % (GUARD_PATH, type(e).__name__))
     try:
         with open(CLI_PACKAGE, encoding="utf-8") as fh:
             g["running"] = json.load(fh).get("version")
-    except (OSError, ValueError):
-        pass
+        if not g["running"]:
+            g["blind"].append("%s has no version key" % CLI_PACKAGE)
+    except (OSError, ValueError) as e:
+        g["blind"].append("%s unreadable (%s)" % (CLI_PACKAGE, type(e).__name__))
     g["cli_established"] = bool(g["enumerated"] and g["running"])
     g["mismatch"] = g["cli_established"] and g["enumerated"] != g["running"]
     off = st.get("guard_log_offset") or 0
@@ -469,8 +479,8 @@ def guard_check(st):
     except FileNotFoundError:
         g["log_ok"] = True          # installed but never written: no rows is a measured zero, the file is created on install
         g["offset_from"] = g["offset_to"] = 0
-    except OSError:
-        pass
+    except OSError as e:
+        g["blind"].append("%s unreadable (%s)" % (GUARD_LOG, type(e).__name__))
     return g
 
 
@@ -761,7 +771,8 @@ def run(quiet=False, injected_total=None, injected_archive_bytes=None, drill_sto
             st, "guard_tool", bool(guard["unenumerated"]), False,
             "Langston index guard refused a tool it was not enumerated for",
             str(len(guard["unenumerated"])) + " refusal(s) since the last run, first " +
-            json.dumps(guard["unenumerated"][:3]) + ", in " + GUARD_LOG + ". A tool aimed at his auto-memory index "
+            json.dumps(guard["unenumerated"][:3]) + ", in " + GUARD_LOG + " (re-read it from byte " +
+            str(guard["offset_from"]) + ": this row's body is frozen at first mint, later refusals are not in it). A tool aimed at his auto-memory index "
             "that the guard cannot size was refused, so a save he tried did not land. Run the bump checklist; add "
             "the tool to WRITERS only if its effect can be predicted. Resolve this row by hand: a quiet day says "
             "nothing about the tool." + stamp, ev)
@@ -769,10 +780,17 @@ def run(quiet=False, injected_total=None, injected_archive_bytes=None, drill_sto
             st, "guard_unestablished", bool(guard["unestablished"]), False,
             "Langston index guard refused a save it could not measure",
             str(len(guard["unestablished"])) + " fail-closed refusal(s) since the last run, first " +
-            json.dumps(guard["unestablished"][:3]) + ", in " + GUARD_LOG + ". The guard could not establish the "
+            json.dumps(guard["unestablished"][:3]) + ", in " + GUARD_LOG + " (re-read it from byte " +
+            str(guard["offset_from"]) + ": this row's body is frozen at first mint, later refusals are not in it). The guard could not establish the "
             "size or the loaded-set ratchet, so it refused a growing save to his auto-memory index: a save he tried "
             "did not land. Read the message; the usual cause is the ratchet state or a watched file. Resolve this "
             "row by hand once the cause is fixed." + stamp, ev)
+        alerts["guard_blind"] = condition_alert(
+            st, "guard_blind", guard["installed"] and bool(guard["blind"]), guard["installed"] and not guard["blind"],
+            "Langston index guard's reader cannot read its own inputs",
+            "langston-size-watch could not read: " + "; ".join(guard["blind"]) + ". Until it can, the guard's "
+            "version-drift, unknown-tool and could-not-establish rows cannot fire. Restore the path or fix the parse; "
+            "resolves on the first run that reads all three." + stamp, ev)
         # the offset moves only when no event is waiting on an add that failed - an unrecorded refusal is re-read
         recorded = all(not guard[k] or str(alerts[a]).startswith(("new ", "same "))
                        for k, a in (("unenumerated", "guard_tool"), ("unestablished", "guard_unestablished")))
@@ -815,7 +833,7 @@ def run(quiet=False, injected_total=None, injected_archive_bytes=None, drill_sto
         return 3            # a drill whose own row did not resolve is a failed drill (ruling (b)), never a pass
     return 1 if (status in ("BREACH", "MISSING-FILE") or archive["over"] or archive["unreadable"]
                  or rules["tamper"] or (guard and (guard["mismatch"] or guard["unenumerated"]
-                                                   or guard["unestablished"]))) else 0
+                                                   or guard["unestablished"] or guard["blind"]))) else 0
 
 
 # ⛔ THE ACTOR IS AN ALLOWLIST, NOT FREE TEXT. The old `SUDO_USER or "unknown"` was the
@@ -942,7 +960,8 @@ def main():
         files, total, missing = measure()
         print(json.dumps({"state": st, "measured_total": total, "missing": missing,
                           "files": files, "archive": dict(measure_archive(), threshold_bytes=ARCHIVE_THRESHOLD_BYTES,
-                                                          owner=ARCHIVE_OWNER, counted_in_total=False)},
+                                                          owner=ARCHIVE_OWNER, counted_in_total=False),
+                          "guard": guard_check(dict(st or {}))},
                          indent=2, ensure_ascii=False))
         return 0
     if "--self-test" in sys.argv:

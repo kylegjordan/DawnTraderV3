@@ -33,8 +33,12 @@ echo "$SHA" | grep -Eq '^[0-9a-f]{40}$' || fail "give the full 40-character sha"
 git -C "$MIRROR" merge-base --is-ancestor "$SHA" migration/aws-supabase || fail "$SHA is not on migration/aws-supabase in the mirror"
 
 # ── 1. stage, compile, test from the blobs ──────────────────────────────────
-ST=$(mktemp -d /var/tmp/lig-install.XXXXXX); trap 'rm -rf "$ST"' EXIT
-chown langston:langston "$ST"; chmod 700 "$ST"
+# ⛔ TWO DIRECTORIES (Langston R-3 review): what root INSTALLS is staged root-only in $ST and never handed to the account
+#    the guard constrains; the tests run on a COPY in $TT, langston-owned. Installing from a langston-owned file would let
+#    that account rewrite a binary systemd runs as root between the test and the install.
+ST=$(mktemp -d /root/lig-install.XXXXXX); TT=$(mktemp -d /var/tmp/lig-test.XXXXXX)
+trap 'rm -rf "$ST" "$TT"' EXIT
+chmod 700 "$ST" "$TT"
 for f in langston-index-guard langston-memory-write test_index_guard.py mutate_index_guard.py langston-size-watch \
          test_size_watch_alerts.py mutate_size_watch_alerts.py; do
   git -C "$MIRROR" cat-file blob "$SHA:comms-infra/langston-memory/bin/$f" > "$ST/$f"
@@ -45,15 +49,15 @@ for f in "$ST"/*; do
   python3 -c "import sys; compile(open(sys.argv[1],'rb').read(), sys.argv[1], 'exec')" "$f" || fail "$f does not compile"
   grep -q "$CR" "$f" && fail "the blob $f carries a carriage return"
 done
-chown langston:langston "$ST"/*
-echo "== guard suite + mutation check, from the blobs, as langston, on a fixture"
-(cd "$ST" && sudo -u langston python3 test_index_guard.py | tail -1) || fail "test_index_guard.py failed"
-(cd "$ST" && sudo -u langston python3 mutate_index_guard.py) || fail "a mutant survived (or the baseline failed)"
+cp "$ST"/* "$TT"/; chown -R langston:langston "$TT"
+echo "== guard suite + mutation check, from a copy of the blobs, as langston, on a fixture"
+(cd "$TT" && sudo -u langston python3 test_index_guard.py | tail -1) || fail "test_index_guard.py failed"
+(cd "$TT" && sudo -u langston python3 mutate_index_guard.py) || fail "a mutant survived (or the baseline failed)"
 # R-3: the size watch is the guard's reader; its suite and mutants run from the blobs too (as langston, private HOME dir)
 echo "== size watch suite + mutation check, from the blobs"
-(cd "$ST" && sudo -u langston HOME="$ST" COLTRANE_WATCH_PATH="$ST/coltrane-size-watch" python3 test_size_watch_alerts.py | tail -1) \
+(cd "$TT" && sudo -u langston HOME="$TT" COLTRANE_WATCH_PATH="$TT/coltrane-size-watch" python3 test_size_watch_alerts.py | tail -1) \
   || fail "test_size_watch_alerts.py failed"
-(cd "$ST" && sudo -u langston HOME="$ST" COLTRANE_WATCH_PATH="$ST/coltrane-size-watch" python3 -I mutate_size_watch_alerts.py | tail -1) \
+(cd "$TT" && sudo -u langston HOME="$TT" COLTRANE_WATCH_PATH="$TT/coltrane-size-watch" python3 -I mutate_size_watch_alerts.py | tail -1) \
   || fail "a size watch mutant survived"
 
 # ── 2. C-3: the state readable as langston ──────────────────────────────────
@@ -61,7 +65,7 @@ sudo -u langston test -r "$STATE" || fail "$STATE is not readable as langston - 
 # R-1 (Langston Step 4): assert the thing itself, not two of its inputs - the staged writer's read_ratchet, run AS
 # LANGSTON against the live home with the index as subject, must establish every leg (state, ceiling, watched list,
 # every watched file present, the subject watched). Any `unknown` here would make the hook refuse every growing save.
-UNK=$(cd "$ST" && sudo -u langston python3 -I -c '
+UNK=$(cd "$TT" && sudo -u langston python3 -I -c '
 import importlib.machinery, importlib.util, os, sys
 sys.dont_write_bytecode = True
 l = importlib.machinery.SourceFileLoader("lmw", "langston-memory-write"); s = importlib.util.spec_from_loader(l.name, l)
