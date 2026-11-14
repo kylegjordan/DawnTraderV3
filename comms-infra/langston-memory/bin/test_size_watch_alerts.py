@@ -106,6 +106,9 @@ def langston_world(tmp, ceiling=1000):
     m.WATCHED = [(f1, "rules"), (f2, "memory"), (f3, "index")]
     m.STATE = os.path.join(tmp, "ratchet-state.json")
     m.RUNLOG = os.path.join(tmp, "size-watch.jsonl")
+    m.GUARD_PATH = os.path.join(tmp, "langston-index-guard")       # absent unless a test writes it
+    m.GUARD_LOG = os.path.join(tmp, "langston-index-guard.jsonl")
+    m.CLI_PACKAGE = os.path.join(tmp, "package.json")
     store = FakeStore()
     m._alerts = store
     m.post = lambda msg, quiet: "recorded"
@@ -337,6 +340,73 @@ def test_langston(tmp):
         os.environ.pop("LMW_RATCHET_STATE", None)
 
 
+def test_guard(tmp):
+    """R-3 (Langston Step 4): the size watch is the reader of the index guard's version and its unenumerated refusals."""
+    GC, GT = "langston-index-guard-cli-mismatch", "langston-index-guard-unenumerated-tool"
+    m, store, world, paths = langston_world(tmp)
+    sizes(paths, 300, 300, 100)                         # 700 < 1000: nothing else is active
+
+    def guard(ver):
+        with open(m.GUARD_PATH, "w", encoding="utf-8") as fh:
+            fh.write('#!/usr/bin/env python3\nCLI_VERSION_ENUMERATED = "%s"\n' % ver)
+
+    def cli(ver):
+        with open(m.CLI_PACKAGE, "w", encoding="utf-8") as fh:
+            json.dump({"version": ver}, fh)
+
+    def logrow(**kw):
+        with open(m.GUARD_LOG, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(kw) + "\n")
+
+    # G0. guard not installed -> neither condition touched, exit 0
+    cli("2.1.318")
+    rc = m.run(quiet=True)
+    check("G0 no guard: exit 0", rc, 0)
+    check("G0 no guard: no add on either guard key", (len(store.adds(GC)), len(store.adds(GT))), (0, 0))
+
+    # G1. installed, versions match, empty log -> nothing raised
+    guard("2.1.318")
+    rc = m.run(quiet=True)
+    check("G1 match: exit 0, no guard rows", (rc, len(store.by_key(GC)), len(store.by_key(GT))), (0, 0, 0))
+
+    # G2. CLI bumped -> cli-mismatch row, exit 1; back in step -> resolved
+    cli("2.1.400")
+    rc = m.run(quiet=True)
+    check("G2 mismatch: exit 1", rc, 1)
+    check("G2 mismatch: one active cli row", len(store.active(GC)), 1)
+    check("G2 the body names both versions", all(v in store.active(GC)[0]["body"] for v in ("2.1.400", "2.1.318")), True)
+    guard("2.1.400")
+    m.run(quiet=True)
+    check("G2b back in step: the cli row is resolved", len(store.active(GC)), 0)
+
+    # G3. an unenumerated refusal in the log -> tool row; the offset moves; a quiet next run does NOT resolve it
+    logrow(verdict="allowed-no-growth", tool="Edit")
+    logrow(verdict="refused", tool="NotebookEdit", message="REFUSED by langston-index-guard: 'NotebookEdit' is not a "
+           "tool this guard was enumerated for (Claude Code 2.1.400)", cli_running="2.1.400")
+    rc = m.run(quiet=True)
+    check("G3 unenumerated refusal: exit 1", rc, 1)
+    check("G3 one active tool row", len(store.active(GT)), 1)
+    check("G3 the offset is the log's size", state(m).get("guard_log_offset"), os.path.getsize(m.GUARD_LOG))
+    n = len(store.adds(GT))
+    rc = m.run(quiet=True)
+    check("G3b quiet next run: no new add", len(store.adds(GT)), n)
+    check("G3b and the row is NOT auto-resolved", len(store.active(GT)), 1)
+    check("G3b and the run exits 0 (nothing new)", rc, 0)
+
+    # G4. an OVER refusal (an enumerated tool) is not an unenumerated event
+    store.hand_resolve(GT)
+    logrow(verdict="refused", tool="Write", message="REFUSED by langston-index-guard: ... OVER its ceiling ...")
+    m.run(quiet=True)
+    check("G4 an over-ceiling refusal raises no tool row", len(store.active(GT)), 0)
+
+    # G5. the log replaced by a shorter one -> read from 0, the new refusal is seen
+    with open(m.GUARD_LOG, "w", encoding="utf-8") as fh:
+        fh.write(json.dumps({"verdict": "refused", "tool": "FutureWrite",
+                             "message": "x is not a tool this guard was enumerated for"}) + "\n")
+    m.run(quiet=True)
+    check("G5 a shorter log is read from 0", len(store.active(GT)), 1)
+
+
 # ─────────────────────────────── coltrane-size-watch ───────────────────────────────
 
 def test_coltrane(tmp):
@@ -406,7 +476,9 @@ def main():
     try:
         t1 = os.path.join(base, "langston"); os.makedirs(t1)
         t2 = os.path.join(base, "coltrane"); os.makedirs(t2)
+        t3 = os.path.join(base, "guard"); os.makedirs(t3)
         test_langston(t1)
+        test_guard(t3)
         test_coltrane(t2)
     finally:
         shutil.rmtree(base, ignore_errors=True)

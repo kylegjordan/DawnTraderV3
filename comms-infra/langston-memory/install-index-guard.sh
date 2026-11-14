@@ -20,6 +20,7 @@ SHA=${1:-}
 MIRROR=/srv/dawntrader-backup.git
 GUARD=/opt/langston-memory/bin/langston-index-guard
 WRITER=/usr/local/bin/langston-memory-write
+WATCH=/usr/local/bin/langston-size-watch
 LOG=/var/log/langston-index-guard.jsonl
 MANAGED=/etc/claude-code/managed-settings.json
 STATE=/opt/langston-memory/state/ratchet-state.json
@@ -34,9 +35,11 @@ git -C "$MIRROR" merge-base --is-ancestor "$SHA" migration/aws-supabase || fail 
 # ── 1. stage, compile, test from the blobs ──────────────────────────────────
 ST=$(mktemp -d /var/tmp/lig-install.XXXXXX); trap 'rm -rf "$ST"' EXIT
 chown langston:langston "$ST"; chmod 700 "$ST"
-for f in langston-index-guard langston-memory-write test_index_guard.py mutate_index_guard.py; do
+for f in langston-index-guard langston-memory-write test_index_guard.py mutate_index_guard.py langston-size-watch \
+         test_size_watch_alerts.py mutate_size_watch_alerts.py; do
   git -C "$MIRROR" cat-file blob "$SHA:comms-infra/langston-memory/bin/$f" > "$ST/$f"
 done
+git -C "$MIRROR" cat-file blob "$SHA:comms-infra/codex/coltrane-size-watch" > "$ST/coltrane-size-watch"
 CR=$(printf '\r')
 for f in "$ST"/*; do
   python3 -c "import sys; compile(open(sys.argv[1],'rb').read(), sys.argv[1], 'exec')" "$f" || fail "$f does not compile"
@@ -46,6 +49,12 @@ chown langston:langston "$ST"/*
 echo "== guard suite + mutation check, from the blobs, as langston, on a fixture"
 (cd "$ST" && sudo -u langston python3 test_index_guard.py | tail -1) || fail "test_index_guard.py failed"
 (cd "$ST" && sudo -u langston python3 mutate_index_guard.py) || fail "a mutant survived (or the baseline failed)"
+# R-3: the size watch is the guard's reader; its suite and mutants run from the blobs too (as langston, private HOME dir)
+echo "== size watch suite + mutation check, from the blobs"
+(cd "$ST" && sudo -u langston HOME="$ST" COLTRANE_WATCH_PATH="$ST/coltrane-size-watch" python3 test_size_watch_alerts.py | tail -1) \
+  || fail "test_size_watch_alerts.py failed"
+(cd "$ST" && sudo -u langston HOME="$ST" COLTRANE_WATCH_PATH="$ST/coltrane-size-watch" python3 -I mutate_size_watch_alerts.py | tail -1) \
+  || fail "a size watch mutant survived"
 
 # ── 2. C-3: the state readable as langston ──────────────────────────────────
 sudo -u langston test -r "$STATE" || fail "$STATE is not readable as langston - the hook would refuse every growing save"
@@ -70,9 +79,12 @@ pgrep -u langston -f '/usr/bin/claude' >/dev/null && fail "a langston claude pro
 # ── 4. install, writer first, managed settings last ─────────────────────────
 mkdir -p "$BK"; chmod 700 "$BK"
 cp -p "$WRITER" "$BK/langston-memory-write"
+cp -p "$WATCH" "$BK/langston-size-watch"
 [ -e "$MANAGED" ] && cp -p "$MANAGED" "$BK/managed-settings.json"
 install -o root -g root -m 0755 "$ST/langston-memory-write" "$WRITER.new" && mv "$WRITER.new" "$WRITER"
 python3 "$WRITER" --self-test | tail -1 | grep -q "self-test PASSED" || { cp -p "$BK/langston-memory-write" "$WRITER"; fail "writer --self-test failed; old writer restored"; }
+install -o root -g root -m 0755 "$ST/langston-size-watch" "$WATCH.new" && mv "$WATCH.new" "$WATCH"
+"$WATCH" --status >/dev/null || { cp -p "$BK/langston-size-watch" "$WATCH"; fail "langston-size-watch --status failed; old watch restored"; }
 install -d -o root -g root -m 0755 "$(dirname "$GUARD")"
 install -o root -g root -m 0755 "$ST/langston-index-guard" "$GUARD.new" && mv "$GUARD.new" "$GUARD"
 if [ ! -e "$LOG" ]; then install -o root -g langston -m 0620 /dev/null "$LOG"; fi
@@ -86,8 +98,8 @@ chmod 0644 "$MANAGED.tmp"; mv "$MANAGED.tmp" "$MANAGED"
 # ── 5. the record ───────────────────────────────────────────────────────────
 {
   echo "installed $TS from $SHA (B-LANGSTON-CLAUDEMD-RESIDUAL #1197 rider)"
-  sha256sum "$WRITER" "$GUARD" "$MANAGED"
+  sha256sum "$WRITER" "$WATCH" "$GUARD" "$MANAGED"
   echo "claude $(/usr/bin/claude --version 2>&1 | head -1); guard enumerated for $(grep -o 'CLI_VERSION_ENUMERATED = "[^"]*"' "$GUARD")"
-  echo "rollback: rm $MANAGED; cp -p $BK/langston-memory-write $WRITER"
+  echo "rollback: rm $MANAGED; cp -p $BK/langston-memory-write $WRITER; cp -p $BK/langston-size-watch $WATCH"
 } | tee -a "$REC"
 echo "INSTALLED. Live proof (P13) is a real index save by Langston producing one row in $LOG."

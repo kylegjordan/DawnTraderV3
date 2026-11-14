@@ -50,7 +50,7 @@ USAGE:
                                         touch the heartbeat.
 """
 
-import hashlib, json, os, shlex, stat, subprocess, sys, datetime
+import hashlib, json, os, re, shlex, stat, subprocess, sys, datetime
 
 HOME = "/home/langston"
 WATCHED = [
@@ -115,7 +115,21 @@ CONDITION_ALERTS = {
     "missing": ("missing_alert_id", "langston-size-watch-missing-file"),
     "archive": ("archive_alert_id", "langston-size-watch-archive"),
     "tamper": ("rules_tamper_alert_id", "langston-rules-tamper"),
+    "guard_cli": ("guard_cli_alert_id", "langston-index-guard-cli-mismatch"),
+    "guard_tool": ("guard_tool_alert_id", "langston-index-guard-unenumerated-tool"),
 }
+# ⭐ THE INDEX GUARD'S READER (B-LANGSTON-CLAUDEMD-RESIDUAL, Langston Step-4 R-3: a new counter needs a reader).
+#    langston-index-guard refuses a growing save to his auto-memory index that would put the set over the ceiling. It
+#    was enumerated against ONE Claude Code version, and it refuses any tool it was not enumerated for. Two conditions:
+#    guard_cli  - the installed CLI version differs from the guard's CLI_VERSION_ENUMERATED. Read DIRECTLY (both files),
+#                 so a bump is seen on a day with no index save; resolves when they match (the bump checklist was run).
+#    guard_tool - a NEW log row since the last run refused a tool as unenumerated. An event: it is NEVER auto-resolved
+#                 (a quiet next day says nothing about the tool); the owner resolves it by hand after the checklist.
+#    Both are NOT ESTABLISHED (nothing raised, nothing resolved) while the guard is not installed.
+GUARD_PATH = "/opt/langston-memory/bin/langston-index-guard"
+GUARD_LOG = "/var/log/langston-index-guard.jsonl"
+CLI_PACKAGE = "/usr/lib/node_modules/@anthropic-ai/claude-code/package.json"
+UNENUMERATED_MARK = "not a tool this guard was enumerated for"
 DRILL_KEY = "langston-size-watch-breach-drill"   # a drill NEVER touches a real key (Langston ruling (b))
 EPISODE_CAP = 100                                # breach episodes kept in state; the run log keeps every run
 LIVE_READ = "langston-size-watch --status on Helsinki, or its run log " + RUNLOG
@@ -391,6 +405,52 @@ def update_episodes(st, status, over, total, ts):
     return None
 
 
+def guard_check(st):
+    """The index guard's two conditions. Returns {installed, enumerated, running, cli_established, mismatch,
+    unenumerated (new rows), log_ok, offset_from, offset_to}. Reads the log from the byte offset the last run stored;
+    a log shorter than that offset (rotated or replaced) is read from 0."""
+    g = {"installed": os.path.exists(GUARD_PATH), "enumerated": None, "running": None, "cli_established": False,
+         "mismatch": False, "unenumerated": [], "log_ok": False, "offset_from": None, "offset_to": None}
+    if not g["installed"]:
+        return g
+    try:
+        with open(GUARD_PATH, encoding="utf-8") as fh:
+            mm = re.search(r'^CLI_VERSION_ENUMERATED = "([^"]+)"', fh.read(), re.M)
+        g["enumerated"] = mm.group(1) if mm else None
+    except OSError:
+        pass
+    try:
+        with open(CLI_PACKAGE, encoding="utf-8") as fh:
+            g["running"] = json.load(fh).get("version")
+    except (OSError, ValueError):
+        pass
+    g["cli_established"] = bool(g["enumerated"] and g["running"])
+    g["mismatch"] = g["cli_established"] and g["enumerated"] != g["running"]
+    off = st.get("guard_log_offset") or 0
+    try:
+        size = os.path.getsize(GUARD_LOG)
+        if size < off:
+            off = 0
+        with open(GUARD_LOG, "rb") as fh:
+            fh.seek(off)
+            data = fh.read()
+        g["offset_from"], g["offset_to"] = off, off + len(data)
+        for line in data.decode("utf-8", "replace").split(NL):
+            try:
+                r = json.loads(line)
+            except ValueError:
+                continue
+            if r.get("verdict") == "refused" and UNENUMERATED_MARK in (r.get("message") or ""):
+                g["unenumerated"].append({"ts": r.get("ts"), "tool": r.get("tool"), "cli_running": r.get("cli_running")})
+        g["log_ok"] = True
+    except FileNotFoundError:
+        g["log_ok"] = True          # installed but never written: no rows is a measured zero, the file is created on install
+        g["offset_from"] = g["offset_to"] = 0
+    except OSError:
+        pass
+    return g
+
+
 def tamper_established(rules):
     """The tamper check's own assertions (1)-(2) actually ran: an install record was read, and lsattr answered.
     Assertion (3)'s network failure is NOT part of this - it says nothing about tampering."""
@@ -630,7 +690,7 @@ def run(quiet=False, injected_total=None, injected_archive_bytes=None, drill_sto
              "broken is the thing that would tell you if the watch STOPPED running.", quiet)
 
     # ⭐ B-SIZE-WATCH-BREACH-ALARM: one row per condition (see CONDITION_ALERTS). A drill touches none of them.
-    alerts, episodes_note, drill_row, drill_ok = {}, None, None, True
+    alerts, episodes_note, drill_row, drill_ok, guard = {}, None, None, True, None
     if injected_total is None:
         ts, ev = run_ts, _runlog_ref()
         per_file = "; ".join("%s=%s" % (os.path.basename(f["path"]), f["bytes"]) for f in files)
@@ -664,6 +724,26 @@ def run(quiet=False, injected_total=None, injected_archive_bytes=None, drill_sto
             RULES_TARGET + ": " + "; ".join(rules["tamper"]) + ". It is installed only by langston-rules-install "
             "from a reviewed commit. Compare it with /root/langston-rules-backup/ and re-install the recorded "
             "commit. Resolves on the first run where the file matches its install record." + stamp, ev)
+        guard = guard_check(st)
+        alerts["guard_cli"] = condition_alert(
+            st, "guard_cli", guard["mismatch"], guard["cli_established"] and not guard["mismatch"],
+            "Langston index guard was enumerated for a different Claude Code version",
+            "Installed Claude Code is " + str(guard["running"]) + "; " + GUARD_PATH + " was enumerated for " +
+            str(guard["enumerated"]) + ". The guard still runs and still refuses unknown tools; what is unchecked is "
+            "whether Write/Edit inputs or the path keys changed. Run the BUMP CHECKLIST at the top of the guard, then "
+            "update CLI_VERSION_ENUMERATED through a reviewed commit. Resolves on the first run where they match."
+            + stamp, ev)
+        alerts["guard_tool"] = condition_alert(
+            st, "guard_tool", bool(guard["unenumerated"]), False,
+            "Langston index guard refused a tool it was not enumerated for",
+            str(len(guard["unenumerated"])) + " refusal(s) since the last run, first " +
+            json.dumps(guard["unenumerated"][:3]) + ", in " + GUARD_LOG + ". A tool aimed at his auto-memory index "
+            "that the guard cannot size was refused, so a save he tried did not land. Run the bump checklist; add "
+            "the tool to WRITERS only if its effect can be predicted. Resolve this row by hand: a quiet day says "
+            "nothing about the tool." + stamp, ev)
+        # the offset moves only when no event is waiting on an add that failed - an unrecorded refusal is re-read
+        if guard["log_ok"] and (not guard["unenumerated"] or str(alerts["guard_tool"]).startswith(("new ", "same "))):
+            st["guard_log_offset"] = guard["offset_to"]
         episodes_note = update_episodes(st, status, over, total, ts)
     elif drill_store:
         drill_ok, drill_row = drill_alert()
@@ -676,7 +756,7 @@ def run(quiet=False, injected_total=None, injected_archive_bytes=None, drill_sto
                         "alarms; it NEVER lowers the ceiling itself — that is a deliberate act "
                         "in the batch that lands the trim (#1007)."),
            "heartbeat": hb, "archive": archive, "archive_delivery": archive_delivery,
-           "rules": rules, "rules_delivery": rules_delivery,
+           "rules": rules, "rules_delivery": rules_delivery, "guard": guard,
            "alerts": alerts, "episodes_note": episodes_note, "drill_alert": drill_row,
            "population": "the three files in WATCHED, all of them, every run; plus the writer's archive, "
                          "measured separately and never added to the sum"}
@@ -700,7 +780,7 @@ def run(quiet=False, injected_total=None, injected_archive_bytes=None, drill_sto
     if not drill_ok:
         return 3            # a drill whose own row did not resolve is a failed drill (ruling (b)), never a pass
     return 1 if (status in ("BREACH", "MISSING-FILE") or archive["over"] or archive["unreadable"]
-                 or rules["tamper"]) else 0
+                 or rules["tamper"] or (guard and (guard["mismatch"] or guard["unenumerated"]))) else 0
 
 
 # ⛔ THE ACTOR IS AN ALLOWLIST, NOT FREE TEXT. The old `SUDO_USER or "unknown"` was the
