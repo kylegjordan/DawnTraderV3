@@ -320,6 +320,6 @@ The cadence-aware form exists: `computePrevFire(expression, timezone, from)` (`s
 
 **5. AP-5's function arm** (plan r2, unchanged): `rotated=1 failed=0` on the 171 MB trace, a restore by id with `checksum=OK` and the expected line count. It runs on a day claimed with Infra Claude first, because the restore spends B2 download budget shared with token-watch.
 
-**6. 3d step 5 gate:** the order is agreed with CC-INFRA before step 5. Their P11 orphan removal needs a hide or delete right on the cold key (Infra Claude, Discord `1571064942004797533`: P11 comes after their P2, so not soon).
+**6. 3d step 5 gate, narrowed (Langston, Discord `1571065560979218544`):** KD-54 step 4 adds one `b2_hide_file` call with the narrow key on a throwaway `_liveness/` object, made after the mint and before step 5. If it is permitted, step 5 is unblocked and residue is hidden explicitly. If it is refused, the order is agreed with CC-INFRA first. Their `#1132` OBJ-6 census is read-only and is not blocked either way; only its removal step needs a right (Infra Claude, Discord `1571064942004797533`: P11 comes after P2).
 
 **Order inside 3b:** the retry plus the failed-upload record and the lock (storage-client and rotator) → by-id reads and the reader → binding the 4 rows → residue deletion → `.verify` → the function-arm run on a claimed day. Each lands as its own commit with its own fence, all inside 3b's single Step 3 → 4 → 6 → 7.
