@@ -394,3 +394,29 @@ Further checks:
 **Mutations:**
 - Retry removed → the 503/503/200 case goes red.
 - **The classifier made to retry on 400 → the 400 fence goes red** (a classifier that retries everything must not pass).
+
+### 3b item 1 — Step 4 PROCEED (r3, Discord `1571085406219542619`), Step 6 deploy, Step 7 first pass
+**Step 6:** `cc1a1c2df5180617dda4f55681d3d9410610fde5` live 2026-11-14T09:00:58Z (restart 702, pm2 start 09:00:47.821Z, pid 3719895); CI `43578056970` 4/4 on that exact sha. Migration `2026-11-14-b-disk-file-tiering-cold-retry.sql` applied in 712 ms. Its rollback was dry-run first, in one transaction ending `ROLLBACK`:
+- table count 0 → 1 → 0 → 0;
+- the four limit rows 0 → 4 → 0 → 0.
+
+NEW Claude cleared the restart (no B-ENTRY-GATE activity since 07:06Z). The deploy carried only the three 3b commits.
+
+**Step 7 (staging, all read-only except the proof's own `_proof/` version, deleted by id):**
+1. `data_archive_cold_upload_failure` exists, 0 rows. The four `data_lifecycle` rows read 60000 / 1048576 / 6000 / 72000000. `_migrations` holds the forward file.
+2. **The rotator, run by hand once** — safe because there are 0 candidates: oldest warm active row 2026-05-06, 0 older than 365 days, no per-table overrides. Output went to the terminal, not the production log.
+   - `loadConfig` read the four new rows without refusing.
+   - `DONE candidates=0 rotated=0 failed=0 bytes_moved=0 deferred=0`, exit 0.
+   - `~/.b75-cold-rotator.lock` is absent afterwards (taken and released).
+   - `b75-cold-rotator.log` still ends at the 2026-11-01 run.
+3. **`b75-cold-proof.ts` on the 171 MB object through the new upload path:** limits from `loadColdLimits`, no retry lines (first-try success), `proof_deleted: true`. Kernel `Maximum resident set size` 131,836 kB (128.7 MiB), matching Langston's 129.5 MiB.
+4. **archival-health, plant run** against copies of the four logs (DRY, private 0700 folder, deleted after):
+   - `cold-rotator deferred: OK (last run deferred 0; runs read 4)`;
+   - `cold-upload-failures: OK (0 unresolved)`;
+   - `DONE — all_ok=true checks=6`.
+
+   The production `archival-health.log` is unchanged at 70,770 B.
+
+**Fence-only, stated in these words:** the retry on a failure, the lock refusal and takeover, the deferral page and the failure page have not fired live. No live silence from any of them is evidence that it fires (#661 leg 3). Their evidence is the fences and mutations recorded at Step 3/4.
+
+**UI surface: none** — scheduled scripts and a table that no page reads.
