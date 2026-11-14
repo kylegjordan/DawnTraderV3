@@ -74,7 +74,7 @@ SUBCOMMANDS, each run as `tokenwatch`:
            _identity_map) and every 1,000 loop entries. tombstone_path also fires inside _fold (summary.py:153), so
            the dead-set read's marker is the tombstone_path one that FOLLOWS after-summary._fold. Every line carries memory.current, memory.peak (exact
            high-water: its delta between markers brackets the peak to a stage, A-2), memory.stat anon / file /
-           file_dirty / file_writeback / slab_reclaimable / slab_unreclaimable / kernel_stack / pagetables /
+           file_dirty / file_writeback / shmem / slab_reclaimable / slab_unreclaimable / kernel_stack / pagetables /
            pgscan / pgsteal, and memory.events max / oom / oom_kill. Markers add sys.getallocatedblocks(),
            len(prev) (the `last_seen` dict the loop grows) and len(store._DEAD_CACHE["set"]) (A-3). No tracemalloc:
            its tables scale with the traced objects and inflate the charge being measured. Combinable with --trace,
@@ -621,7 +621,9 @@ def _egress_control(probes: list[str]) -> tuple[bool, str]:
     return True, "; ".join(notes)
 
 
-_STAT_KEYS = ("anon", "file", "file_dirty", "file_writeback", "slab_reclaimable", "slab_unreclaimable",
+# shmem (Langston, F-6 ruling): `file` INCLUDES shmem and shmem is NOT reclaimable - without it a file-dominant result
+# cannot tell reclaimable page cache from unreclaimable shared memory
+_STAT_KEYS = ("anon", "file", "file_dirty", "file_writeback", "shmem", "slab_reclaimable", "slab_unreclaimable",
               "kernel_stack", "pagetables", "pgscan", "pgsteal")
 
 

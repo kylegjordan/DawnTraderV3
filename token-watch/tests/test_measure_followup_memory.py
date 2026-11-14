@@ -431,8 +431,8 @@ check("S1 a loop marker at entry 0 and a loop-end carrying the entry count", loo
 m0 = next((x for x in lines if x.get("stage") == "after-summary.build"), {})
 check("S1 a marker carries the cgroup reads", m0.get("memory_current") == 123456789 and m0.get("memory_peak") == 234567890
       and m0.get("events") == {"max": 7, "oom": 0, "oom_kill": 0}, str({k: m0.get(k) for k in ("memory_current", "memory_peak", "events")}))
-check("S1 memory.stat: exactly the ten named keys, shmem not among them", m0.get("stat") == {
-    "anon": 1000, "file": 2000, "kernel_stack": 30, "pagetables": 40, "file_dirty": 6, "file_writeback": 7,
+check("S1 memory.stat: exactly the eleven named keys (shmem included, F-6 ruling)", m0.get("stat") == {
+    "anon": 1000, "file": 2000, "kernel_stack": 30, "pagetables": 40, "shmem": 5, "file_dirty": 6, "file_writeback": 7,
     "slab_reclaimable": 8, "slab_unreclaimable": 9, "pgscan": 10, "pgsteal": 11}, str(m0.get("stat")))
 check("S1 a marker carries the Python counters (A-3)", isinstance(m0.get("allocated_blocks"), int)
       and isinstance(m0.get("len_prev"), int) and isinstance(m0.get("len_dead_cache"), int),
