@@ -17,6 +17,7 @@ import {
   ColdUploadFailed,
   acquireRotatorLock,
   releaseRotatorLock,
+  type RotatorLock,
   runColdRotationCandidates,
   type ColdFailureStore,
   type ColdRotationCandidate,
@@ -474,7 +475,7 @@ describe('3b item 2 — Langston r3 carries', () => {
 });
 
 // ── 3b item 3: bind the pre-3a cold rows to exact versions; the inventory; the exclusive takeover ────────────────────
-import { coldPathOf, orphanVersions, otherOwnerCounts, planColdBindings, type UnboundColdRow } from '../../scripts/b75-cold-bind';
+import { COLD_NON_ARCHIVE_PREFIXES, coldPathOf, orphanVersions, otherOwnerCounts, ownColdPrefixes, planColdBindings, type UnboundColdRow } from '../../scripts/b75-cold-bind';
 import type { B2ListedVersion } from '../../services/data-archive/storage-client';
 
 const ROW: UnboundColdRow = { id: 'r1', source_table: 'context_bridge_log', partition_label: '2026-01', storage_uri: 'b2://dt-archive-cold/context_bridge_log/2026-01.jsonl.gz', bytes_compressed: 13901237, checksum: 'sha256-x' };
@@ -554,21 +555,61 @@ describe('3b item 3 — the takeover itself is exclusive (Langston item 2 findin
     expect(acquireRotatorLock(f, () => false).kind).toBe('taken_over');
     expect(JSON.parse(fs.readFileSync(f, 'utf-8')).pid).toBe(process.pid);
   });
-  it('if another run creates the file between our remove and our create, we read it as HELD', () => {
+  it('two runs that both judge the holder dead: exactly ONE takes over, the other reads HELD (Langston item 3 C-1)', () => {
+    // The second run is started inside the first run's takeover window (after its re-read, before its remove) — the
+    // interleaving Langston reproduced with a delay. Without the gate both returned taken_over.
     const f = path.join(tmp(), 'lock');
     fs.writeFileSync(f, JSON.stringify({ pid: 999_999, host: os.hostname(), started_at: new Date().toISOString() }));
-    const realWrite = fs.writeFileSync;
-    vi.spyOn(fs, 'writeFileSync').mockImplementation(((file: fs.PathOrFileDescriptor, data: string | NodeJS.ArrayBufferView, opts?: fs.WriteFileOptions) => {
-      if (typeof opts === 'object' && opts && (opts as { flag?: string }).flag === 'wx' && file === f && !fs.existsSync(f)) {
-        realWrite(f, JSON.stringify({ pid: 777, host: os.hostname(), started_at: new Date().toISOString() })); // the other run wins
-        const e = new Error('EEXIST') as NodeJS.ErrnoException;
-        e.code = 'EEXIST';
-        throw e;
-      }
-      return realWrite(file, data, opts);
-    }) as typeof fs.writeFileSync);
-    const r = acquireRotatorLock(f, () => false);
-    expect(r.kind).toBe('held');
-    expect(r.kind === 'held' && r.holder).toMatch(/"pid":777/);
+    let second: RotatorLock | null = null;
+    const first = acquireRotatorLock(f, () => false, undefined, Date.now(), () => null, () => {
+      second = acquireRotatorLock(f, () => false, undefined, Date.now(), () => null);
+    });
+    const kinds = [first.kind, second!.kind].sort();
+    expect(kinds).toEqual(['held', 'taken_over']);
+    expect(fs.existsSync(`${f}.takeover`)).toBe(false); // the gate is released
+  });
+  it('a takeover gate left by a run that died mid-takeover is cleared once stale, never blocking forever', () => {
+    const f = path.join(tmp(), 'lock');
+    fs.writeFileSync(f, JSON.stringify({ pid: 999_999, host: os.hostname(), started_at: new Date().toISOString() }));
+    fs.mkdirSync(`${f}.takeover`);
+    expect(acquireRotatorLock(f, () => false).kind).toBe('held'); // fresh gate: someone is mid-takeover
+    const old = new Date(Date.now() - 11 * 60 * 1000);
+    fs.utimesSync(`${f}.takeover`, old, old);
+    expect(acquireRotatorLock(f, () => false).kind).toBe('held'); // stale gate removed on this pass
+    expect(fs.existsSync(`${f}.takeover`)).toBe(false);
+    expect(acquireRotatorLock(f, () => false).kind).toBe('taken_over'); // and the next pass proceeds
+  });
+});
+
+describe('3b item 3 r2 — the binder fixes (Langston item 3)', () => {
+  it('ownColdPrefixes REFUSES a source_table that collides with a non-archive prefix', () => {
+    expect([...ownColdPrefixes(['context_bridge_log', 'disk_file.diagnostic_reports'])].sort()).toEqual(['_proof', 'context_bridge_log', 'disk_file.diagnostic_reports']);
+    expect(() => ownColdPrefixes(['context_bridge_log', 'token-watch'])).toThrow(/collides with a non-archive cold prefix/);
+    expect(() => ownColdPrefixes(['_liveness'])).toThrow(/collides/);
+  });
+  it('the non-archive prefixes are labelled: token-watch another owner, _liveness ours-untracked', () => {
+    expect(COLD_NON_ARCHIVE_PREFIXES.get('token-watch')).toBe('other-owner');
+    expect(COLD_NON_ARCHIVE_PREFIXES.get('_liveness')).toBe('ours-untracked');
+  });
+  it('hide markers are not counted as stored versions', () => {
+    const own = new Set(['context_bridge_log']);
+    const vs = [ver('t1', { fileName: 'token-watch/a' }), ver('t2', { fileName: 'token-watch/a', action: 'hide' })];
+    expect(Object.fromEntries(otherOwnerCounts(vs, own))).toEqual({ 'token-watch': 1 });
+  });
+  it('needs_download carries the wrong-size siblings so they reach the residue inventory', () => {
+    const [d] = planColdBindings([ROW], [ver('a', { contentSha1: 'aa' }), ver('b', { contentSha1: 'bb' }), ver('w', { contentLength: 5 })]);
+    expect(d.kind).toBe('needs_download');
+    if (d.kind !== 'needs_download') return;
+    expect(d.candidates.map((v) => v.fileId)).toEqual(['a', 'b']);
+    expect(d.wrongSize.map((v) => v.fileId)).toEqual(['w']);
+  });
+  it('a SHA-1 of "none" (large-file) or null is not a fingerprint: only the bytes can decide', () => {
+    expect(planColdBindings([ROW], [ver('a', { contentSha1: 'none' })])[0].kind).toBe('needs_download');
+    expect(planColdBindings([ROW], [ver('a', { contentSha1: null })])[0].kind).toBe('needs_download');
+    expect(planColdBindings([ROW], [ver('a', { contentSha1: 'none' }), ver('b', { contentSha1: 'none' })])[0].kind).toBe('needs_download');
+  });
+  it('the binder checks the version against the LISTING bucket id, not the info response against itself', () => {
+    expect(read('server/scripts/b75-cold-bind.ts')).toContain('bucketId: listing.bucketId');
+    expect(read('server/scripts/b75-cold-bind.ts')).not.toContain('bucketId: info.bucketId');
   });
 });

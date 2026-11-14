@@ -939,7 +939,7 @@ export class StorageClient {
     bucket: string,
     prefix: string,
     setupMs?: number,
-  ): Promise<{ versions: B2ListedVersion[]; pages: number }> {
+  ): Promise<{ versions: B2ListedVersion[]; pages: number; bucketId: string }> {
     const bucketId = await this.b2ResolveBucketId(bucket, setupMs);
     const versions: B2ListedVersion[] = [];
     let startFileName: string | null = null;
@@ -974,7 +974,7 @@ export class StorageClient {
       startFileName = page.nextFileName;
       startFileId = page.nextFileId;
     }
-    return { versions, pages };
+    return { versions, pages, bucketId };
   }
 
   /**

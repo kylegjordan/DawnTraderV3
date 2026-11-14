@@ -689,9 +689,14 @@ export function acquireRotatorLock(
   staleAfterMs?: number,
   nowMs: number = Date.now(),
   pidStartedMs: (pid: number) => number | null = linuxPidStartedMs,
+  /** test seam only: runs inside the takeover gate, after the holder is re-read and before its file is removed */
+  inTakeover?: () => void,
 ): RotatorLock {
-  return acquireRotatorLockImpl(file, isAlive, staleAfterMs, nowMs, pidStartedMs);
+  return acquireRotatorLockImpl(file, isAlive, staleAfterMs, nowMs, pidStartedMs, inTakeover);
 }
+
+/** A takeover gate older than this was left by a run that died mid-takeover (a takeover takes milliseconds). */
+const TAKEOVER_GATE_STALE_MS = 10 * 60 * 1000;
 
 /** A process's start time in epoch ms from /proc (Linux); null where it cannot be read (then the pid is trusted). */
 export function linuxPidStartedMs(pid: number): number | null {
@@ -722,6 +727,7 @@ function acquireRotatorLockImpl(
   staleAfterMs: number | undefined,
   nowMs: number,
   pidStartedMs: (pid: number) => number | null,
+  inTakeover: (() => void) | undefined,
 ): RotatorLock {
   const me = JSON.stringify({ pid: process.pid, host: os.hostname(), started_at: new Date().toISOString() });
   try {
@@ -751,19 +757,40 @@ function acquireRotatorLockImpl(
     alive = false;
   }
   if (alive) return { kind: 'held', holder };
-  // Takeover is itself exclusive (Langston, item 2 finding — folded into item 3): remove the dead holder's file, then
-  // create ours with O_EXCL. Two runs that both judged the holder dead race here; exactly one create succeeds, and the
-  // loser reads the winner's file as HELD. A read-back of our own pid confirms the win.
-  fs.rmSync(file, { force: true });
+  // The takeover is SERIALISED (Langston, item 3 C-1, measured): `wx` alone is not enough — a loser that judged the
+  // holder dead could `rm` the winner's fresh file and then win its own `wx`, so both returned taken_over. An O_EXCL
+  // directory gate (`mkdirSync`) admits one takeover at a time; a run that finds the gate taken reads HELD. Inside the
+  // gate the holder is RE-READ: if it is no longer the file we judged (another run already took over), HELD.
+  const gate = `${file}.takeover`;
   try {
-    fs.writeFileSync(file, me, { flag: 'wx', mode: 0o600 });
+    fs.mkdirSync(gate, { mode: 0o700 });
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e;
-    return { kind: 'held', holder: fs.readFileSync(file, 'utf-8') };
+    // a gate left by a run that died mid-takeover would otherwise block every month: removed when stale, then HELD
+    try {
+      if (nowMs - fs.statSync(gate).mtimeMs > TAKEOVER_GATE_STALE_MS) fs.rmSync(gate, { recursive: true, force: true });
+    } catch {
+      // gone already
+    }
+    return { kind: 'held', holder: '(another run is taking the lock over)' };
   }
-  const back = JSON.parse(fs.readFileSync(file, 'utf-8')) as { pid?: unknown };
-  if (back.pid !== process.pid) return { kind: 'held', holder: JSON.stringify(back) };
-  return { kind: 'taken_over', holder };
+  try {
+    let current = '(gone)';
+    try {
+      current = fs.readFileSync(file, 'utf-8');
+    } catch {
+      // removed by nobody else — the gate is ours
+    }
+    if (current !== holder && current !== '(gone)') return { kind: 'held', holder: current };
+    inTakeover?.(); // test seam: the window Langston's reproduction delayed in — after the re-read, before the remove
+    fs.rmSync(file, { force: true });
+    fs.writeFileSync(file, me, { flag: 'wx', mode: 0o600 });
+    const back = JSON.parse(fs.readFileSync(file, 'utf-8')) as { pid?: unknown };
+    if (back.pid !== process.pid) return { kind: 'held', holder: JSON.stringify(back) };
+    return { kind: 'taken_over', holder };
+  } finally {
+    fs.rmSync(gate, { recursive: true, force: true });
+  }
 }
 
 export function releaseRotatorLock(file: string): void {

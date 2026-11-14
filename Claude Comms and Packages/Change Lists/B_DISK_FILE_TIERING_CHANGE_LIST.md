@@ -434,7 +434,7 @@ NEW Claude cleared the restart (no B-ENTRY-GATE activity since 07:06Z). The depl
   - no version, or a size mismatch → refused.
   - Before writing, `b2_get_file_info` and `assertB2Version` check the chosen version; the UPDATE is guarded `provider_file_id IS NULL`.
 - **Orphans are scoped to DawnTrader's own namespaces.** Only a first segment that is a manifest `source_table` (or `_proof`) can be an orphan; every other version is counted as another owner's and never listed. **Found at Step 3:** the first report listed 108 `token-watch/` objects (CC-INFRA's cold archive, which shares the bucket) as orphans, and item 4 deletes orphans. Fence: token-watch and `_liveness/` are never orphans.
-- **Lock takeover is exclusive** (Langston's item 2 finding, homed on 3c, folded here): remove the dead file, create with `wx`, read back our own pid. Losing the race reads as HELD. Fence plus mutation (plain write) → red.
+- ~~Lock takeover is exclusive: remove the dead file, create with `wx`, read back our own pid.~~ **WITHDRAWN at Step 4 (Langston, item 3 C-1, measured):** `wx` alone was NOT exclusive. A loser's `rm` could unlink the winner's fresh file, and the loser's own `wx` then won — both returned `taken_over`. The earlier fence mocked only the half `wx` already prevents. **Replaced in item 3 r2:** an O_EXCL directory gate (`mkdirSync`) serialises the takeover, the holder is re-read inside the gate, and a stale gate (over 10 min) is cleared. Fence: two runs interleaved in the window (after re-read, before remove) give exactly one `taken_over`. Mutation (gate removed) → both `taken_over`, red.
 - **Report run on staging** (read-only, from a private copy, no deploy), the bucket listed in 1 page, 115 versions:
   - other owner: `token-watch/` 109;
   - ORPHAN: `disk_file.diagnostic_reports/phase-41F-L-trace.ndjson.jsonl.gz` (the P10 orphan, 170,761,082 B);
@@ -443,3 +443,14 @@ NEW Claude cleared the restart (no B-ENTRY-GATE activity since 07:06Z). The depl
   - `failures=0`, and no download needed.
 - **`--apply` runs after deploy** (the script must be on the box). No staging deploy before NEW's 21:04Z read.
 Tests: 3b 60/60; 3a, harness and amendment2 93/93; tsc 324 = 324.
+- **Item 3 r2, folded (Langston CHANGES at `0f7960de7`, Discord `1571103174138400800`):**
+  - C-1: the takeover gate, as above.
+  - C-2: CI is re-run on the new head.
+  - `assertB2Version` takes the LISTING's bucket id; comparing the info response's bucket id to itself was a tautology.
+  - `_liveness/` is labelled ours and not manifest-tracked, never an orphan.
+  - Owner counts cover stored versions only: token-watch is 108 versions plus 1 hide marker.
+  - The `needs_download` arm reports its wrong-size siblings and the candidates that lose the SHA-256 comparison as residue.
+  - A SHA-1 of `none` or null is not a fingerprint.
+  - (a) The report prints the row's `created_at` against the chosen version's upload time (2026-01: 22:58:12.185Z vs 22:58:09.251Z).
+  - (b) `COLD_NON_ARCHIVE_PREFIXES` = {`token-watch`: other owner, `_liveness`: ours untracked}. `ownColdPrefixes` REFUSES if a `source_table` collides with one. Both live in the binder module, where item 4 will read them.
+  - Re-run report on staging: unchanged bindings, `failures=0`.
