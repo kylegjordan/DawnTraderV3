@@ -1021,17 +1021,22 @@ export class StorageClient {
 
   /**
    * B-DISK-FILE-TIERING 3d step 1 — HIDE the current version of a name (`b2_hide_file`). Replaces `deleteCold` (rule 18):
-   * after 3d the cold key holds listFiles/readFiles/writeFiles only, and a hide is a WRITE — the bucket's lifecycle rule
-   * on `_liveness/` and `_proof/` (daysFromHidingToDeleting 1) then deletes the hidden version. b2_hide_file has no
-   * file-id parameter: it hides whatever version of `path` is current, so a caller that must target one object writes a
-   * name unique to it. `setupMs` is REQUIRED (Langston 3d r3 C-1: deleteCold's optional bound is how the canary's path
-   * went unbounded). Retried like the other metadata calls — a hide is idempotent.
+   * after 3d the cold key holds listFiles/readFiles/writeFiles only, and a hide is a WRITE. 3d STEP 2 (not yet in place
+   * at this commit) adds the bucket lifecycle rule on `_liveness/` and `_proof/` (daysFromHidingToDeleting 1) that then
+   * deletes the hidden version; until then a hidden version stays stored. b2_hide_file has no file-id parameter: it hides
+   * whatever version of `path` is current, so a caller that must target one object writes a name unique to it.
+   * `setupMs` is REQUIRED (Langston 3d r3 C-1: deleteCold's optional bound is how the canary's path went unbounded).
+   * The POST is retried like the other metadata calls. HYPOTHESIS, measured at 3d step 4 (hide one throwaway twice):
+   * what B2 answers to a hide of an already-hidden name, and whether the rule reaps a stacked marker. An extra hide
+   * marker reaches no instrument here: the meter and the reconcile count upload versions only.
+   * The ANSWER CHECK runs OUTSIDE the retry (Langston 3d step 1 Step-4 C-1, the uploadColdFile pattern): a 200 that does
+   * not attest a hide of this name, or whose body is not JSON, throws at once and is never re-POSTed.
    */
   async hideColdFile(bucket: string, path: string, setupMs: number): Promise<void> {
     if (!this.isColdConfigured()) {
       throw new Error('[B75 storage-client] cold storage not configured');
     }
-    await withB2Retry('hide_file', async () => {
+    const text = await withB2Retry('hide_file', async () => {
       const auth = await this.b2Authorize(setupMs);
       const res = await fetch(`${auth.apiUrl}/b2api/v3/b2_hide_file`, {
         method: 'POST',
@@ -1040,16 +1045,22 @@ export class StorageClient {
         signal: AbortSignal.timeout(setupMs),
       });
       if (!res.ok) throw await b2Error('hide_file', res);
-      const j = (await res.json()) as { action?: string; fileName?: string };
-      if (j.action !== 'hide' || j.fileName !== path) {
-        throw new Error(`[B75 storage-client] B2 hide_file returned action=${j.action ?? 'none'} name=${j.fileName ?? 'none'}, expected a hide of ${path}`);
-      }
+      return await res.text();
     }, {
       ...B2_RETRY_DEFAULTS,
       retryAfterCapMs: setupMs,
       reauth: () => this.b2Reauthorize(setupMs),
       onAttempt: this.b2AttemptLog,
     });
+    let j: { action?: string; fileName?: string };
+    try {
+      j = JSON.parse(text) as { action?: string; fileName?: string };
+    } catch {
+      throw new Error(`[B75 storage-client] B2 hide_file returned 200 with a body that is not JSON (${text.slice(0, 200)}), expected a hide of ${path}`);
+    }
+    if (j.action !== 'hide' || j.fileName !== path) {
+      throw new Error(`[B75 storage-client] B2 hide_file returned action=${j.action ?? 'none'} name=${j.fileName ?? 'none'}, expected a hide of ${path}`);
+    }
   }
 }
 

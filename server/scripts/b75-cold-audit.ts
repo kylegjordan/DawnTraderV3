@@ -258,7 +258,6 @@ export function reconcileArchive(
 export interface MeterHistoryRow {
   run_at: Date;
   bytes_by_owner: Partial<Record<OwnerClass, number>>;
-  proof_ids: string[];
   due: number | null;
   readback_ok: number | null;
   budget_cause: string | null;
@@ -290,7 +289,7 @@ export function meterPages(cur: MeterTotals, prev: MeterHistoryRow | null, nowMs
   for (const [owner, prefix] of [['liveness', '_liveness/'], ['proof', '_proof/']] as const) {
     if (cur.countByOwner[owner] > cfg.livenessMaxVersions) {
       pages.push({ key: `cold-meter-${owner}-ceiling`, severity: 'warning', title: `${prefix} in the cold bucket holds more versions than a working lifecycle rule leaves`,
-        body: `${prefix} holds ${cur.countByOwner[owner]} upload versions (${cur.byOwner[owner]} bytes), above cold_meter_liveness_max_versions ${cfg.livenessMaxVersions}. The bucket's ${prefix} lifecycle rule hides and deletes them within about two days; more than this means it is not running.` });
+        body: `${prefix} holds ${cur.countByOwner[owner]} upload versions (${cur.byOwner[owner]} bytes), above cold_meter_liveness_max_versions ${cfg.livenessMaxVersions}. The bucket's ${prefix} lifecycle rule hides and deletes them within about two days, so more than this means the rule is not running${owner === 'proof' ? ', OR more than ' + cfg.livenessMaxVersions + ' proofs were run inside one lifecycle day (a hand-run burst; nothing schedules the proof) — check the proof log before reading it as a dead rule' : ''}.` });
     }
   }
   if (prev) {
@@ -312,7 +311,7 @@ export const RECONCILE_PAGE_CAP = 25;
  * row unchanged for a dedupe key, so a single set-wide key would let the first (e.g. day-1 residue awaiting Kyle's
  * delete) mute every later object. Capped at RECONCILE_PAGE_CAP per kind, plus one overflow page with the count.
  */
-export function reconcilePages(rc: Reconcile, kept: Set<string> = new Set()): Page[] {
+export function reconcilePages(rc: Reconcile, kept: Set<string>): Page[] {
   const pages: Page[] = [];
   const each = <T>(items: T[], kind: string, severity: Page['severity'], title: string, idOf: (x: T) => string, bodyOf: (x: T) => string) => {
     for (const x of items.slice(0, RECONCILE_PAGE_CAP)) pages.push({ key: `cold-reconcile-${kind}-${idOf(x)}`, severity, title, body: bodyOf(x) });
@@ -572,7 +571,7 @@ async function main(): Promise<number> {
     console.log(`${TAG} METER pages=${listing.pages} versions=${totals.versions} bytes=${totals.bytes} by_owner=${JSON.stringify(totals.byOwner)} versions_by_owner=${JSON.stringify(totals.countByOwner)} cold_rows=${rows.length} unbound=${unbound}`);
     for (const v of rc.inFlight) console.log(`${TAG} IN_FLIGHT ${v.fileName} id=${v.fileId} uploaded=${new Date(v.uploadTimestamp).toISOString()} (not paged; pages next run if still unbound)`);
     const prevRes = await client.query<MeterHistoryRow>(
-      `SELECT run_at, bytes_by_owner, proof_ids, due, readback_ok, budget_cause, skipped_unbound
+      `SELECT run_at, bytes_by_owner, due, readback_ok, budget_cause, skipped_unbound
          FROM data_archive_cold_meter ORDER BY run_at DESC LIMIT 1`,
     );
     const prev = prevRes.rows[0] ?? null;
@@ -630,7 +629,7 @@ async function main(): Promise<number> {
         body: `${stale.length} bound cold object(s) have gone more than cold_readback_max_age_days ${cfg.maxAgeDays} since their last read-back: ${stale.slice(0, 10).map((x) => `${x.r.storage_uri} (${x.age.toFixed(1)} d)`).join('; ')}` });
     }
     const hist = (await client.query<MeterHistoryRow>(
-      `SELECT run_at, bytes_by_owner, proof_ids, due, readback_ok, budget_cause, skipped_unbound
+      `SELECT run_at, bytes_by_owner, due, readback_ok, budget_cause, skipped_unbound
          FROM data_archive_cold_meter WHERE finished_at IS NOT NULL ORDER BY run_at DESC LIMIT $1`,
       [cfg.stallDays],
     )).rows;

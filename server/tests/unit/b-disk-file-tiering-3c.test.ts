@@ -104,6 +104,8 @@ describe('B-DISK-FILE-TIERING 3d step 1 — the kept-residue allowlist and the h
     expect(fn).toContain("withB2Retry('hide_file'");
     expect(fn).toContain('signal: AbortSignal.timeout(setupMs)');
     expect(fn).toContain("j.action !== 'hide' || j.fileName !== path");
+    // Step-4 C-1: the check sits AFTER the retry returns (the behaviour is pinned in the 3b suite, one POST on a bad 200)
+    expect(fn.indexOf("j.action !== 'hide'")).toBeGreaterThan(fn.indexOf('onAttempt: this.b2AttemptLog'));
     expect(sc).not.toContain('async deleteCold(');
   });
   it('the canary and the proof hide; neither script deletes anything any more', () => {
@@ -178,8 +180,8 @@ describe('B-DISK-FILE-TIERING 3c — the meter', () => {
     const countByOwner = { archive: 0, proof: 0, liveness: 0, 'token-watch': 0, unknown: 0, ...counts };
     return { versions: 1, bytes: Object.values(byOwner).reduce((a, b) => a + b, 0), byOwner, countByOwner, proofIds, unknownNames: o.unknown ? ['m/x'] : [] };
   };
-  const prev = (o: Partial<Record<string, number>>, proof_ids: string[] = []): MeterHistoryRow => ({
-    run_at: new Date(NOW - DAY), bytes_by_owner: o, proof_ids, due: 0, readback_ok: 0, budget_cause: null, skipped_unbound: 0,
+  const prev = (o: Partial<Record<string, number>>, _proofIds: string[] = []): MeterHistoryRow => ({
+    run_at: new Date(NOW - DAY), bytes_by_owner: o, due: 0, readback_ok: 0, budget_cause: null, skipped_unbound: 0,
   });
   it('first run is a baseline: no growth judgement', () => {
     expect(meterPages(totals({ 'token-watch': 900 }), null, NOW, cfgM).map((p) => p.key)).toEqual([]);
@@ -193,6 +195,9 @@ describe('B-DISK-FILE-TIERING 3c — the meter', () => {
     expect(meterPages(totals({}, [], { liveness: 2, proof: 2 }), null, NOW, cfgM)).toEqual([]); // a working rule's envelope
     expect(meterPages(totals({}, [], { liveness: 3 }), null, NOW, cfgM).map((p) => p.key)).toEqual(['cold-meter-liveness-ceiling']);
     expect(meterPages(totals({}, [], { proof: 3 }), prev({}), NOW, cfgM).map((p) => p.key)).toEqual(['cold-meter-proof-ceiling']);
+    // Step-4 (3): the two prefixes share one constant, so the _proof/ body names a hand-run burst as a cause; _liveness/ does not
+    expect(meterPages(totals({}, [], { proof: 3 }), null, NOW, cfgM)[0].body).toMatch(/proofs were run inside one lifecycle day/);
+    expect(meterPages(totals({}, [], { liveness: 3 }), null, NOW, cfgM)[0].body).not.toMatch(/proofs were run/);
   });
   it('3d: a hidden _proof object seen at two consecutive runs no longer pages (the rule deletes it a day after its hide)', () => {
     expect(meterPages(totals({}, ['p1'], { proof: 1 }), prev({}, ['p1']), NOW, cfgM)).toEqual([]);
@@ -241,7 +246,7 @@ describe('B-DISK-FILE-TIERING 3c — the read-back', () => {
     const fresh = row('n', 'b2://b/y', { verified_at: new Date(NOW - 0.25 * DAY) });
     expect(coverageAgeDays(fresh, undefined, new Date(NOW - 100 * DAY), NOW)).toBeCloseTo(0.25, 5);
   });
-  const h = (o: Partial<MeterHistoryRow>): MeterHistoryRow => ({ run_at: new Date(NOW), bytes_by_owner: {}, proof_ids: [], due: 1, readback_ok: 0, budget_cause: null, skipped_unbound: 0, ...o });
+  const h = (o: Partial<MeterHistoryRow>): MeterHistoryRow => ({ run_at: new Date(NOW), bytes_by_owner: {}, due: 1, readback_ok: 0, budget_cause: null, skipped_unbound: 0, ...o });
   it('stall pages after k runs due-but-zero-ok; one ok row in any of them clears it', () => {
     expect(historyPages([h({}), h({}), h({})], 3).map((p) => p.key)).toEqual(['cold-readback-stall']);
     expect(historyPages([h({}), h({ readback_ok: 1 }), h({})], 3)).toEqual([]);
@@ -261,13 +266,13 @@ describe('B-DISK-FILE-TIERING 3c — the read-back', () => {
 describe('B-DISK-FILE-TIERING 3c Step 4 C-1 — one alert per object, never one set-wide key', () => {
   it('two untracked objects mint two keys, so day-1 residue cannot mute a later object', () => {
     const rc = { untracked: [ver('dup', 'context_bridge_log/2026-01.jsonl.gz'), ver('leak', 'context_bridge_log/2026-03.jsonl.gz')], missing: [row('m', 'b2://b/x', { provider_file_id: 'f-m' })], sizeMismatch: [], inFlight: [] };
-    const keys = reconcilePages(rc).map((p) => p.key);
+    const keys = reconcilePages(rc, new Set()).map((p) => p.key);
     expect(keys).toEqual(['cold-reconcile-untracked-dup', 'cold-reconcile-untracked-leak', 'cold-reconcile-missing-f-m']);
-    expect(reconcilePages(rc).find((p) => p.key === 'cold-reconcile-missing-f-m')?.severity).toBe('critical');
+    expect(reconcilePages(rc, new Set()).find((p) => p.key === 'cold-reconcile-missing-f-m')?.severity).toBe('critical');
   });
   it('past the cap, one overflow page carries the count', () => {
     const many = Array.from({ length: RECONCILE_PAGE_CAP + 3 }, (_, i) => ver(`u${i}`, `context_bridge_log/x${i}`));
-    const pages = reconcilePages({ untracked: many, missing: [], sizeMismatch: [], inFlight: [] });
+    const pages = reconcilePages({ untracked: many, missing: [], sizeMismatch: [], inFlight: [] }, new Set());
     expect(pages).toHaveLength(RECONCILE_PAGE_CAP + 1);
     expect(pages[RECONCILE_PAGE_CAP].key).toBe('cold-reconcile-untracked-overflow');
     expect(pages[RECONCILE_PAGE_CAP].body).toContain(`${RECONCILE_PAGE_CAP + 3} in all`);

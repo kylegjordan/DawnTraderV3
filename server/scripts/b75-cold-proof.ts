@@ -11,9 +11,10 @@
  * would write a cold row and delete a live warm object months early.
  *
  * B2 download spend: zero bytes. Warm is Supabase; the upload is free; b2_get_file_info is metadata (Langston, plan r2).
- * Cleanup (3d step 1): the proof object is HIDDEN with b2_hide_file, a write the narrowed key keeps; the bucket's
- * `_proof/` lifecycle rule deletes it a day later, and hides it anyway after a day if this hide never ran. The wide key's
- * delete-by-id (plan r2 C-1) is gone with that key.
+ * Cleanup (3d step 1): the proof object is HIDDEN with b2_hide_file, a write the narrowed key keeps. From 3d STEP 2 (not
+ * yet in place at step 1) the bucket's `_proof/` lifecycle rule deletes it a day later, and hides it after a day if this
+ * hide never ran; until that rule exists a hidden proof object stays stored. The wide key's delete-by-id (plan r2 C-1)
+ * goes with that key.
  *
  * PASS (AP-5, verbatim): peak RSS FLAT in object size — run at 170,761,082 B (the trace) and 535,409,768 B (the largest
  * warm object), each under 1 GiB RSS and MemAvailable >= 512 MiB, and the two peaks within 64 MiB of each other.
@@ -49,7 +50,7 @@ export interface ProofResult {
   sha256: string;
   sha1: string;
   proof_file_id: string;
-  /** 3d step 1: the proof object is HIDDEN (the `_proof/` lifecycle rule deletes it), never deleted by this key */
+  /** 3d step 1: the proof object is HIDDEN (from 3d step 2 the `_proof/` lifecycle rule deletes it), never deleted by this key */
   proof_hidden: boolean;
   download_ms: number;
   upload_ms: number;
@@ -109,7 +110,7 @@ export async function runColdProof(
       hidden = true;
     } catch (err) {
       // the `_proof/` rule's daysFromUploadingToHiding hides it anyway; the cold audit's `_proof/` ceiling pages if not
-      console.error(`[B75 cold-proof] proof object NOT hidden (${proofPath} ${cold.fileId}) — the _proof/ lifecycle rule hides it after a day:`, err);
+      console.error(`[B75 cold-proof] proof object NOT hidden (${proofPath} ${cold.fileId}) — from 3d step 2 the _proof/ lifecycle rule hides it after a day:`, err);
     }
     return {
       manifest_id: row.id, bytes: cold.bytes, peak_rss_kb: peakRss, min_memavailable_kb: minAvail,

@@ -10,8 +10,9 @@
  * on a restore-day emergency. This canary exercises the exact production cold
  * path on a recurring cadence:
  *
- *   upload a tiny timestamped object → re-download → SHA-256 verify → hide (3d: the bucket's
- *   `_liveness/` lifecycle rule deletes the hidden version a day later; the cold key cannot delete).
+ *   upload a tiny timestamped object → re-download → SHA-256 verify → hide (3d: from 3d STEP 2 the bucket's
+ *   `_liveness/` lifecycle rule deletes the hidden version a day later; until that rule exists a hidden version stays
+ *   stored. After 3d the cold key cannot delete).
  *
  * On ANY failure it raises a §10.5 system-alert (critical) and exits non-zero.
  * On success it logs OK and exits 0. Recovery from a prior failure is a manual
@@ -118,10 +119,10 @@ async function main(): Promise<void> {
         `checksum mismatch on readback: expected=${expected} got=${dl.checksum} (bytes=${dl.bytes})`,
       );
     }
-    // 3. hide (B-DISK-FILE-TIERING 3d step 1): the cold key holds no delete right after 3d; the bucket's `_liveness/`
-    //    lifecycle rule deletes the hidden version a day later. Best-effort: an object left unhidden (this failing, or
-    //    the mismatch throw above, #431) is hidden by the rule's daysFromUploadingToHiding and paged by the cold audit's
-    //    `_liveness/` version ceiling if the rule ever stops working.
+    // 3. hide (B-DISK-FILE-TIERING 3d step 1): the cold key holds no delete right after 3d. From 3d STEP 2 (not yet in
+    //    place at step 1) the bucket's `_liveness/` lifecycle rule deletes the hidden version a day later. Best-effort:
+    //    once that rule exists, an object left unhidden (this failing, or the mismatch throw above, #431) is hidden by its
+    //    daysFromUploadingToHiding, and the cold audit's `_liveness/` version ceiling pages if the rule stops working.
     try {
       await storage.hideColdFile(coldBucket, objPath, setupMs);
     } catch (hideErr) {

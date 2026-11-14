@@ -549,6 +549,35 @@ describe('3b item 3 — listColdFileVersions pages to the end, and a failed page
   });
 });
 
+describe('3d step 1 — hideColdFile: the POST is retried, the ANSWER CHECK is not (Langston Step-4 C-1)', () => {
+  const auth = () => new Response(JSON.stringify({ accountId: 'acct', authorizationToken: 'tok', apiInfo: { storageApi: { apiUrl: 'https://api.fake', downloadUrl: 'https://dl.fake' } } }));
+  const stub = (answers: Array<() => Response>) => {
+    const posts: unknown[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit = {}) => {
+      if (url.endsWith('/b2_authorize_account')) return auth();
+      if (!url.endsWith('/b2_hide_file')) throw new Error(`unexpected fetch ${url}`);
+      posts.push(JSON.parse(String(init.body)));
+      return answers.shift()!();
+    }));
+    return posts;
+  };
+  it('a 200 that is not a hide of this name throws after ONE POST — never re-POSTed', async () => {
+    const posts = stub([() => new Response(JSON.stringify({ action: 'upload', fileName: '_liveness/x' })), () => new Response(JSON.stringify({ action: 'hide', fileName: '_liveness/x' }))]);
+    await expect(client().hideColdFile('dt-archive-cold', '_liveness/x', 60_000)).rejects.toThrow(/action=upload .*expected a hide of _liveness\/x/);
+    expect(posts).toHaveLength(1);
+  });
+  it('a 200 whose body is not JSON throws after ONE POST', async () => {
+    const posts = stub([() => new Response('<html>oops</html>'), () => new Response(JSON.stringify({ action: 'hide', fileName: '_liveness/x' }))]);
+    await expect(client().hideColdFile('dt-archive-cold', '_liveness/x', 60_000)).rejects.toThrow(/not JSON/);
+    expect(posts).toHaveLength(1);
+  });
+  it('a 503 is retried, and a following attested hide resolves; the POST names the bucket id and the path', async () => {
+    const posts = stub([() => new Response(JSON.stringify({ code: 'service_unavailable' }), { status: 503 }), () => new Response(JSON.stringify({ action: 'hide', fileName: '_liveness/x' }))]);
+    await expect(client().hideColdFile('dt-archive-cold', '_liveness/x', 60_000)).resolves.toBeUndefined();
+    expect(posts).toEqual([{ bucketId: 'bucket-id', fileName: '_liveness/x' }, { bucketId: 'bucket-id', fileName: '_liveness/x' }]);
+  });
+});
+
 describe('3b item 3 — the takeover itself is exclusive (Langston item 2 finding)', () => {
   it('a dead holder is taken over and the file names OUR pid', () => {
     const f = path.join(tmp(), 'lock');
