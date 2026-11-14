@@ -71,7 +71,7 @@ SUBCOMMANDS, each run as `tokenwatch`:
            exactly as `run` would, and nothing else. Its ru_maxrss sits beside the arms (Langston (d)).
 
 Exit: 0 done · 2 refused · 6 egress control · 7 all_shed control · 8 MemoryMax control · 9 served-share floor
-      · 10 clock-freeze control · 11 arm sept NOT RUN (under 30 one-pair templates, the basis) · 12 fresh-parse
+      · 10 clock-freeze control · 16 no work (due - requeued <= 0: every count control would pass by 0 == 0) · 11 arm sept NOT RUN (under 30 one-pair templates, the basis) · 12 fresh-parse
       control (parses != served) · 13 arm sept control (wiring, alive below the reference, Helius range)
       · 14 derive-n: N VOID · 15 run_hour reported an error (a deterministic replay must have none).
 Arms xn (`--n`, the derived N: ceil(N) − 1 pad copies) and sept (`--shape`, §6 AMENDMENTS 1-2: classes under 30 real
@@ -805,10 +805,11 @@ def cmd_run(a) -> int:
     stats = follow_up.run_hour(now)
 
     shed_rows = 0
-    with open(obs_day, encoding="utf-8") as fh:
-        for i, line in enumerate(fh):
-            if i >= rows_before and '"shed":' in line:
-                shed_rows += 1
+    if os.path.exists(obs_day):              # a skipped or empty hour writes no rows, so the day file may not exist
+        with open(obs_day, encoding="utf-8") as fh:
+            for i, line in enumerate(fh):
+                if i >= rows_before and '"shed":' in line:
+                    shed_rows += 1
     expected = stats["due"] - stats["requeued_not_yet_due"]
     loop_lookups = c.loop_served + c.loop_no_body
     result = {
@@ -837,7 +838,15 @@ def cmd_run(a) -> int:
                           "class0_test": "WIRING control (C-4), not fidelity to the reference day",
                           "alive_direction": "below the reference alive share voids; above stands (C-5)"}
     code = 0
-    if stats.get("errors"):
+    if stats.get("skipped") or expected <= 0:
+        # Step 9 r8: every control below compares counts against `expected`, so with no work they all pass by 0 == 0.
+        # Measured 2026-11-14: the OS updater restarted a traced all_shed unit mid-run; the new process found the
+        # killed one's periodic.lock in the run dir, run_hour SKIPPED (buckets_read 0, due 0), and the all_shed
+        # control reported "exit 0, satisfied". A skipped hour or an empty one is never a measurement.
+        result["void"] = "no work: run_hour skipped=%s, due - requeued = %d; every count control would pass by 0 == 0" % (
+            bool(stats.get("skipped")), expected)
+        code = 16
+    elif stats.get("errors"):
         # §6 AMENDMENT 2: a deterministic replay with a run_hour error is a harness defect by construction
         # (follow_up.py swallows exceptions into this count, where no other control can see them)
         result["void"] = "run_hour reported %d error(s); a replay must have none" % stats["errors"]

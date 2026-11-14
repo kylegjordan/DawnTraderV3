@@ -44,7 +44,7 @@ set -e
 RES=$(sed -n 's/^Finished with result: //p' "$OUT/$ARM-unit.txt")
 PEAK=$(sed -n 's/^Memory peak: //p' "$OUT/$ARM-unit.txt")
 STAT=$(sed -n 's/^Main processes terminated with: code=[a-z]*\/status=//p' "$OUT/$ARM-unit.txt")
-printf 'Result=%s\nExecMainStatus=%s\nMemoryPeak=%s\nSystemdRunRC=%s\n' "${RES:-unknown}" "${STAT:-unknown}" "${PEAK:-unknown}" "$RC" >> "$OUT/$ARM-unit.txt"
+printf 'Result=%s\nExecMainStatus=%s\nMemoryPeak=%s\nSystemdRunRC=%s\nSystemdRunVersion=%s\n' "${RES:-unknown}" "${STAT:-unknown}" "${PEAK:-unknown}" "$RC" "$(systemd-run --version | head -n1)" >> "$OUT/$ARM-unit.txt"
 systemctl reset-failed "$UNIT" 2>&1 || true
 cat "$OUT/$ARM-unit.txt"
 [[ "$RES" == oom-kill ]] && exit 137
