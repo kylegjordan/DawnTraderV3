@@ -49,21 +49,50 @@ describe('P5 — the data-archive panel on the diagnostic pool (C-1, Langston bl
   it('B-DB-SIZE-RELIEF OBJ-2: with the table reads SUCCEEDING, a window wider than the hot horizon is PARTIAL beside a real count; one inside it is not', async () => {
     const db = await import('../../db.js');
     const exec = (db as unknown as { diagDb: { execute: ReturnType<typeof vi.fn> } }).diagDb.execute;
-    exec.mockImplementationOnce(async () => HORIZON_ROWS);
-    for (let i = 0; i < 5; i++) {
-      exec.mockImplementationOnce(async () => ({ rows: [{ rows_in_window: 1000 + i, total_rows: 2000 + i, last_write_at: '2026-11-08T03:00:00Z', disk_bytes: 4096 }] }));
+    // B-DB-SIZE-RELIEF Step-9 (KD-80): the two estimated tables issue different reads (leaf info, daily exact counts,
+    // size + last write), so this mock answers BY THE QUERY rather than by call order. The horizon read answers once.
+    let horizonServed = false;
+    let tableN = 0;
+    const DAYMS = 86_400_000;
+    const now = Date.now();
+    const today = Math.floor(now / DAYMS) * DAYMS;
+    exec.mockImplementation(async (q: unknown) => {
+      const text = JSON.stringify(q);
+      if (text.includes('module_constants')) {
+        if (horizonServed) throw new Error(failWith.msg);
+        horizonServed = true;
+        return HORIZON_ROWS;
+      }
+      if (text.includes('pg_partition_tree') && text.includes('reltuples')) {
+        // one closed daily leaf (estimate) and today's open leaf (exact)
+        return { rows: [
+          { qname: 'leaf_closed', reltuples: 5000, heap_bytes: 8192, from_ms: today - DAYMS, to_ms: today, analyzed_at: '2026-11-08 03:00:00+00' },
+          { qname: 'leaf_open', reltuples: -1, heap_bytes: 8192, from_ms: today, to_ms: today + DAYMS, analyzed_at: null },
+        ] };
+      }
+      if (text.includes('count(*)::bigint AS n')) return { rows: [{ n: 77 }] };
+      if (text.includes('rows_in_window')) {
+        const i = tableN++;
+        return { rows: [{ rows_in_window: 1000 + i, total_rows: 2000 + i, last_write_at: '2026-11-08T03:00:00Z', disk_bytes: 4096 }] };
+      }
+      return { rows: [{ last_write_at: '2026-11-08T03:00:00Z', disk_bytes: 4096 }] }; // the estimated tables' size + last write
+    });
+    try {
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const { computeDataArchiveStatus } = await import('../../services/drift-dashboard-aggregator.js');
+      const r = await computeDataArchiveStatus('rolling_30d' as never);
+      expect(spy).not.toHaveBeenCalled(); // nothing failed, so no fault line
+      spy.mockRestore();
+      const byName = new Map(r.tables.map((t) => [t.name, t]));
+      // the estimated table: a labelled estimate (closed leaf by reltuples + open leaf exact), PARTIAL beside a real figure
+      expect(byName.get('signal_eval_archive')).toMatchObject({ timedOut: false, rowsInWindow: 5077, rowsInWindowKind: 'estimate', totalRows: 5077, totalRowsKind: 'estimate', hotHorizonDays: 15, windowPartial: true });
+      expect(byName.get('pair_scan_archive')).toMatchObject({ timedOut: false, rowsInWindow: 1000, rowsInWindowKind: 'exact', hotHorizonDays: 30, windowPartial: false });
+      expect(byName.get('signal_eval_provenance')).toMatchObject({ timedOut: false, rowsInWindowKind: 'estimate', hotHorizonDays: null, windowPartial: null });
+      const r24 = await (await import('../../services/drift-dashboard-aggregator.js')).computeDataArchiveStatus('rolling_24h' as never);
+      expect(r24.tables.every((t) => t.windowPartial === null)).toBe(true); // that call's horizon read failed (the mock throws): unknown
+    } finally {
+      exec.mockImplementation(async () => { throw new Error(failWith.msg); });
     }
-    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const { computeDataArchiveStatus } = await import('../../services/drift-dashboard-aggregator.js');
-    const r = await computeDataArchiveStatus('rolling_30d' as never);
-    expect(spy).not.toHaveBeenCalled(); // nothing failed, so no fault line
-    spy.mockRestore();
-    const byName = new Map(r.tables.map((t) => [t.name, t]));
-    expect(byName.get('signal_eval_archive')).toMatchObject({ timedOut: false, rowsInWindow: 1001, hotHorizonDays: 15, windowPartial: true });
-    expect(byName.get('pair_scan_archive')).toMatchObject({ timedOut: false, rowsInWindow: 1000, hotHorizonDays: 30, windowPartial: false });
-    expect(byName.get('signal_eval_provenance')).toMatchObject({ timedOut: false, hotHorizonDays: null, windowPartial: null });
-    const r24 = await (await import('../../services/drift-dashboard-aggregator.js')).computeDataArchiveStatus('rolling_24h' as never);
-    expect(r24.tables.every((t) => t.windowPartial === null)).toBe(true); // that call's horizon read failed (the mock throws): unknown
   });
 
   it('gate 2 C-1: horizon read OK but the table reads time out (the likely render under pool pressure) — the client never shows PARTIAL beside QUERY TIMEOUT', async () => {
@@ -93,7 +122,9 @@ describe('P5 — the data-archive panel on the diagnostic pool (C-1, Langston bl
     }
     // all four catch sites use the one predicate/text; no loose substring survives
     const src = read('server/services/drift-dashboard-aggregator.ts');
-    expect(src.match(/isDiagPoolLoad\(err\)/g)?.length).toBe(3);
+    // 3 + 2 (B-DB-SIZE-RELIEF Step-9, KD-80: the estimated tables' leaf/meta read and their exact-count read, both
+    // through the same predicate)
+    expect(src.match(/isDiagPoolLoad\(err\)/g)?.length).toBe(5);
     // the constant is USED at exactly two sites: inside the predicate, and the passive panel's safeCount timeout branch
     // (Langston r2: a toContain was satisfied by the predicate alone, so the fourth site was pinned by nothing)
     expect(src.match(/msg\.includes\(STATEMENT_TIMEOUT_CANCEL\)/g)?.length).toBe(2);

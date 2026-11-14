@@ -2041,6 +2041,20 @@ interface DataArchiveTableStat {
   hotHorizonDays: number | null;
   /** True when the selected window reaches past the hot window, so the count covers only the hot days. */
   windowPartial: boolean | null;
+  /** B-DB-SIZE-RELIEF Step-9 (KD-80): how each count was obtained. Absent on an older server = exact. */
+  rowsInWindowKind?: 'exact' | 'estimate' | 'lower_bound' | 'unavailable';
+  totalRowsKind?: 'exact' | 'estimate' | 'lower_bound' | 'unavailable';
+  /** the excluded or lagging partitions behind a non-exact count */
+  countNote?: string | null;
+}
+
+/** B-DB-SIZE-RELIEF Step-9 (KD-80): a count is never shown bare unless it is exact (Langston D/E). */
+export function fmtArchiveCount(n: number, kind: DataArchiveTableStat['rowsInWindowKind'], timedOut: boolean): string {
+  if (timedOut || kind === 'unavailable') return timedOut ? '—' : 'estimate unavailable';
+  const v = n.toLocaleString();
+  if (kind === 'estimate') return `≈ ${v}`;
+  if (kind === 'lower_bound') return `≥ ${v}`;
+  return v;
 }
 
 interface DataArchiveBatchWriterStat {
@@ -2179,12 +2193,20 @@ function DataArchiveSection() {
                             </span>
                           )}
                         </td>
-                        <td className="text-right py-2 pr-4">{fmtN(t.rowsInWindow)}</td>
                         <td
                           className="text-right py-2 pr-4"
-                          title={t.hotHorizonDays != null ? `The last ${t.hotHorizonDays} days held in the live database; older rows are in the archive tier.` : undefined}
+                          title={t.rowsInWindowKind && t.rowsInWindowKind !== 'exact' ? `≈ = the database's own row estimate; ≥ = at least this many (a named partition is left out). ${t.countNote ?? ''}`.trim() : undefined}
                         >
-                          {fmtN(t.totalRows)}
+                          {fmtArchiveCount(t.rowsInWindow, t.rowsInWindowKind, t.timedOut)}
+                        </td>
+                        <td
+                          className="text-right py-2 pr-4"
+                          title={[
+                            t.hotHorizonDays != null ? `The last ${t.hotHorizonDays} days held in the live database; older rows are in the archive tier.` : '',
+                            t.totalRowsKind && t.totalRowsKind !== 'exact' ? `≈ = the database's own row estimate; ≥ = at least this many. ${t.countNote ?? ''}` : '',
+                          ].filter(Boolean).join(' ') || undefined}
+                        >
+                          {fmtArchiveCount(t.totalRows, t.totalRowsKind, t.timedOut)}
                         </td>
                         <td className="text-right py-2 pr-4">{t.diskPretty}</td>
                         <td className="text-right py-2 pr-4">{fmtTimeAgo(t.lastWriteAt)}</td>

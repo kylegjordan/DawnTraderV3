@@ -27,6 +27,14 @@ import * as path from 'path';
 import { directionalBiasStore } from '../core/metrics/directional-bias-store.js';
 import { checkMovedTelemetryDays } from './data-archive/moved-day-check.js';
 import { HOT_HORIZON_SQL, parseHorizonRows } from './data-archive/hot-horizon.js';
+import {
+  assembleEstimate,
+  exactCountSql,
+  leafInfoSql,
+  parseLeafRows,
+  planEstimate,
+  type CountKind,
+} from './data-archive/archive-count-estimate.js';
 
 /**
  * The ONE statement-timeout text these panels treat as LOAD. Postgres's "canceling statement due to ..." is a FAMILY —
@@ -807,6 +815,12 @@ export interface DataArchiveStatusResponse {
     hotHorizonDays: number | null;
     /** True when the selected window reaches past the hot horizon (the count covers only the hot days); null = unknown. */
     windowPartial: boolean | null;
+    /** B-DB-SIZE-RELIEF Step-9 (KD-80): how the two counts were obtained — exact, a planner estimate, a lower bound
+     *  (a named leaf excluded), or unavailable at this window. The client labels each; never a bare number. */
+    rowsInWindowKind: CountKind;
+    totalRowsKind: CountKind;
+    /** the excluded / lagging leaves behind a non-exact count, or null */
+    countNote: string | null;
   }>;
   totalDiskBytes: number;
   totalDiskPretty: string;
@@ -832,6 +846,14 @@ export interface DataArchiveStatusResponse {
   };
   currentMode: 'vts' | 'paper_sim' | 'live';
 }
+
+/**
+ * B-DB-SIZE-RELIEF Step-9 (KD-80): the Data Archive tables whose exact counts cannot finish inside the diagnostic
+ * pool's 25 s statement bound at any window (measured 2026-11-14: 67-69 s and 53 s). They read labelled estimates
+ * (archive-count-estimate.ts); the other three keep their exact counts, which complete. A measured list, not a
+ * setting: a table joins it when its exact count is measured past the bound.
+ */
+export const ESTIMATED_COUNT_TABLES: ReadonlySet<string> = new Set(['signal_eval_archive', 'signal_eval_provenance']);
 
 export async function computeDataArchiveStatus(
   window: DashboardWindow,
@@ -888,6 +910,59 @@ export async function computeDataArchiveStatus(
     let diskPretty = '0 bytes';
     let lastWriteAt: string | null = null;
     let timedOut = false;
+    let rowsInWindowKind: CountKind = 'exact';
+    let totalRowsKind: CountKind = 'exact';
+    let countNote: string | null = null;
+    if (ESTIMATED_COUNT_TABLES.has(t)) {
+      // B-DB-SIZE-RELIEF Step-9 (KD-80): an exact count of these two cannot finish inside the 25 s bound at ANY window
+      // (measured 53-69 s each, 2026-11-14), so they rendered QUERY TIMEOUT. Estimates per leaf, exact counts only for
+      // the open and boundary DAILY leaves (archive-count-estimate.ts). The size and last-write reads stay exact.
+      try {
+        const lr = await db.execute(sql.raw(leafInfoSql(t)));
+        const leaves = parseLeafRows((Array.isArray(lr) ? lr : (lr as any).rows ?? []) as Array<Record<string, unknown>>);
+        const plan = planEstimate(leaves, windowStart.getTime(), now);
+        const exact = new Map<string, number | null>();
+        for (const a of plan.asks) {
+          const key = `${a.qname}|${a.sinceIso ?? ''}`;
+          try {
+            const er = await db.execute(sql.raw(exactCountSql(a)));
+            const n = ((Array.isArray(er) ? er : (er as any).rows ?? []) as Array<{ n: number | string }>)[0]?.n;
+            exact.set(key, n === undefined || n === null ? null : Number(n));
+          } catch (err) {
+            // a failed exact count EXCLUDES its leaf (named in countNote) — never 0. A real fault is still collected.
+            if (!isDiagPoolLoad(err)) archiveFaults.push(`${t}: exact count of ${a.qname}: ${err instanceof Error ? err.message : String(err)}`);
+            exact.set(key, null);
+          }
+        }
+        const est = assembleEstimate(plan, exact);
+        rowsInWindow = est.rowsInWindow;
+        totalRows = est.totalRows;
+        rowsInWindowKind = est.rowsInWindowKind;
+        totalRowsKind = est.totalRowsKind;
+        countNote = est.countNote;
+        const mr = await db.execute(sql.raw(`SELECT
+            (SELECT max(captured_at) FROM ${t}) AS last_write_at,
+            COALESCE((SELECT sum(pg_total_relation_size(p.relid))::bigint FROM pg_partition_tree('${t}'::regclass) p),
+                     pg_total_relation_size('${t}'::regclass)) AS disk_bytes`));
+        const m = ((Array.isArray(mr) ? mr : (mr as any).rows ?? []) as Array<{ last_write_at: string | Date | null; disk_bytes: number | string | null }>)[0];
+        if (m) {
+          diskBytes = m.disk_bytes != null ? Number(m.disk_bytes) : 0;
+          diskPretty = formatBytes(diskBytes);
+          totalDiskBytes += diskBytes;
+          lastWriteAt = m.last_write_at instanceof Date ? m.last_write_at.toISOString() : (m.last_write_at as string | null);
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (!isDiagPoolLoad(err)) archiveFaults.push(`${t}: ${msg}`);
+        timedOut = true;
+        rowsInWindowKind = 'unavailable';
+        totalRowsKind = 'unavailable';
+      }
+      const hotHorizonDaysE = horizons?.get(t) ?? null;
+      const windowPartialE = hotHorizonDaysE === null ? null : windowMs > hotHorizonDaysE * 86_400_000;
+      tables.push({ name: t, rowsInWindow, totalRows, diskBytes, diskPretty, lastWriteAt, timedOut, hotHorizonDays: hotHorizonDaysE, windowPartial: windowPartialE, rowsInWindowKind, totalRowsKind, countNote });
+      continue;
+    }
     try {
       // Counts + last-write timestamp + total-relation-size (includes all
       // monthly partitions). Partitioned-parent size walks every partition
@@ -938,7 +1013,8 @@ export async function computeDataArchiveStatus(
     // Windows are 24 h / 7 d / 30 d and horizons whole days, so a window in (N, N+1) — the only one a strict test
     // could under-badge — is unreachable. Do NOT relax this to `>=`: it would badge every 30-day table at rolling_30d.
     const windowPartial = hotHorizonDays === null ? null : windowMs > hotHorizonDays * 86_400_000;
-    tables.push({ name: t, rowsInWindow, totalRows, diskBytes, diskPretty, lastWriteAt, timedOut, hotHorizonDays, windowPartial });
+    if (timedOut) { rowsInWindowKind = 'unavailable'; totalRowsKind = 'unavailable'; }
+    tables.push({ name: t, rowsInWindow, totalRows, diskBytes, diskPretty, lastWriteAt, timedOut, hotHorizonDays, windowPartial, rowsInWindowKind, totalRowsKind, countNote });
   }
   if (archiveFaults.length > 0) {
     console.error(`[B70][archive-status] ${archiveFaults.length} of ${TABLES.length} table reads failed — shown as QUERY TIMEOUT; first: ${archiveFaults[0]}`
