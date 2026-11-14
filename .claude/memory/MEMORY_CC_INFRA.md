@@ -111,7 +111,7 @@ Registered in `cc-wake-filter.py` as **"Infra Claude"** — the `--sender` value
 - **★ EMITTER fix (MINE, B-TOKEN-BURN-CUT amd-1, #1026/#1035; acked CC-A 09-30):** `discord-langston-bridge.py` owner=/blocked-on= templates → 6-way. live `29074992` == repo blob at `5ec1a8227` (measured 10-08: cleanly BEHIND, no reconcile). Head adds my OBJ-4a P4; agreed with OLD Claude: ONE combined install with #1177's change, bridge IDLE only. Still owed: `cadb175b1` set-ratification. Detail = my ack in-channel.
 - **★ PLAN-CENSUS 2026-W40 (OLD Claude handover, in-my-own-time; scope `B_PLAN_CURRENCY_CHECK_CENSUS_2026-W40_HANDOVER.md` `ea4b971d9`):** MY 5 items — PLACE #924, #1027; STRIKE dates keep placed home #681, #682; CLOSE §0 plan line `B-WAKE-LEAD-NAME` (#1040, report exists + Langston confirmed — no Kyle ack needed). Re-reported weekly; do with B-CREDENTIALS.
 
-- **#1181 B-DTREVIEW-ABSENCE-PROVENANCE (mine, row 1w1):** obj 1 DONE 11-14 `c0250099b`: NOT a false absence (refusals 06:59:54Z, mirror sync 07:00:04Z; posted 07:14Z was wrong). Asked Langston (a) withdraw+close or (b) keep row for fetch-on-miss (msg `1571112724119691325`). Waiting on his ruling.
+- **`B-DTREVIEW-ABSENCE-PROVENANCE` (#1181, row 1w1) — STEP: 1 of 11 · NEXT: 2 of 11.** Obj 1 (reproduce) done: NOT a false absence (`c0250099b`); Langston ruled (b), keep row for fetch-on-miss, 6 conditions (msg `1571115568788934797`); titles fixed `4ee9b3069`. Scope `2df51fbc9` with Langston (msg `1571118017709084714`). Card created (Scope, blocked Langston). Declared-open GOV_EXCEPTIONS row owed at the FIRST CODE push (deadline clock).
 
 ## ✅ CLOSED — repo is authoritative
 
