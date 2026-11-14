@@ -236,6 +236,8 @@ export class StorageClient {
       });
       if (patchRes.status !== 204) {
         const body = await patchRes.text().catch(() => '');
+        // PARSED: isWarmTooLarge (context-bridge-log-ttl.ts) reads the status after this exact "failed at offset=N
+        // chunk=N: " infix to route a 413 to cold. Change the template and change that regex (a harness fence checks both).
         throw new Error(
           `[B75 storage-client] TUS PATCH failed at offset=${offset} chunk=${chunk.length}: ${patchRes.status} ${patchRes.statusText} — ${body}`,
         );
@@ -393,6 +395,8 @@ export class StorageClient {
         });
         if (patchRes.status !== 204) {
           const body = await patchRes.text().catch(() => '');
+          // PARSED: isWarmTooLarge (context-bridge-log-ttl.ts) reads the status after this exact "failed at offset=N
+          // chunk=N: " infix to route a 413 to cold. Change the template and change that regex (a harness fence checks both).
           throw new Error(
             `[B75 storage-client] TUS(file) PATCH failed at offset=${offset} chunk=${want}: ${patchRes.status} ${patchRes.statusText} — ${body}`,
           );

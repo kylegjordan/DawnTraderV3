@@ -564,6 +564,17 @@ describe('context lane deletion fence', () => {
     ];
     for (const m of notSize) expect(isWarmTooLarge(new Error(m)), m).toBe(false);
   });
+  it('3b item 5 r2 fold: every "failed …: ${status}" template in storage-client, rendered at 413, is read as a size rejection', () => {
+    // Langston's fold: the shapes above are RETYPED, so a template edit in storage-client would leave them green while
+    // the status arm silently degraded. This reads the producer's source, so the contract is checked from both ends.
+    const src = fs.readFileSync(path.resolve(__dirname, '../../services/data-archive/storage-client.ts'), 'utf8');
+    const infixes = [...src.matchAll(/failed([^:`]*): \$\{/g)].map((m) => m[1]);
+    expect(infixes.length).toBeGreaterThanOrEqual(17); // census at c5c0ed83d: 17 templates, two with the PATCH infix
+    for (const infix of infixes) {
+      const rendered = `[B75 storage-client] op failed${infix.replace(/\$\{[^}]*\}/g, '6291456')}: 413  — {}`;
+      expect(isWarmTooLarge(new Error(rendered)), rendered).toBe(true);
+    }
+  });
   it('3b item 5 r1: with cold configured, a space refusal or a checksum mismatch containing "413" never falls back to cold', async () => {
     const ctl = { query: vi.fn(async (sql: string) => {
       if (sql.includes('SELECT id, state')) return { rows: [] };

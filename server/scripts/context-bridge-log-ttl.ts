@@ -189,6 +189,8 @@ async function listDeletePopulationLabels(client: pg.Client, cutoff: Date): Prom
  * r2 (Langston): the TUS PATCH messages carry "at offset=N chunk=N" between "failed" and the status, and that path
  * carries every upload over 40 MB, so the status arm admits exactly that infix. Deliberately narrower than
  * `failed[^:]*: 413`, which would also match a response BODY holding `failed","code": 413`.
+ * Residual, inherited from the pre-r1 arm and not closable by a regex: a non-413 response whose BODY holds the literal
+ * text "upload failed: 413" still matches. The status templates it parses are fenced against storage-client's source.
  */
 export function isWarmTooLarge(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err);
