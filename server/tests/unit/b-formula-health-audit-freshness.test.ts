@@ -125,7 +125,7 @@ vi.mock('fs', async (orig) => {
   const mocked = { ...actual, writeFileSync, existsSync: () => true, statSync: actual.statSync, readdirSync: () => [] };
   return { ...mocked, default: mocked };
 });
-vi.mock('../../services/alerts-service', () => ({ AlertsService: { createAlert: vi.fn() } }));
+vi.mock('../../services/alerts-service', () => ({ AlertsService: { createAlert: vi.fn(), getAlertOwner: vi.fn(async () => null) } }));
 vi.mock('../../storage', () => ({ storage: { getAllUsers: vi.fn(async () => []) } }));
 
 describe('the write guards', () => {

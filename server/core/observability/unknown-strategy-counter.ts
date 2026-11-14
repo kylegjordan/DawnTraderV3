@@ -13,7 +13,6 @@
  * because the conservative floor substitution at the gate is what guarantees safety, not this counter.
  */
 import { AlertsService } from '../../services/alerts-service.js';
-import { storage } from '../../storage.js';
 
 /** in-memory counts keyed by asset_class — the queryable metric `dawntrader_gate_unknown_strategy_total{asset_class}` */
 const _counts = new Map<string, number>();
@@ -65,23 +64,26 @@ export function __resetUnknownStrategyCountsForTest(): void {
 }
 
 async function _raiseUnknownStrategyAlert(assetClass: string, rawToken: string): Promise<void> {
-  const users = await storage.getAllUsers();
-  const adminUsers = users.filter((u) => u.isAdmin);
-  for (const admin of adminUsers) {
-    await AlertsService.createAlert({
-      userId: admin.id,
-      mode: 'paper',
-      alertType: 'unknown_strategy_at_gate',
-      severity: 'warning',
-      category: 'actionable',
-      message:
-        `Unrecognized strategy token "${rawToken}" reached the per-class minRR gate ` +
-        `(assetClass=${assetClass}) and was failed CLOSED to the conservative floor. A strategy-name ` +
-        `drift slipped past the canonicalization SSOT — investigate the emitting site. (reorg-B2.3 tripwire)`,
-      // NOTE (Langston Step-4): mode is hardcoded 'paper' for the alert envelope, but this is a CODE-DRIFT
-      // observability alert that fires on BOTH the paper AND live gate paths — it is NOT a paper-only event.
-      // `firesOnAllModes: true` records that so a future reader doesn't mistake it for paper-path-scoped.
-      metadata: { assetClass, rawToken, source: 'getPerClassTargetGate', firesOnAllModes: true, counts: getUnknownStrategyCounts() },
-    });
+  // B-ALERT-INSERT-CONTRACT (#1255, P4): ONE write under the deterministic alert owner (alerts are global per mode; the
+  // per-admin loop wrote the same row twice and the second collided on unique_global_alert).
+  const owner = await AlertsService.getAlertOwner();
+  if (!owner) {
+    console.warn('[UnknownStrategy] No admin user to own the alert — not written');
+    return;
   }
+  await AlertsService.createAlert({
+    userId: owner.id,
+    mode: 'paper',
+    alertType: 'unknown_strategy_at_gate',
+    severity: 'warning',
+    category: 'actionable',
+    message:
+      `Unrecognized strategy token "${rawToken}" reached the per-class minRR gate ` +
+      `(assetClass=${assetClass}) and was failed CLOSED to the conservative floor. A strategy-name ` +
+      `drift slipped past the canonicalization SSOT — investigate the emitting site. (reorg-B2.3 tripwire)`,
+    // NOTE (Langston Step-4): mode is hardcoded 'paper' for the alert envelope, but this is a CODE-DRIFT
+    // observability alert that fires on BOTH the paper AND live gate paths — it is NOT a paper-only event.
+    // `firesOnAllModes: true` records that so a future reader doesn't mistake it for paper-path-scoped.
+    metadata: { assetClass, rawToken, source: 'getPerClassTargetGate', firesOnAllModes: true, counts: getUnknownStrategyCounts() },
+  });
 }

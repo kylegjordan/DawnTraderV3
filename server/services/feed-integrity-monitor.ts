@@ -656,10 +656,11 @@ class FeedIntegrityMonitorService {
   }
 
   /**
-   * B-FEED-HEALTH-GRADE-ARM (#1123, Langston Step-1 C1): the status the alert state last recorded — the read site of the
-   * recovery predicate. The job acknowledges the dashboard alerts only on a recorded non-healthy → healthy transition, then
-   * records `healthy`, so it fires once per recovery. (`shouldSendAlert` alone cannot say this: with the 300 s cooldown equal
-   * to the 5-minute cron it returns true on nearly every healthy cycle.)
+   * B-FEED-HEALTH-GRADE-ARM (#1123, Langston Step-1 C1): the status the alert state last recorded. The job reads it on a
+   * healthy cycle to log what was recorded and to record `healthy` once per recovery. The dashboard clear itself runs on
+   * EVERY healthy cycle, not on the transition (Step 9 r3 BLOCKER-2; corrected here by B-ALERT-INSERT-CONTRACT #1255).
+   * (`shouldSendAlert` alone cannot say this: with the 300 s cooldown equal to the 5-minute cron it returns true on nearly
+   * every healthy cycle.)
    */
   public getLastStatus(): FeedHealthStatus {
     return this.alertState.lastStatus;

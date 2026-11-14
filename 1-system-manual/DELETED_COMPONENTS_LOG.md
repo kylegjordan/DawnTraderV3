@@ -1628,3 +1628,17 @@ Archive: git history is authoritative (this is a field-retirement within live fi
 **WHY:** 0 production callers; it returned OPEN trade records by default (`closedOnly` defaulted false), so once P-14b drops the money defaults it was a ready-made path to NULL money values for any future caller. Built for LATTI baseline calculations (Phase 27.F.14.B); LATTI is retired (`#659`). Rule 18: found dead in the batch, deleted in the batch.
 **BLAST RADIUS:** `git grep getClosedTradesGlobal` across `server`, `shared`, `client`, `scripts` — 3 hits before (interface, implementation, the Q-9 case), 0 after; `tsc` 324 = baseline. The other non-outcome readers Q-1..Q-8, Q-10.. in that test still run.
 **ARCHIVE:** `1-system-manual/_archive/deleted-code/getClosedTradesGlobal.20261113-B-CLOSE-WRITER-COSTS.removed` (the method verbatim). **COMMIT:** the P-14b code commit.
+
+## 2026-11-14 — `storage.createSystemAlert` and `AlertsService.cleanupOldAlerts` — B-ALERT-INSERT-CONTRACT (`#1255`), CC-B
+| removed | where (pre-removal, at `ec916a2a6`) | what it was |
+|---|---|---|
+| `createSystemAlert(alert)` (method + `IStorage` line) | `server/storage.ts:4447-4456`, `:672-673` | a second, unguarded `db.insert(systemAlerts)` beside `AlertsService.createAlert`, used only by the OpenAI rate limiter |
+| the `SystemAlert`, `InsertSystemAlert` and `systemAlerts` imports | `server/storage.ts:181-183` | used only by that method |
+| `cleanupOldAlerts(daysOld)` | `server/services/alerts-service.ts:247-262` | deleted acknowledged alerts older than N days, by `timestamp` |
+
+**WHY:** rule 18. `createSystemAlert` duplicated the insert path that this batch makes repeat-safe (`ON CONFLICT (mode, alert_type, message) DO UPDATE`); left in place it would keep throwing on `unique_global_alert`. Its one caller (`openai-rate-limiter.ts:144`) now writes through `AlertsService.createAlert`. `cleanupOldAlerts` had **zero callers**, and it aged rows by the `timestamp` that a refresh now moves, so it would have kept any recurring alert alive forever.
+**BLAST RADIUS (§9.5(a-ii)):** at the ref, `insert(systemAlerts)` has exactly two code sites (`alerts-service.ts:46`, `storage.ts:4450`); `createSystemAlert` has one caller (`openai-rate-limiter.ts:144`) plus a comment in `ohlc-batch-writer.ts:278` and a comment in `f-g-1-writer-retry-fence.test.ts:8` (neither calls it); `cleanupOldAlerts` has one hit, its definition (Langston re-derived both at `7946a924d`). State written: both wrote only `system_alerts`, and every reader of that table survives (`AlertsService.get*`/`acknowledge*`/`muteLowSeverity`, the routes, the action route). `tsc` baseline unchanged (324 = 324).
+**LEFT INTENTIONALLY:** the `system_alerts` table and every reader. The action route's per-user ownership check (`routes.ts:18640-18648`) is untouched: no writer sets action buttons.
+**RESTORE PATH:** re-add from git at `ec916a2a6`. A restored `createSystemAlert` must go through the conflict-aware insert or it reintroduces the crash; a restored `cleanupOldAlerts` must age rows by something other than the refreshed `timestamp`.
+**ARCHIVE:** none — two short functions, recoverable from git at `ec916a2a6`; no file was removed.
+**COMMIT:** the B-ALERT-INSERT-CONTRACT Step-3 commit.

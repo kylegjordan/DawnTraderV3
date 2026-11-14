@@ -13,6 +13,7 @@ process.env.FEED_ALERT_COOLDOWN_SEC = '600'; // explicit cooldown — the tests 
 const m = vi.hoisted(() => ({
   createAlert: vi.fn(),
   acknowledgeFeedHealthAlerts: vi.fn(),
+  getAlertOwner: vi.fn(),
   getAllUsers: vi.fn(),
   isEngineActive: vi.fn(),
 }));
@@ -20,7 +21,9 @@ vi.mock('../../services/alerts-service', () => ({
   AlertsService: {
     createAlert: (...a: any[]) => m.createAlert(...a),
     acknowledgeFeedHealthAlerts: (...a: any[]) => m.acknowledgeFeedHealthAlerts(...a),
+    getAlertOwner: (...a: any[]) => m.getAlertOwner(...a),
   },
+  formatCheckFailedMessage: (e: any) => `Feed Health Check Failed: ${e?.message ?? e}`,
 }));
 vi.mock('../../storage', () => ({ storage: { getAllUsers: (...a: any[]) => m.getAllUsers(...a) } }));
 vi.mock('../../services/trading-state-sync', () => ({ tradingStateSync: { isEngineActive: (...a: any[]) => m.isEngineActive(...a) } }));
@@ -48,6 +51,7 @@ let mon: ReturnType<typeof getFeedIntegrityMonitor>;
 beforeEach(() => {
   vi.clearAllMocks();
   m.getAllUsers.mockResolvedValue([ADMIN]);
+  m.getAlertOwner.mockResolvedValue({ id: ADMIN.id, tradingMode: 'paper' });
   m.isEngineActive.mockResolvedValue(true);
   m.createAlert.mockResolvedValue({});
   m.acknowledgeFeedHealthAlerts.mockResolvedValue([{ mode: 'live' }, { mode: 'paper' }]);
@@ -58,15 +62,15 @@ beforeEach(() => {
 });
 
 describe('the clear: acknowledged on every healthy cycle, idempotent (Step 9 r3, Langston BLOCKER-2)', () => {
-  it('a non-healthy cycle mints; the next healthy cycle acknowledges for each admin and records healthy', async () => {
+  it('a non-healthy cycle mints; the next healthy cycle closes the episode (one global call) and records healthy', async () => {
     vi.spyOn(mon, 'generateReport').mockReturnValueOnce(report('critical', 'F')).mockReturnValueOnce(report('healthy', 'A'));
     await runFeedIntegrityCheck('auto');
-    expect(m.createAlert).toHaveBeenCalledTimes(2); // live + paper for the one admin
+    expect(m.createAlert).toHaveBeenCalledTimes(2); // live + paper, under the one alert owner
     expect(m.acknowledgeFeedHealthAlerts).not.toHaveBeenCalled(); // a non-healthy cycle acknowledges nothing
     expect(mon.getLastStatus()).toBe('critical');
     await runFeedIntegrityCheck('auto');
     expect(m.acknowledgeFeedHealthAlerts).toHaveBeenCalledTimes(1);
-    expect(m.acknowledgeFeedHealthAlerts).toHaveBeenCalledWith('admin-1');
+    expect(m.acknowledgeFeedHealthAlerts).toHaveBeenCalledWith(); // B-ALERT-INSERT-CONTRACT P5: global, no user filter
     expect(mon.getLastStatus()).toBe('healthy');
   });
   it('THE RESTART CASE: the recorded status starts healthy, rows are waiting — the FIRST healthy cycle acknowledges them', async () => {
@@ -76,7 +80,7 @@ describe('the clear: acknowledged on every healthy cycle, idempotent (Step 9 r3,
     vi.spyOn(mon, 'generateReport').mockReturnValue(report('healthy', 'A'));
     await runFeedIntegrityCheck('auto');
     expect(m.acknowledgeFeedHealthAlerts).toHaveBeenCalledTimes(1);
-    expect(log.mock.calls.some((c) => /\[FeedIntegrity\]\[CLEAR\] .*acknowledged 2 feed alert/.test(String(c[0])))).toBe(true);
+    expect(log.mock.calls.some((c) => /\[FeedIntegrity\]\[CLEAR\] .*closed 2 feed alert episode/.test(String(c[0])))).toBe(true);
   });
   it('drained: a second healthy cycle acknowledges nothing and prints no CLEAR line', async () => {
     m.acknowledgeFeedHealthAlerts.mockResolvedValueOnce([{ mode: 'live' }]).mockResolvedValue([]);
@@ -92,6 +96,31 @@ describe('the clear: acknowledged on every healthy cycle, idempotent (Step 9 r3,
     await runFeedIntegrityCheck('auto');
     await runFeedIntegrityCheck('auto');
     expect(m.acknowledgeFeedHealthAlerts).not.toHaveBeenCalled();
+  });
+});
+
+describe('B-ALERT-INSERT-CONTRACT (#1255) — one write per mode under the alert owner (P4)', () => {
+  it('with TWO admins the alerting cycle writes exactly once per mode, under the owner, and completes (updateAlertState runs)', async () => {
+    m.getAllUsers.mockResolvedValue([ADMIN, { id: 'admin-2', isAdmin: true }]);
+    vi.spyOn(mon, 'generateReport').mockReturnValueOnce(report('critical', 'F'));
+    await runFeedIntegrityCheck('auto');
+    expect(m.createAlert).toHaveBeenCalledTimes(2);
+    expect(m.createAlert.mock.calls.map((c) => [c[0].userId, c[0].mode])).toEqual([['admin-1', 'live'], ['admin-1', 'paper']]);
+    expect(mon.getLastStatus()).toBe('critical'); // the cycle reached updateAlertState — the collision used to abort before it
+  });
+  it('with NO admin the alert is not written, and the check still completes', async () => {
+    m.getAlertOwner.mockResolvedValue(null);
+    vi.spyOn(mon, 'generateReport').mockReturnValueOnce(report('warning', 'C'));
+    await runFeedIntegrityCheck('auto');
+    expect(m.createAlert).not.toHaveBeenCalled();
+    expect(mon.getLastStatus()).toBe('warning');
+  });
+  it('the check-failed write carries the cause in the message and the full text in metadata', async () => {
+    vi.spyOn(mon, 'generateReport').mockImplementationOnce(() => { throw new Error('boom 42'); });
+    await expect(runFeedIntegrityCheck('auto')).rejects.toThrow('boom 42');
+    expect(m.createAlert).toHaveBeenCalledTimes(2);
+    expect(m.createAlert.mock.calls[0][0].message).toBe('Feed Health Check Failed: boom 42');
+    expect(m.createAlert.mock.calls[0][0].metadata.error).toBe('boom 42');
   });
 });
 

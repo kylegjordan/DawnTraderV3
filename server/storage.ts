@@ -178,9 +178,6 @@ import {
   type SystemContext,
   type InsertSystemContext,
   systemContext,
-  type SystemAlert,
-  type InsertSystemAlert,
-  systemAlerts,
   type AuditLog,
   type InsertAuditLog,
   auditLog,
@@ -669,9 +666,9 @@ export interface IStorage {
   upsertSystemContext(data: Partial<InsertSystemContext> & { tradingMode: 'live' | 'paper' }): Promise<SystemContext>;
   updateSystemContext(mode: 'live' | 'paper', updates: Partial<SystemContext>): Promise<SystemContext>;
   
-  // System Alert methods (OpenAI Rate Limiter)
-  createSystemAlert(alert: InsertSystemAlert): Promise<SystemAlert>;
-
+  // B-ALERT-INSERT-CONTRACT (#1255, P2): `createSystemAlert` DELETED (rule 18) - the second, unguarded insert into
+  // system_alerts. Its one caller (openai-rate-limiter) writes through AlertsService.createAlert. Record: DELETED_COMPONENTS_LOG.
+  
   // Phase 28.C: Override Audit History methods
   addAuditLog(log: InsertAuditLog): Promise<AuditLog>;
   getRecentAuditLogs(params: { mode?: 'live' | 'paper'; entityType?: string; limit?: number; since?: Date }): Promise<AuditLog[]>;
@@ -4442,17 +4439,6 @@ export class DatabaseStorage implements IStorage {
       .where(eq(systemContext.tradingMode, mode))
       .returning();
     return updated;
-  }
-  
-  // System Alert methods (OpenAI Rate Limiter)
-  async createSystemAlert(alert: InsertSystemAlert): Promise<SystemAlert> {
-    const [created] = await db
-      .insert(systemAlerts)
-      .values(alert)
-      .returning();
-    
-    console.log(`[SystemAlert] Created ${alert.severity} alert for user ${alert.userId}: ${alert.alertType}`);
-    return created;
   }
   
   // Phase 28.C: Override Audit History methods

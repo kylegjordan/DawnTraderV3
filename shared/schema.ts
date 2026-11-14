@@ -1555,6 +1555,10 @@ export const systemAlerts = pgTable("system_alerts", {
   timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow(),
 }, (table) => ({
   userModeTimestampIdx: uniqueIndex("system_alerts_user_mode_timestamp_idx").on(table.userId, table.mode, table.timestamp),
+  // B-ALERT-INSERT-CONTRACT (#1255, P3): the database's ONE-ROW-PER-ALERT rule, created by
+  // drizzle/migrations/2026-04-22-initial-schema.sql and previously undeclared here. AlertsService.createAlert's conflict
+  // target is these columns; server/tests/unit/b-alert-insert-contract.test.ts holds the two in step. Declaration only, no DDL.
+  uniqueGlobalAlert: unique("unique_global_alert").on(table.mode, table.alertType, table.message),
 }));
 
 // Strategy Parameters (shared global parameters - NO mode column) - GLOBAL

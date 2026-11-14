@@ -1,7 +1,6 @@
 import cron from 'node-cron';
 import { FormulaAuditService } from '../services/formula-audit';
 import { AlertsService } from '../services/alerts-service';
-import { storage } from '../storage';
 import * as fs from 'fs';
 import * as path from 'path';
 import { countedMetaFromReport, type AuditResultView } from '../services/formula-audit-view';
@@ -93,10 +92,14 @@ function validateReportFile(filePath: string): boolean {
  */
 async function createAlertNotification(formulaName: string, deviation: number, status: 'WARNING' | 'FAIL') {
   try {
-    // Get all admin users
-    const users = await storage.getAllUsers();
-    const adminUsers = users.filter(u => u.isAdmin);
-    
+    // B-ALERT-INSERT-CONTRACT (#1255, P4): ONE write per mode under the deterministic alert owner. Alerts are global per mode,
+    // and the per-admin loop that stood here wrote the same row twice, the second colliding on unique_global_alert.
+    const owner = await AlertsService.getAlertOwner();
+    if (!owner) {
+      console.warn('[FORMULA-AUDIT] No admin user to own the alert — not written');
+      return;
+    }
+
     // Set severity based on status: FAIL = critical, WARNING = warning
     const severity = status === 'FAIL' ? 'critical' : 'warning';
     const category = status === 'FAIL' ? 'critical' : 'actionable';
@@ -104,21 +107,10 @@ async function createAlertNotification(formulaName: string, deviation: number, s
       ? `Formula Audit FAILURE — ${formulaName} deviated ${deviation.toFixed(2)}% (≥1%)`
       : `Formula Audit Warning — ${formulaName} deviated ${deviation.toFixed(2)}% (0.1-1%)`;
     
-    // Create alerts for each admin user (existing AlertsService flow)
-    for (const admin of adminUsers) {
+    for (const mode of ['paper', 'live'] as const) {
       await AlertsService.createAlert({
-        userId: admin.id,
-        mode: 'paper',
-        alertType: 'formula_audit',
-        severity,
-        category,
-        message,
-        metadata: { formulaName, deviation, status }
-      });
-      
-      await AlertsService.createAlert({
-        userId: admin.id,
-        mode: 'live',
+        userId: owner.id,
+        mode,
         alertType: 'formula_audit',
         severity,
         category,

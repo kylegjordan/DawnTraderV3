@@ -4,7 +4,7 @@
  */
 
 import OpenAI from 'openai';
-import { storage } from '../storage';
+import { AlertsService } from './alerts-service';
 
 interface CircuitBreakerState {
   isOpen: boolean;
@@ -137,22 +137,24 @@ export class OpenAIRateLimiter {
    */
   private async createSystemAlert() {
     try {
-      const users = await storage.getAllUsers();
-      const owners = users.filter(u => u.role === 'owner');
-
-      for (const owner of owners) {
-        await storage.createSystemAlert({
-          userId: owner.id,
-          mode: owner.tradingMode || 'paper',
-          alertType: 'openai_quota_exhausted',
-          severity: 'critical',
-          category: 'critical',
-          message: 'All AI features are temporarily unavailable due to OpenAI API rate limits. AI requests will automatically resume in 5 minutes. Please check your OpenAI account billing and usage.',
-          acknowledged: false,
-        });
+      // B-ALERT-INSERT-CONTRACT (#1255, P2/P4): ONE write through AlertsService (the storage bypass is deleted), under the
+      // deterministic alert owner (is_admin, by created_at then id) — it was one write per `role='owner'` user, and the
+      // second collided with the first on unique_global_alert. The two populations are equal today; the change is stated.
+      const owner = await AlertsService.getAlertOwner();
+      if (!owner) {
+        console.warn('[OpenAIRateLimiter] No admin user to own the quota alert — not written');
+        return;
       }
+      await AlertsService.createAlert({
+        userId: owner.id,
+        mode: owner.tradingMode || 'paper',
+        alertType: 'openai_quota_exhausted',
+        severity: 'critical',
+        category: 'critical',
+        message: 'All AI features are temporarily unavailable due to OpenAI API rate limits. AI requests will automatically resume in 5 minutes. Please check your OpenAI account billing and usage.',
+      });
 
-      console.log(`[OpenAIRateLimiter] Created ${owners.length} alerts for quota exhaustion`);
+      console.log('[OpenAIRateLimiter] Wrote the quota-exhaustion alert');
     } catch (error) {
       console.error('[OpenAIRateLimiter] Failed to create alert:', error);
     }

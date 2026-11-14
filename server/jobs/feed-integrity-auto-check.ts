@@ -1,7 +1,6 @@
 import cron, { type ScheduledTask } from 'node-cron';
 import { getFeedIntegrityMonitor } from '../services/feed-integrity-monitor';
-import { AlertsService } from '../services/alerts-service';
-import { storage } from '../storage';
+import { AlertsService, formatCheckFailedMessage } from '../services/alerts-service';
 import { tradingStateSync } from '../services/trading-state-sync';
 import { clusterBus } from '../services/cluster-bus';
 import type { FeedHealthReport, LivenessReading } from '../services/feed-integrity-monitor';
@@ -132,14 +131,15 @@ export async function runFeedIntegrityCheck(trigger: 'auto' | 'manual'): Promise
     // filters `acknowledged = false`), so a drained table returns nothing; the line prints only when it acknowledged >= 1. It
     // clears grade-path and check-failed rows alike (both mint alertType 'feed_health'). The verb is acknowledge:
     // `system_alerts` has no resolve state. The dead `getActiveAlertId()` branch that stood here is removed.
+    // B-ALERT-INSERT-CONTRACT (#1255, P5): ONE call, for every user's rows (alerts are global per mode; the per-admin loop
+    // with a `user_id` filter could never reach a row owned by a user who is not an admin — five live rows were stranded that
+    // way). The call also CLOSES the episode (stamps `episodeClosedAt`), so the next recurrence re-raises.
     if (metrics.status === 'healthy') {
       const was = monitor.getLastStatus();
-      const admins = (await storage.getAllUsers()).filter((u) => u.isAdmin);
-      for (const admin of admins) {
-        const cleared = await AlertsService.acknowledgeFeedHealthAlerts(admin.id);
-        if (cleared.length === 0) continue;
+      const cleared = await AlertsService.acknowledgeFeedHealthAlerts();
+      if (cleared.length > 0) {
         const live = cleared.filter((a) => a.mode === 'live').length;
-        console.log(`[FeedIntegrity][CLEAR] healthy (recorded ${was}): acknowledged ${cleared.length} feed alert(s) for user ${admin.id} (live ${live}, paper ${cleared.length - live})`);
+        console.log(`[FeedIntegrity][CLEAR] healthy (recorded ${was}): closed ${cleared.length} feed alert episode row(s) (live ${live}, paper ${cleared.length - live})`);
       }
       if (was !== 'healthy') monitor.updateAlertState('healthy', overallGrade);
     }
@@ -151,7 +151,6 @@ export async function runFeedIntegrityCheck(trigger: 'auto' | 'manual'): Promise
       if (metrics.status !== 'healthy') {
         // PHASE 27.F.21: Check if trading is inactive (dormant mode)
         // Phase 27.F.13.O: Check global engine state (paper and live) instead of per-user
-        const users = await storage.getAllUsers();
         const [paperActive, liveActive] = await Promise.all([
           tradingStateSync.isEngineActive('paper'),
           tradingStateSync.isEngineActive('live')
@@ -159,7 +158,7 @@ export async function runFeedIntegrityCheck(trigger: 'auto' | 'manual'): Promise
         const anyTradingActive = paperActive || liveActive;
         const isDormantMode = !anyTradingActive;
         
-        // Create new alert for all admin users (warning or critical)
+        // Create the alert (warning or critical), one row per mode
         const severity = metrics.status === 'critical' ? 'critical' : 'warning';
         const dormantPrefix = isDormantMode ? '[DORMANT] ' : '';
         const message = `${dormantPrefix}Feed Health: ${metrics.status.toUpperCase()} (Grade ${overallGrade})\n${report.issues.join('\n')}`;
@@ -167,11 +166,8 @@ export async function runFeedIntegrityCheck(trigger: 'auto' | 'manual'): Promise
         if (isDormantMode) {
           console.log(`[FeedIntegrity] 🔇 Dormant mode detected: Suppressing dashboard alerts (trading inactive)`);
         } else {
-          console.log(`[FeedIntegrity] Creating ${severity} alert for admin users`);
+          console.log(`[FeedIntegrity] Creating ${severity} alert`);
         }
-        
-        // Get all admin users
-        const adminUsers = users.filter(u => u.isAdmin);
         
         // PHASE 27.F.21: Dormant Mode Handling
         // In dormant mode: Skip user-facing alerts (trading inactive, no active stream to monitor)
@@ -183,48 +179,35 @@ export async function runFeedIntegrityCheck(trigger: 'auto' | 'manual'): Promise
           
           const alertCategory = severity === 'critical' ? 'critical' : 'actionable';
           
-          for (const admin of adminUsers) {
-            await AlertsService.createAlert({
-              userId: admin.id,
-              mode: 'live',
-              alertType: 'feed_health',
-              severity,
-              category: alertCategory,
-              message,
-              metadata: {
-                grade: overallGrade,
-                latencyMs: metrics.latencyMs,
-                uptimePercent: metrics.uptimePercent ?? 'warming',
-                reconnectBasis: metrics.reconnectBasis,
-                ringSpanMs: metrics.ringSpanMs,
-                reconnectCount: metrics.reconnectCount,
-                tickAgeSec: metrics.tickAgeSec,
-                feedType: metrics.feedType,
-                trigger,
-                dormant: false,
-              },
-            });
-            
-            await AlertsService.createAlert({
-              userId: admin.id,
-              mode: 'paper',
-              alertType: 'feed_health',
-              severity,
-              category: alertCategory,
-              message,
-              metadata: {
-                grade: overallGrade,
-                latencyMs: metrics.latencyMs,
-                uptimePercent: metrics.uptimePercent ?? 'warming',
-                reconnectBasis: metrics.reconnectBasis,
-                ringSpanMs: metrics.ringSpanMs,
-                reconnectCount: metrics.reconnectCount,
-                tickAgeSec: metrics.tickAgeSec,
-                feedType: metrics.feedType,
-                trigger,
-                dormant: false,
-              },
-            });
+          // B-ALERT-INSERT-CONTRACT (#1255, P4): ONE write per mode under the deterministic alert owner. The per-admin loop
+          // that stood here wrote the same row twice per mode; with two admins the second write collided on
+          // unique_global_alert in the same second and aborted the check before updateAlertState below.
+          const owner = await AlertsService.getAlertOwner();
+          if (!owner) {
+            console.warn(`[FeedIntegrity-Alert] No admin user to own the alert — not written`);
+          } else {
+            for (const mode of ['live', 'paper'] as const) {
+              await AlertsService.createAlert({
+                userId: owner.id,
+                mode,
+                alertType: 'feed_health',
+                severity,
+                category: alertCategory,
+                message,
+                metadata: {
+                  grade: overallGrade,
+                  latencyMs: metrics.latencyMs,
+                  uptimePercent: metrics.uptimePercent ?? 'warming',
+                  reconnectBasis: metrics.reconnectBasis,
+                  ringSpanMs: metrics.ringSpanMs,
+                  reconnectCount: metrics.reconnectCount,
+                  tickAgeSec: metrics.tickAgeSec,
+                  feedType: metrics.feedType,
+                  trigger,
+                  dormant: false,
+                },
+              });
+            }
           }
         }
         
@@ -249,7 +232,7 @@ export async function runFeedIntegrityCheck(trigger: 'auto' | 'manual'): Promise
   } catch (error: any) {
     console.error(`[FeedIntegrity:${trigger}] ❌ Check failed:`, error);
     
-    // Create critical alert for check failure for all admin users.
+    // Create the critical check-failed alert, one row per mode.
     // B-FEED-HEALTH-GRADE-ARM (Langston Step-1 Q1): THROTTLED through the grade path's own state — a persistent throw used
     // to mint two critical rows per admin every 5 minutes. `CHECK_FAILED` differs from every real grade, so the first
     // successful check after a throw always trips the status/grade-change arm and the healthy transition clears these rows.
@@ -258,29 +241,25 @@ export async function runFeedIntegrityCheck(trigger: 'auto' | 'manual'): Promise
       if (!failMonitor.shouldSendAlert('critical', 'CHECK_FAILED')) {
         console.log(`[FeedIntegrity] Check-failed alert suppressed (cooldown or duplicate)`);
       } else {
-        const users = await storage.getAllUsers();
-        const adminUsers = users.filter(u => u.isAdmin);
-      
-        for (const admin of adminUsers) {
-          await AlertsService.createAlert({
-            userId: admin.id,
-            mode: 'live',
-            alertType: 'feed_health',
-            severity: 'critical',
-            category: 'critical',
-            message: `Feed Health Check Failed: ${error.message}`,
-            metadata: { error: error.message, trigger },
-          });
-        
-          await AlertsService.createAlert({
-            userId: admin.id,
-            mode: 'paper',
-            alertType: 'feed_health',
-            severity: 'critical',
-            category: 'critical',
-            message: `Feed Health Check Failed: ${error.message}`,
-            metadata: { error: error.message, trigger },
-          });
+        // B-ALERT-INSERT-CONTRACT (#1255, P4/P6): ONE write per mode under the alert owner. The cause stays in `message`
+        // (the banner renders nothing else), normalized so one kind of failure keeps one row; the full text and the time go
+        // in metadata. The constant-text collision this path used to hit came from the duplicate-key error P1 removes.
+        const owner = await AlertsService.getAlertOwner();
+        if (owner) {
+          const errorText = error instanceof Error ? error.message : String(error);
+          for (const mode of ['live', 'paper'] as const) {
+            await AlertsService.createAlert({
+              userId: owner.id,
+              mode,
+              alertType: 'feed_health',
+              severity: 'critical',
+              category: 'critical',
+              message: formatCheckFailedMessage(error),
+              metadata: { error: errorText, trigger, at: new Date().toISOString() },
+            });
+          }
+        } else {
+          console.warn(`[FeedIntegrity] No admin user to own the check-failed alert — not written`);
         }
         failMonitor.updateAlertState('critical', 'CHECK_FAILED');
       }
@@ -418,8 +397,8 @@ export async function clearFeedHealthAlertsOnStop(userId: string): Promise<void>
   try {
     console.log(`[FeedIntegrity] 🔇 Auto-clearing feed-health alerts for user ${userId} (trading stopped)`);
     
-    // Use efficient service method to acknowledge all feed-health alerts at once
-    const clearedAlerts = await AlertsService.acknowledgeFeedHealthAlerts(userId);
+    // B-ALERT-INSERT-CONTRACT (#1255, P5): every user's feed-health rows (global per mode); `userId` names who stopped.
+    const clearedAlerts = await AlertsService.acknowledgeFeedHealthAlerts();
     const totalCleared = clearedAlerts.length;
     
     if (totalCleared > 0) {
