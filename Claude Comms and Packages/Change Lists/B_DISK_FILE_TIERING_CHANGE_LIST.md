@@ -183,7 +183,7 @@ Plus, not in the class matrix but owed: STORAGE_POLICY (incl. the `:100`/`:191` 
 | (i) class | `architecture` (scope header) |
 | (ii) doc set | scope present; pre-audit present (amendment 1 AP-4/5/6; amendment 4 r1, r2, PROCEED notes); change list — this file; System Manual / SIM / STORAGE_POLICY / BATCH_CATALOG / PHASE_HISTORY / CHANGES_AND_FIXES / RUNNING_ISSUES / task list — owed at Step 10 (SIM `:2405`'s 1× rotator model corrected; STORAGE_POLICY cold verification = attestation) |
 | (iii) Step 2 | pre-audit "AMENDMENT 4" r1 → r2 → PROCEED notes; amendment 1 AP-4 / AP-5 / AP-6 |
-- **`storage-client.ts`:** NEW `uploadColdFile(bucket, path, localPath)` — one streamed read for SHA-256 + SHA-1 (`hashFileSha256Sha1`), body streamed from the file (`duplex: 'half'`, `Content-Length` set), the upload response PARSED and checked (Coltrane 1: action, bucket, name, SHA-1, length, file id), then `b2_get_file_info` by the returned file id and the same check (Coltrane 2); any mismatch or a transaction-cap refusal throws. NEW `downloadColdFile` (streamed, by name; by id is 3b), `b2GetFileInfo`, `deleteColdVersion(fileName, fileId)` (usable only until 3d step 5). `assertB2Version` exported for tests. The Buffer forms stay for the liveness canary.
+- **`storage-client.ts`:** NEW `uploadColdFile(bucket, path, localPath)` — one streamed read for SHA-256 + SHA-1 (`hashFileSha256Sha1`), body streamed from the file with backpressure through `postFileStream` (node:https `request` + `stream.pipeline`, `Content-Length` set; as shipped after Step 9 — the first form used `fetch` with a `duplex: 'half'` stream body, which held the whole object, see the Step-7 section), the upload response PARSED and checked (Coltrane 1: action, bucket, name, SHA-1, length, file id), then `b2_get_file_info` by the returned file id and the same check (Coltrane 2); any mismatch or a transaction-cap refusal throws. NEW `downloadColdFile` (streamed, by name; by id is 3b), `b2GetFileInfo`, `deleteColdVersion(fileName, fileId)` (usable only until 3d step 5). `assertB2Version` exported for tests. The Buffer forms stay for the liveness canary.
 - **Rotator:** `rotateColdCandidate` refuses before any I/O unless free space covers 2 × the object + `data_lifecycle.disk_file_free_floor_bytes` (the tiering job's own floor — same disk; a missing floor refuses rather than skips, because `free < NaN` is false); `downloadWarmFile` into a private `0700` temp folder (removed whatever happens); `uploadColdFile` — **no re-download**; the cold manifest row writes `provider_file_id`, `provider_sha1`, `provider_bytes` and `verification_method = 'b2-sha1-attested'`; warm deleted only after. `Pick` narrowed to `downloadWarmFile | uploadColdFile | deleteWarm` (N1). The Phase-2 step list and the exact-evidence basis comment cite the attestation (L-2).
 - **`b75-rehydrate.ts`:** the cold restore streams to the file (`downloadColdFile`) — AP-4 C-2's reason: a streaming rotator with a buffered restore sends to cold what cannot come back.
 - **`context-bridge-log-ttl.ts`:** the warm pair (`uploadWarmFile` + a streamed read-back to a `.verify` file, removed after) and the 413 cold fallback (`uploadColdFile`, attested, the manifest UPDATE writing the provider columns) — `#169`'s subject; the now-unused `readFile` dependency removed (rule 18). Its export is still built in memory by its exporter (AP-4's recorded limit).
@@ -291,3 +291,24 @@ Then CI, deploy, and re-run the proof at both sizes.
 The first fence form, read-ahead (`bytesRead` minus received), did NOT fail the mutation: 7.4 MB on Node 20. That is how the mechanism correction above was found.
 
 Checks: the 3a file passes 16/16, and the `tsc` baseline gate stays at 324 = 324. The Node 20 runs used a private mirror at `/home/deploy/.m3a` (deleted after); the deploy clone was untouched.
+
+### 3a Step 9 r2 — Langston CHANGES-NEEDED at `301684a42` (Discord `1571054015536439297`), folded
+- **FINDING-1 (early-response leak), fixed:** `postFileStream`'s `done()` now destroys the request when its body has not ended (`if (!req.writableEnded) req.destroy()`). The pipeline then destroys the file read stream. Without it, a receiver that answered on the headers and kept the socket open left the request and the read stream alive, pinning the temp file's inode after the rotator unlinked it.
+  - **New fence:** a raw `net` receiver answers 400 on the headers and keeps draining. Asserts the caller gets `{400, "nope"}` and that the body read stream and the socket are destroyed within 2 s.
+  - **Mutation (the destroy line removed):** FAILS on Node 20.20.0 and on Node 22.18.0.
+- **(a) loopback carve-out:** additionally gated to the test runner (`VITEST === 'true'` or `NODE_ENV === 'test'`). Production accepts https only.
+- **(b) gc hygiene:** `--no-expose-gc` is set right after `gc` is captured; a comment states the per-file-isolation assumption.
+- **(c) timeout:** the doc comment now says the 300 s socket-idle timer also times the send phase, and that redirects are not followed.
+
+**Node 20.20.0 private-mirror runs, r2:**
+- This sender: retention fence 7.3 MiB, early-refusal fence passes.
+- Destroy removed: early-refusal fence FAILS.
+- Deployed `fetch` body restored: retention fence 93.2 MiB, FAILS.
+- The mirror's 5 other failures are the caller-census tests, which read source files the mirror did not copy. All 17 pass in the repo.
+
+**Langston's three record items:**
+1. Line 186 now describes `uploadColdFile` as shipped.
+2. `GOVERNANCE_EXCEPTIONS.md` row 44 item (2) is refreshed to the measured Step-7 FAIL and this fix.
+3. The sha the proof loaded: the two proof runs (06:19:39Z and 06:20:26Z by their B2 upload timestamps) and the per-phase probe ran `npx tsx` from `/home/deploy/dawntrader`, whose checkout was `415b3051f`, deployed at 06:18:45Z. The drift row's "deployed `9591ba8c2`" was stamped AS AT 06:17:01Z, before that deploy.
+
+**#661 leg 3 (Langston):** the `https` arm has never executed in a test — every fence drives http to loopback. Its first exercise is the `b75-cold-proof` re-run against real B2, so no green fence is cited for it. The 40 MiB bound is not scale-invariant; AP-5 flatness is proven only by the proof harness.

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
+import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import v8 from 'node:v8';
@@ -38,9 +39,12 @@ afterEach(async () => {
   await Promise.all(servers.splice(0).map((s) => new Promise<void>((z) => s.close(() => z()))));
 });
 
-// A real collector for the retention fence below: `--expose-gc` set at runtime, `gc` taken from a fresh context.
+// A real collector for the retention fence below: `--expose-gc` set at runtime, `gc` taken from a fresh context, then
+// the flag turned back off so no later context in this process gets a `gc` global. The measurement assumes vitest's
+// per-file process isolation (the `forks` default; vitest.config.ts pins neither `pool` nor `isolate`).
 v8.setFlagsFromString('--expose-gc');
 const gc = vm.runInNewContext('gc') as () => void;
+v8.setFlagsFromString('--no-expose-gc');
 
 /**
  * A fake B2. The JSON API calls go through a global-fetch stub; the UPLOAD goes to a REAL local HTTP receiver, because
@@ -131,6 +135,52 @@ describe('3a — uploadColdFile streams the file and attests the stored version 
     // Node 22.18.0 (a laptop), same day: this sender 14.4 MiB, the mutation 101.6 MiB — the fence discriminates on both.
     expect(seen.maxHeldBytes).toBeLessThan(40 * 1024 * 1024);
   }, 60_000);
+
+  it('a receiver that refuses on the headers and keeps the socket open: the request and the file read stream are destroyed', async () => {
+    // Langston, 3a Step-9 Step 4 FINDING-1: answered early, nothing reaped the request, so the read stream pinned the
+    // temp file's inode after the caller unlinked it. A raw receiver, because a Node http server destroys the socket
+    // itself and would hide the leak.
+    const dir = tmp();
+    const f = path.join(dir, 'big.gz');
+    const chunk = crypto.randomBytes(1024 * 1024);
+    const fd = fs.openSync(f, 'w');
+    for (let i = 0; i < 64; i++) fs.writeSync(fd, chunk);
+    fs.closeSync(fd);
+    const streams: fs.ReadStream[] = [];
+    const realCreate = fs.createReadStream;
+    vi.spyOn(fs, 'createReadStream').mockImplementation(((...a: Parameters<typeof fs.createReadStream>) => {
+      const s = realCreate(...a);
+      streams.push(s);
+      return s;
+    }) as typeof fs.createReadStream);
+    let socketClosed = false;
+    const raw = net.createServer((sock) => {
+      let head = '';
+      let answered = false;
+      sock.on('data', (c: Buffer) => {
+        if (answered) return; // keep draining, never close
+        head += c.toString('latin1');
+        if (head.includes('\r\n\r\n')) {
+          answered = true;
+          sock.write('HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nContent-Length: 4\r\n\r\nnope');
+        }
+      });
+      sock.on('close', () => { socketClosed = true; });
+      sock.on('error', () => {});
+    });
+    await new Promise<void>((z) => raw.listen(0, '127.0.0.1', () => z()));
+    try {
+      const url = `http://127.0.0.1:${(raw.address() as { port: number }).port}/upload`;
+      const r = await postFileStream(url, { 'Content-Length': String(64 * 1024 * 1024) }, f);
+      expect(r).toEqual({ status: 400, text: 'nope' });
+      const body = streams[streams.length - 1];
+      for (let i = 0; i < 40 && !(body.destroyed && socketClosed); i++) await new Promise((z) => setTimeout(z, 50));
+      expect(body.destroyed).toBe(true);
+      expect(socketClosed).toBe(true);
+    } finally {
+      await new Promise<void>((z) => raw.close(() => z()));
+    }
+  }, 30_000);
 
   it('refuses a non-https upload URL that is not loopback', async () => {
     const dir = tmp();

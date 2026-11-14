@@ -928,8 +928,9 @@ export async function hashFileSha256Sha1(localPath: string): Promise<{ bytes: nu
 /**
  * POSTs a local file as the request body WITH backpressure: `stream.pipeline` reads the next chunk only when the
  * socket drains, so memory stays at a few chunks whatever the file size (3a Step 7; see uploadColdFile). Resolves with
- * the response status and body text; a socket idle for 300 s is destroyed (fetch's own body timeout). Only https, or
- * http to a loopback host (the unit tests' slow local sink) — any other URL is refused.
+ * the response status and body text; a socket idle for 300 s is destroyed (it times the send phase too, which fetch's
+ * response timeouts never did). Redirects are not followed — a 3xx is returned like any other non-2xx. Only https, or
+ * http to a loopback host under the test runner (the unit tests' local receiver) — any other URL is refused.
  */
 export async function postFileStream(
   url: string,
@@ -938,7 +939,8 @@ export async function postFileStream(
 ): Promise<{ status: number; text: string }> {
   const u = new URL(url);
   const loopback = u.hostname === '127.0.0.1' || u.hostname === 'localhost';
-  if (u.protocol !== 'https:' && !(u.protocol === 'http:' && loopback)) {
+  const underTest = process.env.VITEST === 'true' || process.env.NODE_ENV === 'test';
+  if (u.protocol !== 'https:' && !(u.protocol === 'http:' && loopback && underTest)) {
     throw new Error(`[B75 storage-client] refusing a non-https upload URL: ${u.protocol}//${u.host}`);
   }
   const transport = u.protocol === 'https:' ? https : http;
@@ -947,6 +949,11 @@ export async function postFileStream(
     const done = (err: Error | null, v?: { status: number; text: string }) => {
       if (settled) return;
       settled = true;
+      // A receiver that answers before the whole body is sent (e.g. a 400 on the headers) and keeps the socket open
+      // would otherwise leave the request and the file read stream alive: the open read stream pins the temp file's
+      // inode after the caller unlinks it, so its disk space is never reclaimed (Langston, 3a Step-9 Step 4). Destroying
+      // the request fails the pipeline, which destroys the read stream; that late pipeline error is then moot.
+      if (!req.writableEnded) req.destroy();
       if (err) reject(err);
       else resolve(v!);
     };
@@ -958,8 +965,7 @@ export async function postFileStream(
     });
     req.setTimeout(300_000, () => req.destroy(new Error('[B75 storage-client] upload socket idle for 300 s')));
     req.on('error', (e) => done(e));
-    // A receiver that answers early (e.g. a 400 before the body ends) can make the pipeline fail after the response
-    // has settled the promise; that error is then moot. Before it, it rejects.
+    // A pipeline failure before the response settles rejects; after it (including the destroy in done()), it is moot.
     pipeline(fs.createReadStream(localPath), req).catch((e) => done(e as Error));
   });
 }
