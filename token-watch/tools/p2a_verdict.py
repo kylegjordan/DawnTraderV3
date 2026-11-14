@@ -11,7 +11,10 @@ THRESH = 314_572_800
 
 
 def ts(s):
-    return datetime.strptime(s, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc).timestamp()
+    # fractional seconds accepted (Langston): truncating the kill to whole seconds understates the gap by up to 1 s,
+    # which is half the 2 s allowance of a 1 s-interval rerun
+    fmt = "%Y-%m-%dT%H:%M:%S.%fZ" if "." in s else "%Y-%m-%dT%H:%M:%SZ"
+    return datetime.strptime(s, fmt).replace(tzinfo=timezone.utc).timestamp()
 
 
 path, kill = sys.argv[1], ts(sys.argv[2])
