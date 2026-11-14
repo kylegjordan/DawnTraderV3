@@ -458,3 +458,89 @@ Langston's re-derivation at today's values (S = 60 s, F = 1 MiB/s, B = 535,409,7
 - **C-4, folded:** the canary's error message names both reads. **Recorded as an assertion narrowed:** the canary's independence (r4 1b) is now one `data_lifecycle` row narrower. `cold_upload_setup_ms` at 0 or absent takes the weekly canary down as well as the bound. It pages as `Could not resolve cold config …`.
 - **C-3, a 3c item:** `downloadColdFileById` has no caller passing `bound`, so that arm is fence-only (#661 leg 3). Its refusal side logs nothing. Settle both before the first bounded caller, which is 3c's read-back.
 - **A Step-10 carry:** `SYSTEM_IMPACT_MAP.md` row 8 (the rehydrate CLI) needs a content update for the version-bound-or-named restore.
+
+### Amendment 4 — 3c Step 2: audit and plan r1 (2026-11-14, CC-A; code read at `2dbfcece4`, staging read-only 13:4xZ)
+**What 3c is (plan r2, unchanged):** one daily job. It lists the cold bucket's versions once. The **meter** runs first and always: bucket bytes against a threshold, and growth against the measured baseline ("alerted, uncapped"). Then the **read-back** downloads cold objects by file id, oldest first, inside a daily download budget, and compares SHA-256. A watchdog check pages if the job does not run. Carries folded in: **C-3** (the first bounded caller of `downloadColdFileById`, and logging on its refusal side) and **outcome (2)**, a 429 with a non-JSON body.
+
+**PREVIOUSLY STATED → NOW**
+| | previously stated | now | reason |
+|---|---|---|---|
+| cold population | "4 rotated + the P10 orphan" (r1) | **4 manifest rows, 117,461,261 B in all; mean 29,365,315 B; largest 99,870,161 B** (`context_bridge_log/2025-12`). All 4 are `sha256-roundtrip` with no `provider_file_id` until tonight's cold-bind `--apply`. | measured 13:4xZ on staging (`data_archive_manifest`, tier `cold`) |
+| when cold grows | not stated | **The rotator moves a warm row once `created_at` is more than 365 days old** (`b75-cold-rotator.ts:7`, `default_warm_retention_days` = 365, no per-table override). It runs monthly, on the 1st. **By month CREATED, warm active is:** 2026-05: 1 row, 0.33 MB · 06: 6.66 GB · 07: 8.04 GB · 08: 13.34 GB · 09: 5.41 GB · 10: 14.91 GB · 11 (to date): 9.41 GB, which is 5,691 rows, the November backfill. So real cold inflow starts with the 2027-07-01 run (6.66 GB). | the same read. Per-table `.warm_retention_days` keys: 0 rows, against a 30-row read of the module that returned its `hot_retention_days` keys (the control). ⚠️ My first draft of this row grouped by `date_range_end`, which is the data's month, not when it reaches cold. That moved the start to 2027-05 and the profile with it. The rotator keys on `created_at` (`MISTAKE: wrong-object [B-DISK-FILE-TIERING]`). |
+| download budget | "1 GB minus token-watch's measured share" | unchanged: **cap $0.00 = 1 GB/day, read back by PM Claude 11-06 (KD-53 row)**; token-watch's share ~0.10-0.12 GB/day is **cited from Infra Claude's P15 addendum and NOT re-measured here** | — |
+
+**Census at `2dbfcece4`** (every site 3c reads or writes; tests excluded):
+| site | today | 3c's use |
+|---|---|---|
+| `storage-client.ts` `listColdFileVersions` (`:953` retry) | paged `b2_list_file_versions`; returns `{versions, pages, bucketId}`; never partial (C-2); retried | the one listing the meter and the read-back share |
+| `storage-client.ts` `downloadColdFileById` | streamed by id, SHA-256 streamed; NOT retried (A-5); `bound` arm has no caller (C-3) | the read-back's only download |
+| `b75-cold-bind.ts` `ownColdPrefixes`, `COLD_NON_ARCHIVE_PREFIXES` | owner split used by the orphan report: our archive prefixes, `_liveness/`, `token-watch/`, UNKNOWN | the meter's owner split, reused, not re-derived |
+| `b-storage-archival-health.ts` `CHECKS` (`:130-171`) + root crontab | the cron-fire verifier: STALE / FAILED / NOT_STARTED / SCHEDULE_DRIFT / NOT_SCHEDULED per job | 3c's liveness carrier (Langston (ii)): one new `CheckSpec` + one crontab line |
+| `data_archive_manifest.verified_at` | set at rotation | the read-back's order for a row never read back |
+| `download_cap_exceeded` / `transaction_cap_exceeded` | **0 handlers** (the only match is a comment at `storage-client.ts:780`) | 3c adds the first: "daily download budget exhausted" |
+
+**Plan r1 — one script, `server/scripts/b75-cold-audit.ts`, daily at `15 6 * * *` UTC** (after archival-health 05:00Z and token-watch's 05:30-05:45Z upload; outside NEW Claude's 14:30-21:00Z window):
+1. **Listing, once.** `listColdFileVersions(coldBucket, '')`, the whole bucket. A partial listing FAILS the run (C-2) and is what archival-health pages on.
+2. **Meter, first and unconditional.** It splits bytes and versions by owner, using `b75-cold-bind`'s split, and records the totals in a new `data_archive_cold_meter` row (run_at, versions, bytes, and bytes per owner).
+   - **Total:** page warning when bucket bytes ≥ `cold_meter_warn_bytes`. Proposed value: **100 GB** — half of the late-2027 estimate (~200 GB, KD-53 margin line), so the page lands about a year before that estimate.
+   - **Growth, split by owner instead of one threshold.** One threshold would fire every month on the rotator's 5-15 GB a month (from 2027-07) or have to be set above it.
+     - **Our archive prefixes reconcile EXACTLY.** Their growth since the last meter row must equal the bytes of cold manifest rows created in that interval. Any difference pages: it is an upload the manifest does not know about, or a deletion it did not record. This also finds a new orphan within a day, not at the next hand-run report.
+     - **`token-watch/`** pages when its growth is above `cold_meter_tokenwatch_growth_warn_bytes_per_day`. Proposed: **350 MB/day**, about 3× the measured mean of 103.7 MB/day (max 118.4 MB).
+     - **`_liveness/`** pages above 10 MB net growth: the canary's object is 104 B, and the 3a proof objects are deleted at the end of each proof.
+     - **UNKNOWN** pages on any bytes at all.
+   - **First run:** no previous row, so it records a baseline and makes no growth judgement. It says so in its log line.
+3. **Read-back, inside the budget.**
+   - **Candidates:** cold rows with `provider_file_id` set. Each is due when it has never been read back, or when its last read-back is older than `cold_readback_min_interval_days` (proposed **30**). Ordered by last read-back, nulls first, then `verified_at`.
+   - **Unbound rows are skipped**, with a counted log line (`skipped_unbound=N`). They should not exist after tonight's `--apply`.
+   - **Budget:** `cold_readback_daily_bytes`, proposed **500,000,000 B**. With token-watch's 0.12 GB, the day's total stays under ~0.62 GB of the 1 GB cap, leaving ~0.38 GB for a re-run or an investigative read.
+     - The job stops before an object that would take it past the budget.
+     - An object larger than the whole budget pages once ("larger than the daily read-back budget; never read back") instead of starving the queue.
+   - **Each object:**
+     - Free space is checked first: object bytes + `disk_file_free_floor_bytes`.
+     - `downloadColdFileById(fileId, privateTempPath, bound)`, with `bound` = setup + bytes ÷ floor from the cold limits. **This is C-3's first bounded caller.** A bound refusal logs the id, the bound and the elapsed time. That closes C-3's "logs nothing" side.
+     - The streamed SHA-256 is compared to `checksum`, and the temp file is deleted in a `finally`.
+   - **Outcomes, recorded in a new `data_archive_cold_readback` row** (manifest_id, at, bytes, result, sha256_seen):
+     - `ok`.
+     - `mismatch` → a **critical** page naming the row and both digests.
+     - `budget_exhausted`: B2 `download_cap_exceeded` or `transaction_cap_exceeded`. It ends the read-back leg only and logs "daily download budget exhausted" (Langston (i)). It is not counted as a failure and is not an outage.
+     - `error`: any other failure. Counted; the row is due again tomorrow. There is no in-run retry, per A-5: downloads spend budget.
+4. **Outcome (2), the non-JSON 429, decided here.** On a download it is classed `budget_exhausted`. A 429 from a proxy or CDN in front of B2 is throttling: ending the leg and coming back tomorrow is the right response, and counting it as a failure would page on the vendor's rate limit. On the listing it stays fatal, as amendment 3 has it: the run FAILS and archival-health pages. The meter must not publish from a listing it could not finish.
+5. **Pages that need no new input:**
+   - **No progress:** `cold_readback_stall_days` consecutive runs (proposed **3**) with due candidates and zero `ok` rows.
+   - **Coverage exceeded:** the oldest bound row's last read-back (or `verified_at`, if never read) is older than `cold_readback_max_age_days` (proposed **90**).
+6. **DONE line, for archival-health:** `DONE versions=V bytes=B readback_ok=K readback_failed=F budget_exhausted=0|1 skipped_unbound=U`. The new `CheckSpec` uses `donePattern` on `readback_failed=(\d+)` and `startPattern` on the job's start line. Its `onMissing` is `skip` until the first run is recorded, then `alert`, following the disk-file-tiering precedent.
+7. **One migration:**
+   - creates `data_archive_cold_meter` and `data_archive_cold_readback` (index on `(manifest_id, at DESC)`);
+   - seeds seven `data_lifecycle` rows: `cold_meter_warn_bytes`, `cold_meter_tokenwatch_growth_warn_bytes_per_day`, `cold_meter_liveness_growth_warn_bytes`, `cold_readback_daily_bytes`, `cold_readback_min_interval_days`, `cold_readback_stall_days`, `cold_readback_max_age_days`;
+   - has a rollback file in git. Each value is read through `reqNum`: missing or ≤ 0 refuses the run, with no hard-coded default.
+
+**Coverage period N, pre-registered (L-1)** — N is the number of days within which every bound cold object is read back at least once:
+- **Today:** 117 MB of cold against a 500 MB budget, so the interval binds. **N = 30 days** (`cold_readback_min_interval_days`), and all four objects fit in one day's budget.
+- **The budget starts to bind once bound cold bytes exceed 30 × 500 MB = 15 GB**, when N = cold bytes ÷ 500 MB per day. On the created-month profile above, cold holds (cumulative, after each monthly run, counting rows that exist today):
+  - 2027-07-01: 6.8 GB (N = 30, interval-bound)
+  - 2027-08-01: 14.8 GB (N = 30)
+  - **2027-09-01: 28.2 GB (N ≈ 56)**, the first budget-bound month
+  - 2027-10-01: 33.6 GB (N ≈ 67)
+  - **2027-11-01: 48.5 GB (N ≈ 97), past the proposed 90-day coverage page**
+  - 2027-12-01: 57.9 GB (N ≈ 116)
+  - Rows created after today add to this. These are lower bounds, from arithmetic, not a measurement.
+  - **That crossing is pre-registered as a Kyle decision, not a defect** (taxonomy outcome (2)). The choice it will put to him: pay for a larger daily download, accept a longer coverage period, or read back a sample. Not decided now; the page is what raises it, about a year out.
+
+**Fences (each mutation-tested):**
+- the meter's exact reconcile: an unrecorded upload pages, and a recorded one does not;
+- the budget stop: the object that would cross the budget is not downloaded;
+- a mismatch is critical;
+- `download_cap_exceeded` and a non-JSON 429 each produce `budget_exhausted` and never a failure;
+- a listing failure fails the run before any meter row is written;
+- the bound refusal logs its line;
+- the temp file is removed on every path;
+- the `CheckSpec`'s schedule equals the crontab line.
+
+**Doc set (`architecture`, unchanged):** this section is the Step-2 record. SIM (new job, two tables, the watchdog row), System Manual (the cold-path verification chapter) and `STORAGE_POLICY` (the meter and N) land at Step 10.
+
+**Not in 3c:** the restore runbook line and KD-54 belong to 3d. No Kyle gate: the budget sits inside the free 1 GB under KD-53, and the setting values are technical choices inside agreed work (KD-34).
+
+**Questions for Langston:**
+- **(a)** The exact-reconcile growth check for our own prefixes, in place of a single growth threshold. Can the manifest-created interval drift from the listing's view? For example, a rotation running across the meter's listing.
+- **(b)** Is 500 MB/day the right read-back share, given that token-watch's read-back already hit `download_cap_exceeded` on its 11-04 first run?
+- **(c)** Should a non-JSON 429 on a download count as `budget_exhausted` (my recommendation), or as `error`?
