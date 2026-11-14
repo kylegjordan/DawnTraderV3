@@ -368,3 +368,37 @@ The table:
 4. **residue deletion — this must precede the function arm**, because it is a dependency. The cold path is `${source_table}/${partition_label}.jsonl.gz` (`:210`), and the P10 orphan sits at exactly the name the function arm's rotation of `disk_file.diagnostic_reports` / `phase-41F-L-trace.ndjson` (170,761,082 B) will write. Its SHA-256 equals the new version's, so "the manifest SHA-256 decides between two versions" cannot disambiguate them. Reversing these two steps manufactures the ambiguity 3b removes.
 5. `.verify` free space — reachable only on a hand run (`context-bridge-log-ttl.ts` has never been scheduled, `#169`). It reuses the rotator's `need = 2 × bytes + freeFloorBytes` (`:191`) with `data_lifecycle.disk_file_free_floor_bytes` through `reqNum`, with no new literal; the export plus `.verify` are exactly two concurrent local copies.
 6. the function-arm run, on a day claimed with Infra Claude.
+
+### Amendment 4 — 3b plan r5: item 1's arithmetic (Langston, Discord `1571069933687799881`: (b)-(e) and items 2-6 PROCEED; one edit owed, no further round)
+**The deadline is per phase.** Within an attempt, setup (authorize + `get_upload_url`) gets `cold_upload_setup_ms`. Each body phase gets its own `bytes ÷ cold_body_min_bytes_per_s`:
+- the warm read, once per candidate (not retried, A-5);
+- the upload body, on every upload attempt.
+
+There is no single envelope, so a candidate running exactly at the floor on both phases passes.
+
+**Per-candidate worst case, restated.** r3's "3 × 1,111 + 5 ≈ 56 min" was stale twice over: setup went from 600 s to 60 s, and the warm read moved inside. At the largest warm object (535,409,768 B = 510.6 MiB, floor 1 MiB/s, setup 60 s):
+- warm read: 510.6 s;
+- upload, 3 attempts: 3 × (60 + 510.6) = 1,711.8 s;
+- backoff: 5 s;
+- **total 2,227 s ≈ 37.1 min.** That needs every phase at the floor and every attempt failing; today's measured candidate (warm read plus one upload) took about 27 s.
+
+**The per-RUN bound — measured inflow sets N, a whole-run deadline bounds time** (A-1 offered either; r5 uses both, because the population says a count alone is the wrong bound):
+- **Warm inflow by month of `created_at`**, staging 2026-11-14:
+
+  | month | rows | GB |
+  |---|---|---|
+  | 2026-06 | 33 | 6.7 |
+  | 2026-07 | 78 | 8.0 |
+  | 2026-08 | 231 | 13.3 |
+  | 2026-09 | 58 | 5.4 |
+  | 2026-10 | 322 | 14.9 |
+  | **2026-11** | **5,691** | **9.4** |
+
+  November is the one-time disk-file backfill: many small daily files that age into candidacy together in 2027-11.
+- **`cold_rotator_max_candidates_per_run` = 6,000.** It covers the largest month measured (5,691), so even the backfill month rotates in one run and no backlog carries month to month. A smaller N would spread November 2027 across many months while new inflow accrues.
+- **`cold_rotator_run_deadline_ms` = 72,000,000 (20 h)**, a new fourth row read through `reqNum`. Time is bytes, not count: a steady month of 15 GB at today's ~23 MB/s is about 11 min of upload. Even at the 1 MiB/s floor on both body phases with no failures, 15 GB is about 8 h, inside 20 h. When the deadline is reached, the run stops between candidates (never mid-candidate) and logs `deferred=<count>`. archival-health pages when two consecutive runs defer, so a backlog cannot build up silently. 20 h stays well inside the monthly interval, and the canary's independence is asserted separately (r4, 1b).
+- **Starting values, all from `data_lifecycle`:** `cold_upload_setup_ms` 60,000 · `cold_body_min_bytes_per_s` 1,048,576 · `cold_rotator_max_candidates_per_run` 6,000 · `cold_rotator_run_deadline_ms` 72,000,000.
+
+**Langston's Step-3 conditions, carried:**
+1. All four `data_lifecycle` rows are seeded in the same migration as `data_archive_cold_upload_failure`, using the six-column key form of `2026-11-04-b-disk-file-tiering.sql:46`; the rollback removes them (form at `:34`). None exists today, so the rotator would fail closed at `loadConfig` until they are seeded.
+2. **A Step-10 carry from 3a:** `STORAGE_POLICY.md:62` (the rotator "stamps `verified_at` after a re-download checksum match") and `SIM:2528` (the buffered `downloadWarm`/`uploadCold` path at ~503 MB) both describe mechanisms 3a deleted. Their content update is owed before the batch closes.
