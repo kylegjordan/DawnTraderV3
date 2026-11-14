@@ -44,7 +44,11 @@ WRITERS = ("Write", "Edit")
 # Write/Edit (an append mode, a multi-replacement field) that mis-predicts permissively.
 # ⛔ BUMP CHECKLIST (re-run at every CLI version change, then update CLI_VERSION_ENUMERATED): (1) the tool list from the
 #    init event; (2) the input schema of Write and Edit; (3) PATH_KEYS below still names every path-bearing input key
-#    (Langston R-2: fail-closed is bounded by the path-key enumeration as well as by the tool list).
+#    (Langston R-2: fail-closed is bounded by the path-key enumeration as well as by the tool list); (4) KNOWN UNDER-COUNT,
+#    new with the bytes-end-to-end fix (Langston, 5a40fc1f4 re-review): on a NON-UTF-8 index, if the tool decodes with
+#    replacement and re-encodes, each invalid byte becomes 3 bytes on disk while this guard predicts 1 (measured:
+#    a\xffb minus "a" -> predicted 2 B, round trip 4 B). The permissive direction; exact on valid UTF-8 (0 divergences
+#    in 200k random cases, his measurement). Re-check whether Write/Edit still decode-replace at each bump.
 CLI_PACKAGE = os.environ.get("LIG_CLI_PACKAGE") or "/usr/lib/node_modules/@anthropic-ai/claude-code/package.json"
 ORDERING = (" Each call is judged on its own bytes: to make room, remove lines in one call first, then add in the next."
             " Do not route the write another way; ask Infra Claude if the set needs headroom.")

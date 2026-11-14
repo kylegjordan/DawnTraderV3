@@ -343,6 +343,7 @@ def test_langston(tmp):
 def test_guard(tmp):
     """R-3 (Langston Step 4): the size watch is the reader of the index guard's version and its unenumerated refusals."""
     GC, GT = "langston-index-guard-cli-mismatch", "langston-index-guard-unenumerated-tool"
+    GU = "langston-index-guard-could-not-establish"
     m, store, world, paths = langston_world(tmp)
     sizes(paths, 300, 300, 100)                         # 700 < 1000: nothing else is active
 
@@ -369,15 +370,18 @@ def test_guard(tmp):
     rc = m.run(quiet=True)
     check("G1 match: exit 0, no guard rows", (rc, len(store.by_key(GC)), len(store.by_key(GT))), (0, 0, 0))
 
-    # G2. CLI bumped -> cli-mismatch row, exit 1; back in step -> resolved
+    # G2. CLI bumped -> cli-mismatch row, exit 1; back in step -> NOT auto-resolved (re-review (a): hand resolve + evidence)
     cli("2.1.400")
     rc = m.run(quiet=True)
     check("G2 mismatch: exit 1", rc, 1)
     check("G2 mismatch: one active cli row", len(store.active(GC)), 1)
     check("G2 the body names both versions", all(v in store.active(GC)[0]["body"] for v in ("2.1.400", "2.1.318")), True)
     guard("2.1.400")
-    m.run(quiet=True)
-    check("G2b back in step: the cli row is resolved", len(store.active(GC)), 0)
+    rc = m.run(quiet=True)
+    check("G2b back in step: the cli row is NOT auto-resolved", len(store.active(GC)), 1)
+    check("G2b and the run exits 0 (nothing is currently wrong)", rc, 0)
+    check("G2b the body says resolve by hand with the checklist evidence", "resolve by hand" in store.active(GC)[0]["body"], True)
+    store.hand_resolve(GC)
 
     # G3. an unenumerated refusal in the log -> tool row; the offset moves; a quiet next run does NOT resolve it
     logrow(verdict="allowed-no-growth", tool="Edit")
@@ -393,11 +397,23 @@ def test_guard(tmp):
     check("G3b and the row is NOT auto-resolved", len(store.active(GT)), 1)
     check("G3b and the run exits 0 (nothing new)", rc, 0)
 
-    # G4. an OVER refusal (an enumerated tool) is not an unenumerated event
+    # G4. an OVER refusal (an enumerated tool) is the guard working: no tool row, no could-not-establish row
     store.hand_resolve(GT)
     logrow(verdict="refused", tool="Write", message="REFUSED by langston-index-guard: ... OVER its ceiling ...")
     m.run(quiet=True)
     check("G4 an over-ceiling refusal raises no tool row", len(store.active(GT)), 0)
+    check("G4 and no could-not-establish row", len(store.active(GU)), 0)
+
+    # G6. a fail-closed refusal (could not establish) gets its OWN row, never auto-resolved (re-review (b))
+    logrow(verdict="refused", tool="Edit", message="REFUSED by langston-index-guard: this write grows the auto-memory "
+           "index by 9 B and the loaded-set size COULD NOT BE ESTABLISHED: the ratchet state cannot be read")
+    rc = m.run(quiet=True)
+    check("G6 a could-not-establish refusal: exit 1", rc, 1)
+    check("G6 one active could-not-establish row", len(store.active(GU)), 1)
+    check("G6 and no tool row", len(store.active(GT)), 0)
+    m.run(quiet=True)
+    check("G6b quiet next run: still active", len(store.active(GU)), 1)
+    store.hand_resolve(GU)
 
     # G5. the log replaced by a shorter one -> read from 0, the new refusal is seen
     with open(m.GUARD_LOG, "w", encoding="utf-8") as fh:

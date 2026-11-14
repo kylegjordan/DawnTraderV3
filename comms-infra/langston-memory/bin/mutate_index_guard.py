@@ -19,7 +19,7 @@ MUTANTS = [
     ("writer ignores subject", "writer", "        if os.path.realpath(f) == subj:\n            continue",
      "        if os.path.realpath(f) == os.path.realpath(TARGET):\n            continue"),
     ("allow ignores a log failure", "guard", "    if not log(row):\n        sys.stderr.write(\"langston-index-guard: allowed",
-     "    if False:\n        sys.stderr.write(\"langston-index-guard: allowed"),
+     "    if not log(row) and False:\n        sys.stderr.write(\"langston-index-guard: allowed"),
     ("old bytes decoded eagerly", "guard", "= predict(tool, ti, old)", "= predict(tool, ti, old.decode(\"utf-8\") and old)"),
     ("unenumerated tool allowed", "guard", "    if tool not in WRITERS:\n        return block(",
      "    if False:\n        return block("),

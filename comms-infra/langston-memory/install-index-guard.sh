@@ -99,6 +99,8 @@ chmod 0644 "$MANAGED.tmp"; mv "$MANAGED.tmp" "$MANAGED"
 {
   echo "installed $TS from $SHA (B-LANGSTON-CLAUDEMD-RESIDUAL #1197 rider)"
   sha256sum "$WRITER" "$WATCH" "$GUARD" "$MANAGED"
+  # Langston (5a40fc1f4 re-review, note 3): the headroom at install, so a first refusal is read as the guard working
+  echo "loaded set at install: $UNK - growing index saves past that headroom are REFUSED from day one, by design"
   echo "claude $(/usr/bin/claude --version 2>&1 | head -1); guard enumerated for $(grep -o 'CLI_VERSION_ENUMERATED = "[^"]*"' "$GUARD")"
   echo "rollback: rm $MANAGED; cp -p $BK/langston-memory-write $WRITER; cp -p $BK/langston-size-watch $WATCH"
 } | tee -a "$REC"

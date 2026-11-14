@@ -117,19 +117,35 @@ CONDITION_ALERTS = {
     "tamper": ("rules_tamper_alert_id", "langston-rules-tamper"),
     "guard_cli": ("guard_cli_alert_id", "langston-index-guard-cli-mismatch"),
     "guard_tool": ("guard_tool_alert_id", "langston-index-guard-unenumerated-tool"),
+    "guard_unestablished": ("guard_unestablished_alert_id", "langston-index-guard-could-not-establish"),
 }
 # ⭐ THE INDEX GUARD'S READER (B-LANGSTON-CLAUDEMD-RESIDUAL, Langston Step-4 R-3: a new counter needs a reader).
 #    langston-index-guard refuses a growing save to his auto-memory index that would put the set over the ceiling. It
 #    was enumerated against ONE Claude Code version, and it refuses any tool it was not enumerated for. Two conditions:
 #    guard_cli  - the installed CLI version differs from the guard's CLI_VERSION_ENUMERATED. Read DIRECTLY (both files),
-#                 so a bump is seen on a day with no index save; resolves when they match (the bump checklist was run).
-#    guard_tool - a NEW log row since the last run refused a tool as unenumerated. An event: it is NEVER auto-resolved
-#                 (a quiet next day says nothing about the tool); the owner resolves it by hand after the checklist.
+#                 so a bump is seen on a day with no index save. NEVER auto-resolved, not even on a match (Langston,
+#                 re-review (a)): a match is exactly what a lazy bump produces - one constant edited, the checklist not
+#                 run - so the resolve is by hand, carrying the checklist evidence in --evidence (the #447 shape).
+#    guard_tool - a NEW log row since the last run refused a tool as unenumerated. An event: never auto-resolved.
+#    guard_unestablished - a NEW refused row of the fail-closed class (the guard could not establish a size or the
+#                 ratchet). Refusals are PARTITIONED BY MESSAGE CLASS (re-review (b)): an OVER refusal is the guard
+#                 working and raises nothing; every other refusal that is not unenumerated lands here, so no refusal
+#                 class is invisible. Never auto-resolved.
 #    Both are NOT ESTABLISHED (nothing raised, nothing resolved) while the guard is not installed.
 GUARD_PATH = "/opt/langston-memory/bin/langston-index-guard"
 GUARD_LOG = "/var/log/langston-index-guard.jsonl"
 CLI_PACKAGE = "/usr/lib/node_modules/@anthropic-ai/claude-code/package.json"
 UNENUMERATED_MARK = "not a tool this guard was enumerated for"
+OVER_MARK = "OVER its ceiling"
+
+
+def refusal_class(msg):
+    """unenumerated | over | unestablished - every refused row lands in exactly one class."""
+    if UNENUMERATED_MARK in msg:
+        return "unenumerated"
+    if OVER_MARK in msg:
+        return "over"
+    return "unestablished"
 DRILL_KEY = "langston-size-watch-breach-drill"   # a drill NEVER touches a real key (Langston ruling (b))
 EPISODE_CAP = 100                                # breach episodes kept in state; the run log keeps every run
 LIVE_READ = "langston-size-watch --status on Helsinki, or its run log " + RUNLOG
@@ -410,7 +426,8 @@ def guard_check(st):
     unenumerated (new rows), log_ok, offset_from, offset_to}. Reads the log from the byte offset the last run stored;
     a log shorter than that offset (rotated or replaced) is read from 0."""
     g = {"installed": os.path.exists(GUARD_PATH), "enumerated": None, "running": None, "cli_established": False,
-         "mismatch": False, "unenumerated": [], "log_ok": False, "offset_from": None, "offset_to": None}
+         "mismatch": False, "unenumerated": [], "unestablished": [], "over": 0, "log_ok": False,
+         "offset_from": None, "offset_to": None}
     if not g["installed"]:
         return g
     try:
@@ -440,8 +457,14 @@ def guard_check(st):
                 r = json.loads(line)
             except ValueError:
                 continue
-            if r.get("verdict") == "refused" and UNENUMERATED_MARK in (r.get("message") or ""):
-                g["unenumerated"].append({"ts": r.get("ts"), "tool": r.get("tool"), "cli_running": r.get("cli_running")})
+            if r.get("verdict") != "refused":
+                continue
+            cls = refusal_class(r.get("message") or "")
+            if cls == "over":
+                g["over"] += 1
+            else:
+                g[cls].append({"ts": r.get("ts"), "tool": r.get("tool"), "cli_running": r.get("cli_running"),
+                               "message": (r.get("message") or "")[:160]})
         g["log_ok"] = True
     except FileNotFoundError:
         g["log_ok"] = True          # installed but never written: no rows is a measured zero, the file is created on install
@@ -726,12 +749,13 @@ def run(quiet=False, injected_total=None, injected_archive_bytes=None, drill_sto
             "commit. Resolves on the first run where the file matches its install record." + stamp, ev)
         guard = guard_check(st)
         alerts["guard_cli"] = condition_alert(
-            st, "guard_cli", guard["mismatch"], guard["cli_established"] and not guard["mismatch"],
+            st, "guard_cli", guard["mismatch"], False,
             "Langston index guard was enumerated for a different Claude Code version",
             "Installed Claude Code is " + str(guard["running"]) + "; " + GUARD_PATH + " was enumerated for " +
             str(guard["enumerated"]) + ". The guard still runs and still refuses unknown tools; what is unchecked is "
             "whether Write/Edit inputs or the path keys changed. Run the BUMP CHECKLIST at the top of the guard, then "
-            "update CLI_VERSION_ENUMERATED through a reviewed commit. Resolves on the first run where they match."
+            "update CLI_VERSION_ENUMERATED through a reviewed commit. NOT auto-resolved, even once they match: "
+            "resolve by hand with the checklist evidence (the commit that re-ran items 1-4) in --evidence."
             + stamp, ev)
         alerts["guard_tool"] = condition_alert(
             st, "guard_tool", bool(guard["unenumerated"]), False,
@@ -741,8 +765,18 @@ def run(quiet=False, injected_total=None, injected_archive_bytes=None, drill_sto
             "that the guard cannot size was refused, so a save he tried did not land. Run the bump checklist; add "
             "the tool to WRITERS only if its effect can be predicted. Resolve this row by hand: a quiet day says "
             "nothing about the tool." + stamp, ev)
+        alerts["guard_unestablished"] = condition_alert(
+            st, "guard_unestablished", bool(guard["unestablished"]), False,
+            "Langston index guard refused a save it could not measure",
+            str(len(guard["unestablished"])) + " fail-closed refusal(s) since the last run, first " +
+            json.dumps(guard["unestablished"][:3]) + ", in " + GUARD_LOG + ". The guard could not establish the "
+            "size or the loaded-set ratchet, so it refused a growing save to his auto-memory index: a save he tried "
+            "did not land. Read the message; the usual cause is the ratchet state or a watched file. Resolve this "
+            "row by hand once the cause is fixed." + stamp, ev)
         # the offset moves only when no event is waiting on an add that failed - an unrecorded refusal is re-read
-        if guard["log_ok"] and (not guard["unenumerated"] or str(alerts["guard_tool"]).startswith(("new ", "same "))):
+        recorded = all(not guard[k] or str(alerts[a]).startswith(("new ", "same "))
+                       for k, a in (("unenumerated", "guard_tool"), ("unestablished", "guard_unestablished")))
+        if guard["log_ok"] and recorded:
             st["guard_log_offset"] = guard["offset_to"]
         episodes_note = update_episodes(st, status, over, total, ts)
     elif drill_store:
@@ -780,7 +814,8 @@ def run(quiet=False, injected_total=None, injected_archive_bytes=None, drill_sto
     if not drill_ok:
         return 3            # a drill whose own row did not resolve is a failed drill (ruling (b)), never a pass
     return 1 if (status in ("BREACH", "MISSING-FILE") or archive["over"] or archive["unreadable"]
-                 or rules["tamper"] or (guard and (guard["mismatch"] or guard["unenumerated"]))) else 0
+                 or rules["tamper"] or (guard and (guard["mismatch"] or guard["unenumerated"]
+                                                   or guard["unestablished"]))) else 0
 
 
 # ⛔ THE ACTOR IS AN ALLOWLIST, NOT FREE TEXT. The old `SUDO_USER or "unknown"` was the
