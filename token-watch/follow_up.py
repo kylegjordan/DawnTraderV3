@@ -448,6 +448,13 @@ def run_hour(now: datetime | None = None) -> dict:
         stats["last_seen_pruned"] = before - len(prev)
         stats["unclassified_by_age"] = unclassified_by_age
         save_state("last_seen", prev)
+        # ⛔ RELEASED HERE (B-TOKEN-WATCH-FOLLOWUP-MEMORY P2b-2 F-e): nothing reads
+        #    `prev` after the save, but `promote.run` and `summary.build` run below
+        #    in this same frame, so it stayed referenced through both -- 268,740
+        #    entries in P2b-1's live arm. Graded on the MEASURED peak, never on
+        #    reuse: freed blocks return to pools, and requests over 512 B cannot
+        #    use them (Langston, P2b-2 C-4).
+        del prev
         # A quantified residual beats a stated one: the one-directional
         # under-count of `liquidity_pulled` is now countable per age label
         # rather than described in a document.

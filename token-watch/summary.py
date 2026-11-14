@@ -40,6 +40,7 @@ token-watch — THE PUBLISHED SUMMARY. The only thing the tracking page reads.
 
 from __future__ import annotations
 
+import heapq
 import json
 import logging
 import os
@@ -47,7 +48,7 @@ from datetime import datetime, timedelta, timezone
 
 from config import (BIRTHS_DIR, DISPLAY_AGES, GRID, GRID_LABELS,
                     OBSERVATIONS_DIR, ROOT)
-from store import (census as store_census, identity_map as _identity_map, load_state, save_state,
+from store import (iter_census as store_iter_census, identity_for as _identity_for, load_state, save_state,
                    tombstone_path, _correction_index, dead_set, dead_set_status,
                    latest_observations_uncorrected)
 
@@ -217,6 +218,12 @@ def _oldest_survivors(dead: set, limit: int, now: datetime) -> list:
     _unresolved = 0   # counted, never silently dropped
     out = []
     for name in _birth_files():
+        # ⛔ STOP THE INSTANT THE LIMIT IS MET (P2b-2 C-1(b)): the old loop returned
+        #    before the next file was opened, and a two-file walk must not become a
+        #    read of every birth file.
+        need = limit - len(out)
+        if need <= 0:
+            break
         # ⛔ THE CORRECTED READ PATH, NOT A RAW open(). 19 census rows carry a
         #    QUOTE CURRENCY where the launched mint belongs, written before the
         #    conservation rule landed. THIS TABLE IS MINT-KEYED AND USER-FACING, so
@@ -228,21 +235,23 @@ def _oldest_survivors(dead: set, limit: int, now: datetime) -> list:
         # ⚠️ The row-COUNTING fold above is deliberately left uncorrected: it counts
         #    rows per day and a collapsed row is still one launch, counted once.
         #    Counts were never the broken thing; identity was.
+        # ⛔ THE TRY WRAPS THE CONSUMPTION, NOT A CALL (P2b-2 C-2). The census is
+        #    read lazily, so an unparseable line raises inside the selection; the
+        #    file then contributes NOTHING -- no rows and no unresolved count, exactly
+        #    as when the whole day file was read up front -- and the walk moves on.
+        file_unresolved = []
         try:
-            rows = store_census(name, _corrections)
+            best = _oldest_in_file(name, _corrections, dead, need, file_unresolved)
         except (OSError, ValueError):
             continue
-        rows.sort(key=lambda r: r.get("created_at") or "")
-        for r in rows:
-            # ⛔ A ROW WE KNOW IS A QUOTE CURRENCY BUT COULD NOT REPAIR IS NOT A
-            #    LAUNCH, AND MUST NOT BE LISTED AS ONE. Its key is in the corrections
-            #    store, so this is derived from the data rather than from a hard-coded
-            #    currency list -- the denylist the conservation rule was chosen over.
-            if r.get("mint_unresolved"):
-                _unresolved += 1
-                continue
-            if r.get("mint") in dead:
-                continue
+        if len(best) == need:
+            # this file meets the limit: the old loop counted only the unresolved rows
+            # it passed before returning, i.e. those sorting below the last row taken
+            last = best[-1][0]
+            _unresolved += sum(1 for k in file_unresolved if k < last)
+        else:
+            _unresolved += len(file_unresolved)
+        for _key, r in best:
             created = r.get("created_at")
             age_days = None
             if created:
@@ -260,9 +269,42 @@ def _oldest_survivors(dead: set, limit: int, now: datetime) -> list:
                 "venue": r.get("venue"),
                 "follow_reason": r.get("follow_reason"),
             })
-            if len(out) >= limit:
-                return _enrich(out), _unresolved
+    # no day-file row is referenced here: only the <= limit rows taken (P2b-1 R2)
     return _enrich(out), _unresolved
+
+
+def _survivor_key(item):
+    return item[0]
+
+
+def _oldest_in_file(name: str, corrections, dead, need: int, unresolved_keys: list) -> list:
+    """The `need` oldest listable rows of ONE day file, as [(key, row)], oldest first,
+    holding at most `need` rows at a time (B-TOKEN-WATCH-FOLLOWUP-MEMORY P2b-2 F-d2).
+
+    ★ THE SAME ORDER AS THE OLD WHOLE-FILE SORT, EXACTLY (Langston, P2b-2 C-1(a)):
+      the key is (created_at or "", position), where position is the row's index in
+      the RAW stream, assigned BEFORE the unresolved and dead filters. The old
+      `rows.sort(key=created_at)` was stable, so ties kept file order; the position
+      reproduces that, and `heapq.nsmallest` is documented equal to
+      `sorted(iterable, key=key)[:n]`.
+    ★ THE SAME COUNTER STAMPS THE UNRESOLVED ROWS, appended to `unresolved_keys`
+      (19 in the whole store), so the caller's "below the last row taken" compares one
+      coordinate system.
+    ⛔ A ROW WE KNOW IS A QUOTE CURRENCY BUT COULD NOT REPAIR IS NOT A LAUNCH, AND
+       MUST NOT BE LISTED AS ONE. Its key is in the corrections store, so this is
+       derived from the data rather than from a hard-coded currency list -- the
+       denylist the conservation rule was chosen over.
+    """
+    def candidates():
+        for pos, r in enumerate(store_iter_census(name, corrections)):
+            key = (r.get("created_at") or "", pos)
+            if r.get("mint_unresolved"):
+                unresolved_keys.append(key)
+                continue
+            if r.get("mint") in dead:
+                continue
+            yield key, r
+    return heapq.nsmallest(need, candidates(), key=_survivor_key)
 
 
 def _enrich(rows: list) -> list:
@@ -290,7 +332,7 @@ def _enrich(rows: list) -> list:
     #    the stalest view we could build. Identity does not change, so it does
     #    not need re-observing; the volatile fields still come from the
     #    observation and still blank out when it is old, which is correct.
-    ids = _identity_map()
+    ids = _identity_for({r["mint"] for r in rows})
     for r in rows:
         o = obs.get(r["mint"]) or {}
         sol = o.get("sol_usd")

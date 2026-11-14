@@ -116,8 +116,23 @@ def _birth_files() -> list:
     return sorted(f for f in os.listdir(BIRTHS_DIR) if f.endswith(".jsonl"))
 
 
-def _read_new(path: str, offset: int):
+class _read_new:
     """Complete lines from `offset`, WITH each row's byte length.
+
+    ⛔ STREAMED (B-TOKEN-WATCH-FOLLOWUP-MEMORY P2b-2 F-f, Langston gate B). It read
+       the whole remainder with `fh.read()`, split it into a second whole-remainder
+       copy of per-line strings, and built `rows` + `sizes` lists of every parsed
+       object -- three whole-remainder representations at once: 303.0 MiB inside
+       `promote.run` in P2b-1's live arm. Iterating it now yields `(row, nbytes)`
+       one at a time with ONE row of lookahead (a blank or unparseable line is added
+       to the PREVIOUS row's size, so a row is yielded only once the next row or
+       the end is seen). `.base` is the starting offset after a shrink reset and
+       after any leading blank/unparseable lines; it is final once the first row is
+       yielded, or once iteration ends.
+    ★ THE SAME OUTPUT AS BEFORE, row for row and byte for byte: each physical line
+      is split with `splitlines(keepends=True)`, so the pieces are exactly those of
+      `raw.splitlines` over the whole remainder; a final line with no newline is
+      still a row being written and is not consumed.
 
     ⛔ THE BYTE LENGTHS ARE NOT BOOKKEEPING — THEY ARE THE SHED FIX. The first
        version advanced the cursor to the end of everything it READ, then did
@@ -127,44 +142,47 @@ def _read_new(path: str, offset: int):
        shed defers work instead of discarding it. Caught by the suite, not by
        reading the code.
     """
-    if not os.path.exists(path):
-        return [], [], offset
-    size = os.path.getsize(path)
-    if size < offset:
-        LOG.error("promote: %s shrank (%d -> %d) — cursor restarted", path, offset, size)
-        offset = 0
-    if size == offset:
-        return [], [], offset
-    with open(path, "r", encoding="utf-8") as fh:
-        fh.seek(offset)
-        raw = fh.read()
-    if not raw:
-        return [], [], offset
-    if not raw.endswith("\n"):
-        cut = raw.rfind("\n")
-        if cut < 0:
-            return [], [], offset
-        raw = raw[: cut + 1]
-    rows, sizes = [], []
-    for line in raw.splitlines(keepends=True):
-        nbytes = len(line.encode("utf-8"))
-        body = line.strip()
-        if not body:
-            # a blank line is still consumed, or the cursor would stick on it
-            if rows:
-                sizes[-1] += nbytes
-            else:
-                offset += nbytes
-            continue
-        try:
-            rows.append(json.loads(body))
-            sizes.append(nbytes)
-        except ValueError:
-            if rows:
-                sizes[-1] += nbytes
-            else:
-                offset += nbytes
-    return rows, sizes, offset
+    def __init__(self, path: str, offset: int):
+        self.path = path
+        self.base = offset
+
+    def __iter__(self):
+        path = self.path
+        if not os.path.exists(path):
+            return
+        size = os.path.getsize(path)
+        if size < self.base:
+            LOG.error("promote: %s shrank (%d -> %d) — cursor restarted", path, self.base, size)
+            self.base = 0
+        if size == self.base:
+            return
+        held = None                     # [row, nbytes]: yielded once its trailing lines are known
+        with open(path, "r", encoding="utf-8") as fh:
+            fh.seek(self.base)
+            for phys in fh:
+                if not phys.endswith("\n"):
+                    break               # a row still being written -- not consumed
+                for line in phys.splitlines(keepends=True):
+                    nbytes = len(line.encode("utf-8"))
+                    body = line.strip()
+                    if body:
+                        try:
+                            row = json.loads(body)
+                        except ValueError:
+                            body = ""
+                    if not body:
+                        # a blank or unparseable line is still consumed, or the
+                        # cursor would stick on it
+                        if held is not None:
+                            held[1] += nbytes
+                        else:
+                            self.base += nbytes
+                        continue
+                    if held is not None:
+                        yield held[0], held[1]
+                    held = [row, nbytes]
+        if held is not None:
+            yield held[0], held[1]
 
 
 def _correction_key(recorded_mint, created_at):
@@ -267,9 +285,12 @@ def run(now: datetime = None) -> dict:
         if stop or budget <= 0:
             break
         path = os.path.join(BIRTHS_DIR, name)
-        rows, sizes, base = _read_new(path, cursors.get(name, 0))
-        consumed = base
-        for birth, nbytes in zip(rows, sizes):
+        # `consumed` counts bytes handled PAST `new.base`; base is final once the
+        # first row is yielded or the read ends (see `_read_new`), so it is read
+        # only when the cursor is saved
+        new = _read_new(path, cursors.get(name, 0))
+        consumed = 0
+        for birth, nbytes in new:
             if budget <= 0:
                 stats["bounded_out"] += 1
                 continue
@@ -434,7 +455,7 @@ def run(now: datetime = None) -> dict:
             _append(CHECKS_PATH, rec)
             consumed += nbytes
 
-        cursors[name] = consumed
+        cursors[name] = new.base + consumed
 
     st["cursors"] = cursors
     st["attempts"] = tries

@@ -142,6 +142,12 @@ jobs:
           python3 token-watch/tests/mutate_due_storage.py
           python3 token-watch/tests/test_measure_followup_memory.py
           python3 token-watch/tests/test_p2b_memory_fixes.py
+          # P2b-2 (B-TOKEN-WATCH-FOLLOWUP-MEMORY): the new walk, identity lookup, prev release and streamed promote read,
+          # plus the suites of the three modules it changes (promote, the census read path, the creator-stake backfill)
+          python3 token-watch/tests/test_p2b2_memory_fixes.py
+          python3 token-watch/tests/test_promote.py
+          python3 token-watch/tests/test_census_correction.py
+          python3 token-watch/tests/test_creator_stake.py
           pwsh -NoProfile -Command '$e=$null;[Management.Automation.Language.Parser]::ParseFile("comms-infra/laptop/ssh-keyholder/install.ps1",[ref]$null,[ref]$e)>$null;if($e){$e|% Message;exit 1}'
           pwsh -NoProfile -Command '$e=$null;[Management.Automation.Language.Parser]::ParseFile("comms-infra/laptop/ssh-keyholder/capture_caller_processes.ps1",[ref]$null,[ref]$e)>$null;if($e){$e|% Message;exit 1}'
           pwsh -NoProfile -Command '$e=$null;[Management.Automation.Language.Parser]::ParseFile("comms-infra/laptop/ssh-keyholder/rollback.ps1",[ref]$null,[ref]$e)>$null;if($e){$e|% Message;exit 1}'

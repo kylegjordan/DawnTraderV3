@@ -528,7 +528,22 @@ def read_census_uncorrected(day_file: str):
     Legitimate callers: anything auditing the correction itself, and anything
     that must reproduce what was recorded at the time.
     """
-    return list(_read(f"{BIRTHS_DIR}/{day_file}"))
+    return list(_iter_census_uncorrected(day_file))
+
+
+def _iter_census_uncorrected(day_file: str):
+    """The raw census rows ONE AT A TIME (B-TOKEN-WATCH-FOLLOWUP-MEMORY P2b-2 F-d2).
+
+    ⛔ PRIVATE ON PURPOSE (Langston, P2b-2 C-3): the 2026-09-01 rule's force is that
+       a bypass of the correction is ONE greppable public name. The public raw
+       names are `read_census_uncorrected` and `latest_observations_uncorrected`;
+       this generator is the representation `iter_census` streams over, not a
+       third door.
+    ⚠️ LAZY: `_read` raises an unparseable line's ValueError when the consumer
+       reaches it, not when this is called -- a caller's try must wrap the
+       CONSUMPTION (P2b-2 C-2).
+    """
+    return _read(f"{BIRTHS_DIR}/{day_file}")
 
 
 def census(day_file: str, _idx=None):
@@ -537,6 +552,22 @@ def census(day_file: str, _idx=None):
     Returns rows carrying `mint` (corrected) and, where a substitution
     happened, `recorded_mint` (what was originally written) so the repair is
     auditable from the row itself rather than only from the index.
+    """
+    return list(iter_census(day_file, _idx))
+
+
+def iter_census(day_file: str, _idx=None):
+    """`census` one row at a time -- the same correction, the same backfilled
+    stake, applied per row as it is read (B-TOKEN-WATCH-FOLLOWUP-MEMORY P2b-2
+    F-d2). `census()` is `list()` of this, so its contract is unchanged.
+
+    ★ WHY IT EXISTS: the survivor walk needs the 100 oldest rows of a day file,
+      and building the whole day file as a list held ~+44 MiB through the
+      summary's enrich step (P2b-1, `read_census_uncorrected` +740k blocks, ~+814k
+      still held after the call returned). A consumer that keeps only what it
+      selects now holds only that.
+    ⚠️ LAZY: the correction index and the stake index are built on the FIRST
+       row requested, and a bad line raises when it is reached.
     """
     idx = _correction_index() if _idx is None else _idx
     # ⛔ THE BACKFILLED CREATOR STAKE IS APPLIED HERE, ON THE DEFAULT PATH.
@@ -547,8 +578,7 @@ def census(day_file: str, _idx=None):
     #    silently left reading `not_extracted`, which would be
     #    indistinguishable from never having been backfilled at all.
     _stake = creator_stake_index()
-    out = []
-    for r in read_census_uncorrected(day_file):
+    for r in _iter_census_uncorrected(day_file):
         key = (r.get("mint"), r.get("created_at"))
         if key in idx:
             real = idx[key]
@@ -577,8 +607,7 @@ def census(day_file: str, _idx=None):
                 r = dict(r, creator_stake_source="backfill_ambiguous")
             elif got:
                 r = dict(r, **got)
-        out.append(r)
-    return out
+        yield r
 
 
 IDENTITY_PATH = f"{ROOT}/study/identity.jsonl"
@@ -606,13 +635,28 @@ def record_identity(mint: str, name: str, symbol: str) -> None:
     _append(IDENTITY_PATH, {"mint": mint, "name": name, "symbol": symbol})
 
 
-def identity_map() -> dict:
-    """mint -> {name, symbol}. Last write wins, which is right: if a provider
-    ever corrects a name, the correction is what we want."""
+def identity_for(mints) -> dict:
+    """mint -> {name, symbol} for the WANTED mints only. Last write wins, which
+    is right: if a provider ever corrects a name, the correction is what we want.
+
+    ⛔ IT REPLACED `identity_map()`, WHICH MAPPED EVERY ROW (B-TOKEN-WATCH-
+       FOLLOWUP-MEMORY P2b-2 F-d1). The summary looks up <= 100 mints, and the
+       whole-file map was +328.4 MiB / +4.15M blocks over 1,883,655 rows -- the
+       live arm's kill site and all_shed's near-miss (P2b-1). Measured over the
+       live file before building: 100 wanted mints, 51.4 KiB peak, 11.1 s.
+    ⚠️ STILL A FULL SCAN, so last-write-wins holds: the scan cost grows with the
+       file, which is append-only with no dedupe (Langston, surfaced at gate B;
+       proposed as its own batch, not fixed here).
+    ⚠️ BAD LINES behave as before: `_read` raises on an unparseable line. The one
+       difference is that an empty `mints` reads nothing at all.
+    """
+    want = set(mints)
     out = {}
+    if not want:
+        return out
     for r in _read(IDENTITY_PATH):
         m = r.get("mint")
-        if m:
+        if m in want:
             out[m] = {"name": r.get("name"), "symbol": r.get("symbol")}
     return out
 

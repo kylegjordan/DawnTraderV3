@@ -180,19 +180,20 @@ check("S2 the note names the unreadable line count", "1 tombstone line" in (p.ge
 print("\n=== S3. ROWS EXCLUDED AS UNRESOLVED QUOTE CURRENCIES ARE COUNTED ON THE PAYLOAD (R4: _unresolved had no reader)")
 reset()
 birth("REAL1", NOW - timedelta(days=50))
-real_census = summary.store_census
+real_iter = summary.store_iter_census          # P2b-2 F-d2: the walk reads the census as a generator
 
 
 def census_with_unresolved(day, *a, **k):
-    rows = real_census(day, *a, **k)
-    return rows + [{"mint": "USDC-LIKE", "mint_unresolved": True, "created_at": rows[0]["created_at"] if rows else None}]
+    rows = list(real_iter(day, *a, **k))
+    yield from rows
+    yield {"mint": "USDC-LIKE", "mint_unresolved": True, "created_at": rows[0]["created_at"] if rows else None}
 
 
-summary.store_census = census_with_unresolved
+summary.store_iter_census = census_with_unresolved
 try:
     p = summary.build(NOW)
 finally:
-    summary.store_census = real_census
+    summary.store_iter_census = real_iter
 check("S3 the excluded count reaches the payload", p.get("oldest_survivors_unresolved_excluded") == 1,
       p.get("oldest_survivors_unresolved_excluded"))
 check("S3 and the excluded row is not listed", "USDC-LIKE" not in [r["mint"] for r in p["oldest_survivors"]])

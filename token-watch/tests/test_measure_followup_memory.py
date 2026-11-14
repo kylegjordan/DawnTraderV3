@@ -380,14 +380,14 @@ check("E3 the default probes hold two literals in different /8s",
       len(lits) == 2 and len({x.split(".")[0] for x in lits}) == 2, str(mfm.DEFAULT_EGRESS_PROBES))
 
 # ── T1: --trace reaches the identity map ───────────────────────────────────────────────────────────────────────────
-print("T1 expect: --trace writes snapshots, including around summary._identity_map (A2's site)")
+print("T1 expect: --trace writes snapshots, including around summary._identity_for (A2's site, P2b-2 F-d1)")
 run_root_t, _ = prepare("run-trace")
 tdir = os.path.join(WORK, "trace")
 p, res = run("live", run_root_t, "--trace", tdir)
 names = sorted(os.listdir(tdir)) if os.path.isdir(tdir) else []
 check("T1 exit 0", p.returncode == 0, p.stderr[-1500:])
-check("T1 identity map bracketed", any("before-summary._identity_map" in n for n in names)
-      and any("after-summary._identity_map" in n for n in names), str(names))
+check("T1 identity lookup bracketed", any("before-summary._identity_for" in n for n in names)
+      and any("after-summary._identity_for" in n for n in names), str(names))
 
 # ── S1: --sample (P2a) - markers at every stage Langston named, cgroup fields parsed, start/end bracket ───────────
 print("S1 expect: --sample writes start, samples, the stage markers in order (incl. inside summary.build) and end")
@@ -400,6 +400,9 @@ open(os.path.join(cgs, "memory.events"), "w").write("low 0\nhigh 0\nmax 7\noom 0
 open(os.path.join(cgs, "memory.stat"), "w").write(
     "anon 1000\nfile 2000\nkernel_stack 30\npagetables 40\nshmem 5\nfile_dirty 6\nfile_writeback 7\n"
     "slab_reclaimable 8\nslab_unreclaimable 9\npgscan 10\npgsteal 11\n")
+# P2b-2 (gate A condition 1): PSI on every line
+open(os.path.join(cgs, "memory.pressure"), "w").write(
+    "some avg10=0.00 avg60=0.00 avg300=0.00 total=4242\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=17\n")
 run_root_s, _ = prepare("run-sample")
 sfile = os.path.join(WORK, "samples.jsonl")
 p, res = run("live", run_root_s, "--cgroup-dir", cgs, "--sample", sfile, "--sample-interval", "0.02", skip_memory=False)
@@ -411,7 +414,7 @@ check("S1 first line is start, last is end", lines and lines[0]["kind"] == "star
 check("S1 seq is 1..n with no gap", [x["seq"] for x in lines] == list(range(1, len(lines) + 1)))
 want = ["after-follow_up.dead_set", "before-summary.build", "after-summary._fold", "before-summary.dead_set",
         "before-summary._oldest_survivors", "after-summary._oldest_survivors", "before-summary._latest_observations",
-        "before-summary._identity_map", "after-summary._identity_map", "after-summary.build"]
+        "before-summary._identity_for", "after-summary._identity_for", "after-summary.build"]
 check("S1 every named stage marker present", all(w in marks for w in want), str([w for w in want if w not in marks]))
 # in ORDER: each stage searched for after the previous one. tombstone_path is also called inside _fold
 # (summary.py:153, the new-tombstone offset read), so the dead-set read's marker is the one AFTER after-summary._fold.
@@ -434,22 +437,35 @@ check("S1 a marker carries the cgroup reads", m0.get("memory_current") == 123456
 check("S1 memory.stat: exactly the eleven named keys (shmem included, F-6 ruling)", m0.get("stat") == {
     "anon": 1000, "file": 2000, "kernel_stack": 30, "pagetables": 40, "shmem": 5, "file_dirty": 6, "file_writeback": 7,
     "slab_reclaimable": 8, "slab_unreclaimable": 9, "pgscan": 10, "pgsteal": 11}, str(m0.get("stat")))
+check("S1 P2b-2: memory.pressure some/full totals are parsed onto every line",
+      m0.get("pressure") == {"some": 4242, "full": 17}
+      and all(x.get("pressure") == {"some": 4242, "full": 17} for x in lines if x.get("kind") in ("sample", "mark")),
+      str(m0.get("pressure")))
 check("S1 a marker carries the Python counters (A-3)", isinstance(m0.get("allocated_blocks"), int)
       and isinstance(m0.get("len_prev"), int) and isinstance(m0.get("len_dead_cache"), int),
       str({k: m0.get(k) for k in ("allocated_blocks", "len_prev", "len_dead_cache")}))
 check("S1 the result names the side file", res.get("sample_file") == sfile, str(res.get("sample_file")))
 # P2b-0: markers INSIDE _oldest_survivors and a per-file open mark, each carrying blocks beside anon
-inside = ["before-summary._correction_index", "after-summary._correction_index", "before-summary.store_census",
-          "before-store.creator_stake_index", "after-store.creator_stake_index", "before-store.read_census_uncorrected",
-          "after-summary.store_census"]
+# P2b-2 F-d2: the census is read lazily inside the per-file selection, so _oldest_in_file is the bracket and the stake
+# index is built inside it
+inside = ["before-summary._correction_index", "after-summary._correction_index", "before-summary._oldest_in_file",
+          "before-store.creator_stake_index", "after-store.creator_stake_index", "after-summary._oldest_in_file"]
 check("S1 P2b-0: the markers inside _oldest_survivors are present", all(w in marks for w in inside),
       str([w for w in inside if w not in marks]))
 opens = [x for x in lines if str(x.get("stage", "")).startswith("open:")]
-check("S1 P2b-0: births and observations file opens are marked with their size",
-      any("births/" in x["stage"] for x in opens) and any("observations/" in x["stage"] for x in opens)
-      # file_bytes is None for a file opened to be CREATED (an append before it exists); every mark carries the key
-      and all("file_bytes" in x for x in opens) and any(isinstance(x.get("file_bytes"), int) for x in opens),
+check("S1 P2b-0: births file reads are marked with their size",
+      any("births/" in x["stage"] for x in opens)
+      and all("file_bytes" in x for x in opens) and all(isinstance(x.get("file_bytes"), int) for x in opens),
       str(sorted(set(x["stage"] for x in opens))))
+# P2b-2: an APPEND is not marked. The loop appends one observation per entry, so before P2b-2 the span between the
+# loop's first marker and loop-end held one open:observations mark per observation; a read-only mark leaves none.
+_l0 = next((x["seq"] for x in lines if x.get("stage") == "loop"), None)
+_le = next((x["seq"] for x in lines if x.get("stage") == "loop-end"), None)
+_in_loop_obs = [x for x in opens if "observations/" in x["stage"] and _l0 is not None and _le is not None
+                and _l0 < x["seq"] < _le]
+check("S1 P2b-2: no open mark for the loop's observation APPENDS", _l0 is not None and _le is not None
+      and not _in_loop_obs and res.get("stats", {}).get("observed", 0) > 0,
+      "in-loop observation marks=%d observed=%s" % (len(_in_loop_obs), res.get("stats", {}).get("observed")))
 check("S1 P2b-0: every inside marker carries allocated_blocks (R2: retained vs transient)",
       all(isinstance(x.get("allocated_blocks"), int) for x in lines if x.get("stage") in inside), "missing blocks")
 # C-2: the periodic stream itself - at least two samples, one of them BETWEEN two named markers
@@ -465,10 +481,10 @@ check("S1 end says the sampler thread was alive, raised nothing and stopped", li
       str({k: lines[-1].get(k) for k in ("thread_alive", "thread_error", "joined")} if lines else {}))
 # F-4: the markers NEST - _latest_observations and _identity_map run inside _oldest_survivors (via _enrich), inside build
 nest = ["before-summary.build", "before-summary._oldest_survivors", "before-summary._latest_observations",
-        "after-summary._latest_observations", "before-summary._identity_map", "after-summary._identity_map",
+        "after-summary._latest_observations", "before-summary._identity_for", "after-summary._identity_for",
         "after-summary._oldest_survivors", "after-summary.build"]
 ns = [seq_of.get(w, -1) for w in nest]
-check("S1 the nesting: build > _oldest_survivors > (_latest_observations, _identity_map)", -1 not in ns and ns == sorted(ns),
+check("S1 the nesting: build > _oldest_survivors > (_latest_observations, _identity_for)", -1 not in ns and ns == sorted(ns),
       str(dict(zip(nest, ns))))
 # C-1: after the prune, len_prev is the PRUNED dict (the one save_state got), not the loop's
 end_mark = next((x for x in lines if x.get("stage") == "loop-end"), {})

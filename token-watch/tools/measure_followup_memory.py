@@ -62,28 +62,31 @@ SUBCOMMANDS, each run as `tokenwatch`:
            ru_maxrss, stats, the fan-out, the frozen modules, the bytes p99/max of the bodies THIS run served, and
            the PREPARE.json it ran on.
            --trace: tracemalloc snapshots (top 10, to disk) after the fold, after each dead_set, around promote.run,
-           around summary.build, and around `summary._identity_map` (A2's 321 MB site — summary binds it at import
-           as `from store import identity_map as _identity_map`, so that name is the one wrapped). A wrap target
-           that does not exist RAISES rather than skipping.
+           around summary.build, and around `summary._identity_for` (A2's 321 MB site was the whole-file
+           `identity_map`, replaced in P2b-2 F-d1; summary binds the new lookup at import as `_identity_for`, so that
+           name is the one wrapped). A wrap target that does not exist RAISES rather than skipping.
 
            --sample (P2a, Langston's ruling on the traced reruns, Discord 1571210672413343797): a side file of
            JSON lines, each os.write() on an O_APPEND fd so a SIGKILL loses nothing already written - the deciding
            reading must survive the kill (his R3 C-2). A thread samples every --sample-interval seconds (default 5,
            his A-1); MARKERS are written at stage boundaries (his A-4: inside summary.build at _fold,
            tombstone_path (the local dead-set build that follows it), _oldest_survivors, _latest_observations,
-           _identity_map) and every 1,000 loop entries. tombstone_path also fires inside _fold (summary.py:153), so
+           _identity_for) and every 1,000 loop entries. tombstone_path also fires inside _fold (summary.py:153), so
            the dead-set read's marker is the tombstone_path one that FOLLOWS after-summary._fold. Every line carries memory.current, memory.peak (exact
            high-water: its delta between markers brackets the peak to a stage, A-2), memory.stat anon / file /
            file_dirty / file_writeback / shmem / slab_reclaimable / slab_unreclaimable / kernel_stack / pagetables /
-           pgscan / pgsteal, and memory.events max / oom / oom_kill. P2b-0 adds markers inside _oldest_survivors
-           (_correction_index, store_census, store.creator_stake_index, store.read_census_uncorrected) and an
-           `open:<dir>/<file>` mark (with file_bytes) for every births / observations / creator-stake file store
-           opens. Markers add sys.getallocatedblocks(),
-           len(prev) (the `last_seen` dict the loop grows) and len(store._DEAD_CACHE["set"]) (A-3). No tracemalloc:
+           pgscan / pgsteal, memory.events max / oom / oom_kill, and (P2b-2, Langston gate A condition 1)
+           memory.pressure some / full `total` (µs) on EVERY line - recorded and reported, never graded. P2b-0 adds
+           markers inside _oldest_survivors (_correction_index, and since P2b-2 _oldest_in_file per day file around
+           store.creator_stake_index) and an `open:<dir>/<file>` mark (with file_bytes) for every births /
+           observations / dead / creator-stake file that store or promote opens FOR READING (P2b-2: an append is not
+           marked - P2b-1 wrote 501,923 append marks per arm). Markers add sys.getallocatedblocks(), len(prev) (the
+           `last_seen` dict the loop grows - recorded at load and at its save, never held past it: P2b-2 F-e releases
+           it after the save) and len(store._DEAD_CACHE["set"]) (A-3). No tracemalloc:
            its tables scale with the traced objects and inflate the charge being measured. Combinable with --trace,
            but a P2a run uses --sample alone.
            ⛔ THE MARKERS ARE A NESTED TREE, NOT A PARTITION (Langston, P2a review F-4): build > _oldest_survivors
-           (summary.py:428) > _enrich (:267-268) > _latest_observations (:288) and _identity_map (:296). A delta
+           > _enrich > _latest_observations and _identity_for. A delta
            between two markers brackets a span; spans nest, so they are never summed.
            ⛔ An existing --sample file is REFUSED (exit 2), never appended to and never truncated: a re-run after a
            kill must not merge two populations into one file, and the killed run's file is the evidence. The driver
@@ -664,6 +667,17 @@ class Sampler:
             k, _, v = line.partition(" ")
             if k in ("max", "oom", "oom_kill") and v.isdigit():
                 out["events"][k] = int(v)
+        # P2b-2 (Langston gate A condition 1): PSI on EVERY line, because the arm that fails never reaches an
+        # "end". `some avg10=.. avg60=.. avg300=.. total=N` -> {"some": N, "full": N}, totals in microseconds.
+        # Recorded and reported, NOT graded: no bound exists until a run that otherwise passes R3 measures one.
+        psi = _read(os.path.join(self.cg, "memory.pressure")) or ""
+        out["pressure"] = {}
+        for line in psi.splitlines():
+            kind, _, rest = line.partition(" ")
+            for field in rest.split():
+                k, _, v = field.partition("=")
+                if k == "total" and kind in ("some", "full") and v.isdigit():
+                    out["pressure"][kind] = int(v)
         return out
 
     def write(self, kind: str, _final: bool = False, **extra) -> None:
@@ -910,6 +924,10 @@ def cmd_run(a) -> int:
         real_load_state = follow_up.load_state
 
         def load_state_seen(name, *args, **kw):
+            if name == "unclassified":
+                # P2b-2 C-4: the first wrapped statement after `del prev` when this run has unclassified deaths
+                # (else the next mark is before-promote.run)
+                sampler.mark("after-release:prev")
             v = real_load_state(name, *args, **kw)
             if name == "last_seen":
                 held["prev"] = v
@@ -918,17 +936,22 @@ def cmd_run(a) -> int:
         real_save_state = follow_up.save_state
 
         def save_state_seen(name, value, *args, **kw):
-            # C-1 (Langston): follow_up.py:439 rebinds prev to the pruned dict and :442 saves it. Holding the dict
-            # load_state returned would pin the PRE-prune dict (and every pruned mint's value) for the rest of the run,
-            # through promote and summary.build - the harness perturbing what it measures. Re-point here, so the old
-            # dict dies three statements after production's and post-prune markers report the pruned size.
+            # C-1 (Langston): the prune rebinds prev to a NEW dict and the save writes it.
+            # ⛔ P2b-2 F-e: production now RELEASES prev right after this save, so the harness must not hold it
+            #    either - holding it here would pin exactly what production frees, through promote and
+            #    summary.build. At the save it records the pruned dict's length and id, then drops the reference.
             if name == "last_seen":
-                held["prev"] = value
-            return real_save_state(name, value, *args, **kw)
+                held.pop("prev", None)
+                held["len"], held["id"] = len(value), id(value)
+            r = real_save_state(name, value, *args, **kw)
+            if name == "last_seen":
+                sampler.mark("after-save:last_seen")
+            return r
         follow_up.save_state = save_state_seen
-        sampler.probes["len_prev"] = lambda: len(held["prev"]) if "prev" in held else None
-        # which dict that is: :439 always builds a NEW dict, so the id changes at the prune whatever the prune count
-        sampler.probes["prev_id"] = lambda: id(held["prev"]) if "prev" in held else None
+        sampler.probes["len_prev"] = lambda: (len(held["prev"]) if "prev" in held else held.get("len"))
+        # which dict that is: the prune always builds a NEW dict, so the id changes at the prune whatever the count;
+        # after the save it is the id RECORDED at the save (the dict itself is no longer held)
+        sampler.probes["prev_id"] = lambda: (id(held["prev"]) if "prev" in held else held.get("id"))
         sampler.probes["len_dead_cache"] = lambda: (len(store._DEAD_CACHE["set"])
                                                     if store._DEAD_CACHE.get("set") is not None else None)
         real_entries = follow_up._entries_across
@@ -969,11 +992,12 @@ def cmd_run(a) -> int:
         #    Every mark carries allocated_blocks beside anon: a before/after pair whose blocks fall back is a TRANSIENT
         #    freed inside the call; blocks that stay up are RETAINED by something still referenced (R2).
         mwrap(summary, "_correction_index")
-        mwrap(summary, "store_census")
+        # P2b-2 F-d2: the census is read lazily inside the per-file selection, so the bracket is that selection
+        # (a regular function); a wrap around the generator call itself would bracket nothing
+        mwrap(summary, "_oldest_in_file")
         mwrap(store, "creator_stake_index")
-        mwrap(store, "read_census_uncorrected")
         mwrap(summary, "_latest_observations")
-        mwrap(summary, "_identity_map")
+        mwrap(summary, "_identity_for")
         # ⭐ P2b-0: INSIDE the reads themselves - every births day file, observation day file or creator-stake file
         #    store opens is marked with its size, so the growth inside _latest_observations (both P2a kills) and inside
         #    each census call is located per file. store resolves `open` through its globals, so a module-level `open`
@@ -983,7 +1007,12 @@ def cmd_run(a) -> int:
 
         def marked_open(file, *args, **kw):
             path = str(file)
+            mode = args[0] if args else kw.get("mode", "r")
             # dead/ added (Langston, P2b-1 run condition): the tombstone read is where the DeadSet build transient lives
+            # ⛔ READ opens only (P2b-2): an append opens the day file once per observation - 501,923 marks per arm
+            #    in P2b-1, sample files of 285 / 295 MB in the cgroup's own page cache
+            if any(c in mode for c in "awx+"):
+                return real_open(file, *args, **kw)
             if "/observations/" in path or "/births/" in path or "/dead/" in path or "creator-stake" in path:
                 try:
                     size = os.path.getsize(path)
@@ -993,6 +1022,8 @@ def cmd_run(a) -> int:
                              file_bytes=size)
             return real_open(file, *args, **kw)
         store.open = marked_open
+        # P2b-2 F-f: promote reads its births files itself; marking those reads locates its streamed read
+        promote.open = marked_open
 
     if tracer:
         def wrap(mod, name, before=True, after=True):
@@ -1011,7 +1042,7 @@ def cmd_run(a) -> int:
         wrap(follow_up, "dead_set", before=False)
         wrap(promote, "run")
         wrap(summary, "build")
-        wrap(summary, "_identity_map")
+        wrap(summary, "_identity_for")
 
     obs_day = store.observation_path(now)
     rows_before = sum(1 for _ in open(obs_day, encoding="utf-8")) if os.path.exists(obs_day) else 0
