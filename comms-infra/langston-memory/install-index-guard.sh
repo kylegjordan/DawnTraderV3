@@ -52,6 +52,10 @@ for f in "$ST"/*; do
 done
 chown root:root "$ST"/*; chmod 644 "$ST"/*
 RUN="sudo -u langston HOME=$TT SIZE_WATCH_PATH=$ST/langston-size-watch COLTRANE_WATCH_PATH=$ST/coltrane-size-watch MEMORY_WRITE_PATH=$ST/langston-memory-write"
+# (Langston fold-in 2a) sudo's env_reset / always_set_home could hand the suites /home/langston instead of $TT, and the
+# fixtures (mkdtemp under ~) would then land in the live home, outside the trap. Assert the HOME they actually get.
+GOT=$(cd "$TT" && $RUN python3 -I -c 'import os; print(os.path.expanduser("~"))') || fail "could not read the test HOME"
+[ "$GOT" = "$TT" ] || fail "the suites would run with HOME=$GOT, not $TT - fixtures would land outside the staging dir"
 echo "== guard suite + mutation check, from the staged blobs (root-owned, read-only to langston), as langston"
 (cd "$TT" && $RUN python3 -I "$ST/test_index_guard.py" | tail -1) || fail "test_index_guard.py failed"
 (cd "$TT" && $RUN python3 -I "$ST/mutate_index_guard.py") || fail "a mutant survived (or the baseline failed)"

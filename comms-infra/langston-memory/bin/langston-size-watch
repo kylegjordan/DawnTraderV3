@@ -432,7 +432,7 @@ def guard_check(st):
     a log shorter than that offset (rotated or replaced) is read from 0."""
     g = {"installed": os.path.exists(GUARD_PATH), "enumerated": None, "running": None, "cli_established": False,
          "mismatch": False, "unenumerated": [], "unestablished": [], "over": 0, "log_ok": False,
-         "offset_from": None, "offset_to": None, "blind": []}
+         "offset_from": None, "offset_to": None, "blind": [], "bad_lines": 0}
     if not g["installed"]:
         return g
     try:
@@ -484,6 +484,7 @@ def guard_check(st):
                 g[cls].append({"ts": r.get("ts"), "tool": r.get("tool"), "cli_running": r.get("cli_running"),
                                "message": (r.get("message") or "")[:160]})
         g["log_ok"] = True
+        g["bad_lines"] = bad
         if bad:
             g["blind"].append("%d line(s) of %s from byte %d do not parse as JSON" % (bad, GUARD_LOG, off))
     except FileNotFoundError:
@@ -802,8 +803,11 @@ def run(quiet=False, injected_total=None, injected_archive_bytes=None, drill_sto
             "version-drift, unknown-tool and could-not-establish rows cannot fire. Restore the path or fix the parse; "
             "resolves on the first run that reads all three." + stamp, ev)
         # the offset moves only when no event is waiting on an add that failed - an unrecorded refusal is re-read
+        # (Langston fold-in 1a) an unparseable line is in the same position as a refusal: once the offset passes it,
+        # nothing re-reads it, so its blind row must have minted too
         recorded = all(not guard[k] or str(alerts[a]).startswith(("new ", "same "))
-                       for k, a in (("unenumerated", "guard_tool"), ("unestablished", "guard_unestablished")))
+                       for k, a in (("unenumerated", "guard_tool"), ("unestablished", "guard_unestablished"),
+                                    ("bad_lines", "guard_blind")))
         if guard["log_ok"] and recorded:
             st["guard_log_offset"] = guard["offset_to"]
         episodes_note = update_episodes(st, status, over, total, ts)

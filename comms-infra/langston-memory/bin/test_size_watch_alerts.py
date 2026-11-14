@@ -462,6 +462,22 @@ def test_guard(tmp):
     check("G9c a complete line that does not parse: a blind row", len(store.active(GB)), 1)
     check("G9c the body says it does not parse", "do not parse" in store.active(GB)[0]["body"], True)
     store.hand_resolve(GB)
+    m.run(quiet=True)                                  # the bad line is behind the offset now: nothing left active
+    store.hand_resolve(GB)
+
+    # G9d. fold-in 1a: an unparseable line whose blind add FAILED is not consumed - the offset holds, the next healthy
+    #      run mints the blind row
+    off9d = state(m).get("guard_log_offset")
+    with open(m.GUARD_LOG, "a", encoding="utf-8") as fh:
+        fh.write("{also not json\n")
+    store.fail_add = True
+    m.run(quiet=True)
+    check("G9d blind add failing: the offset did NOT advance", state(m).get("guard_log_offset"), off9d)
+    store.fail_add = False
+    m.run(quiet=True)
+    check("G9d healthy store: the blind row is minted on the next run", len(store.active(GB)), 1)
+    check("G9d and the offset now covers the line", state(m).get("guard_log_offset"), os.path.getsize(m.GUARD_LOG))
+    store.hand_resolve(GB)
 
     # G8. C-2: the reader blind on each input raises its own row; back to readable resolves it
     os.remove(m.CLI_PACKAGE)
