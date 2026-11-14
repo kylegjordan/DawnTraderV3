@@ -312,3 +312,28 @@ Driver `tw-p1-traced-driver-r2` (installed `80ad52922`, the r9 runner), log `/va
 - **Unkilled arm:** untested, does not pass, and needs its own disposition before P2b — 10 of 10 untraced arms were killed, so a non-kill means the sampler changed its subject.
 - **Recorded beside the verdict, no verdict of their own:** `shmem` at the deciding line (`file` includes it and it is not reclaimable — added to the sampled keys for this); the `pgsteal` delta over the run (the mechanism leg: `pgsteal ≈ 0` with a small `file` means the cache was never there to reclaim); the sample file's final byte count (its own unsynced lines are dirty page cache inside the cgroup, biasing against the prediction); the deciding line's `stage` (locates each kill).
 - **"P2a should find a third thing" carries NO verdict** — an order-of-magnitude expectation, never recorded as passed or failed.
+
+### Step 7 — P2a ran: both arms killed at the cap, F-6 PASSES on both, and the trail locates every large allocation (Infra Claude, 2026-11-14 19:06-19:31Z, staging)
+Installed for the run: `/opt/token-watch-p1` = `bf5617bab` (git archive of `token-watch/`), **91/91 files sha256-equal to their blobs**, control (one hash altered) FAILED as it must; the `80ad52922` tree kept as `/opt/token-watch-p1.80ad52922.superseded`. Driver `tools/p2a_driver.sh` as unit `tw-p1-p2a-driver`, log `p2a-driver.log`, updater next elapse 2026-11-15 06:43Z (no refusal). Results `results/p2a/`.
+
+| arm | unit result | runtime | CPU | `MemoryPeak` | sample lines | sample bytes |
+|---|---|---|---|---|---|---|
+| all_shed | oom-kill, KILL (19:12:10.56Z) | 5m 20s | 1m 56s | 512.0M | 591 (1 start, 62 samples, 528 marks) | 302,860 |
+| live | oom-kill, KILL (19:31:21.58Z) | 18m 59s | 7m 25s | 512.0M | 754 (1 start, 225 samples, 528 marks) | 368,305 |
+
+**The pre-registered F-6 criterion, applied by `tools/p2a_verdict.py` exactly as written (kill time from each unit's own journal; second resolution, so a deciding line can read up to 1 s "after" it):**
+| arm | deciding line | gap to kill | S = anon + slab_unrecl. | F = file | U = CAP − current | S ≥ 314,572,800 | S > F | seq contiguous, partials | verdict |
+|---|---|---|---|---|---|---|---|---|---|
+| all_shed | seq 591, `sample` | ≈0 s (−0.36 at s resolution) | **531,035,288** | 4,272,128 | 155,648 | yes | yes | yes, 0 | **PASS** |
+| live | seq 754, mark `before-summary._latest_observations` | 0.51 s | **471,715,304** | 55,808,000 | 7,258,112 | yes | yes | yes, 0 | **PASS** |
+Beside the verdict (no verdict of their own): four-term C-1(ii) sum all_shed 532,194,456 / live 472,763,880 (an UPPER bound at 256 MiB on a different sum — not comparable to S); `shmem` 0 on both; `pgsteal` delta all_shed 112,896 / live 173,693 (the cache WAS there and was reclaimed — the mechanism leg holds); `memory.events max` 665 / 2,457; `oom_kill` still 0 in the last line on both (the kill is after it).
+
+**The trail (`tools/p2a_trail.py`), anon in MiB at named markers — the measurement P2b is designed against:**
+- **Dead set (`follow_up.dead_set`, `store._DEAD_CACHE`): anon 40 → 146 (+106 MiB), +766,794 mints**, both arms, in ~5 s. (The tombstone file holds 766,794 distinct mints here, not the 1,013,993 decoder objects the traced run counted.)
+- **The loop:** all_shed flat at 146 (sheds before `prev` grows). **live 146 → 261 (+115 MiB) while `len(prev)` grew 64,784 → 398,262 (+333,478) — about 360 B per entry. F-4 confirmed by measurement.** `file` climbed to ~245-276 MiB during the loop and was reclaimed (`pgsteal`), never the killing charge.
+- **promote.run:** all_shed +17 MiB; live +16 MiB, and the prune at `follow_up.py:439` released ~387k blocks (`prev` 398,262 → 268,740).
+- **summary.build, inside, in order:** `_fold` +0. **Build's own dead-set loop (`summary.py:378-389`): +111 MiB (all_shed) / +99 MiB (live), +767k blocks — F-1 confirmed by measurement: a second full copy of the dead set beside the first.** Then **inside `_oldest_survivors` before `_enrich` reaches `_latest_observations`: +81 MiB / +73 MiB, +812k blocks** — the "third thing" (located, no verdict: `_correction_index()` and `store_census` day reads are the only work there, HYPOTHESIS which). **Both arms were killed inside `_latest_observations`** (their last marker is `before-summary._latest_observations`; F-2's whole-day-file parse is the site, located, magnitude not separable — no marker inside it).
+- **F-4's corollary is REFUTED by measurement:** live did NOT die in the loop. It survived the loop at 261 MiB anon and died in `summary.build`, at the same site as all_shed. The loop's growth lowered the floor summary started from (277 vs 166 MiB); it was not the kill.
+- **Locations settle F-3:** the kill is downstream of `_oldest_survivors`' own allocation and inside `_latest_observations`, for both arms.
+
+**What this says for P2b (design input, not yet a plan):** remove the duplicate dead set in `summary.build` (use `store.dead_set()`; ~100-111 MiB); shrink the dead set itself (~106 MiB for 766,794 mints as Python strings + set); stream `_latest_observations` instead of materialising a day file; find which of `_correction_index()` / `store_census` makes the ~75-80 MiB in `_oldest_survivors` (one more marker); and `prev` (~360 B per entry, F-4) for the live loop. The done-line is the R3 pair, judged by the in-cgroup read with the sampler kept.
