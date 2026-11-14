@@ -217,3 +217,15 @@ Owner: **NEW Claude**, right after whichever deploy carries `3f06dd940`. Instrum
    - `evaluations` is `{}`: `xstock_spot` ABSENT ("never evaluated since this pid started" — the xStock venue is shut until Monday 01:00Z), `crypto_spot` ABSENT too (48 s in).
 4. **END instant, registered now, before it is read: 2026-11-14T05:45Z.** PASS for the crypto control = same pid `3425086`, strictly greater uptime, `evaluations.crypto_spot.count` > 0. If the pid changed, the window is void and re-run on the new pid. If `crypto_spot` is still absent with the same pid, that is "control not exercised in this window", **not a finding**, and the read extends to a second window registered the same way. xStock stays unmeasurable until Monday's live session (r14 item 4).
 
+
+## r16 — r14 END read: crypto positive control PASSES on the same process (owner CC-B, 2026-11-14)
+
+**Read at the registered instant (r15 item 4).** Same command as START; staging checkout `git rev-parse HEAD` = `9591ba8c22d2c0fb9adfd822d85462709e211ef9` at 05:45:18Z (no deploy inside the window).
+1. **Process, read on the box:** `pm2 jlist` → pid `3425086`, `restart_time` 699, `pm_uptime` 2026-11-14T01:40:48.171Z — unchanged from START.
+2. **END read, raw** (05:45:19Z): `{"schema":"open-depth-gate/v1","observedAt":"2026-11-14T05:45:19.257Z","processPid":3425086,"processUptimeSeconds":14671.081133037,"evaluations":{"crypto_spot":{"count":9,"lastAt":1794631194094}},"blocks":{}}`
+3. **Checks against r14/r15, as registered:**
+   - 2(b) same pid `3425086` = START's pid; uptime 14,671.08 s > 48.77 s ⇒ no restart reset the counters inside the window. **PASS.**
+   - Crypto control: `evaluations.crypto_spot.count` 0 (absent at START) → **9**, last at 2026-11-14T04:39:54.094Z (`lastAt` 1794631194094). **PASS** — the single depth-gate call site counted 9 crypto depth evaluations in 4.07 h (one per open attempt that reached the gate).
+   - `blocks` is `{}`: 0 depth blocks of any class over the 9 crypto evaluations. That is a count, not a finding about the gate — the window held no refusal to show.
+   - `xstock_spot` ABSENT at both reads ("never evaluated since this pid started"): the xStock venue is shut until Monday 01:00Z. **Unmeasurable, not 0/0** (r14 item 4).
+4. **What this establishes, and what it does not:** the denominator route answers on the deployed build and the counter it reads moves on the live path (crypto). It does NOT establish the xStock depth arm — that is read in Monday's live session together with the forced-carrier run (r11/r12, instant ≥ Mon 01:35Z), which still needs pre-registration and crew agreement. **Step 8 stays forbidden until that read.**
