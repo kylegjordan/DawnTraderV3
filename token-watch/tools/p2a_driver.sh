@@ -12,8 +12,10 @@ H=/opt/token-watch-p1/tools/measure_followup_memory.py
 R=/opt/token-watch-p1/tools/run_followup_arm.sh
 B=/var/lib/token-watch-p1-runs/bodies.sqlite
 NOW=2026-10-02T13:00:00Z
-RES=/var/lib/token-watch-p1-runs/results/p2a
-LOG=/var/lib/token-watch-p1-runs/p2a-driver.log
+# P2b-1 (Langston's run condition): RESULTS and LOG are overridable so a later run never writes into P2a's evidence;
+# SAMPLE_INTERVAL (default 5 s) reaches the harness through the runner
+RES=${RES:-/var/lib/token-watch-p1-runs/results/p2a}
+LOG=${LOG:-/var/lib/token-watch-p1-runs/p2a-driver.log}
 ALLOW_S=$((40*60))         # untraced arms ran 5-19 min at Step 7 (his A-1 reading); 40 min allowed + the margin below
 MARGIN_S=$((15*60))
 [[ $EUID -eq 0 ]] || { echo "REFUSED: run as root" >&2; exit 2; }
@@ -58,7 +60,7 @@ for arm in all_shed live; do
   prc=$?; echo "$(date -u +%FT%TZ) prepare rc=$prc" >> "$LOG"
   [ $prc -eq 0 ] || { echo "$(date -u +%FT%TZ) STOP: prepare failed" >> "$LOG"; exit 1; }
   updater_ok "after prepare"
-  bash "$R" "$arm" "$RUN" "$B" "$NOW" "$RES" --sample >> "$LOG" 2>&1
+  SAMPLE_INTERVAL="${SAMPLE_INTERVAL:-5}" bash "$R" "$arm" "$RUN" "$B" "$NOW" "$RES" --sample >> "$LOG" 2>&1
   rc=$?
   echo "$(date -u +%FT%TZ) END p2a $arm rc=$rc samples=$(wc -l < "$RES/$arm-samples.jsonl" 2>/dev/null || echo none) free=$(df -B1 --output=avail / | tail -1)" >> "$LOG"
   cp "$RUN/PREPARE.json" "$RES/$arm-PREPARE.json" 2>>"$LOG"

@@ -22,7 +22,7 @@ EXTRA=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --trace) EXTRA+=(--trace "$OUT/$ARM-trace"); shift ;;
-    --sample) EXTRA+=(--sample "$OUT/$ARM-samples.jsonl"); shift ;;
+    --sample) EXTRA+=(--sample "$OUT/$ARM-samples.jsonl" --sample-interval "${SAMPLE_INTERVAL:-5}"); shift ;;
     --n|--shape) [[ $# -ge 2 && -n "$2" ]] || { echo "REFUSED: $1 needs a value" >&2; exit 2; }; EXTRA+=("$1" "$2"); shift 2 ;;
     *) echo "REFUSED: unknown option $1" >&2; exit 2 ;;
   esac

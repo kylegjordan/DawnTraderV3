@@ -74,11 +74,18 @@ def _day(iso: str) -> str | None:
     return iso[:10] if iso and len(iso) >= 10 else None
 
 
+# lines _read_new skipped this build: unparseable, or valid JSON that is not an object. Reset at the top of build and
+# published on the payload (Langston, P2b fold-in 1: a `123` tombstone line used to raise AttributeError in _fold's
+# `r.get`, before save_state, so the cursor never advanced and the build failed every hour).
+_READ_NEW_SKIPPED = {"lines": 0}
+
+
 def _read_new(path: str, offset: int):
     """Complete lines from `offset`. Torn-tail-safe, truncation-detecting.
 
     The same cursor idiom as `liveness` and the spend journal: a final line
     with no newline is a row still being written, so it is not consumed.
+    Only JSON OBJECTS are returned; anything else is skipped and counted (_READ_NEW_SKIPPED).
     """
     if not os.path.exists(path):
         return [], offset
@@ -103,9 +110,14 @@ def _read_new(path: str, offset: int):
         if not line.strip():
             continue
         try:
-            rows.append(json.loads(line))
+            r = json.loads(line)
         except ValueError:
+            _READ_NEW_SKIPPED["lines"] += 1
             continue
+        if not isinstance(r, dict):
+            _READ_NEW_SKIPPED["lines"] += 1
+            continue
+        rows.append(r)
     return rows, offset + len(raw.encode("utf-8"))
 
 
@@ -334,6 +346,7 @@ def _publish_dir() -> None:
 def build(now: datetime = None) -> dict:
     """Compute the published summary. Pure read + one atomic write."""
     now = now or _now()
+    _READ_NEW_SKIPPED["lines"] = 0
     st = _fold(load_state(STATE, {}), now)
 
     born = st["born_by_day"]
@@ -421,6 +434,9 @@ def build(now: datetime = None) -> dict:
         # because they record a quote currency that could not be repaired (counted, never silently dropped - R4)
         "oldest_survivors_note": dead_note,
         "oldest_survivors_unresolved_excluded": unresolved,
+        # census / tombstone lines this build's fold could not use (unparseable or not an object) - counted, never
+        # raised, never silently dropped
+        "fold_skipped_lines": _READ_NEW_SKIPPED["lines"],
         "display_ages": list(DISPLAY_AGES),
         # ⛔ THE ORDER OF THE CHECKPOINTS, CARRIED EXPLICITLY. The payload is
         #    written with sort_keys=True, so `by_age_at_death` comes back

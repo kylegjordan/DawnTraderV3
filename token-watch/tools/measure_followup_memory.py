@@ -983,7 +983,8 @@ def cmd_run(a) -> int:
 
         def marked_open(file, *args, **kw):
             path = str(file)
-            if "/observations/" in path or "/births/" in path or "creator-stake" in path:
+            # dead/ added (Langston, P2b-1 run condition): the tombstone read is where the DeadSet build transient lives
+            if "/observations/" in path or "/births/" in path or "/dead/" in path or "creator-stake" in path:
                 try:
                     size = os.path.getsize(path)
                 except OSError:

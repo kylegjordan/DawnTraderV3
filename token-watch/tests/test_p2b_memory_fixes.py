@@ -197,6 +197,31 @@ check("S3 the excluded count reaches the payload", p.get("oldest_survivors_unres
       p.get("oldest_survivors_unresolved_excluded"))
 check("S3 and the excluded row is not listed", "USDC-LIKE" not in [r["mint"] for r in p["oldest_survivors"]])
 
+print("\n=== S4. A NON-OBJECT TOMBSTONE LINE DOES NOT KILL THE BUILD (fold-in 1) and is counted")
+reset()
+birth("ALIVE4", NOW - timedelta(days=40))
+write_tombstones([{"mint": "DEADX", "age_at_death": "1h", "death_class": "faded"}, "123", "[1]", "{broken"])
+try:
+    p = summary.build(NOW)
+    err = None
+except Exception as exc:
+    p, err = {}, type(exc).__name__
+check("S4 summary.build survives non-object and unparseable tombstone lines", err is None, err)
+check("S4 the fold counts the three it skipped", p.get("fold_skipped_lines") == 3, p.get("fold_skipped_lines"))
+check("S4 and the good death is still counted", (p.get("died") or {}).get("total") == 1, (p.get("died") or {}).get("total"))
+
+print("\n=== D7. THE BAD-LINE COUNT IS MONOTONE ACROSS REBUILDS (fold-in 2)")
+reset()
+write_tombstones([{"mint": "K1"}, "{bad"])
+store.dead_set()
+first = store.dead_set_status()["bad_lines"]
+_time.sleep(0.02)
+write_tombstones([{"mint": "K1"}, {"mint": "K2"}])          # a clean rewrite triggers a rebuild
+os.utime(store.tombstone_path(), None)
+store.dead_set()
+check("D7 a later clean rebuild does not erase the bad line already seen", first == 1
+      and store.dead_set_status()["bad_lines"] == 1, (first, store.dead_set_status()))
+
 print("\n=== O1. THE STREAMED OBSERVATIONS READ IS EXACTLY THE OLD ONE (R5), on 300 random fixtures")
 
 

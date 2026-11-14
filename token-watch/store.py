@@ -822,7 +822,10 @@ def _read_dead_mints(path):
                 bad += 1
                 continue
             yield m
-    _DEAD_STATUS["bad_lines"] = bad
+    # MONOTONE per process (Langston, P2b fold-in 2): follow_up reads the count once and summary.build later; a
+    # rebuild between them (an external write) must not erase a bad line the run already saw, or the page would carry
+    # a bad-line note while the run exited 0.
+    _DEAD_STATUS["bad_lines"] = max(_DEAD_STATUS["bad_lines"], bad)
 
 
 def dead_set() -> DeadSet:
