@@ -514,3 +514,8 @@ Tests: 3b 73/73; tsc 324 = 324.
   - Mutations: the loose `includes('413')` → red. The old structure restored from `055ed387e` → red: it entered the cold fallback on the "413" inside the refusal.
   - Tests: harness 46/46.
 - **Item 5, two non-blocking asks folded** (Langston, Discord `1571130275604463626`, his review of `055ed387e`; its blocker is the `413` finding, already fixed at `66ce9e21b`): the default `freeBytes` is now an exported `statfsFreeBytes` using `path.dirname` (the old slice made `|| '.'` dead). A test runs the LIVE instrument on a real path and gets a finite positive figure (positive control). A non-finite reading (`NaN`) refuses with cold configured: no read-back and no cold upload. Harness 48/48.
+- **Item 5 r2 — Langston's in-commit condition** (Discord `1571131227396767877`, PROCEED on r1 at `66ce9e21b`), at `c5c0ed83d`:
+  - The r1 status arm `/failed: 413\b/` missed the TUS PATCH message shape (`TUS(file) PATCH failed at offset=0 chunk=6291456: 413`, `storage-client.ts:240`, `:397`). That path carries every warm upload over 40 MB.
+  - The arm is now `/failed(?: at offset=\d+ chunk=\d+)?: 413\b/`: exactly the infix storage-client writes. **Deliberately narrower than the condition's `failed[^:]*: 413\b`**, which reaches both shapes but also matches a 500 whose BODY holds `failed","code": 413`.
+  - Tests: one case per message shape (6 shapes), each with an empty statusText and a phrase-free body; must-stay-false: 4130 bytes free, `ab413c`, the 5368709413-byte hard cap, `wanted=413`, `expected=413`, the JSON-body case, a `4130` status.
+  - Mutations: `/failed: 413\b/` → red on the TUS PATCH case; `failed[^:]*: 413\b` → red on the JSON-body case. Harness 49/49; tsc 324 = 324.
