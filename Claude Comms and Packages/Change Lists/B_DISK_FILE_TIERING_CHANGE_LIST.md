@@ -519,3 +519,34 @@ Tests: 3b 73/73; tsc 324 = 324.
   - The arm is now `/failed(?: at offset=\d+ chunk=\d+)?: 413\b/`: exactly the infix storage-client writes. **Deliberately narrower than the condition's `failed[^:]*: 413\b`**, which reaches both shapes but also matches a 500 whose BODY holds `failed","code": 413`.
   - Tests: one case per message shape (6 shapes), each with an empty statusText and a phrase-free body; must-stay-false: 4130 bytes free, `ab413c`, the 5368709413-byte hard cap, `wanted=413`, `expected=413`, the JSON-body case, a `4130` status.
   - Mutations: `/failed: 413\b/` → red on the TUS PATCH case; `failed[^:]*: 413\b` → red on the JSON-body case. Harness 49/49; tsc 324 = 324.
+
+### 3c — Step 3: the cold meter and the budgeted read-back (`ec916a2a6`; plan r1-r3 in the pre-audit, Langston PROCEED `1571165004999426089`)
+- **NEW `server/scripts/b75-cold-audit.ts`**, daily `10 4 * * *` UTC (root crontab line in its header).
+  - **Order:** manifest first (every cold row, no `state` filter) → whole-bucket listing (a partial listing fails the run before any meter row) → meter → read-back → history pages → DONE line in a `finally`.
+  - **Meter:** upload versions only, split by owner (archive / `_proof` / `_liveness` / `token-watch` / unknown).
+    - Archive is a SET reconcile on file id: `untracked`, `missing` (critical), `size_mismatch` (critical). A version uploaded inside the run's window is `in_flight`, logged not paged. An unbound row's own name counts as that row's.
+    - Delta checks only for `token-watch/` (per day) and `_liveness/`.
+    - Unknown pages on any bytes. A `_proof` id seen at two consecutive runs pages. The total pages at `cold_meter_warn_bytes`.
+    - The meter row is written before the read-back.
+  - **Read-back:**
+    - Bound rows are due when never read, or when the last `ok` is over 30 days old; oldest first.
+    - Before each object: own budget, object cap and run deadline (`budget_stop` `own` / `time`), then free space.
+    - The download is a bounded `downloadColdFileById`, and its SHA-256 is compared with the manifest.
+    - Outcomes: `mismatch` is critical. A cap refusal or a non-JSON 429 ends the leg (`budget_stop=cap`), recording its cause and `Retry-After`; for the non-JSON 429 only, ≤ 2,048 B of body is kept. Any other error is counted and the row is due again tomorrow.
+  - **Pages:** coverage (C-5 clock), stall, unidentified-429 throttle (regardless of `ok` rows), unbound.
+  - **Loader:** refuses any of nine settings missing or ≤ 0, and any config whose read-back worst case does not fit the deadline less a 5 × setup listing allowance. At the seeded values that is 1,076,838 ms against 2,100,000.
+- **`storage-client.ts`:** `downloadColdFileById` logs its bound outcome in a `finally` (`phaseLog('cold_read_by_id')`, through the `onPhase` hook, else `console.warn` on a non-`ok` outcome). Every bounded caller, cold-bind included, now logs a deadline.
+- **`b-storage-archival-health.ts`:** a `b75-cold-audit` CheckSpec. Its `donePattern` sums `readback_failed` and `failed`; `onMissing` is `skip` until the first recorded run.
+- **Migration** `2026-11-14-b-disk-file-tiering-cold-audit.sql`: `data_archive_cold_meter`, `data_archive_cold_readback`, nine `data_lifecycle` rows, and a postcondition. Its rollback is in git; the forward file is in `MANIFEST.txt`.
+- **Deploy needs the root crontab line in the SAME step.** archival-health checks the box's crontab against the CheckSpec schedule and pages `not_scheduled` without it.
+- **Tests:** 3c 25/25; with 3a, 3b, amendment2 and the harness, 202/202. tsc 324 = 324.
+- **Nine mutants, each RED:**
+  - the unbound-name skip removed;
+  - a JSON 429 ending the leg;
+  - the throttle page requiring zero `ok`;
+  - coverage ignoring the first run;
+  - no deadline check;
+  - hide markers counted;
+  - no fit refusal;
+  - `_proof` counted as archive;
+  - a `state` filter on the manifest read.
