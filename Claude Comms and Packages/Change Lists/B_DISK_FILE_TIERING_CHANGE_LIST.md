@@ -562,3 +562,4 @@ Tests: 3b 73/73; tsc 324 = 324.
   - **The oversize page is uncapped, and it is the one arm with no deadline check.** Staging holds 4 cold rows, none over the 500 MB budget, the largest 99,870,161 B. So the page is bounded by 4, and reachable only if `cold_readback_daily_bytes` is set under ~100 MB.
 - **OWED on this batch:** flip the CheckSpec's `onMissing` to `'alert'` once the first run is recorded.
 - **Push gate:** a literal 4/4 per job at a ref whose 3c files equal `b42cc90a2`'s. Two runs were all-cancelled by later pushes; the green run is cited in the next line when it lands.
+- **Push gate met:** run `43606756074` at `06a407081` (its 3c files byte-equal to `b42cc90a2`): TypeScript Check, Test Suite, Build and Docker Build all success.
