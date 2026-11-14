@@ -281,3 +281,99 @@ select asset_class,arm,count(*) n,
        min(net_reward),max(net_reward),min(friction),max(friction)
 from carrier group by asset_class,arm order by asset_class,arm;
 ```
+
+## Correction Step-7 result — 2026-11-10 full session
+
+**Read at 2026-11-10T21:06Z over the frozen 2026-11-10 14:30:00Z–21:00:00Z population. Verdict:
+PASS for the correction's registered carrier gate.** All 11 dedicated carrier rows were complete; all 11 terminal
+fill-economics rows had the same-symbol/same-arm carrier 145–254 ms earlier; both class settings remained the registered
+`k=1.0`; and none of the registered verification-failure conditions fired. The comparison remains watch-only: no
+admission or refusal decision consumed it, and there was no rollback ceiling.
+
+| asset class | arm | carriers / complete | ratio min / p25 / median / p75 / max | below `k=1` | net-reward range | round-trip-friction range |
+|---|---:|---:|---:|---:|---:|---:|
+| crypto | maker | 1 / 1 | 5.000233 / 5.000233 / 5.000233 / 5.000233 / 5.000233 | 0/1 (0%) | 0.016125125–0.016125125 | 0.003224875–0.003224875 |
+| crypto | taker | 0 / 0 | unavailable | unavailable — no carrier population | unavailable | unavailable |
+| xStock | maker | 5 / 5 | 16.979228 / 17.370641 / 22.332144 / 26.438880 / 31.646783 | 0/5 (0%) | 3.255044–11.494541 | 0.145756–0.435731 |
+| xStock | taker | 5 / 5 | 2.723994 / 5.208088 / 6.961747 / 15.969044 / 16.727528 | 0/5 (0%) | 0.090855–13.969983 | 0.017445–0.874817 |
+
+The durable source control counted 22 active-execution-engine rows in the session: 11 dedicated carriers plus 11
+terminal admitted rows. The complete terminal enumeration matched 11/11 within the registered preceding-60-second
+rule, with 0 missing. The carrier population was PSA, ANET, ED, SNAP, ARM, JUP, CRWD, DLR, CDNS, KMB and MRVL; the
+crypto taker cell is unavailable rather than a measured zero because no crypto taker was evaluated.
+
+### Verification-failure checks and controls
+
+- The live settings population was exactly two wildcard-key rows, one per class, both `1.0`, last written at
+  `2026-11-10T07:47:52.322784Z` by `b-entry-gate-friction-coverage`.
+- The three log files intersecting the frozen window were enumerated before extraction:
+  `out__2026-11-10_14-57-46.log` (window control `14:30:00`, last row `14:57:50`), `out.log` (first row
+  `14:57:50`, last pre-cutoff control `20:59:59`), and `error.log` (window controls `14:30:00` and `20:59:59`).
+  Across exactly those files and the frozen timestamps, `[B-ENTRY-GATE][FRICTION_COVERAGE][ARCHIVE_FAILED]` was
+  0. The same read returned 6 xStock VTS entry-window twin skips and 6 maker fills; stderr independently returned 374
+  paper RTB-promotion rows, so both selected streams and the timestamp filter had positive controls.
+- Deployment identity stayed fixed: the deploy record, staging HEAD and running liveness `buildSha` were all
+  `957b13fde2fdb9b9c12791699b8fabeaa3a9afed`; the last reflog move and process start were 07:47Z, restart count stayed
+  688, and unstable restarts stayed 0. There was no restart or code movement inside 14:30–21:00Z.
+- CI run `42740349578` at the deployed SHA remained individually green for TypeScript Check, Test Suite, Build and
+  Docker Build. The process was online, expected and running; the authenticated diagnostics endpoint returned HTTP
+  200. The general health endpoint also returned HTTP 200 / `ok:true`, but honestly remained `healthy:false` on the
+  already-known soft memory warning (762.59 MB against its 350 MB threshold); this is not reported as a green health
+  envelope and is not a B-ENTRY-GATE carrier failure.
+
+The drift-alarm cell remains **UNVERIFIED**, not a pass or a measured zero. The frozen logs contained no
+`[11.8B][EV_REJECT_SHADOW]` event and the durable sink still contained only `maker_taker` and `sqe_shadow` proof types
+(467 and 110 rows inside this session; 1,658,440 and 1,660,249 all-history at the read). Those are positive controls
+for the sink read but not for the exact active-engine-to-`ev_reject` path, so the correction does not promote this
+separate cell beyond Coltrane's existing condition.
+
+`REVIEWER: claim-only · name the settling objects and materially different states consistent with the correction's
+carrier-completion claim · CLEAN—no carrier-gate contradiction; the separate drift-alarm cell was excluded from the
+claim · re-derived n/a (CLEAN is recorded but is not evidence)`
+
+### UI disposition
+
+No affected staging panel exists: the correction adds only a durable internal shadow carrier and the registered scope
+keeps Filter Diagnostics out. The database, logs, live settings, running process and authenticated diagnostics endpoint
+are therefore the complete affected surfaces; no password was entered and no unrelated dashboard was treated as this
+batch's UI.
+
+## Correction Step-8 ruling — CONFIRMED (Coltrane, 2026-11-10T21:34:13Z)
+
+Coltrane independently reproduced the registered carrier gate at exact evidence ref
+`56509024d94c8a7ed987fe06b7dd9e3321dbcf7f`. His staging read found exactly 22 active-engine rows: 11 complete,
+finite and arithmetically consistent `friction_coverage_shadow` carriers plus 11 terminal `admitted` rows. All 11
+terminals matched the same symbol and arm 145–254 ms earlier; the registered 60-second check found 0 missing, while a
+100 ms mutation found 0/11 matches and proved that the instrument turns red for the failure class. The class/arm
+aggregates matched, 0/11 carriers were below `k=1`, and crypto taker remained unavailable rather than zero.
+
+The settings population independently reproduced as exactly two wildcard class rows at `1.0`, with the registered
+writer and timestamp. The complete three-file log extraction reproduced `ARCHIVE_FAILED=0` with 6 twin skips, 6 maker
+fills and 374 paper RTB-promotion rows as positive controls. Staging HEAD and liveness still identified deployed ref
+`957b13fde2fdb9b9c12791699b8fabeaa3a9afed`; the last ref move/process start remained 07:47Z, restart count 688,
+unstable restarts 0, with no session movement. Coltrane requested no carrier-gate change. The separate drift cell
+remains **UNVERIFIED**, not zero or pass, because its exact `ev_reject` path still lacks a positive control; no affected
+UI panel exists.
+
+## Correction Step-9 all-objectives check — 2026-11-10
+
+**Verdict: every increment-A objective is green; no further fix loop is required.** The check was re-run at
+`2026-11-10T21:49Z` in the current branch, whose governed runtime and targeted-test files have no diff from deployed
+ref `957b13fde2fdb9b9c12791699b8fabeaa3a9afed`. The targeted population was eight test files and 130 tests; all eight
+files and all 130 tests passed. This supersedes the correction change list's earlier 100-test count because this
+Step-9 rerun deliberately includes the distance guard, refresh-log writer and drift-disposition suites as well.
+
+| increment-A item | object re-checked | result |
+|---|---|---|
+| P1 worse-side fill window + P1b cheaper-side shadow | boundary/wiring tests plus the registered active-fill population | exact +25% edge passes, one tick above refuses, cheaper fills never refuse; the live session retained the non-vacuous xStock taker control |
+| P3 resting-maker record + P3v VTS entry window | maker lifecycle and all three VTS call sites, plus the registered log population | watch-only maker state cannot feed cancel/drop/fill; six xStock twin skips among 125 comparable twin outcomes supplied the live VTS control |
+| P4 fill economics | pure kernel, both engine arms, exploration exemption, conversion path and registered durable rows | the actual arm at the paid price remains the deciding number; 11/11 terminal rows carried a preceding complete friction-coverage carrier and 0/11 observations were below `k=1` |
+| P4b snapshot disposition | disposition and alert-latch tests plus deployed source | missing-snapshot outcomes remain unreachable, paper remains shadow and live retains the block. The real-session drift-event cell is still **UNVERIFIED**, not green or zero; it is not used as evidence for this row because no exact-path live positive control exists |
+| P5 increment-A boundary | the ranker, shadow-pool and promoted-open target sites at the deployed ref | all three governed `entry x 1.02` fallbacks remain absent; target-less rows rank last, skip shadow simulation, or refuse `invalid_target`. A repo-wide same-pattern control still finds two unrelated 1.02 calculations elsewhere, proving the census can return positives. The SQE `InvalidTarget` rule remains explicitly in increment B |
+| P9 refresh diagnostics | ESM-writer tests and staging files | transition-only trace, SQE rejection, and warn-on-failed-write checks pass. Staging holds four dated trace files; the current file had 1,176 rows and the rejection file had one row at the read, so file existence is not inferred from an empty directory |
+| A-9 dead constant | deployed server tree, with historical specification documents as the positive control | `ENTRY_PREMIUM_BPS` remains absent from runtime server code while the same ref still finds the historical specification occurrences |
+| correction setting/carrier | live settings, durable archive, log span and deployment identity | Step 7 and Coltrane independently reproduced two class settings, 11 complete carriers, 11/11 terminal matches, complete log controls and no restart or ref movement inside the frozen session |
+
+The delivery-board item was re-read at the object: `Status=Verification`, `Review=Approved`, `Blocked on=Langston`.
+It stays in Verification through governance, as the Step-9 rule requires. Increment-B objectives P2/P6/P7/P8/P11/P12
+are outside this increment and remain on their separately reviewed ref; they are not recorded as zeros or implied done.
