@@ -693,3 +693,53 @@ This retires r1's three workarounds: the `upload_failed` probe, the rotator-lock
 - **(a)** No lifecycle rule on the archive prefixes, so superseded archive versions accumulate as residue. Is that right, given exact-version binding? Or should a rule exist there with the binding protected some other way?
 - **(b)** Removing `deleteColdVersion` at close: the only remaining delete path would then be Kyle's dashboard. Agree, or keep it behind a flag for disaster recovery?
 - **(c)** Step 4 needs no app restart, so it is not a deploy. Is it fine inside NEW Claude's 14:30-21:00Z window, which protects the app's price feed?
+
+### Amendment 4 — 3d plan r2: Langston CHANGES on r1 folded (Discord, graded at `132dcaad0`)
+His rulings: (a) **yes**, no rule on archive prefixes, for the reason in C-2. (b) **remove both, no flag**, with conditions. (c) **yes, not a deploy**, subject to C-5. The runbook line and the Infra post PROCEED as written. r1 stands except as amended here.
+
+**C-1 — `hideColdFile(bucket, path, setupMs?)`, bounded and retried like the other metadata calls.** The two fences that name the deleted calls are fences on BOUNDEDNESS, so they are re-pointed, not deleted:
+- `b-disk-file-tiering-3b.test.ts:433-440` ("the liveness canary bounds every call … with cold_upload_setup_ms") now asserts `storage.hideColdFile(coldBucket, objPath, setupMs)`;
+- `b-disk-file-tiering-3a.test.ts:234`/`:239` move from `deleteColdVersion` to the proof's `hideColdFile` call.
+
+**C-2 — (a)'s reason, corrected.** r1 said a rule on the archive prefixes "would delete the very version the manifest names". **That is false after a SUCCESSFUL re-rotation:** the rotator's upsert sets `provider_file_id = EXCLUDED.provider_file_id` (`b75-cold-rotator.ts:283-288`), and the context bridge UPDATEs the same column (`context-bridge-log-ttl.ts:386-392`). So the manifest names the new, current version, and the superseded one is residue.
+**The real hazard:** the B2 upload and the manifest write are not one transaction. A failure after B2 accepts the body and before the row commits leaves the manifest naming a version that the new upload has just superseded. The two measured residue objects in this bucket are evidence that this divergence happens. A one-day rule would turn that crash window into permanent loss of an object the manifest names. **That is why there is no rule on the archive prefixes.**
+
+**C-3 — the rule is verified, not assumed, and its failure is visible.**
+- **The verification:** step 4 already uploads and hides a throwaway `_liveness/` object. It records that object's file id and the step-4 listing (the positive control: the id is present). A re-list at least 2 days later must show the id gone. Until it is gone, step 1's removal of a working delete is resting on an unverified rule. If it is not gone, step 5 does not run.
+- **The meter:** the `_liveness/` class changes from a 10 MB byte delta to an **upload-version COUNT ceiling, more than 3 versions pages**. That reuses 3c's file-id machinery, and catches a dead rule within about two weeks of weekly canary runs. (At 104 B a week, the byte delta would take ~1,900 years to fire.) `_proof/` gets the same ceiling. Its setting, `cold_meter_liveness_max_versions` (proposed 3), replaces `cold_meter_liveness_growth_warn_bytes` in the not-yet-deployed 3c migration.
+  - **Order:** that 3c change is made before tonight's deploy if it clears review in time. Otherwise the 3c migration ships as is, and 3d's own migration replaces the key.
+- **`daysFromUploadingToHiding: 1` on `_liveness/` and `_proof/` as well** — folded, labelled **HYPOTHESIS until verified**. Per Backblaze's documentation it hides a file N days after upload, so a canary or proof object whose own hide never ran (the canary throws before hiding on a mismatch, `b75-cold-liveness.ts:114-126`) is still hidden, then deleted. The same re-list verifies it: the step-4 run also leaves one object it does NOT hide, and the re-list ≥ 2 days later must show that one gone too.
+- **The `DEPLOY_WINDOWS.jsonl` row — I propose filing it AT STEP 4, not in this Step-2 commit.**
+  - **No deploy can disturb this observation.** A lifecycle rule runs inside B2; nothing `dt-deploy` does reaches it.
+  - **An `open` row filed now would make every session's deploy name it for the days until step 4 runs**, for an observation that has not started. That is noise in the guard, which keeps its value only by being rare.
+  - **The row is filed in the step-4 commit,** with `until_event` = "the ≥ 2-day re-list of the step-4 `_liveness/` objects" and `disturbs` = "nothing a deploy does; only a change to the bucket's lifecycle rules".
+  - If KD-56 requires the row at Step 2 regardless, I file it now. **Your call.**
+
+**C-4 — the residue gate moves to BEFORE STEP 4; the step-5 actor is named.**
+- `--delete-residue` authorizes through `process.env` (`b75-cold-bind.ts:236`), and step 4 swaps `.env`. So Kyle's residue decision, and the deletion if he says yes, come **before step 4**. With no decision by then, step 4 waits.
+- **Step 5's actor is CC-A, as root on staging.** The old pair sits in a root-only file (`/root/b2-wide-key.retired`, 0600 root) from step 4 on. Root reads it to call `b2_delete_key` and confirm the key no longer authorizes, then shreds the file. `deploy` never holds the old pair after step 4.
+
+**C-5 — the `.env` swap is atomic, at a minute clear of the cold crons.**
+- **Atomic:** the new file is written as a 0600 temp in `/home/deploy/dawntrader/` (same filesystem), owned by `deploy`, then `rename`d over `.env`. `ecosystem.config.cjs:20` boots the app with `--env-file=.env`, so a rewrite in place would let a crash-restart read a partial file; a rename cannot.
+- **Clear of the crons:** root's cold-cron fire times, read at 13:3xZ, are 02:15, 02:45 and 04:00 Mon (canary), with 04:10 (cold audit) after tonight, 05:00 (archival-health), and 03:00 on the 1st (rotator). So the swap runs at a minute nowhere near them, e.g. 16:30Z. The canary and the audit are then run by hand straight after (step 4's proofs).
+
+**(b)'s conditions:**
+- **The code goes to the archive, with a DR procedure.** `deleteColdVersion` and `--delete-residue` go to `1-system-manual/_archive/deleted-code/` (`.removed`). The `DELETED_COMPONENTS_LOG` entry names the disaster-recovery procedure: Kyle mints a temporary delete-capable key → restore the archived code → run it → delete the temporary key. The same procedure goes beside the cap line in `STORAGE_POLICY`'s restore section.
+- **The clearing instrument for an untracked object Kyle chooses to keep:** a governed allowlist, `data_lifecycle.cold_residue_kept_file_ids` (a JSON array, read through the same loader).
+  - 3c's reconcile reports a listed id that is in it as `kept`, counted, not paged. A kept object stays visible in the DONE line and the meter row.
+  - The row is written only on Kyle's recorded decision. Writing it clears its per-object page.
+- **Step 10 text** describes `--delete-residue` as removed with the wide key, never as live. 3c r3 item 3's argument is restated as "after 3d there is no deleter in the code at all", which is stronger.
+
+**Steps, r2:**
+- **(0)** Kyle's residue decision; if yes, `--delete-residue` with the wide key.
+- **(1)** Code: `hideColdFile`, the canary and the proof hide, `deleteCold` removed, the two fences re-pointed. Reviewed, CI 4/4, deployed.
+- **(2)** One `b2_update_bucket`, after a re-read that must still be `[]`. It sets rules on `_liveness/` and `_proof/`, each with `daysFromHidingToDeleting: 1` and `daysFromUploadingToHiding: 1`.
+- **(3)** Mint the key: `listFiles`/`readFiles`/`writeFiles`, bucket `dt-archive-cold`, no prefix.
+- **(4)** The atomic swap at a clear minute, then the proofs:
+  - three capabilities, and the bucket;
+  - delete refused, hide allowed;
+  - the canary, the audit and a rotator dry run green;
+  - the two throwaway objects recorded, and the `DEPLOY_WINDOWS` row filed.
+- **(4b)** The re-list at least 2 days later: both ids gone, otherwise stop.
+- **(5)** CC-A as root deletes the wide key, confirms it no longer authorizes, and shreds the retired file.
+- **At close:** `deleteColdVersion` and `--delete-residue` removed and archived.
