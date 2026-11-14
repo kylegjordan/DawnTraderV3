@@ -129,10 +129,23 @@ class _read_new:
        the end is seen). `.base` is the starting offset after a shrink reset and
        after any leading blank/unparseable lines; it is final once the first row is
        yielded, or once iteration ends.
-    ★ THE SAME OUTPUT AS BEFORE, row for row and byte for byte: each physical line
-      is split with `splitlines(keepends=True)`, so the pieces are exactly those of
-      `raw.splitlines` over the whole remainder; a final line with no newline is
-      still a row being written and is not consumed.
+    ★ THE SAME OUTPUT AS BEFORE, row for row and byte for byte, with ONE deliberate
+      difference: each physical line is split with `splitlines(keepends=True)`, so the
+      pieces are exactly those of `raw.splitlines` over the whole remainder; a final
+      line with no newline is still a row being written and is not consumed.
+    ⛔ THE DIFFERENCE — ONLY JSON OBJECTS ARE ROWS (Langston, P2b-2 F-f Step 4 item 1,
+       placed on this batch). A line of valid JSON that is not an object (`123`, `[]`)
+       used to be yielded as a row, and `birth.get(...)` then raised AFTER its check
+       record and provider spend and BEFORE `save_state`, so the same work repeated every
+       hour. It is now treated like an unparseable line — its bytes are consumed with
+       the row before it — and counted in `.skipped` with every unparseable line, so
+       the caller can publish the count. Same shape as summary's fold-in 1.
+    ⚠️ THE FILE IS HELD OPEN ACROSS THE CALLER'S LOOP (Langston, item 2, documented,
+       no work). The receiver appends births without `periodic_lock`, so rows that land
+       during the run are now visible to it where the old snapshot read could not see
+       them; the byte arithmetic is unchanged (all relative to `.base`), and a row is
+       consumed only once its newline is visible. An `OSError` from the read now
+       surfaces mid-loop rather than before any processing.
 
     ⛔ THE BYTE LENGTHS ARE NOT BOOKKEEPING — THEY ARE THE SHED FIX. The first
        version advanced the cursor to the end of everything it READ, then did
@@ -145,6 +158,7 @@ class _read_new:
     def __init__(self, path: str, offset: int):
         self.path = path
         self.base = offset
+        self.skipped = 0                # blank lines excluded: unparseable or not an object
 
     def __iter__(self):
         path = self.path
@@ -169,6 +183,9 @@ class _read_new:
                         try:
                             row = json.loads(body)
                         except ValueError:
+                            row = None
+                        if not isinstance(row, dict):
+                            self.skipped += 1
                             body = ""
                     if not body:
                         # a blank or unparseable line is still consumed, or the
@@ -273,7 +290,10 @@ def run(now: datetime = None) -> dict:
              "control_drawn": 0, "errors": 0, "shed": False, "shed_reason": None,
              "bounded_out": 0, "unresolved_no_pairs": 0,
              "unresolved_error": 0, "resolution_exhausted": 0,
-             "mint_corrected": 0}
+             "mint_corrected": 0,
+             # births lines that are unparseable or not an object, consumed with
+             # the row before them and counted here (P2b-2, Langston item 1)
+             "skipped_lines": 0}
 
     # ⛔ PROCESS FILE BY FILE, ADVANCING THE CURSOR TO THE LAST ROW ACTUALLY
     #    HANDLED. The first version advanced past everything it READ before
@@ -456,6 +476,10 @@ def run(now: datetime = None) -> dict:
             consumed += nbytes
 
         cursors[name] = new.base + consumed
+        if new.skipped:
+            stats["skipped_lines"] += new.skipped
+            LOG.warning("promote: %s had %d births line(s) that are unparseable or "
+                        "not an object — consumed and skipped", name, new.skipped)
 
     st["cursors"] = cursors
     st["attempts"] = tries

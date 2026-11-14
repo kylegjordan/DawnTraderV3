@@ -292,8 +292,12 @@ check("E1 `prev` is not a live local of run_hour at promote.run or summary.build
 
 
 # ═════════════════════════════════════════════════════════════════════════════════════════════════ F-f
-def old_read_new(path, offset):
-    """promote._read_new before P2b-2, verbatim in behaviour (logging dropped)."""
+OLD_SKIPPED = [0]          # the old reader's skip count (non-blank lines it did not yield), for the caller comparison
+
+
+def old_read_new(path, offset, objects_only=False):
+    """promote._read_new before P2b-2, verbatim in behaviour (logging dropped). `objects_only` adds the ONE deliberate
+    difference (Langston item 1): a parsed line that is not an object is treated exactly like an unparseable one."""
     if not os.path.exists(path):
         return [], [], offset
     size = os.path.getsize(path)
@@ -322,9 +326,13 @@ def old_read_new(path, offset):
                 offset += nbytes
             continue
         try:
-            rows.append(json.loads(body))
+            parsed = json.loads(body)
+            if objects_only and not isinstance(parsed, dict):
+                raise ValueError("not an object")
+            rows.append(parsed)
             sizes.append(nbytes)
         except ValueError:
+            OLD_SKIPPED[0] += 1
             if rows:
                 sizes[-1] += nbytes
             else:
@@ -345,7 +353,8 @@ pieces = [
     lambda: NL,                                              # blank
     lambda: "   " + NL,                                      # whitespace-only
     lambda: "{broken" + NL,                                  # unparseable
-    lambda: "123" + NL,                                      # valid JSON, not an object (kept as a row, as before)
+    lambda: "123" + NL,                                      # valid JSON, not an object (now skipped like junk)
+    lambda: "[1, 2]" + NL,
     lambda: json.dumps({"mint": "LS", "name": "a" + chr(0x2028) + "b"}, ensure_ascii=False) + NL,  # raw U+2028
     lambda: "{bro" + chr(0x2028) + "ken" + NL,               # a split-producing separator inside junk
     lambda: json.dumps({"mint": "UNI", "name": "é漢"}, ensure_ascii=False) + NL,                  # multibyte
@@ -366,10 +375,19 @@ for case in range(400):
         acc += len(line.encode("utf-8"))
         starts.append(acc)
     offset = rng.choice(starts + [size + 5])
-    o, n = old_read_new(path, offset), new_read_new(path, offset)
+    o, n = old_read_new(path, offset, objects_only=True), new_read_new(path, offset)
     if o != n:
         diffs.append((case, offset, body[:120], o, n))
-check("F1 identical on every fixture", not diffs, diffs[:1])
+    if any(not isinstance(r, dict) for r in n[0]):
+        diffs.append((case, "a non-object was yielded", n[0]))
+check("F1 identical on every fixture to the old reader with the object filter, and no non-object is ever a row",
+      not diffs, diffs[:1])
+it = promote._read_new(path, 0)
+with open(path, "w", encoding="utf-8", newline="") as fh:
+    fh.write("{broken" + NL + json.dumps({"mint": "OK1"}) + NL + "123" + NL + NL + "[1]" + NL + json.dumps({"mint": "OK2"}) + NL)
+got = list(it)
+check("F1 the skips are counted (unparseable and non-object; a blank line is not a skip)",
+      [r["mint"] for r, _n in got] == ["OK1", "OK2"] and it.skipped == 3, (got, it.skipped))
 check("F1 a missing file yields nothing and keeps the offset", new_read_new(os.path.join(ROOT, "nope"), 7) == ([], [], 7))
 
 print(NL + "=== F2. THE STREAMED READ HOLDS ONE ROW, NOT THE WHOLE REMAINDER (the 303.0 MiB term)")
@@ -402,7 +420,9 @@ class OldReader:
     """The old reader behind the new interface, so promote.run's caller code is compared, not just the reader."""
 
     def __init__(self, path, offset):
-        self.rows, self.sizes, self.base = old_read_new(path, offset)
+        OLD_SKIPPED[0] = 0
+        self.rows, self.sizes, self.base = old_read_new(path, offset, objects_only=True)
+        self.skipped = OLD_SKIPPED[0]
 
     def __iter__(self):
         return iter(zip(self.rows, self.sizes))
@@ -420,6 +440,8 @@ def promote_case(reader, seed):
                 lines.append("{broken")
             elif k < 0.12:
                 lines.append("")
+            elif k < 0.15:
+                lines.append("123")                            # a non-object line (item 1)
             else:
                 lines.append(json.dumps(dict(birth_row("P%d_%d_%d" % (seed, d, i), "2026-10-01T00:00:00+00:00"),
                                              follow_reason=r.choice(["deferred", "deferred", "size_carrier"]))))
@@ -431,10 +453,13 @@ def promote_case(reader, seed):
                 m = json.loads(raw).get("mint")
             except (ValueError, AttributeError):
                 continue
-            outcomes[m] = r.choice(["twitter", "none", "nopair", "boom"])
+            # "shed" is rare on purpose: it stops the whole run, and the other arms must still be reached
+            outcomes[m] = "shed" if r.random() < 0.04 else r.choice(["twitter", "none", "nopair", "boom"])
 
     def fake_get(url, headers=None):
         o = outcomes.get(url.rsplit("/", 1)[-1], "none")
+        if o == "shed":
+            raise providers.Shed("budget exhausted (test)")
         if o == "nopair":
             return {"pairs": []}
         if o == "boom":
@@ -456,17 +481,35 @@ def promote_case(reader, seed):
         providers._get, promote._read_new, promote.MAX_CHECKS_PER_RUN = real_get, real_reader, real_max
 
 
-bad = []
-paths = {"bounded_out": 0, "errors": 0, "unresolved_no_pairs": 0, "checked": 0}
+bad, skip_bad, skip_seen = [], [], [0]
+# "shed" (Langston's condition): the ONLY path that reads .base with the reader suspended mid-file
+paths = {"bounded_out": 0, "errors": 0, "unresolved_no_pairs": 0, "checked": 0, "shed": 0}
 for seed in range(60):
     a, b = promote_case(OldReader, seed), promote_case(promote._read_new, seed)
+    # skipped_lines is the ONE stat allowed to differ, and only downward on a SHED run: the streamed reader counts the
+    # lines it actually reached; the old whole-remainder read counted lines past the shed it never processed (and that
+    # the next hour re-reads). Equal on every run without a shed.
+    for (ca, sa), (cb, sb) in zip(a[0], b[0]):
+        so, sn = sa.pop("skipped_lines", 0), sb.pop("skipped_lines", 0)
+        skip_seen[0] += 1 if sn else 0          # for the positive control below
+        if (sn != so) if not sb.get("shed") else (sn > so):
+            skip_bad.append((seed, so, sn, sb.get("shed")))
     if a != b:
-        bad.append(seed)
+        why = []
+        for h, ((ca, sa), (cb, sb)) in enumerate(zip(a[0], b[0])):
+            if ca != cb:
+                why.append(("cursor", h))
+            why += [(k, h, sa.get(k), sb.get(k)) for k in sorted(set(sa) | set(sb)) if sa.get(k) != sb.get(k)]
+        if a[1] != b[1]:
+            why.append("checks")
+        bad.append((seed, why[:4]))
     for _cur, st in b[0]:
         for k in paths:
             paths[k] += 1 if st.get(k) else 0
-check("F3 POSITIVE CONTROL: the fixtures reach bounded-out, error, no-pairs retries and real checks",
-      all(v > 5 for v in paths.values()), paths)
+check("F3 skipped_lines equal on every run without a shed, never higher on a shed run", not skip_bad, skip_bad[:3])
+check("F3 POSITIVE CONTROL: the fixtures reach bounded-out, error, no-pairs retries, real checks, a SHED and"
+      " skipped lines",
+      all(v > 5 for v in paths.values()) and skip_seen[0] > 5, (paths, skip_seen))
 check("F3 identical cursors, stats and check records over 3 hourly runs on 60 fixtures (#1257's stranding included:"
       " this batch changes representation, not the cursor arithmetic)", not bad, bad[:5])
 
@@ -485,6 +528,31 @@ check("F4 after one run every byte is consumed, leading junk included: cursor ==
       (cur4, size4))
 check("F4 a second run with nothing new keeps the cursor at the end, not at the bytes it handled", cur4[1] == size4,
       (cur4, size4))
+
+print(NL + "=== F5. A NON-OBJECT BIRTHS LINE IS SKIPPED AND COUNTED; THE RUN COMPLETES AND DOES NOT REPEAT ITS WORK (item 1)")
+reset()
+f5 = os.path.join(BIRTHS_DIR, "2026-10-01.jsonl")
+write_lines(f5, [json.dumps(dict(birth_row("N1", "2026-10-01T00:00:00+00:00"), follow_reason="deferred")), "123",
+                 json.dumps(dict(birth_row("N2", "2026-10-01T00:00:00+00:00"), follow_reason="deferred"))])
+_rg = providers._get
+providers._get = lambda url, headers=None: {"pairs": [{"volume": {"h24": 5.0}, "txns": {"h24": {}},
+                                                       "liquidity": {"usd": 1.0}, "dexId": "pumpfun",
+                                                       "info": {"socials": [{"type": "twitter"}]}}]}
+try:
+    st5 = []
+    for h in range(2):
+        try:
+            st5.append(promote.run(NOW + timedelta(hours=h)))
+        except Exception as exc:
+            st5.append({"RAISED": type(exc).__name__})
+finally:
+    providers._get = _rg
+recs5 = [json.loads(x)["mint"] for x in open(promote.CHECKS_PATH, encoding="utf-8")] if os.path.exists(promote.CHECKS_PATH) else []
+check("F5 the run completes and counts the skipped line", "RAISED" not in st5[0] and st5[0].get("skipped_lines") == 1,
+      st5[0])
+check("F5 both real rows are checked exactly once across two runs (no hourly repeat)", recs5 == ["N1", "N2"], recs5)
+check("F5 the cursor reaches the end of the file", store.load_state(promote.STATE, {}).get("cursors", {}).get(
+    "2026-10-01.jsonl") == os.path.getsize(f5))
 
 shutil.rmtree(ROOT, ignore_errors=True)
 print(NL + "%d passed, %d failed" % (PASS, FAIL))
