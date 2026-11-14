@@ -30,6 +30,17 @@
 # Nothing reaches stdout until the whole result is in hand, so a failure never leaves a
 # partial listing behind. `show` re-hashes the commit, every tree on the path and the blob.
 #
+# A PIN THE MIRROR LACKS (B-DTREVIEW-ABSENCE-PROVENANCE, #1181). The fetch above pulls ONE branch;
+# every other branch arrives on dt-backup-sync's 15-minute pass. So a FULL 40-character pin the
+# mirror does not hold is asked of origin by id, in the same lock hold, and anchored at
+# refs/dt-review/pins/<sha> (no automatic deleter — count: for-each-ref refs/dt-review/pins; remove
+# one: update-ref -d). A refusal then says which "no" it is, and only what was measured:
+#   origin did not serve commit id <sha> (git: ...)   — origin's upload-pack refused the id
+#   ... the origin check timed out | failed (git: ...) — no answer from origin
+#   ... no origin check was made: <why>               — a short id, or the branch fetch was not ok
+# A served commit that is not on the branch says, in its OFF-BRANCH line, whether it is on another
+# mirror branch or on NO branch the mirror holds (pushed since the sync, or force-pushed away).
+#
 # The mirror is langston-owned and its push URL is DISABLED: nothing here writes upstream.
 # The fetch shares a lock with dt-backup-sync.sh and writes no FETCH_HEAD (A3, A4).
 
@@ -41,6 +52,11 @@ FETCH_OK="$REPO/DT_REVIEW_FETCH_OK"
 SYNC_PASS="$REPO/DT_SYNC_PASS"
 LOCK_WAIT=90
 FETCH_TIMEOUT=120
+# A FULL-id pin the mirror lacks is asked of origin BY ID, inside the same lock hold as the branch
+# fetch (B-DTREVIEW-ABSENCE-PROVENANCE, #1181). Its own bound, so the worst-case hold is 120 + 60 =
+# 180 s, 120 s inside dt-backup-sync's LOCK_WAIT=300 (a breach there is a gate FAILURE). A plain
+# assignment on purpose: an environment override would let a caller lengthen the hold.
+PIN_FETCH_TIMEOUT=60
 # --git-dir does not stop GIT_OBJECT_DIRECTORY / GIT_ALTERNATE_OBJECT_DIRECTORIES (or config
 # from the environment) redirecting what is read: clear the caller's GIT_* first.
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES \
@@ -196,6 +212,12 @@ age() {
 # fetch was attempted, for a reason on this box — never reported as GitHub's fault).
 FETCH=ok
 REASON=
+# PINFETCH: what asking origin for a missed FULL-id pin produced — served | notserved (origin's
+# upload-pack refused the id) | timeout | failed (any other error) | present (the mirror already
+# held the object, so origin was not asked) | empty (origin was not asked: no pin, a short pin, or
+# the branch fetch was not ok). PINWHY: git's first line for notserved | failed.
+PINFETCH=
+PINWHY=
 # A failed redirection on `exec` is FATAL in dash (a special builtin), so the lock file is
 # checked with an external command first.
 touch "$LOCK" 2>/dev/null
@@ -215,6 +237,41 @@ if [ -f "$LOCK" ] && [ -w "$LOCK" ]; then
       tmp="$FETCH_OK.tmp.$$"
       if printf '%s %s\n' "$(now)" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$tmp" && mv -f "$tmp" "$FETCH_OK"; then :
       else rm -f "$tmp"; say "dt-review: WARNING: could not write $FETCH_OK"; fi
+      # A FULL-id pin the mirror does not hold: ask origin for that one commit BY ID (#1181). Side
+      # branches reach the mirror only on dt-backup-sync's 15-minute pass, so without this a commit
+      # pushed minutes ago reads "not in the mirror", and a reviewer reads that as "not at origin".
+      # GitHub serves a by-id fetch only for a full id (a prefix fails client-side, measured), so a
+      # short pin is never asked. The trigger is the OBJECT, not ^{commit}: a full-id blob the mirror
+      # holds is not fetched. Same SSH options, the same `9>&-` (no git child may inherit the lock),
+      # --no-tags (a tag on the commit would be a second write and a second anchor), no --depth (the
+      # mirror never goes shallow). The commit is anchored at refs/dt-review/pins/<sha>: no automatic
+      # deleter; dt-backup-sync's --prune is bounded to refs/heads/*.
+      if [ -n "$PINNED" ] && [ ${#PIN} -eq 40 ]; then
+        pe=$(git --git-dir="$REPO" cat-file -e "$PIN" 2>&1 9>&-)
+        if [ $? -eq 0 ]; then
+          PINFETCH=present
+        else
+          PERR=$(GIT_SSH_COMMAND='ssh -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=2' \
+            timeout "$PIN_FETCH_TIMEOUT" git -c gc.auto=0 -c maintenance.auto=false --git-dir="$REPO" fetch --quiet --no-tags --no-write-fetch-head "$REMOTE" \
+            "$PIN:refs/dt-review/pins/$PIN" 2>&1 9>&-)
+          prc=$?
+          PINWHY=$(printf '%s\n' "$PERR" | sed -n '/./{p;q;}')
+          if [ $prc -eq 0 ]; then
+            PINFETCH=served
+          elif [ $prc -eq 124 ]; then
+            PINFETCH=timeout
+          else
+            # git 2.43, measured: protocol v2 says "upload-pack: not our ref <id>" (GitHub adds
+            # "remote error: "); protocol v0 says "does not allow request for unadvertised object".
+            # Either means origin did not SERVE the id — never that origin lacks it.
+            case "$PERR" in
+              *"not our ref"*|*"does not allow request for unadvertised object"*) PINFETCH=notserved ;;
+              *) PINFETCH=failed ;;
+            esac
+            [ -n "$PINWHY" ] || PINWHY="git fetch exited $prc with no message"
+          fi
+        fi
+      fi
     else
       FETCH=failed
       REASON=$(printf '%s\n' "$ERR" | sed -n '/./{p;q;}')
@@ -301,7 +358,7 @@ else
       blob|tree)
         if [ ${#PIN} -eq 40 ]; then refuse "$PIN names a $t, not a commit. dt-review pins take a COMMIT id."; fi
         store_readable || broken "cannot claim $PIN is absent: $STORE_ERR"
-        say "REFUSED: no commit with prefix $PIN is in the mirror (a $t shares the prefix) ($BRANCH head $HEAD, fetched $(age "$FETCH_OK" "$SYNC_PASS"); last fetch $LAST; other branches last synced $(age "$SYNC_PASS"))"
+        say "REFUSED: no commit with prefix $PIN is in the mirror (a $t shares the prefix); no origin check was made: a short id cannot be fetched by id — give the full 40-character id ($BRANCH head $HEAD, fetched $(age "$FETCH_OK" "$SYNC_PASS"); last fetch $LAST; other branches last synced $(age "$SYNC_PASS"))"
         exit 1 ;;
       tag) broken "$PIN names a tag whose target the mirror cannot resolve to a commit" ;;
     esac
@@ -323,7 +380,22 @@ else
     # One commit that exists but will not resolve is a damaged object, not an absent one.
     [ "$nc" -eq 0 ] || broken "$PIN names a commit the mirror holds but cannot read"
     store_readable || broken "cannot claim $PIN is absent: $STORE_ERR"
-    say "REFUSED: $PIN is not in the mirror ($BRANCH head $HEAD, fetched $(age "$FETCH_OK" "$SYNC_PASS"); last fetch $LAST; other branches last synced $(age "$SYNC_PASS"))"
+    # Three kinds of "no", each saying only what was measured (#1181, Langston conditions 1 and 4):
+    # origin refused the id · the origin check timed out or failed · no origin check was made.
+    AGES="$BRANCH head $HEAD, fetched $(age "$FETCH_OK" "$SYNC_PASS"); last fetch $LAST; other branches last synced $(age "$SYNC_PASS")"
+    case "$PINFETCH" in
+      notserved) say "REFUSED: origin did not serve commit id $PIN (git: $PINWHY); the mirror does not hold it either ($AGES)" ;;
+      timeout)   say "REFUSED: $PIN is not in the mirror, and the origin check timed out after ${PIN_FETCH_TIMEOUT}s ($AGES)" ;;
+      failed)    say "REFUSED: $PIN is not in the mirror, and the origin check failed (git: $PINWHY) ($AGES)" ;;
+      served)    broken "origin served $PIN into refs/dt-review/pins/, but the mirror cannot resolve it to a commit" ;;
+      present)   broken "the mirror held object $PIN at the fetch and cannot resolve it to a commit now" ;;
+      *)
+        if [ ${#PIN} -lt 40 ]; then
+          say "REFUSED: no commit with prefix $PIN is in the mirror; no origin check was made: a short id cannot be fetched by id — give the full 40-character id ($AGES)"
+        else
+          say "REFUSED: $PIN is not in the mirror, and no origin check was made: the branch fetch was $LAST ($AGES)"
+        fi ;;
+    esac
     exit 1
   fi
   # A 7-39 character name can resolve as a BRANCH before it resolves as an object id; a
@@ -341,7 +413,18 @@ else
   case $rc in
     0) PLACE="on $BRANCH" ;;
     1) PLACE="OFF $BRANCH"
-       LOUD="OFF-BRANCH: $SHA is not an ancestor of $BRANCH — $EXACT, provenance is NOT the graded ref" ;;
+       # WHICH off-branch (#1181, Langston condition 2): a commit on another mirror branch, or one
+       # on NO branch the mirror holds — pushed since the last all-branch sync, or force-pushed away
+       # (origin serves those too, measured). Local only; 0.01-0.03 s over 135 heads, measured.
+       ob=$(git --git-dir="$REPO" for-each-ref --count=1 --format='%(refname:short)' --contains "$SHA" refs/heads/ 2>"$TMPD/fe")
+       orc=$?
+       [ $orc -eq 0 ] && [ ! -s "$TMPD/fe" ] || broken "could not tell which mirror branch holds $SHA (for-each-ref exit $orc)" "$(cat "$TMPD/fe")"
+       if [ -n "$ob" ]; then
+         WHERE="it is on mirror branch $ob"
+       else
+         WHERE="it is on NO branch the mirror holds (all-branch sync $(age "$SYNC_PASS")): pushed since that sync, or force-pushed away; the mirror cannot tell which"
+       fi
+       LOUD="OFF-BRANCH: $SHA is not an ancestor of $BRANCH; $WHERE — $EXACT, provenance is NOT the graded ref" ;;
     *) broken "could not tell whether $SHA is on $BRANCH (merge-base exit $rc)" ;;
   esac
   if [ "$FETCH" != ok ]; then

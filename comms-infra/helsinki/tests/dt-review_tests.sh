@@ -2,7 +2,8 @@
 # Test harness for B-CREDENTIALS-PRIVATE-REPO OBJ-4a: dt-review.
 # Runs as langston in /tmp/dtr-test ONLY. Never touches /srv/dawntrader-backup.git except to
 # clone FROM it (--shared: reads its objects, writes nothing there).
-# Test copies differ from the file under test ONLY in REPO, REMOTE and LOCK_WAIT.
+# Test copies differ from the file under test ONLY in REPO, REMOTE, LOCK_WAIT and (the pin-fetch
+# copies, mk_pin) PIN_FETCH_TIMEOUT.
 # SETUP (as root on Helsinki): mkdir -p /tmp/dtr-test/src, then copy in
 #   dt-review            the version under test
 #   dt-review.baseline   comms-infra/helsinki/dt-review at ab68732d7 (the verbatim live copy)
@@ -11,6 +12,7 @@
 #   dt-review.r3         comms-infra/helsinki/dt-review at 764ec389b (before fresh-reader round 3)
 #   dt-review.r4         comms-infra/helsinki/dt-review at 2767d358a (what Langston approved with conditions at gate 4a-1)
 #   dt-review.r5         comms-infra/helsinki/dt-review at 3b7b46f59 (gate 4a-1 conditions folded; before gate 4a-2 condition 2)
+#   dt-review.r6         comms-infra/helsinki/dt-review at 445b6a505 (the copy installed 2026-09-29, before B-DTREVIEW-ABSENCE-PROVENANCE)
 # and chown -R langston. Run: cd /home/langston && sudo -u langston HOME=/home/langston bash <this>.
 # Remove /tmp/dtr-test afterwards.
 # Every "CONTROL" line runs the same check against an OLDER copy and must FAIL there: a check
@@ -111,7 +113,9 @@ $M update-ref -d "refs/heads/$HEXNAME"
 
 # ---------- (c) a made-up sha ----------
 run "$T/dtr" show 0123456789abcdef0123456789abcdef01234567 CLAUDE.md
-[ $RC -eq 1 ] && echo "$ERR" | grep -q "^REFUSED: 0123456789abcdef0123456789abcdef01234567 is not in the mirror (migration/aws-supabase head $(cur), fetched .* ago (DT_REVIEW_FETCH_OK); last fetch ok; other branches last synced " && ok "c: made-up sha -> the not-in-mirror text" || bad c "rc=$RC ${ERR:0:200}"
+# B-DTREVIEW-ABSENCE-PROVENANCE: a FULL made-up id is now asked of the REAL origin first. GitHub's
+# own refusal is the positive control that the "did not serve" class matches its spelling.
+[ $RC -eq 1 ] && echo "$ERR" | grep -q "^REFUSED: origin did not serve commit id 0123456789abcdef0123456789abcdef01234567 (git: fatal: remote error: upload-pack: not our ref 0123456789abcdef0123456789abcdef01234567); the mirror does not hold it either (migration/aws-supabase head $(cur), fetched .* ago (DT_REVIEW_FETCH_OK); last fetch ok; other branches last synced " && ! echo "$ERR" | grep -qi "does not have" && ok "c: made-up full id -> origin (GitHub) did not serve it, git's own line quoted" || bad c "rc=$RC ${ERR:0:260}"
 
 # ---------- F-R2: a commit whose TREE is missing -> exit 3, never "not a file" ----------
 BROKEN=$(printf 'tree 1111111111111111111111111111111111111111\nauthor t <t@i> 1 +0000\ncommitter t <t@i> 1 +0000\n\nbroken\n' | $M hash-object -t commit --literally -w --stdin)
@@ -127,6 +131,7 @@ $M update-ref refs/heads/scratch/offbranch-test "$OFF"
 run "$T/dtr" show "$OFF" CLAUDE.md
 L1=$(sed -n 1p "$T/o"); REST=$(tail -n +2 "$T/o" | git hash-object --stdin); CW=$($M rev-parse "$OFF:CLAUDE.md")
 [ $RC -eq 0 ] && [ "${L1#OFF-BRANCH: $OFF is not an ancestor}" != "$L1" ] && echo "$ERR" | grep -q "^OFF-BRANCH: $OFF" && [ "$REST" = "$CW" ] && ok "b: off-branch served; header on stdout line 1 AND stderr; rest = exact blob" || bad b "rc=$RC"
+echo "$L1" | grep -q "^OFF-BRANCH: $OFF is not an ancestor of $B; it is on mirror branch scratch/offbranch-test — " && ok "b: the header names the mirror branch that holds it (#1181 condition 2)" || bad b-where "l1=${L1:0:200}"
 "$T/dtr" show "$OFF" CLAUDE.md 2>/dev/null | head -1 | grep -q "^OFF-BRANCH" && ok "b: header survives 2>/dev/null" || bad b2 x
 "$T/dtr" show "$OFF" CLAUDE.md 2>&1 >/dev/null | grep -q "^OFF-BRANCH" && ok "b: header survives >/dev/null" || bad b3 x
 run "$T/dtr_fail" show "$OFF" CLAUDE.md
@@ -170,6 +175,7 @@ run "$T/dtr_fail" show CLAUDE.md
 [ $RC -eq 1 ] && [ -z "$OUT" ] && echo "$ERR" | grep -q "^REFUSED: fetch failed; mirror head is $(cur), fetched .* — no head read served" && echo "$ERR" | grep -q "^dt-review: reason: " && ok "d: head read after a failed fetch refused, with git's reason" || bad d2 "rc=$RC ${ERR:0:160}"
 run "$T/dtr_fail" show 0123456789abcdef0123456789abcdef01234567 CLAUDE.md
 echo "$ERR" | grep -q "last fetch FAILED (" && ok "d: not-in-mirror names 'last fetch FAILED (<reason>)'" || bad d3 "${ERR:0:160}"
+echo "$ERR" | grep -q "^REFUSED: 0123456789abcdef0123456789abcdef01234567 is not in the mirror, and no origin check was made: the branch fetch was FAILED (" && ! echo "$ERR" | grep -q "origin did not serve" && ok "d: branch fetch failed -> 'no origin check was made', never origin's refusal (#1181)" || bad d4 "${ERR:0:200}"
 ( flock "$T/mirror.git/dt-fetch.lock" sleep 12 ) & sleep 1
 run "$T/dtr_busy" show CLAUDE.md; BR=$RC; BE=$ERR
 run "$T/dtr_busy" show "$PIN" "$P"; BL1=$(sed -n 1p "$T/o")
@@ -318,7 +324,7 @@ echo "$ERR" | grep -q "Illegal number: 0999" && echo "$ERR" | grep -q "from  —
 # F3-9: a SHORT pin whose prefix only a blob shares is "no such commit", with the freshness data.
 SP=$(printf '%s' "$WANT" | cut -c1-12)
 run "$T/dtr" show "$SP" CLAUDE.md
-[ $RC -eq 1 ] && echo "$ERR" | grep -q "^REFUSED: no commit with prefix $SP is in the mirror (a blob shares the prefix) (migration/aws-supabase head " && ok "F3-9: a short pin shared only by a blob -> exit 1 with freshness" || bad F3-9 "rc=$RC ${ERR:0:200}"
+[ $RC -eq 1 ] && echo "$ERR" | grep -q "^REFUSED: no commit with prefix $SP is in the mirror (a blob shares the prefix); no origin check was made: a short id cannot be fetched by id — give the full 40-character id (migration/aws-supabase head " && ok "F3-9: a short pin shared only by a blob -> exit 1 with freshness, and says no origin check was made (#1181 R1)" || bad F3-9 "rc=$RC ${ERR:0:200}"
 run "$T/r3" show "$SP" CLAUDE.md
 [ $RC -eq 2 ] && echo "$ERR" | grep -q "names a blob" && ok "F3-9 CONTROL: r3 told the caller it was their error (exit 2)" || bad F3-9c "rc=$RC ${ERR:0:160}"
 # F3-9b: a tag whose target is missing is a broken mirror (exit 3), not a caller error.
@@ -362,5 +368,116 @@ GIT_OBJECT_DIRECTORY="$T/decoy-objects" run "$T/r5" show "$SC" side.txt; RRC=$RC
 [ $NRC -eq 3 ] && [ -z "$NOUT" ] && ok "G2-R: with GIT_OBJECT_DIRECTORY exported, the reader still reads the mirror (exit 3, nothing served)" || bad G2-R "rc=$NRC out=${NOUT:0:80}"
 [ $RRC -eq 0 ] && echo "$ROUT" | grep -q "only in a side store" && ok "G2-R CONTROL: r5 served a blob from a store that is NOT the mirror" || bad G2-Rc "rc=$RRC out=${ROUT:0:120}"
 rm -rf "$T/side.git" "$T/decoy-objects"
+
+# ==========================================================================================
+# B-DTREVIEW-ABSENCE-PROVENANCE (#1181): a missed FULL-id pin is asked of origin by id.
+# Langston condition 3: these run on a SYNTHETIC origin ($PO) and a test mirror ($PM) that share NO
+# object store with anything (--no-local --single-branch clone, no alternates), so a "kept by gc" or
+# "served" result cannot come from an alternate. Every case states its before-call absence first.
+# Each CONTROL runs the copy installed 2026-09-29 (r6, 445b6a505) on the same input.
+# ==========================================================================================
+PO=$T/po.git; PM=$T/pm.git; PW=$T/pw
+rm -rf "$PO" "$PM" "$PW"
+git init -q --bare "$PO"; git init -q -b "$B" "$PW"
+( cd "$PW" && echo base > CLAUDE.md && git add CLAUDE.md && git commit -qm base && git push -q "$PO" "HEAD:refs/heads/$B" \
+  && git checkout -qb side && echo side > CLAUDE.md && git commit -qam side && git push -q "$PO" side \
+  && git tag sidetag && git push -q "$PO" sidetag \
+  && git checkout -qb gone && echo gone > CLAUDE.md && git commit -qam gone && git push -q "$PO" gone && git push -q "$PO" :refs/heads/gone ) \
+  || bad pin-setup "could not build the synthetic origin"
+S=$(git -C "$PW" rev-parse side); X=$(git -C "$PW" rev-parse gone); BLOB=$(git -C "$PW" rev-parse "$B:CLAUDE.md")
+PM_="git --git-dir=$PM"
+mkpm() {   # a fresh test mirror holding ONLY the review branch, configured like the real one
+  rm -rf "$PM"
+  git clone -q --bare --no-local --single-branch --branch "$B" "file://$PO" "$PM" || bad pin-mkpm "clone failed"
+  $PM_ config --unset-all remote.origin.fetch; $PM_ config core.logAllRefUpdates always
+}
+absent() { $PM_ cat-file -e "$1" 2>"$T/ce"; [ $? -ne 0 ]; }   # stderr KEPT in a file, not discarded
+mk_pin() { # name remote pintimeout source
+  sed -e "s#^REPO=.*#REPO=$PM#" -e "s#^REMOTE=.*#REMOTE=$2#" -e "s#^LOCK_WAIT=.*#LOCK_WAIT=90#" -e "s#^PIN_FETCH_TIMEOUT=.*#PIN_FETCH_TIMEOUT=$3#" "$4" > "$T/$1"
+  chmod +x "$T/$1"
+}
+mk_pin dtp      "file://$PO"                60    "$T/src/dt-review"
+mk_pin dtp_fail "file://$T/nonexistent.git" 60    "$T/src/dt-review"
+mk_pin dtp_to   "file://$PO"                0.001 "$T/src/dt-review"
+mk_pin r6p      "file://$PO"                60    "$T/src/dt-review.r6"
+nrefs() { $PM_ for-each-ref | wc -l; }
+
+# T1 — the #1181 case run FORWARD: a side-branch commit the mirror has not synced is SERVED.
+mkpm; absent "$S" && ok "T1 pre: $S is absent from the test mirror before the call" || bad T1-pre "present"
+N0=$(nrefs); t0=$(date +%s%N)
+run "$T/dtp" show "$S" CLAUDE.md; t1=$(date +%s%N)
+L1=$(sed -n 1p "$T/o"); REST=$(tail -n +2 "$T/o")
+[ $RC -eq 0 ] && [ "$REST" = side ] && echo "$L1" | grep -q "^OFF-BRANCH: $S is not an ancestor of $B; it is on NO branch the mirror holds (all-branch sync " && ok "T1: served after asking origin, header says ON NO BRANCH the mirror holds" || bad T1 "rc=$RC l1=${L1:0:200} err=${ERR:0:200}"
+[ "$($PM_ rev-parse --verify --quiet refs/dt-review/pins/$S)" = "$S" ] && ok "T1: anchored at refs/dt-review/pins/$S" || bad T1-ref x
+# Langston C-2: exactly ONE new ref (the pin), and NO tag, although origin has a tag on $S.
+[ "$(nrefs)" -eq $((N0 + 1)) ] && [ "$($PM_ for-each-ref refs/tags | wc -l)" -eq 0 ] && ok "T1/C-2: exactly one new ref, zero tags (origin has sidetag on $S)" || bad T1-tags "refs $N0 -> $(nrefs); tags: $($PM_ for-each-ref refs/tags)"
+echo "T9 timing: T1 pin read took $(( (t1 - t0) / 1000000 )) ms (synthetic local origin)"
+mkpm; run "$T/r6p" show "$S" CLAUDE.md
+[ $RC -eq 1 ] && echo "$ERR" | grep -q "^REFUSED: $S is not in the mirror (" && ok "T1 CONTROL: r6 refuses the same commit as 'not in the mirror'" || bad T1-ctl "rc=$RC ${ERR:0:160}"
+mkpm; $PM_ fetch -q "file://$PO" "$S:refs/x/control" 2>"$T/fe"
+[ "$($PM_ for-each-ref refs/tags | wc -l)" -ge 1 ] && ok "T1/C-2 CONTROL: the same by-id fetch WITHOUT --no-tags writes the tag" || bad T1-tagctl "tags=$($PM_ for-each-ref refs/tags | wc -l) $(cat "$T/fe")"
+
+# T2 — a commit whose branch was DELETED at origin (force-pushed away) is served, and says so.
+mkpm; absent "$X" && ok "T2 pre: $X absent" || bad T2-pre present
+run "$T/dtp" show "$X" CLAUDE.md; L1=$(sed -n 1p "$T/o")
+[ $RC -eq 0 ] && echo "$L1" | grep -q "^OFF-BRANCH: $X is not an ancestor of $B; it is on NO branch the mirror holds (all-branch sync .*): pushed since that sync, or force-pushed away; the mirror cannot tell which — " && ok "T2: deleted-branch commit served with the ON NO BRANCH header" || bad T2 "rc=$RC l1=${L1:0:220}"
+run "$T/dtp" show "$S" CLAUDE.md
+$PM_ update-ref refs/heads/side2 "$S"
+run "$T/dtp" show "$S" CLAUDE.md; L1=$(sed -n 1p "$T/o")
+[ $RC -eq 0 ] && echo "$L1" | grep -q "^OFF-BRANCH: $S is not an ancestor of $B; it is on mirror branch side2 — " && ok "T2: a commit on a mirror branch names that branch" || bad T2-on "rc=$RC l1=${L1:0:200}"
+
+# T3 — a made-up FULL id: origin did not serve it. Never "does not have".
+F=0123456789abcdef0123456789abcdef01234567
+mkpm; absent "$F" && ok "T3 pre: $F absent" || bad T3-pre present
+run "$T/dtp" show "$F" CLAUDE.md
+[ $RC -eq 1 ] && [ -z "$OUT" ] && echo "$ERR" | grep -q "^REFUSED: origin did not serve commit id $F (git: .*not our ref $F); the mirror does not hold it either (" && ! echo "$ERR" | grep -qi "does not have" && ok "T3: made-up full id -> origin did not serve it, git's line quoted" || bad T3 "rc=$RC ${ERR:0:220}"
+[ -z "$($PM_ for-each-ref refs/dt-review)" ] && ok "T3: no pin ref written" || bad T3-ref "$($PM_ for-each-ref refs/dt-review)"
+run "$T/r6p" show "$F" CLAUDE.md
+[ $RC -eq 1 ] && echo "$ERR" | grep -q "^REFUSED: $F is not in the mirror (" && ok "T3 CONTROL: r6 says 'not in the mirror', no origin check" || bad T3-ctl "rc=$RC ${ERR:0:160}"
+
+# T4 — a SHORT id of a commit the mirror lacks: no fetch, and the refusal says why.
+SS=$(printf '%s' "$S" | cut -c1-12)
+mkpm; absent "$S" && ok "T4 pre: $S absent" || bad T4-pre present
+run "$T/dtp" show "$SS" CLAUDE.md
+[ $RC -eq 1 ] && echo "$ERR" | grep -q "^REFUSED: no commit with prefix $SS is in the mirror; no origin check was made: a short id cannot be fetched by id — give the full 40-character id (" && ok "T4: short id -> no origin check, asks for the full id" || bad T4 "rc=$RC ${ERR:0:220}"
+[ -z "$($PM_ for-each-ref refs/dt-review)" ] && absent "$S" && ok "T4: nothing fetched, no pin ref" || bad T4-ref x
+run "$T/r6p" show "$SS" CLAUDE.md
+[ $RC -eq 1 ] && echo "$ERR" | grep -q "^REFUSED: $SS is not in the mirror (" && ok "T4 CONTROL: r6 gives the bare 'not in the mirror'" || bad T4-ctl "rc=$RC ${ERR:0:160}"
+
+# T5 — origin unreachable: the branch fetch fails, so NO origin check -> never "did not serve".
+mkpm; absent "$S" && ok "T5 pre: $S absent" || bad T5-pre present
+run "$T/dtp_fail" show "$S" CLAUDE.md
+[ $RC -eq 1 ] && echo "$ERR" | grep -q "^REFUSED: $S is not in the mirror, and no origin check was made: the branch fetch was FAILED (" && ! echo "$ERR" | grep -q "origin did not serve" && ok "T5: unreachable origin -> 'no origin check was made'" || bad T5 "rc=$RC ${ERR:0:220}"
+
+# T6 — the pin fetch times out: the timeout wording, never origin's refusal; and the lock is FREE
+# right after (no git child kept fd 9 — Langston C-1).
+mkpm; absent "$S" && ok "T6 pre: $S absent" || bad T6-pre present
+run "$T/dtp_to" show "$S" CLAUDE.md
+[ $RC -eq 1 ] && echo "$ERR" | grep -q "^REFUSED: $S is not in the mirror, and the origin check timed out after 0.001s (" && ! echo "$ERR" | grep -q "origin did not serve" && ok "T6: pin fetch timeout -> timeout wording" || bad T6 "rc=$RC ${ERR:0:220}"
+flock -n "$PM/dt-fetch.lock" true && ok "T6/C-1: the fetch lock is free immediately after the timed-out call" || bad T6-lock "lock still held"
+
+# T7 — the anchor survives gc and dt-backup-sync's prune; the mirror never goes shallow.
+mkpm; absent "$S" && ok "T7 pre: $S absent" || bad T7-pre present
+run "$T/dtp" show "$S" CLAUDE.md
+$PM_ reflog expire --expire=now --all; $PM_ gc --quiet --prune=now
+$PM_ cat-file -e "$S" && ok "T7: pinned commit survives reflog expiry + gc --prune=now" || bad T7 "gone after gc"
+[ "$($PM_ rev-parse --is-shallow-repository)" = false ] && ok "T7: the mirror is not shallow" || bad T7-shallow x
+$PM_ update-ref -d "refs/dt-review/pins/$S"; $PM_ reflog expire --expire=now --all; $PM_ gc --quiet --prune=now
+absent "$S" && ok "T7 CONTROL: with the pin ref removed, the same expiry + gc drops it" || bad T7-ctl "still present"
+mkpm; run "$T/dtp" show "$S" CLAUDE.md
+$PM_ fetch --quiet --prune "file://$PO" "+refs/heads/*:refs/heads/*"
+[ "$($PM_ rev-parse --verify --quiet refs/dt-review/pins/$S)" = "$S" ] && ok "T7: a dt-backup-sync-shaped --prune fetch leaves the pin ref" || bad T7-prune x
+
+# T8 — a FULL id of a BLOB the mirror holds: not fetched, refused as before.
+mkpm; $PM_ cat-file -e "$BLOB" && ok "T8 pre: blob $BLOB present" || bad T8-pre absent
+run "$T/dtp" show "$BLOB" CLAUDE.md
+[ $RC -eq 2 ] && echo "$ERR" | grep -q "names a blob, not a commit" && [ -z "$($PM_ for-each-ref refs/dt-review)" ] && ok "T8: present full-id blob -> refused, origin not asked" || bad T8 "rc=$RC ${ERR:0:160}"
+
+# T10 — the shipped pin-fetch command carries every bound (C-1, C-2): read off the file under test.
+PF=$(grep -B2 'refs/dt-review/pins/$PIN" 2>&1 9>&-)' "$T/src/dt-review")
+echo "$PF" | grep -q "GIT_SSH_COMMAND='ssh -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=2'" \
+  && echo "$PF" | grep -q 'timeout "$PIN_FETCH_TIMEOUT"' && echo "$PF" | grep -q -- '--no-tags' \
+  && ! echo "$PF" | grep -q -- '--depth' && ok "T10: the pin fetch has GIT_SSH_COMMAND, its timeout, --no-tags, 9>&-, and no --depth" || bad T10 "${PF:0:300}"
+rm -rf "$PO" "$PM" "$PW"
 
 echo "DTR SUMMARY: $PASSN pass, $FAILN fail"
