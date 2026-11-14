@@ -540,6 +540,30 @@ describe('context lane deletion fence', () => {
     expect(isWarmTooLarge(new Error('refused the read-back copy — 4130 bytes free, need 5000'))).toBe(false);
     expect(isWarmTooLarge(new Error('checksum mismatch local=ab413c upload=ab413c readback=ff'))).toBe(false);
   });
+  it('3b item 5 r2: the status position is read on every warm-upload message shape, with an empty statusText and a phrase-free body', () => {
+    // each shape exactly as storage-client builds it, statusText '' and a body that carries none of the vendor phrases,
+    // so only the status arm can make these true
+    const shapes = [
+      '[B75 storage-client] warm upload failed: 413  — {"statusCode":"413"}',
+      '[B75 storage-client] warm upload (file, small) failed: 413  — {"statusCode":"413"}',
+      '[B75 storage-client] TUS create failed: 413  — {"statusCode":"413"}',
+      '[B75 storage-client] TUS(file) create failed: 413  — {"statusCode":"413"}',
+      '[B75 storage-client] TUS PATCH failed at offset=0 chunk=6291456: 413  — {"statusCode":"413"}',
+      '[B75 storage-client] TUS(file) PATCH failed at offset=0 chunk=6291456: 413  — {"statusCode":"413"}',
+    ];
+    for (const m of shapes) expect(isWarmTooLarge(new Error(m)), m).toBe(true);
+    // must stay false: numbers and digests containing 413, and a body that holds "failed" and a 413 after a colon
+    const notSize = [
+      'refused the read-back copy — 4130 bytes free, need 5000',
+      'checksum mismatch local=ab413c upload=ab413c readback=ff',
+      '[B75 storage-client] warm upload (file, small) failed: 400  — object of 5368709413 bytes exceeds the hard cap',
+      '[B75 storage-client] TUS(file) PATCH failed at offset=0 chunk=6291456: 409  — wanted=413',
+      '[B75 storage-client] warm upload failed: 500  — expected=413',
+      '[B75 storage-client] warm upload failed: 500  — {"message":"upload failed","code": 413}',
+      '[B75 storage-client] TUS(file) PATCH failed at offset=0 chunk=6291456: 4130  — {}',
+    ];
+    for (const m of notSize) expect(isWarmTooLarge(new Error(m)), m).toBe(false);
+  });
   it('3b item 5 r1: with cold configured, a space refusal or a checksum mismatch containing "413" never falls back to cold', async () => {
     const ctl = { query: vi.fn(async (sql: string) => {
       if (sql.includes('SELECT id, state')) return { rows: [] };

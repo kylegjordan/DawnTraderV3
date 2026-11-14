@@ -186,10 +186,13 @@ async function listDeletePopulationLabels(client: pg.Client, cutoff: Date): Prom
 /**
  * 3b item 5 r1: whether a warm UPLOAD error is the size rejection that routes to cold. The status sits after "failed: "
  * in storage-client's messages; a bare "413" anywhere in the text (a byte count, a digest) is not one.
+ * r2 (Langston): the TUS PATCH messages carry "at offset=N chunk=N" between "failed" and the status, and that path
+ * carries every upload over 40 MB, so the status arm admits exactly that infix. Deliberately narrower than
+ * `failed[^:]*: 413`, which would also match a response BODY holding `failed","code": 413`.
  */
 export function isWarmTooLarge(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err);
-  return /failed: 413\b/.test(msg) || /Payload Too Large|Maximum size exceeded|exceeded the maximum allowed size/i.test(msg);
+  return /failed(?: at offset=\d+ chunk=\d+)?: 413\b/.test(msg) ||/Payload Too Large|Maximum size exceeded|exceeded the maximum allowed size/i.test(msg);
 }
 
 /** Free bytes available to this user on the filesystem holding `filePath`'s directory (statfs). Exported so the live
