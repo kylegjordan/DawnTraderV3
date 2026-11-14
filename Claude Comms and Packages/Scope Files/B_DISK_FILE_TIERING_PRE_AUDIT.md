@@ -290,3 +290,36 @@ The cadence-aware form exists: `computePrevFire(expression, timezone, from)` (`s
 - **The premise 3a rests on, stated:** warm is Supabase (`storage-client.ts:422`), cold is B2 (`:589`). 3a's proof downloads from Supabase, uploads to B2 (free) and reads `b2_get_file_info` (metadata) — **zero B2 download bytes**, so 3a needs no claimed day and is not blocked by the B2 download cap; 3b's restore by id is the first leg that spends download budget.
 - **Binding C-1 (3a), the choice made:** the two proof versions (171 MB and 535 MB) are **deleted by file id with the wide key at the end of the proof** — the instrument 3b uses for the P10 orphan, available until 3d step 5 — under a `_proof/` prefix. No hide verb exists in `storage-client.ts` today and the `_liveness/` lifecycle rule is 3d step 2, so "hide under `_liveness/proof/`" (r2) is withdrawn.
 - **Binding C-2 (3c):** `b2_list_file_versions` is paged until no `nextFileName` / `nextFileId` remains; every run states the file and version counts it summed, and a run that cannot finish the listing FAILS rather than publishing a partial (low) total.
+
+### Amendment 4 — 3b plan r3 (2026-11-14, CC-A): what 3a's Steps 7-8 added to 3b
+3b's scope is plan r2's (exact-version reads, AP-5's function arm, the orphan). Added, each recorded in the change list with its source:
+
+**1. The bounded B2 retry** (Step-8 FINDING-1; agreed with Langston under KD-34, change list section "3b item — bounded B2 retry"; his nine amendments are binding).
+- **Retry set:** `b2_upload_file` (fresh upload URL on every attempt), `b2_get_upload_url`, `b2Authorize`, and `b2_get_file_info`.
+- **Classification:** on the pair (status, B2 `code`). Retryable: 500, 503, 408, 429 (honouring `Retry-After`, capped), 401 `expired_auth_token` (re-authorize), and any `postFileStream` rejection. Never retried: other 4xx (including 401 `unauthorized`) and an `assertB2Version` failure.
+- **Limits:** 3 attempts, backoff 1 s / 4 s plus jitter.
+- **`b2_list_buckets`:** off the staging live path, read-site stated. `B2_BUCKET_ID` is set in `/home/deploy/dawntrader/.env` (24 characters, prefix `a39ddd`, equal to the bucket id Langston read at Step 8), so `b2ResolveBucketId` returns it before `list_buckets` (`storage-client.ts:620-623`). It still gets the same retry, so an env without it is covered.
+- **Worst-case wall clock — measured, then bounded:**
+  - Measured: today's attested uploads of the 535 MB object took 22.1-22.7 s and the 171 MB object 8.9-16.4 s.
+  - The 300 s socket-idle timer does NOT bound a trickling upload. 3b adds a per-attempt deadline: 600 s plus `bytes` ÷ 1 MiB/s (1,111 s for 535 MB).
+  - Worst case per candidate: 3 × 1,111 s + 5 s ≈ 56 min.
+  - The rotator has no overlap guard (`b75-cold-rotator.ts`: no lock). It fires monthly at `0 3 1 * *`, the canary weekly at `0 4 * * 1`, and archival-health judges a run in progress as not-yet-due. With a month between fires, even 6 candidates at worst case (≈ 5.6 h) cannot overlap the next rotator. 3b adds a lock file anyway, so two rotators can never run at once — the absence of a guard is stated, not assumed safe.
+  - Caps: uploads carry no download bytes. A retry adds at most 2 `b2_get_upload_url` (class C) and 2 `b2_get_file_info` (class B) calls per candidate — negligible against the daily transaction caps, and they show in 3c's meter.
+- **The durable failed-upload record:** on a final throw, the rotator writes `(bucket, path, sha1, bytes, attempt timestamps, last status/code)`. The row lands in `data_archive_manifest` as `tier='cold' state='upload_failed'` with no `deleteWarm`, or in its own table if the manifest's state check forbids that (read at Step 3). A page is raised either way. The 3b listing reconciles these names.
+
+**2. The attestation-column reader (Step-4 carry).** `downloadColdFileById` reads `provider_file_id` from the manifest row — rehydrate and the read-back download that exact version. The 4 pre-3a cold rows (`sha256-roundtrip`, provider columns NULL) get their ids bound by `b2_list_file_versions`, with the manifest SHA-256 deciding when a name has two versions (plan r2), and are then relabelled `b2-sha1-attested` from `b2_get_file_info`.
+
+**3. Residue to delete by id with the wide key before 3d step 5:**
+- the P10 orphan;
+- the second `context_bridge_log/2026-01.jsonl.gz` version (FINDING-2);
+- any `proof_deleted:false` survivors. Today: none — `_proof/` lists 0 versions; Langston, Step 8.
+- The listing names the `_proof/` prefix.
+- **The lifecycle question** (does `daysFromHidingToDeleting` reach a version superseded without an explicit hide?) is a HYPOTHESIS, to confirm against B2's documentation and `prove_cold_key.py` before 3d step 2 relies on it.
+
+**4. The `.verify` free-space check (Step-4 carry).** `context-bridge-log-ttl.ts:289-304` writes a second full copy (`<export>.verify`) with no free-space check. 3b checks free space for both copies before the first byte, as AP-4 already requires of the export.
+
+**5. AP-5's function arm** (plan r2, unchanged): `rotated=1 failed=0` on the 171 MB trace, a restore by id with `checksum=OK` and the expected line count. It runs on a day claimed with Infra Claude first, because the restore spends B2 download budget shared with token-watch.
+
+**6. 3d step 5 gate:** the order is agreed with CC-INFRA before step 5. Their P11 orphan removal needs a hide or delete right on the cold key (Infra Claude, Discord `1571064942004797533`: P11 comes after their P2, so not soon).
+
+**Order inside 3b:** the retry plus the failed-upload record and the lock (storage-client and rotator) → by-id reads and the reader → binding the 4 rows → residue deletion → `.verify` → the function-arm run on a claimed day. Each lands as its own commit with its own fence, all inside 3b's single Step 3 → 4 → 6 → 7.
