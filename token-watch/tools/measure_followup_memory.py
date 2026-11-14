@@ -103,6 +103,8 @@ UTC = timezone.utc
 CLOCK_MODULES = ("budget", "provenance", "store", "follow_up", "promote", "summary", "providers")
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CURVES = os.path.join(HERE, "tests", "fixtures", "pumpfun_curves.json")
+# two literals in different /8s (Langston r7: a narrow IPAddressAllow over one range cannot pass both), then the venue
+DEFAULT_EGRESS_PROBES = ("1.1.1.1:443", "9.9.9.9:443", "api.dexscreener.com:443")
 
 
 MIN_CLASS = 30                                                  # §6 C-3: a size/template class needs >= 30 bodies
@@ -565,6 +567,10 @@ def _egress_control(probes: list[str]) -> tuple[bool, str]:
        with no resolver alike."""
     notes, proven = [], False
     for p in probes:
+        # ⛔ IPv4 or a hostname only (Langston r7): an IPv6 literal would split on its last colon and fail the literal
+        #    test, silently becoming a non-proof leg. Refused rather than mis-parsed.
+        if p.startswith("[") or p.count(":") != 1:
+            return False, "probe %r is not host:port (an IPv6 probe is not supported): refused, not a proof leg" % p
         host, port = p.rsplit(":", 1)
         literal = all(ch.isdigit() or ch == "." for ch in host)
         if literal:
@@ -583,6 +589,9 @@ def _egress_control(probes: list[str]) -> tuple[bool, str]:
         try:
             socket.create_connection((host, int(port)), timeout=5).close()
             return False, "a connection to %s SUCCEEDED; IPAddressDeny is not in force" % p
+        except socket.gaierror:
+            # no packet was ever addressed: the name did not resolve (Langston r7 — "refused" would read as measured)
+            notes.append("%s TCP not attempted (DNS failure)" % p)
         except OSError as exc:
             notes.append("%s TCP refused (%s)" % (p, errno.errorcode.get(exc.errno, type(exc).__name__)))
     if not proven:
@@ -615,7 +624,7 @@ def cmd_run(a) -> int:
     if a.skip_egress_check:
         egress_note = "SKIPPED (test)"
     else:
-        ok, egress_note = _egress_control(a.egress_probe or ["1.1.1.1:443", "api.dexscreener.com:443"])
+        ok, egress_note = _egress_control(a.egress_probe or list(DEFAULT_EGRESS_PROBES))
         if not ok:
             return void(6, "egress control: " + egress_note)
 

@@ -317,6 +317,36 @@ check("E2 UDP ENETUNREACH -> not proof of a deny", not ok and "not EPERM" in why
 (ok, why), calls = _egress_with(_errno.EPERM, "timeout", probes=("api.dexscreener.com:443",))
 check("E2 hostname only, TCP timeout -> not proven (no literal probe)", not ok and "no literal-IP probe" in why and calls == [], why)
 
+# ── E3: Langston r7 riders — a DNS failure is "not attempted", IPv6 is refused, two literal /8s by default ──────────
+print("E3 expect: gaierror -> 'not attempted (DNS failure)'; an IPv6 probe -> refused; default probes hold 2 literal /8s")
+
+
+def _egress_dns(probes):
+    real_sock, real_cc = mfm.socket.socket, mfm.socket.create_connection
+
+    def fake_cc(addr, timeout=None):
+        if all(ch.isdigit() or ch == "." for ch in addr[0]):
+            raise TimeoutError("timed out")
+        raise socket.gaierror(-3, "Temporary failure in name resolution")
+    mfm.socket.socket = lambda *a, **k: _FakeUdp(_errno.EPERM)
+    mfm.socket.create_connection = fake_cc
+    try:
+        return mfm._egress_control(list(probes))
+    finally:
+        mfm.socket.socket, mfm.socket.create_connection = real_sock, real_cc
+
+
+ok, why = _egress_dns(("1.1.1.1:443", "api.dexscreener.com:443"))
+check("E3 DNS failure reads 'not attempted', never 'refused'",
+      ok and "api.dexscreener.com:443 TCP not attempted (DNS failure)" in why and "gaierror" not in why, why)
+(ok, why), calls = _egress_with(_errno.EPERM, "timeout", probes=("[2606:4700::1111]:443", "1.1.1.1:443"))
+check("E3 an IPv6 probe is refused, not parsed into a non-proof leg", not ok and "IPv6" in why and calls == [], why)
+(ok, why), calls = _egress_with(_errno.EPERM, "timeout", probes=("2606:4700::1111:443",))
+check("E3 a bare IPv6 probe is refused too", not ok and "IPv6" in why, why)
+lits = [x.rsplit(":", 1)[0] for x in mfm.DEFAULT_EGRESS_PROBES if all(c.isdigit() or c in ".:" for c in x)]
+check("E3 the default probes hold two literals in different /8s",
+      len(lits) == 2 and len({x.split(".")[0] for x in lits}) == 2, str(mfm.DEFAULT_EGRESS_PROBES))
+
 # ── T1: --trace reaches the identity map ───────────────────────────────────────────────────────────────────────────
 print("T1 expect: --trace writes snapshots, including around summary._identity_map (A2's site)")
 run_root_t, _ = prepare("run-trace")

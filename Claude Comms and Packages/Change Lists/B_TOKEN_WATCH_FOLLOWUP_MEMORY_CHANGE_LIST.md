@@ -158,3 +158,41 @@ Positive control: 09-28/29/30 hold 184,531 / 187,352 / 108,755 rows and **0** ob
 - **Mutations, each restored from a saved copy and `cmp`-verified:** M12 the UDP proof skipped (`if literal:` → `if False:`) → 105/6 (E1 port-closed, E2 ×5); M13 the literal-probe requirement dropped → 110/1 (E2 hostname-only); M14 any UDP errno accepted → 110/1 (E2 ENETUNREACH).
 - **The runner (`tools/run_followup_arm.sh`) accepted only `all_shed|live|x4`** — arms xn and sept (§6 AMENDMENTS 1-2) could not be run through the reviewed runner at all. Now: `[--trace] [--n N] [--shape FILE]` in any order; arms `xn|sept` accepted; xn without `--n` and sept without `--shape` refused (exit 2) before any unit starts; a flag without a value and an unknown option refused. **Exercised on staging as root, six bad invocations, every one exit 2 with its reason, no unit started and no result dir created.**
 - **Arms NOT yet run.** After review at this commit: reinstall `/opt/token-watch-p1` (R-2 path, every file hash-compared), then the driver from all_shed rep 1.
+
+### Step 9 r7 — RULED PROCEED (Langston, Discord `1570996051261915168`, at `cc2fa979f`, re-read by him; blob sha256 97c0578c…f524) — arms started; his three riders folded AFTER, not installed
+- **Installed for the arms:** `/opt/token-watch-p1` = `cc2fa979f` (R-2 path; the `a609d6209` tree kept as `/opt/token-watch-p1.a609d6209.superseded`), **88/88 files sha256-equal to their blobs, 0 mismatches.** The voided rep-1 record is PRESERVED at `/var/lib/token-watch-p1-runs/results/void-egress-r6-rep1/` (his rider: `--out` is overwritten on a re-run). Driver r2 started 02:58:16Z as unit `tw-p1-arms-driver-r2`.
+- **His ruling on the attacks:** (1) UDP EPERM is sound proof for TCP — `IPAddressDeny` is one address-keyed cgroup packet filter with no protocol term (`systemd.resource-control`); the residual is ADDRESS coverage (an `IPAddressAllow` wins over the deny), measured empty on `system.slice` and not set by the runner; `providers._request` is a pure sqlite/file stub, so the deny is a backstop. (2) the one datagram on the no-deny path does not matter, and the venue is now contacted LESS (the literal voids before any TCP to `api.dexscreener.com`). He verified `grep -q "oom-kill" && exit 137` falls through to `exit "$RC"` on no match.
+- **Riders folded (§9.4 disposition 1), at the commit carrying this entry, NOT in the installed `cc2fa979f` tree — so the arms in flight still render a DNS failure as `TCP refused (gaierror)`; read that string as "not attempted":** a DNS failure now reads `TCP not attempted (DNS failure)`; an IPv6 probe (bracketed or bare) is refused, not mis-parsed into a non-proof leg; the default probes are `1.1.1.1:443`, `9.9.9.9:443` (a second literal /8 against a narrow allow), `api.dexscreener.com:443`. Tests **115/0** (E3 ×4 new).
+- **The driver is not in the repo; its full text, sha256 `75fdc3af…d745` (staging `/root/p1_arms.sh`):**
+
+```bash
+#!/usr/bin/env bash
+# B-TOKEN-WATCH-FOLLOWUP-MEMORY Step 7: arms all_shed, live, x4, xn, sept, each twice (r2, after the egress repair cc2fa979f). Infra Claude 2026-11-14.
+set -u
+H=/opt/token-watch-p1/tools/measure_followup_memory.py
+R=/opt/token-watch-p1/tools/run_followup_arm.sh
+B=/var/lib/token-watch-p1-runs/bodies.sqlite
+NOW=2026-10-02T13:00:00Z
+RES=/var/lib/token-watch-p1-runs/results
+LOG=/var/lib/token-watch-p1-runs/arms-driver.log
+install -d -o tokenwatch -g tokenwatch -m 0700 "$RES"
+for rep in 1 2; do
+  for arm in all_shed live x4 xn sept; do
+    case $arm in xn) XA=(--n 13.185706158620139);; sept) XA=(--shape /var/lib/token-watch-p1-runs/shape-2026-09-26.json);; *) XA=();; esac
+    RUN=/var/lib/token-watch-p1-runs/run-$arm-$rep
+    echo "$(date -u +%FT%TZ) START $arm rep$rep free=$(df -B1 --output=avail / | tail -1)" >> "$LOG"
+    sudo -u tokenwatch env TOKEN_WATCH_ROOT=/var/lib/token-watch-scratch PYTHONDONTWRITEBYTECODE=1 \
+      /usr/bin/python3 "$H" prepare --pristine /var/lib/token-watch-scratch --run-root "$RUN" --now "$NOW" >> "$LOG" 2>&1
+    prc=$?
+    echo "$(date -u +%FT%TZ) prepare rc=$prc" >> "$LOG"
+    if [ $prc -ne 0 ]; then echo "$(date -u +%FT%TZ) STOP: prepare failed" >> "$LOG"; exit 1; fi
+    bash "$R" "$arm" "$RUN" "$B" "$NOW" "$RES/rep$rep" "${XA[@]}" >> "$LOG" 2>&1
+    rc=$?
+    echo "$(date -u +%FT%TZ) END $arm rep$rep rc=$rc free=$(df -B1 --output=avail / | tail -1)" >> "$LOG"
+    cp "$RUN/PREPARE.json" "$RES/rep$rep/$arm-PREPARE.json" 2>>"$LOG"
+    rm -rf --one-file-system "$RUN" && echo "$(date -u +%FT%TZ) removed $RUN" >> "$LOG"
+    case $rc in 0) ;; *) echo "$(date -u +%FT%TZ) STOP: $arm rep$rep rc=$rc" >> "$LOG"; exit 1;; esac
+  done
+done
+echo "$(date -u +%FT%TZ) ALL DONE" >> "$LOG"
+```
