@@ -441,6 +441,28 @@ def test_guard(tmp):
     check("G7b and the offset now covers it", state(m).get("guard_log_offset"), os.path.getsize(m.GUARD_LOG))
     store.hand_resolve(GT)
 
+    # G9. fold-in 1: a row cut short is NOT consumed - the offset stops at the last newline, the row is read whole later
+    store.hand_resolve(GB)
+    off9 = state(m).get("guard_log_offset")
+    part = json.dumps({"verdict": "refused", "tool": "HalfWrite", "message": "HalfWrite is not a tool this guard was "
+                                                                             "enumerated for"})
+    with open(m.GUARD_LOG, "a", encoding="utf-8") as fh:
+        fh.write(part[:40])
+    m.run(quiet=True)
+    check("G9 a half-written row: offset stays at the last newline", state(m).get("guard_log_offset"), off9)
+    check("G9 and no blind row for a line still being written", len(store.active(GB)), 0)
+    with open(m.GUARD_LOG, "a", encoding="utf-8") as fh:
+        fh.write(part[40:] + "\n")
+    m.run(quiet=True)
+    check("G9b completed: the refusal is read whole and minted", len(store.active(GT)), 1)
+    store.hand_resolve(GT)
+    with open(m.GUARD_LOG, "a", encoding="utf-8") as fh:
+        fh.write("{not json at all\n")
+    m.run(quiet=True)
+    check("G9c a complete line that does not parse: a blind row", len(store.active(GB)), 1)
+    check("G9c the body says it does not parse", "do not parse" in store.active(GB)[0]["body"], True)
+    store.hand_resolve(GB)
+
     # G8. C-2: the reader blind on each input raises its own row; back to readable resolves it
     os.remove(m.CLI_PACKAGE)
     rc = m.run(quiet=True)

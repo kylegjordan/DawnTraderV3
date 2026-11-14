@@ -461,11 +461,19 @@ def guard_check(st):
         with open(GUARD_LOG, "rb") as fh:
             fh.seek(off)
             data = fh.read()
+        # the offset stops at the LAST NEWLINE (Langston R-3 fold-in 1): a row still being written is read whole next
+        # run instead of being consumed half-read; a complete line that does not parse is reported, never skipped
+        cut = data.rfind(NL.encode())
+        data = data[:cut + 1] if cut >= 0 else b""
         g["offset_from"], g["offset_to"] = off, off + len(data)
+        bad = 0
         for line in data.decode("utf-8", "replace").split(NL):
+            if not line.strip():
+                continue
             try:
                 r = json.loads(line)
             except ValueError:
+                bad += 1
                 continue
             if r.get("verdict") != "refused":
                 continue
@@ -476,6 +484,8 @@ def guard_check(st):
                 g[cls].append({"ts": r.get("ts"), "tool": r.get("tool"), "cli_running": r.get("cli_running"),
                                "message": (r.get("message") or "")[:160]})
         g["log_ok"] = True
+        if bad:
+            g["blind"].append("%d line(s) of %s from byte %d do not parse as JSON" % (bad, GUARD_LOG, off))
     except FileNotFoundError:
         g["log_ok"] = True          # installed but never written: no rows is a measured zero, the file is created on install
         g["offset_from"] = g["offset_to"] = 0

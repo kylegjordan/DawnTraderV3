@@ -29,7 +29,7 @@ def check(name, ok, detail=""):
 
 class Fx:
     def __init__(self, claude=1000, memory=2000, index="line a\nline b\nx x x\n", ceiling=None):
-        self.d = tempfile.mkdtemp(prefix="lig-")
+        self.d = tempfile.mkdtemp(prefix="lig-", dir=os.path.expanduser("~"))   # never shared /tmp (#979)
         os.chmod(self.d, 0o700)
         self.home = os.path.join(self.d, "home")
         mem_dir = os.path.join(self.home, ".claude", "projects", "-home-langston", "memory")

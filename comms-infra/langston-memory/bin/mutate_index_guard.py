@@ -37,7 +37,7 @@ if rc != 0:
     sys.exit(2)
 survived = 0
 for name, which, a, b in MUTANTS:
-    d = tempfile.mkdtemp(prefix="ligm-")
+    d = tempfile.mkdtemp(prefix="ligm-", dir=os.path.expanduser("~"))   # never shared /tmp (#979)
     g, w = os.path.join(d, "langston-index-guard"), os.path.join(d, "langston-memory-write")
     shutil.copy(G, g)
     shutil.copy(W, w)
