@@ -96,4 +96,15 @@ Langston's rules file loads on every request, has no backup, no history, and not
 | P13 | Install through `deploy.sh` with a sha256 equal to the blob at the shipping head; one live check that an ordinary index write by him still lands, and that the real set is not pushed over. | R1 | sha matches; his next memory save lands |
 | P14 | SIM row for the hook (writer, reach, the Bash-path residual); `LANGSTON_ARCHITECTURE.md` change-log row. | R3, R5 | landed at Step 10 |
 
+### 5.4 Langston's ruling — OPTION A, five conditions binding at Step 4 (Discord `1571187971703701525`, re-read at `1d5651dac`)
+His reason beyond §5.2: the harness's own auto-memory instruction ("write to it directly with the Write tool") is injected into every invoke and is not ours to edit; B would make it false on disk, and if the harness swallows a permission error on a save he loses a memory he believes he stored — a data-loss gap traded for a size gap. He re-derived R1, R4 and R5 as langston (measured_total 143,246 vs 143,856) and accepted P10 NOT RE-READ.
+| # | condition | folds into |
+|---|---|---|
+| C-1 | **Every decision is logged** (tool, realpath, bytes before and after, verdict) to a root-owned jsonl. P13 asserts the row for his live write AND that a non-index write produces no row — otherwise "fired and passed" and "never matched" both end in a landed write (#661 leg 3). | P11, P13 |
+| C-2 | **One summer:** import `read_ratchet` AND the set-sum from `langston-memory-write`, or call a dry-run `--check-size` mode there. No second implementation of the byte rule. | P11 |
+| C-3 | **The hook runs as langston, not root.** `ratchet-state.json` is root:root 0644 today; if it were tightened to 0600 the fail-closed hook would block every save (B's cost, unannounced). `deploy.sh` asserts the state is readable as langston, and the refusal text distinguishes "over ceiling" from "could not establish". | P11, P13 |
+| C-4 | **The refusal names the ordering.** An add and a delete are separate Edits, so at the ceiling the add is refused even when the net is a shrink; the message says delete first, and says that each call is judged on its own bytes. A blocked stateless Langston with no stated path would route through Bash, the one path A does not reach. | P11, P12 |
+| C-5 | **The matcher is enumerated at the installed CLI version**, not a hardcoded three (MultiEdit is not in his tool set; NotebookEdit is), and the enumeration is recorded so a version bump re-checks it. The byte prediction handles `replace_all`, or fails closed — an assumed single replacement under-counts growth into a false pass. | P11, P12, P14 |
+**If P10 fails:** before Option B goes back to him, measure the permission-error behaviour first — a fixture index made immutable, one harness Write against it, record what the harness does. That is B's whole cost, and a measurement, not a ruling.
+
 **`UNAUDITED`:** none. Plain-language: his memory index can still grow past the size limit without anything stopping it, because only his main memory file is guarded. The plan adds a guard at the moment he saves, tested only against a pretend limit.
