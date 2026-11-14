@@ -513,3 +513,4 @@ Tests: 3b 73/73; tsc 324 = 324.
   - Fences (cold configured, the case the earlier fixture could not see): a refusal at 4,130 bytes and a mismatch on `zz413` both throw, and `uploadColdFile` is never called. `isWarmTooLarge` unit cases.
   - Mutations: the loose `includes('413')` → red. The old structure restored from `055ed387e` → red: it entered the cold fallback on the "413" inside the refusal.
   - Tests: harness 46/46.
+- **Item 5, two non-blocking asks folded** (Langston, Discord `1571130275604463626`, his review of `055ed387e`; its blocker is the `413` finding, already fixed at `66ce9e21b`): the default `freeBytes` is now an exported `statfsFreeBytes` using `path.dirname` (the old slice made `|| '.'` dead). A test runs the LIVE instrument on a real path and gets a finite positive figure (positive control). A non-finite reading (`NaN`) refuses with cold configured: no read-back and no cold upload. Harness 48/48.

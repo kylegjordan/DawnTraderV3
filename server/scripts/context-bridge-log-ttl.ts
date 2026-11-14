@@ -20,6 +20,7 @@
 
 import 'dotenv/config';
 import fs from 'node:fs';
+import path from 'node:path';
 import pg from 'pg';
 import { countGzipJsonlLines, exportPartition } from '../services/data-archive/partition-exporter.js';
 import { getStorageClient, type StorageClient } from '../services/data-archive/storage-client.js';
@@ -191,6 +192,13 @@ export function isWarmTooLarge(err: unknown): boolean {
   return /failed: 413\b/.test(msg) || /Payload Too Large|Maximum size exceeded|exceeded the maximum allowed size/i.test(msg);
 }
 
+/** Free bytes available to this user on the filesystem holding `filePath`'s directory (statfs). Exported so the live
+ * instrument is exercised by a test, not only injected around (Langston item 5). */
+export function statfsFreeBytes(filePath: string): number {
+  const st = fs.statfsSync(path.dirname(filePath));
+  return Number(st.bavail) * Number(st.bsize);
+}
+
 export interface ContextMonthDependencies {
   exportPartition: typeof exportPartition;
   getStorageClient: () => StorageClient;
@@ -211,10 +219,7 @@ const DEFAULT_CONTEXT_MONTH_DEPS: ContextMonthDependencies = {
   evidenceExistsForManifest,
   proofCountStillMatches,
   recordExactArchiveEvidence,
-  freeBytes: (p: string) => {
-    const st = fs.statfsSync(p.slice(0, Math.max(p.lastIndexOf('/'), 1)) || '.');
-    return Number(st.bavail) * Number(st.bsize);
-  },
+  freeBytes: statfsFreeBytes,
 };
 
 export async function exportAndUploadContextMonth(

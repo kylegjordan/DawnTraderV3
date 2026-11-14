@@ -25,6 +25,7 @@ import {
 import {
   exportAndUploadContextMonth,
   isWarmTooLarge,
+  statfsFreeBytes,
   finalizeContextDeletion,
   runContextBridgeCycle,
   runContextBridgeLogTtlCli,
@@ -514,6 +515,24 @@ describe('retention executable gates', () => {
 });
 
 describe('context lane deletion fence', () => {
+  it('3b item 5: the live statfs instrument returns a finite positive figure for a real path (positive control)', () => {
+    const v = statfsFreeBytes(path.join(os.tmpdir(), 'x.verify'));
+    expect(Number.isFinite(v)).toBe(true);
+    expect(v).toBeGreaterThan(0);
+  });
+  it('3b item 5: a non-finite free-space reading refuses (the arm the comment leans on)', async () => {
+    const ctl = { query: vi.fn(async (sql: string) => {
+      if (sql.includes('SELECT id, state')) return { rows: [] };
+      if (sql.includes('INSERT INTO data_archive_manifest')) return { rows: [{ id: 'ctx-5' }] };
+      return { rows: [], rowCount: 1 };
+    }) };
+    const storage = { uploadWarmFile: vi.fn().mockResolvedValue({ checksum: 'ck', bytes: 10 }), downloadWarmFile: vi.fn(), isColdConfigured: vi.fn().mockReturnValue(true), uploadColdFile: vi.fn() };
+    const exportRes = { localPath: 'fake.gz', checksum: 'ck', sourceRowCount: 1, rowCount: 1, bytesCompressed: 10, minTs: month.start, maxTs: new Date('2026-01-01T00:00:01Z') };
+    const deps = contextDeps({ exportPartition: vi.fn().mockResolvedValue(exportRes), getStorageClient: vi.fn().mockReturnValue(storage), freeBytes: () => NaN });
+    await expect(exportAndUploadContextMonth({} as never, ctl as never, contextCfg, month, deps)).rejects.toThrow(/refused the read-back copy — NaN bytes free/);
+    expect(storage.downloadWarmFile).not.toHaveBeenCalled();
+    expect(storage.uploadColdFile).not.toHaveBeenCalled();
+  });
   it('3b item 5 r1: isWarmTooLarge reads only a real size rejection, never a stray "413"', () => {
     expect(isWarmTooLarge(new Error('[B75 storage-client] warm upload (file, small) failed: 413 Payload Too Large — x'))).toBe(true);
     expect(isWarmTooLarge(new Error('413 Payload Too Large'))).toBe(true);
