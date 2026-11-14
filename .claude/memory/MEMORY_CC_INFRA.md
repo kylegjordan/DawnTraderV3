@@ -7,7 +7,7 @@
 
 # ▶▶ CURRENT POSITION — READ THIS FIRST, BEFORE ANYTHING ELSE
 
-> ⭐ **166b evidence (KD-74/76) DELIVERED 11-13 21:01Z** → `Scope Files/B_XSTOCK_WEEKEND_POSTURE_KD74_EVIDENCE_2026-11-13.md`. OWED to NEW: (1) 11-14 01:00Z shutdown row (timer 01:10Z); (2) full-weekend crypto refusals + entries after 11-16 restart — reminder alert `fe5b5abd` 11-16 01:30Z. Read-only via `/home/deploy/w166b-pgq.py` + `w166b.sql`/`w166b_logs.py` on staging.
+> ⭐ **166b evidence (KD-74/76) DELIVERED 11-13 21:01Z** → `Scope Files/B_XSTOCK_WEEKEND_POSTURE_KD74_EVIDENCE_2026-11-13.md`. (1) 11-14 shutdown row DONE 01:10Z `2f45bdf14` (8 xStock/5 crypto; also corrected 10-31/11-07 double-count — closed_trades holds a NULL-closed_at row per OPEN position). OWED to NEW: (2) full-weekend crypto refusals + entries after 11-16 restart — reminder alert `fe5b5abd` 11-16 01:30Z. Read-only via `/home/deploy/w166b-pgq.py` + `w166b.sql`/`w166b_logs.py` on staging.
 > ✅ **BACK ON CLAUDE 2026-11-13 (S6, acked 13:16Z).** Codex shift handover: `pm/handovers/2026-11-13_codex-to-claude.md` Infra section. Weekend (KD-74): after Fri 21:00Z, read-only row-166b xStock-slot/crypto-capacity evidence + prior weekends + KD-76: every position open >7 days (strategy, asset class, age, unrealised result, slots held) → NEW Claude; close nothing, change nothing. No deploy/app restart 14:30-21:00Z today (NEW's price-feed window).
 > **A HEARTBEAT OR TIMER WAKE MEANS *RESUME*, NOT *REPORT*.** Read this block, then carry on from it.
 > **If BLOCKED-ON says Kyle, say NOTHING and do not work the item.**
