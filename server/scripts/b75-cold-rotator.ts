@@ -784,7 +784,14 @@ function acquireRotatorLockImpl(
     if (current !== holder && current !== '(gone)') return { kind: 'held', holder: current };
     inTakeover?.(); // test seam: the window Langston's reproduction delayed in — after the re-read, before the remove
     fs.rmSync(file, { force: true });
-    fs.writeFileSync(file, me, { flag: 'wx', mode: 0o600 });
+    try {
+      fs.writeFileSync(file, me, { flag: 'wx', mode: 0o600 });
+    } catch (e) {
+      // a fresh run's plain acquire (not a takeover — it needs no gate) can land between our rm and our create; it
+      // holds the lock now. HELD, not a throw that would end this run with no page (Langston, item 3 r2).
+      if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e;
+      return { kind: 'held', holder: fs.readFileSync(file, 'utf-8') };
+    }
     const back = JSON.parse(fs.readFileSync(file, 'utf-8')) as { pid?: unknown };
     if (back.pid !== process.pid) return { kind: 'held', holder: JSON.stringify(back) };
     return { kind: 'taken_over', holder };

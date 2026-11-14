@@ -568,6 +568,28 @@ describe('3b item 3 — the takeover itself is exclusive (Langston item 2 findin
     expect(kinds).toEqual(['held', 'taken_over']);
     expect(fs.existsSync(`${f}.takeover`)).toBe(false); // the gate is released
   });
+  it('a loser that reaches the gate AFTER the winner released it re-reads the holder and reads HELD (the likelier arrival)', () => {
+    // isAlive runs after the outer read and before the gate: writing a different, fresh holder there is the winner's
+    // completed takeover landing in between. Only the in-gate re-read can see it (Langston item 3 r2).
+    const f = path.join(tmp(), 'lock');
+    fs.writeFileSync(f, JSON.stringify({ pid: 999_999, host: os.hostname(), started_at: new Date().toISOString() }));
+    const winner = JSON.stringify({ pid: 31337, host: os.hostname(), started_at: new Date().toISOString() });
+    const r = acquireRotatorLock(f, () => { fs.writeFileSync(f, winner); return false; }, undefined, Date.now(), () => null);
+    expect(r.kind).toBe('held');
+    expect(JSON.parse(fs.readFileSync(f, 'utf-8')).pid).toBe(31337); // the winner's file is untouched
+  });
+  it('a fresh run that acquires between our remove and our create: we read HELD, never throw', () => {
+    const f = path.join(tmp(), 'lock');
+    fs.writeFileSync(f, JSON.stringify({ pid: 999_999, host: os.hostname(), started_at: new Date().toISOString() }));
+    const realRm = fs.rmSync;
+    vi.spyOn(fs, 'rmSync').mockImplementation(((p: fs.PathLike, o?: fs.RmOptions) => {
+      realRm(p, o);
+      if (p === f) fs.writeFileSync(f, JSON.stringify({ pid: 4040, host: os.hostname(), started_at: new Date().toISOString() }), { flag: 'wx' });
+    }) as typeof fs.rmSync);
+    const r = acquireRotatorLock(f, () => false, undefined, Date.now(), () => null);
+    expect(r.kind).toBe('held');
+    expect(r.kind === 'held' && r.holder).toMatch(/"pid":4040/);
+  });
   it('a takeover gate left by a run that died mid-takeover is cleared once stale, never blocking forever', () => {
     const f = path.join(tmp(), 'lock');
     fs.writeFileSync(f, JSON.stringify({ pid: 999_999, host: os.hostname(), started_at: new Date().toISOString() }));

@@ -158,7 +158,12 @@ async function main(): Promise<void> {
     const listing = await storage.listColdFileVersions(bucket, '', limits.setupMs);
     console.log(`[B75 cold-bind] listed ${listing.versions.length} version(s) in ${listing.pages} page(s) of ${bucket}; ${r.rows.length} unbound cold row(s); apply=${apply}`);
     for (const [seg, n] of otherOwnerCounts(listing.versions, ownPrefixes)) {
-      const who = COLD_NON_ARCHIVE_PREFIXES.get(seg) === 'ours-untracked' ? 'ours, not manifest-tracked (never an orphan)' : 'other owner (never touched)';
+      // an unrecognised first segment is UNKNOWN, not quietly "another owner" (Langston item 3 r2, carried for item 4:
+      // a mistyped namespace must surface). Item 4 takes its delete set from orphanVersions ONLY, never from these counts.
+      const kind = COLD_NON_ARCHIVE_PREFIXES.get(seg);
+      const who = kind === 'ours-untracked' ? 'ours, not manifest-tracked (never an orphan)'
+        : kind === 'other-owner' ? 'other owner (never touched)'
+        : 'UNKNOWN prefix — not an archive table, not a known owner (never touched; investigate)';
       console.log(`[B75 cold-bind] ${who}: ${seg}/ — ${n} stored version(s)`);
     }
     for (const o of orphanVersions(listing.versions, claimed, ownPrefixes)) {

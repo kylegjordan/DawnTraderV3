@@ -442,7 +442,7 @@ NEW Claude cleared the restart (no B-ENTRY-GATE activity since 07:06Z). The depl
   - `context_bridge_log/2026-01`: two byte-identical versions (one SHA-1, 13,901,237 B), bind the newest (2026-07-07T22:58:09Z) — the older (22:52:35Z) is RESIDUE (FINDING-2);
   - `failures=0`, and no download needed.
 - **`--apply` runs after deploy** (the script must be on the box). No staging deploy before NEW's 21:04Z read.
-Tests: 3b 60/60; 3a, harness and amendment2 93/93; tsc 324 = 324.
+Tests at r1 (`0f7960de7`): 3b 60/60; 3a, harness and amendment2 93/93; tsc 324 = 324 — superseded by the counts below.
 - **Item 3 r2, folded (Langston CHANGES at `0f7960de7`, Discord `1571103174138400800`):**
   - C-1: the takeover gate, as above.
   - C-2: CI is re-run on the new head.
@@ -454,3 +454,10 @@ Tests: 3b 60/60; 3a, harness and amendment2 93/93; tsc 324 = 324.
   - (a) The report prints the row's `created_at` against the chosen version's upload time (2026-01: 22:58:12.185Z vs 22:58:09.251Z).
   - (b) `COLD_NON_ARCHIVE_PREFIXES` = {`token-watch`: other owner, `_liveness`: ours untracked}. `ownColdPrefixes` REFUSES if a `source_table` collides with one. Both live in the binder module, where item 4 will read them.
   - Re-run report on staging: unchanged bindings, `failures=0`.
+  - Tests at r2 (`430c6264`): 3b 67/67, Langston re-derived (53 `it` plus a 14-row `it.each`); CI 43583857750 4/4 at that sha.
+- **Item 3 r3 (Langston CHANGES on one item at `430c6264`, Discord `1571107038229041224`):**
+  - The in-gate re-read was unfenced: deleting it left every test green. That repeated the r1 shape — the fence covered the half the gate already prevents.
+  - New fence: the winner's completed takeover lands between the outer read and the gate, through the `isAlive` seam, and the result is HELD with the winner's file untouched. Mutation (re-read removed) → red.
+  - A fresh plain acquire landing between our `rm` and our `wx` now reads HELD instead of throwing EEXIST out of `acquireRotatorLock` — which ended the run with no page. Fence plus mutation → red.
+  - An unrecognised bucket prefix prints as UNKNOWN, not "other owner". Carried for item 4: its delete set comes from `orphanVersions` only, never from the counts.
+  - Tests: 3b 69/69.
