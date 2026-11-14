@@ -237,3 +237,41 @@ Langston ruled the r1 plant rows `RULED ON REPORTED FACT` (the folder had been d
 | unverified | runs 1-2 print the `schedule_unverified` marker only; run 3 `DRY-ALERT crontab/schedule_unverified: 3 consecutive runs` |
 
 Production log after r2: 70,770 B (unchanged), 0 `PLANT` lines. Record correction from Langston folded above (the separate per-reason zeros). His no-work observation: `archival-health.log.1` does not exist on the box, so the rotated arm of `unverifiedStreak` reads a missing file every run (guarded). Not a defect.
+
+## Amendment 4, increment 3a — Step 6 deploy + Step 7: memory proof FAILS flatness; the upload half is the cause; Step 9 iterate
+**Step 6:** `415b3051f92f8fa315bacaf930b48c0a3b71ca0f` live 2026-11-14T06:18:45Z (restart 700, engine resumed, identity asserted); CI `43565391281` 4/4 on that exact sha. Migration applied in 855 ms. Its rollback was dry-run first in ONE transaction ending `ROLLBACK`:
+- before: 0 attestation columns, 0 constraint;
+- after forward: 4 columns, 1 constraint, cold 4 rows `sha256-roundtrip`, warm 6,417 rows NULL;
+- after the rollback file: 0 and 0;
+- after the transaction rollback: 0 and 0.
+
+Infra Claude cleared the deploy against its live memory run (capped unit).
+
+**Step 7 — AP-5 proof, `b75-cold-proof.ts` on the deployed build:**
+| object (manifest id) | bytes | peak RSS | min MemAvailable | proof version deleted |
+|---|---|---|---|---|
+| `43825287-…` `disk_file.diagnostic_reports/phase-41F-L-trace.ndjson` | 170,761,082 | 258,556 kB (252.5 MiB) | 2,095,712 kB | yes |
+| `0dfe1e0e-…` `crypto_spot_ticker_snap/2026-06` (largest warm object) | 535,409,768 | 619,044 kB (604.5 MiB) | 1,971,996 kB | yes |
+
+Against AP-5, verbatim: each run is under 1 GiB RSS (yes) with MemAvailable ≥ 512 MiB (yes), **but the two peaks must sit within 64 MiB of each other — they are 352 MiB apart. FAIL.** Peak memory grew roughly one-for-one with the object: +347.7 MiB of object for +352 MiB of RSS. Both proof versions and the probe version were deleted by file id. `data_archive_manifest` and the warm objects were untouched.
+
+**Where, measured per phase, one process each, same 535 MB object, deployed `storage-client.ts`:**
+- `downloadWarmFile`: 119,312 kB.
+- `hashFileSha256Sha1`: 107,160 kB.
+- `uploadColdFile` (to `_proof/probe3a/`, then deleted by id): **613,784 kB**.
+
+So the upload holds the object.
+
+**Why, reproduced without B2:** a local HTTP sink reading at ~25 MB/s (B2's measured rate), same 535 MB file.
+- Node 20.20.0 `fetch` with the exact `uploadColdFile` body (`Readable.toWeb(fs.createReadStream)`, `duplex: 'half'`, `Content-Length`): peak **632,304 kB**.
+- `node:http` request + `stream.pipeline` at the same rate: peak **110,844 kB**.
+
+A second control isolates the wrapper. `Readable.toWeb` read by a slow consumer, no network: 106,728 kB. So the wrapper applies backpressure; Node's `fetch` request-body path does not. It reads the file ahead into memory when the receiver is slower than the disk. The exact internal line is a HYPOTHESIS, not cited. The behaviour is measured.
+
+**Exposure today: none.** The scheduled rotator has 0 cold candidates until ~2027-05 (365-day warm retention). `uploadColdFile`'s `duplex` body is the only streamed-`fetch` upload in `server/` and `scripts/` (`git grep` at the ref).
+
+**Proposed fix (Step 9, to Langston):** `uploadColdFile` sends the body with `node:https` `request` + `stream.pipeline` — the same headers, the same response checks, `b2_get_file_info` unchanged.
+- **Fence:** a slow local sink plus a counting source. Assert the sender's read-ahead (bytes read minus bytes received, at its maximum) stays under a stated bound.
+- **Mutation:** put `fetch` back. The fence must fail.
+
+Then CI, deploy, and re-run the proof at both sizes.
