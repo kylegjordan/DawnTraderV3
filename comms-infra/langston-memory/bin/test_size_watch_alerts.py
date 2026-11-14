@@ -541,11 +541,17 @@ def test_state(tmp):
     for label, body in (("non-object", "123"), ("unparseable", "{not json"), ("empty", "")):
         with open(m.STATE, "w", encoding="utf-8") as fh:
             fh.write(body)
+        import contextlib, io
+        buf = io.StringIO()
         try:
-            rc = m.run(quiet=True)
+            with contextlib.redirect_stdout(buf):
+                rc = m.run(quiet=True)
         except Exception as exc:
             rc = "raised %s" % type(exc).__name__
         check("S-%s state: the run refuses with exit 2" % label, rc, 2)
+        out = buf.getvalue()
+        check("S-%s state: the refusal names the run log as the recovery and forbids a re-seed" % label,
+              "STATE-UNREADABLE" in out and m.RUNLOG in out and "NEVER move the state aside" in out, True)
         check("S-%s state: the file is untouched (no re-seed)" % label, open(m.STATE, encoding="utf-8").read(), body)
         check("S-%s state: no alert row was written" % label, len(store.calls), 0)
     os.remove(m.STATE)

@@ -642,10 +642,20 @@ def run(quiet=False, injected_total=None, injected_archive_bytes=None, drill_sto
         st = load_state()
     except StateUnreadable as e:
         # ⛔ NEVER RE-SEED OVER AN EXISTING STATE. Refuse, write nothing, and exit non-zero: the unit fails, the
-        #    heartbeat is not re-armed, so the absence of a good run pages within 26 h. Restore the state from its
-        #    backup or recreate it deliberately with --set-ceiling's history in hand.
+        #    heartbeat is not re-armed, so the absence of a good run pages within 26 h.
+        # ⛔ RECOVERY (Langston 1d): there is NO backup of this file (save_state keeps no copy; the backup dir in this
+        #    tool is the RULES file's) and --set-ceiling cannot recreate a state (it refuses on unreadable AND absent).
+        #    The durable record of the ceiling is the RUN LOG: every row carries ceiling_bytes. Rebuild the state by
+        #    hand from the LAST run-log row's ceiling_bytes, and resolve the open heartbeat row by hand (a rebuilt state
+        #    has no heartbeat_alert_id, so the next re-arm collapses onto the open row and keeps its old triggers_at).
+        #    NEVER move the state aside and run: a missing state is a first run, and it re-seeds at today's total -
+        #    the raise this refusal exists to prevent.
         print(json.dumps({"ts": iso(), "status": "STATE-UNREADABLE", "reason": str(e),
-                          "note": "the ceiling is not re-seeded over an existing state; nothing was written"},
+                          "note": "the ceiling is not re-seeded over an existing state; nothing was written",
+                          "recovery": ("rebuild " + STATE + " by hand with ceiling_bytes from the LAST row of " + RUNLOG +
+                                       " (there is no backup, and --set-ceiling cannot recreate a state); resolve the "
+                                       "open " + HEARTBEAT_KEY + " row by hand; NEVER move the state aside and run - "
+                                       "that re-seeds at today's total")},
                          indent=2, ensure_ascii=False))
         return 2
 
