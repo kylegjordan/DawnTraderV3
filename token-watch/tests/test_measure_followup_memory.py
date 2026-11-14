@@ -233,6 +233,24 @@ os.makedirs(os.path.join(run_root_l2, "state"), exist_ok=True)
 open(os.path.join(run_root_l2, "state", "periodic.lock"), "w").write("follow_up 1 2026-11-14T06:25:00+00:00")
 p, res = run("live", run_root_l2)
 check("A3 exit 16 on live too", p.returncode == 16, "rc=%s %s" % (p.returncode, p.stderr[-800:]))
+print("A4 expect: a NON-skipped empty hour (all 48 due buckets present and emptied) -> skipped False, due 0 -> exit 16")
+run_root_e, _ = prepare("run-empty")
+emptied = 0
+for fn in os.listdir(os.path.join(run_root_e, "due")):
+    open(os.path.join(run_root_e, "due", fn), "w").close()
+    emptied += 1
+p, res = run("all_shed", run_root_e)
+check("A4 exit 16 on an empty, unskipped hour", p.returncode == 16 and "skipped=False" in str(res.get("void"))
+      and res.get("stats", {}).get("buckets_read") == 48, "rc=%s emptied=%d %s" % (p.returncode, emptied, res.get("void")))
+print("A5 expect: --now 10 h early -> only part of the 48 buckets read -> VOID 'partial population', exit 17")
+run_root_p, _ = prepare("run-partial")
+early = (datetime.fromisoformat(NOW) - timedelta(hours=10)).isoformat()
+out_p = os.path.join(WORK, "partial.json")
+p = tool("run", "--arm", "all_shed", "--run-root", run_root_p, "--bodies", BODIES, "--now", early, "--out", out_p,
+         "--skip-memory-check", "--skip-egress-check", root=run_root_p)
+res = json.load(open(out_p)) if os.path.exists(out_p) else {}
+check("A5 exit 17 on a partial read", p.returncode == 17 and "partial population" in str(res.get("void"))
+      and 0 < res.get("stats", {}).get("buckets_read", 0) < 48, "rc=%s %s %s" % (p.returncode, res.get("void"), p.stderr[-600:]))
 
 # ── C1: the clock freeze is load-bearing ───────────────────────────────────────────────────────────────────────────
 print("C1 expect: arm all_shed WITHOUT the clock freeze -> the gate reads the wall month, opens -> VOID, exit 7")

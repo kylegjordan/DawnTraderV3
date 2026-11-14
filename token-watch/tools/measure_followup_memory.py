@@ -71,7 +71,7 @@ SUBCOMMANDS, each run as `tokenwatch`:
            exactly as `run` would, and nothing else. Its ru_maxrss sits beside the arms (Langston (d)).
 
 Exit: 0 done · 2 refused · 6 egress control · 7 all_shed control · 8 MemoryMax control · 9 served-share floor
-      · 10 clock-freeze control · 16 no work (due - requeued <= 0: every count control would pass by 0 == 0) · 11 arm sept NOT RUN (under 30 one-pair templates, the basis) · 12 fresh-parse
+      · 10 clock-freeze control · 16 no work (due - requeued <= 0: every count control would pass by 0 == 0) · 17 partial population (buckets read != 48) · 11 arm sept NOT RUN (under 30 one-pair templates, the basis) · 12 fresh-parse
       control (parses != served) · 13 arm sept control (wiring, alive below the reference, Helius range)
       · 14 derive-n: N VOID · 15 run_hour reported an error (a deterministic replay must have none).
 Arms xn (`--n`, the derived N: ceil(N) − 1 pad copies) and sept (`--shape`, §6 AMENDMENTS 1-2: classes under 30 real
@@ -846,6 +846,13 @@ def cmd_run(a) -> int:
         result["void"] = "no work: run_hour skipped=%s, due - requeued = %d; every count control would pass by 0 == 0" % (
             bool(stats.get("skipped")), expected)
         code = 16
+    elif stats.get("buckets_read") != BUCKETS:
+        # Langston r9 (c): cmd_run resets the cursor to FIRST_BUCKET - 1h, so the intended span is exactly BUCKETS.
+        # A --now short of the last bucket reads fewer, every control then passes against its own smaller `expected`,
+        # and a measurement over a fraction of the population would read as the whole one.
+        result["void"] = "partial population: read %s of the %d buckets (buckets_skipped_too_old %s)" % (
+            stats.get("buckets_read"), BUCKETS, stats.get("buckets_skipped_too_old"))
+        code = 17
     elif stats.get("errors"):
         # §6 AMENDMENT 2: a deterministic replay with a run_hour error is a harness defect by construction
         # (follow_up.py swallows exceptions into this count, where no other control can see them)
