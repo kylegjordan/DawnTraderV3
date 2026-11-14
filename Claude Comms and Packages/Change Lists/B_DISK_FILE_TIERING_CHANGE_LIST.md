@@ -199,3 +199,19 @@ Plus, not in the class matrix but owed: STORAGE_POLICY (incl. the `:100`/`:191` 
 - **Carried to Step 10 (SIM):** the rotator's free-space read (`statfs` of the home folder) and the tiering job's (`statfs` of `/`) are one disk on staging (`/dev/sda1`, device 2049) — measured by Langston; a box with a separate `/home` breaks that silently.
 - **Fence note (no change):** if the 64 MiB memory fence ever goes red on a correct build, raise the constant toward the 128 MiB object size — do not delete it. It is in-process Buffer memory against a fake B2, not RSS, and cannot stand in for AP-5.
 - **No unattended first contact:** 0 cold candidates until ~2027-05 (365-day warm retention, oldest active warm row 2026-05-06), so AP-5's function arm cannot be discharged by a scheduled run — it stays with the Step-7 proof runs.
+
+## Amendment 2 (AP-7) — Step 7 plant runs on the deployed build `9591ba8c2`, 2026-11-14 02:06:51-02:07:01Z — 9/9 as expected
+Procedure: copies (`cp -p`, mtimes kept) of the four real logs and the real root crontab into a private `0700` folder `/home/deploy/.ap7plant/<scenario>`; every run `su - deploy` with `--plant` and `ARCHIVAL_HEALTH_DRY=1`; each run's stdout appended to its scenario's OWN `archival-health.log`. Expected outputs were written into the script header before any run. Folder deleted after. **Production log untouched:** `/var/log/dawntrader/archival-health.log` still 69,489 B, mtime 2026-11-13T05:00:02, 0 `PLANT RUN` lines (control: 129 `DONE — all_ok` lines).
+| scenario | plant | result |
+|---|---|---|
+| base | real copies | 4/4 OK, `all_ok=true` |
+| notstarted | last tiering run removed | `disk-file-tiering/not_started` — last start 2026-11-12T02:45:03 < due 2026-11-13T02:45 |
+| incomplete | retention DONE removed | `b75-retention/incomplete` — start 2026-11-13T02:15:03 with no DONE after it |
+| failed | tiering DONE `failed=2` | `disk-file-tiering/failed`, quotes the DONE line |
+| drift (F3) | box crontab `50 1 * * *` | `schedule_drift` names `"50 1 * * *"` AND the run is graded on it: `stale` against due 2026-11-14T01:50 citing cron `"50 1 * * *"` (on the repo's `45 2` the same log is OK) |
+| notsched | tiering line commented | `not_scheduled`, then graded on `"45 2 * * *"` → OK |
+| rotate | REAL `logrotate -f` (rotate 1, create, notifempty, no dateext, no compress; private state file) | live empty, `.1` 732,866 B → OK — the run is found in `.1` |
+| rotatemid | start in `.1`, DONE alone in live | OK |
+| unverified | crontab file missing, 3 runs | runs 1-2 print the marker only; run 3 `DRY-ALERT crontab/schedule_unverified: 3 consecutive runs` |
+- Note, no work: a run whose only page is a schedule page (`not_scheduled`, `schedule_unverified`) still ends `all_ok=true`. The value has no reader — the watchdog reads only that a `DONE — all_ok=` line exists (`staging-liveness-watchdog.mjs:321`); the pages are the signal.
+- **Still owed for Step 7:** the first production run on this build, 2026-11-14 05:00Z — expect 4/4 OK with the crontab read via `sudo -n` (no `schedule_unverified` line).
