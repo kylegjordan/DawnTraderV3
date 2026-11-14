@@ -196,3 +196,24 @@ for rep in 1 2; do
 done
 echo "$(date -u +%FT%TZ) ALL DONE" >> "$LOG"
 ```
+
+### Step 7 — the ten arms: every one killed at the 512 MiB cap (Infra Claude, 2026-11-14 02:58-05:58Z, staging)
+**Driver r3** (`/root/p1_arms.sh`, sha256 `c536ac54…`, unit `tw-p1-arms-driver-r3`): the r2 text above plus two changes after rep1 `all_shed` ended `137` and r2 stopped on it. (1) `case $rc in 0|137)` — an OOM kill is a RESULT, recorded by the unit's own `Result`, and the driver goes on. (2) An arm whose `<arm>-unit.txt` already carries `^Result=` is skipped, so rep1 `all_shed` was not re-run. Installed tree for all ten: `/opt/token-watch-p1` = `cc2fa979f` (the riders in `dd235cfa9` are NOT installed; they change only probe validation and wording, and the tree stays fixed until the traced runs are done so every Step-7 run is on one tree). Every run was prepared fresh with `prepare --now 2026-10-02T13:00:00Z` and its run dir removed after; each `PREPARE.json` is kept beside its unit record in `/var/lib/token-watch-p1-runs/results/rep{1,2}/`.
+
+| rep | arm | unit | Result | ExecMainStatus | MemoryPeak (B) | runtime | CPU time |
+|---|---|---|---|---|---|---|---|
+| 1 | all_shed | `tw-p1-all_shed-20261114T025827` | oom-kill | 9 | 536,870,912 | 5m 07.3s | 1m 49.3s |
+| 1 | live | `tw-p1-live-20261114T030510` | oom-kill | 9 | 536,870,912 | 18m 23.5s | 7m 10.8s |
+| 1 | x4 | `tw-p1-x4-20261114T032345` | oom-kill | 9 | 536,870,912 | 18m 40.5s | 7m 19.1s |
+| 1 | xn (N = 13.1857) | `tw-p1-xn-20261114T034237` | oom-kill | 9 | 536,870,912 | 18m 59.6s | 7m 26.8s |
+| 1 | sept | `tw-p1-sept-20261114T040148` | oom-kill | 9 | 536,870,912 | 27m 06.8s | 10m 41.3s |
+| 2 | all_shed | `tw-p1-all_shed-20261114T042906` | oom-kill | 9 | 536,870,912 | 5m 04.4s | 1m 48.5s |
+| 2 | live | `tw-p1-live-20261114T043421` | oom-kill | 9 | 536,870,912 | 18m 23.8s | 7m 09.6s |
+| 2 | x4 | `tw-p1-x4-20261114T045255` | oom-kill | 9 | 536,870,912 | 18m 33.7s | 7m 16.9s |
+| 2 | xn (N = 13.1857) | `tw-p1-xn-20261114T051139` | oom-kill | 9 | 536,870,912 | 19m 16.6s | 7m 31.9s |
+| 2 | sept | `tw-p1-sept-20261114T053107` | oom-kill | 9 | 536,870,912 | 27m 22.9s | 10m 48.2s |
+
+Object: the transient unit of each run (`systemctl show` + `systemd-run --wait`'s own summary, written to `<arm>-unit.txt`). Population: all ten pre-registered runs, none dropped. **No run reached its own `--out` JSON** (it is written at the end), so no harness-side control result (egress count, call-site count, served share) exists for any of them; the egress and MemoryMax controls run BEFORE the replay and a failure there exits 6/8 with a void record, which none did.
+**What this does and does not say.** It reproduces 09-30: arm (a), zero egress by construction, is killed at the cap, which settles §0's memcg question in the direction the scope inferred (a kill at the unit's own cap, under the reply-independent arm). **The two reps agree to within 1.2 % in runtime per arm**, so the kill point is reproducible. Every arm is CPU-bound at the 40 % quota (CPU time ≈ 0.39 × runtime), so runtime is a proxy for work done before the kill, not for memory growth rate. ⛔ **The arms do NOT rank (b) vs (c) vs (c′) on memory: all three die at the same cap within 3 % of each other's runtime, which is what a reply-independent ceiling predicts and also what a common post-loop site predicts.** Where the memory goes is the traced runs' question, below. P2's done-line (arms (a) and (b) under 256 MiB) is not met by today's code, as expected.
+
+**lookup-baseline** (06:01Z, own unit `tw-p1-lookup-20261114T060130` with the arms' limits, fresh run dir): `lookups 361853`, `found 361853`, `ru_maxrss_kib 77796` (76.0 MiB), cgroup `memory_peak_incl_page_cache 126803968`, `memory_events {max 0, oom 0, oom_kill 0}`, `memory_max 536870912`. **The harness's own read path costs ≤ 76 MiB RSS**, so it cannot account for the 512 MiB kills (Langston (d)).
