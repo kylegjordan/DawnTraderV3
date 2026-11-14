@@ -552,6 +552,12 @@ def census(day_file: str, _idx=None):
     Returns rows carrying `mint` (corrected) and, where a substitution
     happened, `recorded_mint` (what was originally written) so the repair is
     auditable from the row itself rather than only from the index.
+
+    ⚠️ THIS IS THE EAGER FORM: it holds the WHOLE day file. A caller that keeps
+       only part of a day file uses `iter_census` instead -- the survivor walk's
+       +814k-block hold (P2b-1) was the caller's choice of this form, not a cost
+       in the store. Kept as the public default door the correction-naming rule
+       rests on (Langston, P2b-2 Step 4 part 2: disposition (1)).
     """
     return list(iter_census(day_file, _idx))
 

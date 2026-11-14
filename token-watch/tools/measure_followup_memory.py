@@ -987,8 +987,10 @@ def cmd_run(a) -> int:
         mwrap(summary, "dead_set")
         mwrap(summary, "_oldest_survivors")
         # ⭐ P2b-0 (Langston, P2a ruling (3) + P2b R2): INSIDE _oldest_survivors. summary binds _correction_index and
-        #    census (as store_census) by name, so those names are wrapped in summary; census itself calls
-        #    creator_stake_index and read_census_uncorrected through store's globals, so those are wrapped in store.
+        #    _oldest_in_file by name, so those are wrapped in summary; the lazy census read inside _oldest_in_file calls
+        #    creator_stake_index through store's globals, so that is wrapped in store. (Until P2b-2 the census was
+        #    wrapped as summary.store_census and the raw read as store.read_census_uncorrected; neither name is on this
+        #    path any more, so neither is wrapped - mwrap RAISES on a missing target.)
         #    Every mark carries allocated_blocks beside anon: a before/after pair whose blocks fall back is a TRANSIENT
         #    freed inside the call; blocks that stay up are RETAINED by something still referenced (R2).
         mwrap(summary, "_correction_index")
