@@ -23,6 +23,10 @@ MUTS = [
      [('            if name == "last_seen":' + NL + '                held["prev"] = value', '            pass')]),
     ("C-3 an existing sample file is appended to",
      [('        if os.path.lexists(a.sample):', '        if False:')]),
+    ("FOLD-2 a timed-out join reads as stopped",
+     [('        joined = self.thread.ident is None or not self.thread.is_alive()', '        joined = True')]),
+    ("FOLD-2 writes after close are not dropped",
+     [('            if self.closed:', '            if False:')]),
     ("A-3 len_prev probe dropped",
      [('        sampler.probes["len_prev"] = ', '        _unused = ')]),
 ]

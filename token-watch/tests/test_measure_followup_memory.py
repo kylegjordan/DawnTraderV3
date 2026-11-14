@@ -446,8 +446,9 @@ lo, hi = (mark_seqs[0], mark_seqs[-1]) if mark_seqs else (0, 0)
 check("S1 the sample stream runs: >= 2 samples, one between the first and last named marker", len(samples) >= 2
       and any(lo < s < hi for s in samples), "samples=%d marks %s..%s between=%s" % (len(samples), lo, hi,
                                                                                   [s for s in samples if lo < s < hi][:3]))
-check("S1 end says the sampler thread was alive and raised nothing", lines and lines[-1].get("thread_alive") is True
-      and lines[-1].get("thread_error") is None, str({k: lines[-1].get(k) for k in ("thread_alive", "thread_error")} if lines else {}))
+check("S1 end says the sampler thread was alive, raised nothing and stopped", lines and lines[-1].get("thread_alive") is True
+      and lines[-1].get("thread_error") is None and lines[-1].get("joined") is True,
+      str({k: lines[-1].get(k) for k in ("thread_alive", "thread_error", "joined")} if lines else {}))
 # F-4: the markers NEST - _latest_observations and _identity_map run inside _oldest_survivors (via _enrich), inside build
 nest = ["before-summary.build", "before-summary._oldest_survivors", "before-summary._latest_observations",
         "after-summary._latest_observations", "before-summary._identity_map", "after-summary._identity_map",
@@ -465,6 +466,26 @@ check("S1 post-prune len_prev = loop size minus last_seen_pruned (the pre-prune 
       post.get("len_prev") == end_mark.get("len_prev", -1) - res.get("stats", {}).get("last_seen_pruned", 0),
       "loop-end len_prev=%s pruned=%s before-promote len_prev=%s" % (end_mark.get("len_prev"),
       res.get("stats", {}).get("last_seen_pruned"), post.get("len_prev")))
+
+# ── S4: FOLD-2 - a join that times out is reported (joined false); after close() no write lands ─────────────────────
+print("S4 expect: a sampler whose thread will not stop reports joined=false on end; a write after close is dropped")
+s4f = os.path.join(WORK, "s4.jsonl")
+s4 = mfm.Sampler(s4f, None, 3600)
+s4.start()
+s4.stop.set = lambda: None                              # the thread never sees the stop, so the join times out
+real_join = s4.thread.join
+s4.thread.join = lambda timeout=None: real_join(timeout=0.05)
+s4.close()
+try:
+    s4.write("late")                                    # after close: must not raise and must not land
+    late_err = None
+except Exception as exc:                                # a write on the closed fd (or on a reused fd number)
+    late_err = "%s: %s" % (type(exc).__name__, exc)
+check("S4 a write after close is dropped, not attempted", late_err is None, str(late_err))
+l4 = [json.loads(x) for x in open(s4f, encoding="utf-8")]
+check("S4 end carries joined=false", l4 and l4[-1].get("kind") == "end" and l4[-1].get("joined") is False, str(l4[-1:] if l4 else l4))
+check("S4 nothing after end", [x["kind"] for x in l4][-1] == "end", str([x["kind"] for x in l4]))
+s4.stop.__class__.set(s4.stop)                          # let the daemon thread finish
 
 # ── S3: an existing sample file is refused, never appended to (C-3); a zero interval is refused (nit) ─────────────
 print("S3 expect: --sample at an existing path -> exit 2, file untouched; --sample-interval 0 -> exit 2")

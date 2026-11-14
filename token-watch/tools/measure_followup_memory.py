@@ -636,6 +636,7 @@ class Sampler:
         # O_EXCL: an existing file is refused, never appended to (C-3) - cmd_run refuses first with a clear message
         self.fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_APPEND, 0o644)
         self.thread_error = None
+        self.closed = False
         self.lock = threading.Lock()
         self.stop = threading.Event()
         self.probes = {}                                # name -> zero-arg callable, read at every MARKER
@@ -664,6 +665,8 @@ class Sampler:
         import time
         rec = {"t": round(time.time(), 3), "kind": kind, **self.read(), **extra}
         with self.lock:
+            if self.closed:                             # FOLD-2: after close() the fd number may belong to another file
+                return
             self.seq += 1
             rec["seq"] = self.seq
             data = (json.dumps(rec, sort_keys=True, default=str) + "\n").encode("utf-8")
@@ -695,8 +698,12 @@ class Sampler:
         self.stop.set()
         if self.thread.ident is not None:               # a thread that never started is reported, not joined
             self.thread.join(timeout=max(5.0, 2 * self.interval))
-        self.write("end", thread_alive=alive, thread_error=self.thread_error)
-        os.close(self.fd)
+        # FOLD-2 (Langston): a join that timed out must not read as healthy - `joined` says whether the thread stopped
+        joined = self.thread.ident is None or not self.thread.is_alive()
+        self.write("end", thread_alive=alive, thread_error=self.thread_error, joined=joined)
+        with self.lock:                                 # no sampler write can land on a reused fd number after this
+            self.closed = True
+            os.close(self.fd)
 
 
 def cmd_run(a) -> int:

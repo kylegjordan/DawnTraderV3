@@ -22,12 +22,17 @@ for arm in all_shed live; do
   if [ -e "$RES/$arm-unit.txt" ] && grep -q '^Result=' "$RES/$arm-unit.txt"; then
     echo "$(date -u +%FT%TZ) SKIP $arm: a result already exists in $RES (move it aside to re-run)" >> "$LOG"; continue
   fi
+  RUN=/var/lib/token-watch-p1-runs/run-$arm-p2a   # set before updater_ok: it is read there under set -u (FOLD-1)
   updater_ok() {   # (Langston nit) checked again right before the arm: prepare runs inside the margin and eats it
     NEXT=$(systemctl show apt-daily-upgrade.timer -p NextElapseUSecRealtime --value)
     NEXT_S=$(date -u -d "$NEXT" +%s 2>/dev/null) || { echo "$(date -u +%FT%TZ) STOP: cannot read the updater's next elapse ('$NEXT')" >> "$LOG"; exit 1; }
     END_S=$(( $(date -u +%s) + ALLOW_S + MARGIN_S ))
     if [ "$NEXT_S" -le "$END_S" ]; then
-      echo "$(date -u +%FT%TZ) REFUSED $arm ($1): apt-daily-upgrade next elapse $NEXT falls inside this arm's window (ends $(date -u -d @$END_S +%FT%TZ))" >> "$LOG"; exit 3
+      echo "$(date -u +%FT%TZ) REFUSED $arm ($1): apt-daily-upgrade next elapse $NEXT falls inside this arm's window (ends $(date -u -d @$END_S +%FT%TZ))" >> "$LOG"
+      # FOLD-1 (Langston): prepare REFUSES an existing --run-root, so a refusal after prepare must remove the run dir or
+      # every later invocation stops at the prepare guard until someone deletes it by hand
+      if [ -e "$RUN" ]; then rm -rf --one-file-system "$RUN" && echo "$(date -u +%FT%TZ) removed $RUN after the refusal" >> "$LOG"; fi
+      exit 3
     fi
   }
   updater_ok "before prepare"
@@ -36,7 +41,6 @@ for arm in all_shed live; do
     mv "$RES/$arm-samples.jsonl" "$RES/$arm-samples.jsonl.void-$(date -u +%Y%m%dT%H%M%SZ)"
     echo "$(date -u +%FT%TZ) moved a previous $arm-samples.jsonl aside (a re-run is a new population)" >> "$LOG"
   fi
-  RUN=/var/lib/token-watch-p1-runs/run-$arm-p2a
   echo "$(date -u +%FT%TZ) START p2a $arm (updater next $NEXT) free=$(df -B1 --output=avail / | tail -1)" >> "$LOG"
   sudo -u tokenwatch env TOKEN_WATCH_ROOT=/var/lib/token-watch-scratch PYTHONDONTWRITEBYTECODE=1 \
     /usr/bin/python3 "$H" prepare --pristine /var/lib/token-watch-scratch --run-root "$RUN" --now "$NOW" >> "$LOG" 2>&1
