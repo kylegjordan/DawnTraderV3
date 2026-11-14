@@ -1,11 +1,11 @@
 # B-ENTRY-GATE (`#1224`) — PROGRESS REPORT
 
-## OPEN — increment B remains reviewed but unlanded
+## OPEN — both increments live and verified; the xStock week read (2026-11-20) is owed
 
-**Owner:** CC-B / NEW Codex (`codex-b`)
+**Owner:** CC-B (NEW Codex for increment A; NEW Claude for increment B)
 **Change-class:** `architecture`
 **Plan home:** CC-B pre-sprint list item 2
-**Parent state:** OPEN — increment A is live and verified; increment B still requires landing, deployment, its registered first-full-session read, review and closure.
+**Parent state:** OPEN (board column Observation) — increment A live and verified (Coltrane `56509024d`); increment B live since 2026-11-13 and verified on its 24 h read (Langston Step-8 PROCEED, Review = Approved, 2026-11-14). The parent closes after the xStock week read, alert `7de9caf9` (2026-11-20T21:04Z).
 
 ## 1. What the batch is for
 
@@ -14,7 +14,7 @@
 The parent was split deliberately:
 
 - **Increment A — fill-time contract:** live and verified.
-- **Increment B — SQE, refresh and promotion contract:** Step-4 reviewed at `20404d0a4`, deliberately unlanded until increment A completed its first-full-session evidence and governance boundary.
+- **Increment B — SQE, refresh and promotion contract:** live since `77f6fd598` (2026-11-13T21:03:55Z) and verified on its 24 h read; its xStock-only arms are read in the week to 2026-11-20.
 
 ## 2. Increment A — what shipped
 
@@ -69,17 +69,28 @@ The `ev_reject` drift-event cell is **UNVERIFIED**, not zero or pass. The sessio
 
 Increment A changes which fills enter the paper/VTS outcome populations, so it has a named calibration impact. No calibration epoch was bumped: this is an explicit entry-policy boundary, not a retuning of a learned estimator, and every evidence window is split at the deploy. Increment B receives a new post-deploy session of its own; no pre/post population is blended across either boundary.
 
-## 6. Increment B — unproven and required before parent close
+## 6. Increment B — what shipped and what its first 24 h showed
 
-Increment B remains at reviewed ref `20404d0a4`. It has not been landed, deployed or observed, so none of the following is claimed live:
+**Shipped** (landed `9d903ea9c` after Langston's Step-4 r5 re-review of the rebase; CI `43467219963` 4/4 on the candidate branch; deployed in OLD Claude's joint deploy `77f6fd598` 2026-11-13T21:03:55Z, restart 698, CI `43505196746` 4/4 at that sha): the SQE plan gates `InvalidTarget` and `EntryWindow` (shadow at birth, enforced on the refresh, judged only for a taker-chosen plan) and `NetEVMissing`; refresh re-pricing of the fixed plan at the live ask (`repriceAtAsk`); `last_priced_at` + `consecutive_unpriced_passes` and the promotion freshness gate (crypto 300000 ms; xStock unseeded); the stale-plan limit's reader (no row ⇒ off); the reward-to-risk/target gate moved ahead of the queue write (`#1051`); three ESM `require()` defects fixed (the TCL event trace writes again). Migration objects verified on staging after the restart.
 
-- the SQE birth `EntryWindow` shadow and its class-separated would-refuse share;
-- refresh re-pricing of net EV, maker/taker choice and the fixed plan;
-- priced-pass state and promotion freshness;
-- target normalisation/reachability before the queue write;
-- the SQE `InvalidTarget` and `NetEVMissing` rules;
-- the stale-plan limit and exploration-prefix pins;
-- the additional ESM diagnostic writers.
+**Step 7 — the 24 h read** (2026-11-13T21:03:55Z → 11-14T21:04:00Z; object `/root/b-entry-gate-incb-step7-interim-20261114/window-24h.txt`, 355 lines, sha256 `a920643a…5b87`; record `Change Lists/B_ENTRY_GATE_STEP4_INC_B_CHANGE_LIST.md`, commits `7d1ab3919`, `d59215892`, `0c4a50402`), against the change list's pre-registered list:
+| registered measurement | result |
+|---|---|
+| P6 eviction stream (refresh deletions failing only `NetEV ` at the ask, vs A-4's 41 RegimeWeight deletions) | **0** on 325 priced passes (0 unpriced); refresh deletions of any kind 1 (RegimeWeight). On crypto the ask has no decision authority by configuration (below). |
+| P2 EntryWindow with full denominator | birth crypto 553 outcomes, 0 judged; birth xStock 5, 1 judged (pass); refresh crypto 325, 0 judged. No refusal in the whole window; "judged 0" on crypto holds by entailment. |
+| P2 InvalidTarget | refresh 0; birth 0 failures in 558 checks (carrier control: 180 all-retention rows, both classes). |
+| P7 crypto unpriced refusals | 42 on 20 newborn rows, each lasting ≤ 60 s until its first refresh priced it; the 300 s ceiling never bound. |
+| P7 xStock week | owed — alert `7de9caf9`, 2026-11-20. |
+| P9 TCL trace | `logs/tcl_event_trace_<date>.log` exists and grows (4,642 B by 20:54Z on 11-14); OLD Claude told. |
+
+**Window integrity:** one build across five processes (four deploys in the window, none touching an increment-B file); hour lines print lazily, so hours with no line were empty, and the tallies lost at restarts are named in the record. A sixth deploy (`7c5b45c67`, 21:15Z) fell after the window and changes no increment-B file.
+
+**Step 8:** Langston re-derived the read, sent back four record edits (all folded), and gave PROCEED on the increment (msg 1571289502301814885); Review = Approved on the board.
+
+**What this window does not establish:**
+- ⚠️ **Crypto runs `maker_taker.entry_fill_policy = maker_only`, so EntryWindow's judged arm and P6's at-ask taker test cannot be reached on crypto at all.** Both are xStock-only today. Whether crypto stays `maker_only` is Kyle's decision; Langston proposes it for his list (not placed).
+- The xStock promotion ceiling is unseeded; its value is decided by the week's record against the prediction filed before it.
+- **Increment A carry:** the three inc-A resting-maker watch-only lines in the window (`MAKER_WOULD_CANCEL`, all `outcome=fill`) include UAI at `max_adverse_r = 0.9763` — a fill nearly a full planned risk adverse — recorded for the parent's close.
 
 ## 7. Pre-registered parent close criterion
 
@@ -93,11 +104,14 @@ The parent may convert this file to `B_ENTRY_GATE_COMPLETION_REPORT.md` only aft
 6. Coltrane independently confirms the evidence at an exact pushed ref;
 7. Step 9 rechecks the whole parent objective set, Step 10 reconciles governance again, and Step 11 records both the increment-B data and the action/decision taken on it.
 
+**Status against this criterion, 2026-11-14 (written before the xStock week's data):** (1) ✅ not byte-identical — the rebase onto `dc18a0228` was re-reviewed by Langston at Step-4 r5 and landed as `9d903ea9c`; (2) ✅ CI `43467219963` (candidate) and `43505196746` (deployed sha) each 4/4; (3) ✅ deployed `77f6fd598`, restart 698, identity and migration objects recorded; (4) ◑ crypto half read (§6); the xStock half — P7's five predictions, P2's birth-shadow would-refuse share for the live-switch decision, the EntryWindow judged arm and the P6 taker arm (prediction file items 1-7) — is read on 2026-11-20; (5) nothing has failed yet; (6) ◑ increment B's second pass was Langston's (Coltrane off shift), PROCEED with Review = Approved — the xStock week read gets its own second pass; (7) open.
+
 ## 8. Governance files changed so far
 
-Scope, pre-audit, increment-A and increment-B change lists, Step-7 evidence, this progress report, BATCH_CATALOG.md, PHASE_HISTORY.md, SPRINT_TO_LIVE_PLAN.md, MEMORY.md, MEMORY_CC_B.md, CC_B_SESSION_TASK_LIST.md, SYSTEM_MANUAL.md, SYSTEM_IMPACT_MAP.md, RUNNING_ISSUES.md, CHANGES_AND_FIXES.md, ADJUSTMENT_FRAMEWORK.md, ASSET_CLASS_ONBOARDING_WORKFLOW.md, DELETED_COMPONENTS_LOG.md and GOVERNANCE_EXCEPTIONS.md.
+Increment A (2026-11-10, landed on `migration/aws-supabase` 2026-11-14 at `1bb10641b`): scope, pre-audit, increment-A change list and Step-7 evidence, this progress report, BATCH_CATALOG.md, PHASE_HISTORY.md, SPRINT_TO_LIVE_PLAN.md, CC_B_SESSION_TASK_LIST.md, SYSTEM_MANUAL.md, SYSTEM_IMPACT_MAP.md, RUNNING_ISSUES.md, CHANGES_AND_FIXES.md, ADJUSTMENT_FRAMEWORK.md, ASSET_CLASS_ONBOARDING_WORKFLOW.md, DELETED_COMPONENTS_LOG.md, GOVERNANCE_EXCEPTIONS.md, Langston's MEMORY.md (its MEMORY.md and MEMORY_CC_B.md edits were not carried: stale by landing time).
+Increment B (2026-11-14): increment-B change list, `Langston Design Asks/B_ENTRY_GATE_P7_XSTOCK_PREDICTION.md` (items 6-7), this progress report, BATCH_CATALOG.md, PHASE_HISTORY.md, SPRINT_TO_LIVE_PLAN.md, CC_B_SESSION_TASK_LIST.md, SYSTEM_MANUAL.md, SYSTEM_IMPACT_MAP.md, RUNNING_ISSUES.md, CHANGES_AND_FIXES.md, ADJUSTMENT_FRAMEWORK.md, GOVERNANCE_EXCEPTIONS.md, MEMORY_CC_B.md, Langston's MEMORY.md. Ledger: §10.
 
-## 9. Tier ledger
+## 9. Tier ledger — increment A (2026-11-10)
 
 CHANGE-CLASS: architecture
 
@@ -134,3 +148,40 @@ CHANGE-CLASS: architecture
 | T2 | `ALERT_HANDLING_PROTOCOL.md` | N/A | No ack, resolve, routing or alert-lifecycle process changed. |
 | T2 | `DELIVERY_BOARD_PROTOCOL.md` | N/A | No board field, column or ownership rule changed. |
 | T2 | `CLAUDE_CODE_FEATURE_WATCH.md` | N/A | The daily model/feature check did not run in this governance turn. |
+
+## 10. Tier ledger — increment B (2026-11-14)
+
+CHANGE-CLASS: architecture
+
+| # | document | verdict | one-line result |
+|---|---|---|---|
+| T1 | `BATCH_CATALOG.md` | ✅ | Added what increment B shipped and verified, and re-stated why the parent is open. |
+| T1 | `PHASE_HISTORY.md` | ✅ | Added the plain-language increment-B entry. |
+| T1 | active plan `SPRINT_TO_LIVE_PLAN.md` | ✅ | Row 2 of the CC-B list now names increment B live and the 11-20 read. |
+| T1 | `PHASE_19_PLAN.md` | N/A | B-ENTRY-GATE has no row in PHASE_19_PLAN; the sprint plan is its authority. |
+| T1 | shared `MEMORY.md` + `MEMORY_CC_B.md` | ✅ | Updated my position block; the shared file sits 32 B under its 24,576 B cap, so no line was added there. |
+| T1 | batch `SCOPE` | ✅ | Unchanged; objectives 2, 5-8, 11-12 are increment B's and are graded in §6. |
+| T1 | batch `PRE_AUDIT` | ✅ | Unchanged; its increment-B addendum (r10-r13) defines P2, P6-P11. |
+| T1 | `COMPLETION_REPORT` | ✅ | This progress report updated in place: §6 rewritten, §7 status, §8, §10. |
+| T1 | four session task lists | ✅ mine / N/A ×3 | Updated CC_B_SESSION_TASK_LIST.md; CC_A, CC_C and CC_INFRA lists are not mine. |
+| T1 | Langston `/home/langston/MEMORY.md` | ✅ | Replaced the increment-A line with one covering both increments; loaded set 143,407 → 143,394 B (ceiling 143,856). |
+| T2 | `SYSTEM_MANUAL.md` | ✅ | Added the increment-B section and three SQE gate rows (InvalidTarget, EntryWindow, NetEVMissing). |
+| T2 | `SYSTEM_IMPACT_MAP.md` | ✅ | Added increment-B bullets to the orchestrator, SQE and RTB entries (new columns, readers, couplings). |
+| T2 | `RUNNING_ISSUES.md` | ✅ | Annotated `#1224` with increment B live, the 24 h result and the 11-20 home. |
+| T2 | `CHANGES_AND_FIXES.md` | ✅ | Registered FIX-2026-11-13-A (gate after queue write, no live-price re-check, dead fail-open, ESM requires). |
+| T2 | `POST_AUDIT_ROADMAP.md` | N/A | No phase-level order changed. |
+| T2 | `ADJUSTMENT_FRAMEWORK.md` | ✅ | Registered `promotion_price_max_age_ms` and `rtb_plan_max_age_ms` and their absent-row-means-off rule. |
+| T2 | `AUTHORITY_BASELINE.md` | N/A | Admission gating only; no constitutional authority or operator power changed. |
+| T2 | `STORAGE_POLICY.md` | N/A | Two new columns on an existing queue table; no retention or tier changed. |
+| T2 | `MULTI_ASSET_VTS_EXPANSION_PLAN.md` | N/A | Reviewed the 15-minute working list; increment B touches no VTS path. |
+| T2 | `ASSET_CLASS_ONBOARDING_WORKFLOW.md` | N/A | No new onboarding learning; the per-class promotion row follows increment A's coupled-row learning. |
+| T2 | `BUILD_METHOD_PLAYBOOK.md` | N/A | No role or gate changed. |
+| T2 | `LANGSTON_ARCHITECTURE.md` | N/A | No reviewer runtime, model, auth or read path changed. |
+| T2 | `CLAUDE.md` / `CONDUCT.md` | N/A | No stable rule changed. |
+| T2 | `_archive/CLAUDE_MD_RULE_HISTORY.md` | N/A | No CLAUDE.md rule changed. |
+| T2 | `DELETED_COMPONENTS_LOG.md` | N/A | Increment B removes no module, function, route or type: the SQE's fail-open branch was replaced in place by the `NetEVMissing` refusal (`d37269559`), and the three `require()` calls became imports. |
+| T2 | `MISTAKE_PATTERNS.md` | N/A | Three `MISTAKE: wrong-object` trailers written (`7d1ab3919`, `d59215892`, `0c4a50402`) for CC-A's weekly pass; wrong-object is already §13 item 1. |
+| T2 | `GOVERNANCE_EXCEPTIONS.md` | ✅ | Re-justified the open row for the 11-20 read and recorded that this report was stranded on a side branch until `1bb10641b`. |
+| T2 | `ALERT_HANDLING_PROTOCOL.md` | N/A | No alert process changed. |
+| T2 | `DELIVERY_BOARD_PROTOCOL.md` | N/A | No board field or rule changed. |
+| T2 | `CLAUDE_CODE_FEATURE_WATCH.md` | N/A | The daily check did not run in this turn. |

@@ -1,5 +1,13 @@
 # DawnTrader: Changes, Fixes & Improvements Registry
 
+## FIX-2026-11-13-A — `B-ENTRY-GATE` increment B (`#1224`, CC-B / NEW Claude) — a plan the target gate refused could already be in the queue, and the queue never re-asked its economics at the live price
+
+**CLASS: `architecture`. SYMPTOM:** the orchestrator wrote the RTB row before the reward-to-risk/target-reach gate ran in the same function (`#1051`); the refresh re-decided the maker/taker choice only at the plan price; promotion checked no freshness at all; an absent stored net EV passed the SQE by a dead fail-open; and three `require()` calls of Node built-ins threw in the ESM bundle, silencing the TCL event trace.
+
+**FIX:** the target gate now runs before the queue write and the row stores the gated target; `InvalidTarget`, `EntryWindow` (birth shadow, refresh enforced) and `NetEVMissing` joined both SQE copies; every priced refresh pass re-prices the fixed plan at the live ask; promotion requires a priced pass inside `entry_gate.promotion_price_max_age_ms` (crypto 300000 ms; xStock unseeded); the three `require()` calls became imports behind a server-wide fence.
+
+**Verified:** deployed `77f6fd598` 2026-11-13T21:03:55Z; the 24 h read showed 0 wrongful refusals or evictions (325 priced passes, 1 RegimeWeight deletion, 558 target checks with 0 failures) and the TCL trace writing again; Langston Step-8 PROCEED. The xStock-only arms are read on 2026-11-20. Record: `Batch Completion/B_ENTRY_GATE_PROGRESS_REPORT.md`.
+
 ## FIX-2026-11-11-A — `B-B75-SCRIPT-TEST-HARNESS` (`#1208`, CC-B): context archive reuse could reach the cutoff delete without a final complete-population proof
 
 **CLASS: `non_architecture`. SYMPTOM:** the four B75 command files ran their process entry at import, so tests could assert source structure but could not execute their command and orchestration gates against fakes. During that conversion the context lane exposed a real safety gap: its reuse recount happened before the final cutoff delete, on a separate client, and did not prove that every old month reachable by the delete had been enumerated and guarded.
