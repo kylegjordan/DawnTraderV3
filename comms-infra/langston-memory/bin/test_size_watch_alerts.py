@@ -460,9 +460,22 @@ def test_guard(tmp):
         fh.write("{not json at all\n")
     m.run(quiet=True)
     check("G9c a complete line that does not parse: a blind row", len(store.active(GB)), 1)
-    check("G9c the body says it does not parse", "do not parse" in store.active(GB)[0]["body"], True)
+    check("G9c the body says it does not parse", "do not parse as a guard row" in store.active(GB)[0]["body"], True)
     store.hand_resolve(GB)
     m.run(quiet=True)                                  # the bad line is behind the offset now: nothing left active
+    store.hand_resolve(GB)
+
+    # G9e. fold-in 1b: a complete line of valid JSON that is not a row (`123`) is a bad line, never a crash
+    with open(m.GUARD_LOG, "a", encoding="utf-8") as fh:
+        fh.write("123\n")
+    try:
+        rc9e = m.run(quiet=True)
+    except Exception as exc:                           # the defect: AttributeError out of guard_check
+        rc9e = "raised %s" % type(exc).__name__
+    check("G9e a non-row JSON line does not crash the run", rc9e, 1)
+    check("G9e and it raises a blind row", len(store.active(GB)), 1)
+    store.hand_resolve(GB)
+    m.run(quiet=True)
     store.hand_resolve(GB)
 
     # G9d. fold-in 1a: an unparseable line whose blind add FAILED is not consumed - the offset holds, the next healthy

@@ -475,6 +475,9 @@ def guard_check(st):
             except ValueError:
                 bad += 1
                 continue
+            if not isinstance(r, dict):                 # (Langston 1b) valid JSON that is not a row: `123` crashed .get
+                bad += 1
+                continue
             if r.get("verdict") != "refused":
                 continue
             cls = refusal_class(r.get("message") or "")
@@ -486,7 +489,7 @@ def guard_check(st):
         g["log_ok"] = True
         g["bad_lines"] = bad
         if bad:
-            g["blind"].append("%d line(s) of %s from byte %d do not parse as JSON" % (bad, GUARD_LOG, off))
+            g["blind"].append("%d line(s) of %s from byte %d do not parse as a guard row" % (bad, GUARD_LOG, off))
     except FileNotFoundError:
         g["log_ok"] = True          # installed but never written: no rows is a measured zero, the file is created on install
         g["offset_from"] = g["offset_to"] = 0
