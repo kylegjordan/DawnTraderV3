@@ -423,3 +423,22 @@ There is no single envelope, so a candidate running exactly at the floor on both
 - **A 429 with a non-JSON body is fatal** under amendment 3 — exactly a proxy or CDN 429. Taxonomy outcome (2), working as designed but unaddressed: a scope decision for 3c (the budget-aware scheduler), not a fix here.
 
 **Step 11 must say, in these words:** everything in 3b item 1 — the retry, the lock, the deferral page and the failure page — is fence-only. No live silence from any of them is evidence that it fires (#661 leg 3).
+
+### Amendment 4 — 3b item 1, Step 4 r2 (Langston CHANGES at `c5dc6c331`, Discord `1571082923287912560`): the per-candidate envelope as a term list
+**PREVIOUSLY STATED → NOW:** r1 gave "41.1 min". **That figure is withdrawn and no single replacement is stated.** Langston: r1 itself raised the honoured Retry-After to `cold_upload_setup_ms`, and the `get_file_info` retry had no term. The envelope is stated as its terms instead, so the next change to any one moves the total by construction.
+
+With S = `cold_upload_setup_ms`, F = `cold_body_min_bytes_per_s`, B = object bytes, A = 3 attempts:
+| term | bound |
+|---|---|
+| warm read (once, not retried) | S + B ÷ F |
+| pre-retry authorize + list_buckets (each its own retry) | per call: A × S + 2 inter-attempt sleeps |
+| per upload attempt: get_upload_url | S |
+| per upload attempt: body | S + B ÷ F |
+| inter-attempt sleep (×2 per retried call) | backoff ≤ 4 s plus jitter, or a Retry-After capped at **S** on the upload path |
+| get_file_info after a successful upload (its own retry) | A × S + 2 sleeps capped at S |
+
+Langston's re-derivation at today's values (S = 60 s, F = 1 MiB/s, B = 535,409,768 B): about 46.6 min when all three upload attempts fail, about 52.1 min when the third succeeds and is followed by a retried `get_file_info`. The pre-retry authorize adds up to 186.25 s. 20 h ÷ the binding branch = **23 candidates**, not 29. The conclusion is unchanged and strengthened: the run deadline binds long before the 6,000 cap, and the first-deferral page catches it.
+
+**Folded:**
+1. archival-health's deferral page names `overhead_ms_per_candidate`, the field the RUN line actually writes.
+2. The C-2 fence now covers `list_buckets`: one variant deletes `B2_BUCKET_ID` so the call is fetched. Mutation (its signal removed) → red. The claim "the enumerated set is what the fence tests" now holds for all four JSON calls.

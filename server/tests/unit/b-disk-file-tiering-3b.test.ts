@@ -118,7 +118,7 @@ describe('3b — withB2Retry: bounded, ordered, and honest about what it retries
  * error body; 'ok' stores and attests; 'badsha' answers 200 with a wrong contentSha1.
  */
 async function fakeB2(uploadScript: Array<number | 'ok' | 'badsha'>, infoScript: Array<number | 'ok'> = ['ok']) {
-  const seen = { uploadUrls: 0, uploads: 0, infos: 0, authorizes: 0, unsignalled: [] as string[] };
+  const seen = { uploadUrls: 0, uploads: 0, infos: 0, authorizes: 0, listBuckets: 0, unsignalled: [] as string[] };
   let stored: { fileName: string; sha1: string; len: number } | null = null;
   const server = http.createServer((req, res) => {
     seen.uploads++;
@@ -150,6 +150,7 @@ async function fakeB2(uploadScript: Array<number | 'ok' | 'badsha'>, infoScript:
       return json({ accountId: 'acct', authorizationToken: 'tok', apiInfo: { storageApi: { apiUrl: 'https://api.fake', downloadUrl: 'https://dl.fake' } } });
     }
     if (url.endsWith('/b2_get_upload_url')) { seen.uploadUrls++; return json({ uploadUrl, authorizationToken: 'up-tok' }); }
+    if (url.endsWith('/b2_list_buckets')) { seen.listBuckets++; return json({ buckets: [{ bucketId: 'bucket-id', bucketName: 'dt-archive-cold' }] }); }
     if (url.endsWith('/b2_get_file_info')) {
       seen.infos++;
       const step = infoScript.shift() ?? 'ok';
@@ -189,6 +190,14 @@ describe('3b — uploadColdFile retries the upload with a FRESH upload URL each 
     const seen = await fakeB2(['ok']);
     await client().uploadColdFile('dt-archive-cold', 'x/a.jsonl.gz', file(), LIMITS);
     expect(seen.authorizes).toBeGreaterThan(0);
+    expect(seen.unsignalled).toEqual([]);
+  });
+  it('without B2_BUCKET_ID, list_buckets runs on the upload path and carries the deadline too (Langston r2 item 3)', async () => {
+    const seen = await fakeB2(['ok']);
+    const c = client();
+    delete process.env.B2_BUCKET_ID; // the env branch would otherwise return before list_buckets is ever fetched
+    await c.uploadColdFile('dt-archive-cold', 'x/a.jsonl.gz', file(), LIMITS);
+    expect(seen.listBuckets).toBe(1);
     expect(seen.unsignalled).toEqual([]);
   });
   it('500 three times → throws, no further call', async () => {

@@ -508,7 +508,7 @@ async function checkColdRotationSignals(): Promise<boolean> {
           `The last cold rotator run deferred ${last} candidate(s)${twice ? ` and the run before it deferred ${prev}` : ''}: ` +
           `it reached data_lifecycle.cold_rotator_run_deadline_ms or cold_rotator_max_candidates_per_run. Warm objects ` +
           `older than retention are accumulating. Read the run's RUN line (elapsed_ms, candidates_done, ` +
-          `fixed_ms_per_candidate) in b75-cold-rotator.log before changing either limit.`,
+          `overhead_ms_per_candidate) in b75-cold-rotator.log before changing either limit.`,
         metadata: { source: 'b-storage-archival-health', batch: 'B-DISK-FILE-TIERING', check: 'cold-rotator-deferred', deferred: last, previous_deferred: prev },
         dedupe_key: `archival-health-cold-rotator-deferred${twice ? '-twice' : ''}`,
       });
