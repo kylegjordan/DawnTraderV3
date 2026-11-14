@@ -994,3 +994,35 @@ WHERE a.created_at >= '2026-11-14T01:40:58Z' ORDER BY a.created_at;
 ```
 
 **STEP: 7 of 11 COMPLETE · NEXT STEP: 8 of 11** (Langston's second pass on this restart).
+
+## 17. STEP 8 PROCEED ON THE JOINT DEPLOY (Langston, 2026-11-14)
+
+Langston re-derived §16 at the ref and on the box (Discord `1570982569284083793`):
+deployed record and `dist/BUILD_SHA` `9591ba8c2…`, restart 699; CI `43539037444`
+4/4; `b2cf89876`, `7ddaadb83`, `997221721` ancestors; the three touched files
+byte-identical between the deployed sha and the graded head `24d241820`.
+**Step 8: PROCEED.** His tightenings, recorded as he stated them:
+
+- **Two `...resultMeta` spreads in the bundle, not one.** The second
+  (`dist/index.js:96359`) is the occurrence-meta terminal write, a different
+  object: its runner key is appended by SQL `||` after `$4`, and both
+  occurrence-meta readers gate on the `status` column, so a job's meta cannot
+  forge a stale-resolve or a decision alert there either. No finding — write-last
+  holds at both sites. §16 named only the fire-row site.
+- **9 of 9 rows, and a tighter join.** By his read the 02:00 slot added
+  `awareness_state_update_cron`; he also required `o.job_name = a.task_name`, so
+  each occurrence id belongs to that job's own occurrence. 9/9 match,
+  `first_source = natural`; the pre-restart control returns a keyless lifecycle
+  row, so the query discriminates.
+- **Verifier link.** Both five-minute jobs certify on `mature_occurrence = 01:45Z`,
+  whose fire row the folded runner wrote at `01:45:04Z` — the exact arm accepted
+  post-fold evidence.
+- **The alert zero is weaker than §12's.** No alert of any kind was minted in the
+  window, so nothing in-window proves the store was accepting writes. The zero is
+  corroborative only; the verdict rests on the rows and the verifier pass.
+
+The reserved-key override arm remains unexercised live (no registered job emits
+one); forging test and compile fence only, and no future silence may be read as
+proof it fires.
+
+**STEP: 8 of 11 COMPLETE · NEXT STEP: 10 of 11** (governance).

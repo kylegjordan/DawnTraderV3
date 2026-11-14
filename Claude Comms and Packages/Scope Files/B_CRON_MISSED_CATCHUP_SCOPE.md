@@ -263,3 +263,19 @@ independently reproduced those populations, zero post-deploy verifier alerts,
 resolved alert state and the negative controls at corrected evidence ref
 `3a2097653165c240d80644886a7a1ef80a09426c`. Step 9 re-evaluated all seven
 objectives as green. No observation period or deployment hold was introduced.
+
+## 7. Second Step-11 repair reconciliation (2026-11-14)
+
+The claim-only completion reader found that the exact-boundary arm sat outside
+the provenance checks: an audit row at the candidate's exact timestamp with no
+occurrence ID, or from a non-scheduled source, could certify a current
+candidate. OBJ-6 is reconciled: exact current evidence is a succeeded
+occurrence, or a successful audit row carrying an occurrence ID with source
+`cron` or `missed_catchup`; the pre-boot legacy arm is unchanged and is proxy
+evidence for one callback in its partition, not exact historical identity
+(deployed `77f6fd598`, Langston Step 8 PROCEED). Langston's Step-8 carries
+were then folded: the runner writes its five fire-row identity keys after the
+job's own metadata, reserved by type (`RUNNER_AUTHORED_FIRE_META_KEYS`,
+`JobFireMeta`), with the runner the only production fire-row writer (deployed
+`9591ba8c2`, Langston Step 8 PROCEED). No objective changes; all seven stay
+green. Record: `Change Lists/B_CRON_MISSED_CATCHUP_STEP11_REPAIR.md` §11-§17.
