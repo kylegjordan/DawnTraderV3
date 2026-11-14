@@ -568,7 +568,9 @@ describe('context lane deletion fence', () => {
     // Langston's fold: the shapes above are RETYPED, so a template edit in storage-client would leave them green while
     // the status arm silently degraded. This reads the producer's source, so the contract is checked from both ends.
     const src = fs.readFileSync(path.resolve(__dirname, '../../services/data-archive/storage-client.ts'), 'utf8');
-    const infixes = [...src.matchAll(/failed([^:`]*): \$\{/g)].map((m) => m[1]);
+    // the infix may hold a colon (Langston's fold: `[^:`]*` silently skipped a "failed [bucket: x]: ${status}" template,
+    // and the >= 17 count still passed); `[^`]` keeps a match inside one template literal
+    const infixes = [...src.matchAll(/failed([^`]*?): \$\{/g)].map((m) => m[1]);
     expect(infixes.length).toBeGreaterThanOrEqual(17); // census at c5c0ed83d: 17 templates, two with the PATCH infix
     for (const infix of infixes) {
       const rendered = `[B75 storage-client] op failed${infix.replace(/\$\{[^}]*\}/g, '6291456')}: 413  — {}`;
