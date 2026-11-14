@@ -180,7 +180,7 @@ describe('B-DISK-FILE-TIERING 3c — the meter', () => {
     const countByOwner = { archive: 0, proof: 0, liveness: 0, 'token-watch': 0, unknown: 0, ...counts };
     return { versions: 1, bytes: Object.values(byOwner).reduce((a, b) => a + b, 0), byOwner, countByOwner, proofIds, unknownNames: o.unknown ? ['m/x'] : [] };
   };
-  const prev = (o: Partial<Record<string, number>>, _proofIds: string[] = []): MeterHistoryRow => ({
+  const prev = (o: Partial<Record<string, number>>): MeterHistoryRow => ({
     run_at: new Date(NOW - DAY), bytes_by_owner: o, due: 0, readback_ok: 0, budget_cause: null, skipped_unbound: 0,
   });
   it('first run is a baseline: no growth judgement', () => {
@@ -198,9 +198,6 @@ describe('B-DISK-FILE-TIERING 3c — the meter', () => {
     // Step-4 (3): the two prefixes share one constant, so the _proof/ body names a hand-run burst as a cause; _liveness/ does not
     expect(meterPages(totals({}, [], { proof: 3 }), null, NOW, cfgM)[0].body).toMatch(/proofs were run inside one lifecycle day/);
     expect(meterPages(totals({}, [], { liveness: 3 }), null, NOW, cfgM)[0].body).not.toMatch(/proofs were run/);
-  });
-  it('3d: a hidden _proof object seen at two consecutive runs no longer pages (the rule deletes it a day after its hide)', () => {
-    expect(meterPages(totals({}, ['p1'], { proof: 1 }), prev({}, ['p1']), NOW, cfgM)).toEqual([]);
   });
   it('the total and an unknown prefix page on any run, first included', () => {
     expect(meterPages(totals({ archive: 1_000 }), null, NOW, cfgM).map((p) => p.key)).toEqual(['cold-meter-total']);

@@ -1022,8 +1022,9 @@ export class StorageClient {
   /**
    * B-DISK-FILE-TIERING 3d step 1 — HIDE the current version of a name (`b2_hide_file`). Replaces `deleteCold` (rule 18):
    * after 3d the cold key holds listFiles/readFiles/writeFiles only, and a hide is a WRITE. 3d STEP 2 (not yet in place
-   * at this commit) adds the bucket lifecycle rule on `_liveness/` and `_proof/` (daysFromHidingToDeleting 1) that then
-   * deletes the hidden version; until then a hidden version stays stored. b2_hide_file has no file-id parameter: it hides
+   * at this commit) adds the bucket lifecycle rule on `_liveness/` and `_proof/` (daysFromHidingToDeleting 1 AND
+   * daysFromUploadingToHiding 1) that deletes a hidden version a day after its hide and hides an unhidden one a day
+   * after its upload; until then a hidden version stays stored. b2_hide_file has no file-id parameter: it hides
    * whatever version of `path` is current, so a caller that must target one object writes a name unique to it.
    * `setupMs` is REQUIRED (Langston 3d r3 C-1: deleteCold's optional bound is how the canary's path went unbounded).
    * The POST is retried like the other metadata calls. HYPOTHESIS, measured at 3d step 4 (hide one throwaway twice):
