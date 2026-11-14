@@ -79,6 +79,14 @@ SUBCOMMANDS, each run as `tokenwatch`:
            len(prev) (the `last_seen` dict the loop grows) and len(store._DEAD_CACHE["set"]) (A-3). No tracemalloc:
            its tables scale with the traced objects and inflate the charge being measured. Combinable with --trace,
            but a P2a run uses --sample alone.
+           ⛔ THE MARKERS ARE A NESTED TREE, NOT A PARTITION (Langston, P2a review F-4): build > _oldest_survivors
+           (summary.py:428) > _enrich (:267-268) > _latest_observations (:288) and _identity_map (:296). A delta
+           between two markers brackets a span; spans nest, so they are never summed.
+           ⛔ An existing --sample file is REFUSED (exit 2), never appended to and never truncated: a re-run after a
+           kill must not merge two populations into one file, and the killed run's file is the evidence. The driver
+           moves an old one aside. Read the file ordered by `seq` (write order) and plotted on `t` (taken before the
+           write lock, so the two can invert by one cgroup read); `end` carries thread_alive and any thread error, so
+           samples that stop early are told apart from a kill.
 
   lookup-baseline --run-root <run dir> --bodies <bodies.sqlite> --out <result.json>
            The harness's own read-path footprint: fetches every distinct mint of the 48 buckets from the index,
@@ -618,14 +626,16 @@ _STAT_KEYS = ("anon", "file", "file_dirty", "file_writeback", "slab_reclaimable"
 
 
 class Sampler:
-    """P2a: the kill-surviving side file (see the module doc, --sample). One JSON object per line, written with a
-    single os.write on an O_APPEND fd: the kernel holds each line the moment the call returns, so a SIGKILL after it
-    loses nothing. A line the kill interrupts is the only possible partial, and it is the last line."""
+    """P2a: the kill-surviving side file (see the module doc, --sample). One JSON object per line, written with
+    os.write on an O_APPEND fd, looping until every byte is out: the kernel holds each line the moment the call returns,
+    so a SIGKILL after it loses nothing. A line the kill interrupts is the only possible partial, and it is the last."""
 
     def __init__(self, path: str, cg: str | None, interval: float):
         import threading
         self.cg, self.interval, self.seq = cg, interval, 0
-        self.fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o644)
+        # O_EXCL: an existing file is refused, never appended to (C-3) - cmd_run refuses first with a clear message
+        self.fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_APPEND, 0o644)
+        self.thread_error = None
         self.lock = threading.Lock()
         self.stop = threading.Event()
         self.probes = {}                                # name -> zero-arg callable, read at every MARKER
@@ -656,7 +666,9 @@ class Sampler:
         with self.lock:
             self.seq += 1
             rec["seq"] = self.seq
-            os.write(self.fd, (json.dumps(rec, sort_keys=True, default=str) + "\n").encode("utf-8"))
+            data = (json.dumps(rec, sort_keys=True, default=str) + "\n").encode("utf-8")
+            while data:                                 # a short write is retried, never left as a partial line
+                data = data[os.write(self.fd, data):]
 
     def mark(self, stage: str, **extra) -> None:
         probes = {"allocated_blocks": sys.getallocatedblocks()}
@@ -668,16 +680,22 @@ class Sampler:
         self.write("mark", stage=stage, **probes, **extra)
 
     def _loop(self) -> None:
-        while not self.stop.wait(self.interval):
-            self.write("sample")
+        try:
+            while not self.stop.wait(self.interval):
+                self.write("sample")
+        except Exception as exc:                        # a dead sampler must be visible on `end`, not silent (C-2)
+            self.thread_error = "%s: %s" % (type(exc).__name__, exc)
 
     def start(self) -> None:
         self.write("start", interval_s=self.interval)
         self.thread.start()
 
     def close(self) -> None:
+        alive = self.thread.is_alive()                  # before the stop: was it still sampling when the run ended?
         self.stop.set()
-        self.write("end")
+        if self.thread.ident is not None:               # a thread that never started is reported, not joined
+            self.thread.join(timeout=max(5.0, 2 * self.interval))
+        self.write("end", thread_alive=alive, thread_error=self.thread_error)
         os.close(self.fd)
 
 
@@ -728,6 +746,11 @@ def cmd_run(a) -> int:
 
     sampler = None
     if a.sample:
+        if a.sample_interval < 0.01:
+            return void(2, "--sample-interval must be at least 0.01 s (got %r): zero or less spins" % a.sample_interval)
+        if os.path.lexists(a.sample):
+            return void(2, "--sample file %s already exists: it is a previous run's evidence, never appended to - "
+                           "move it aside" % a.sample)
         sampler = Sampler(a.sample, cg, a.sample_interval)
         sampler.start()
 
@@ -877,18 +900,32 @@ def cmd_run(a) -> int:
                 held["prev"] = v
             return v
         follow_up.load_state = load_state_seen
+        real_save_state = follow_up.save_state
+
+        def save_state_seen(name, value, *args, **kw):
+            # C-1 (Langston): follow_up.py:439 rebinds prev to the pruned dict and :442 saves it. Holding the dict
+            # load_state returned would pin the PRE-prune dict (and every pruned mint's value) for the rest of the run,
+            # through promote and summary.build - the harness perturbing what it measures. Re-point here, so the old
+            # dict dies three statements after production's and post-prune markers report the pruned size.
+            if name == "last_seen":
+                held["prev"] = value
+            return real_save_state(name, value, *args, **kw)
+        follow_up.save_state = save_state_seen
         sampler.probes["len_prev"] = lambda: len(held["prev"]) if "prev" in held else None
+        # which dict that is: :439 always builds a NEW dict, so the id changes at the prune whatever the prune count
+        sampler.probes["prev_id"] = lambda: id(held["prev"]) if "prev" in held else None
         sampler.probes["len_dead_cache"] = lambda: (len(store._DEAD_CACHE["set"])
                                                     if store._DEAD_CACHE.get("set") is not None else None)
         real_entries = follow_up._entries_across
 
         def entries_marked(*args, **kw):
-            n = 0
-            for n, entry in enumerate(real_entries(*args, **kw)):
-                if n % 1000 == 0:
-                    sampler.mark("loop", entries=n)
+            count = 0
+            for entry in real_entries(*args, **kw):
+                if count % 1000 == 0:
+                    sampler.mark("loop", entries=count)
+                count += 1
                 yield entry
-            sampler.mark("loop-end", entries=n + 1 if n else 0)
+            sampler.mark("loop-end", entries=count)
         follow_up._entries_across = entries_marked
 
         def mwrap(mod, name, before=True, after=True):

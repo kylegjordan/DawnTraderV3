@@ -438,6 +438,43 @@ check("S1 a marker carries the Python counters (A-3)", isinstance(m0.get("alloca
       and isinstance(m0.get("len_prev"), int) and isinstance(m0.get("len_dead_cache"), int),
       str({k: m0.get(k) for k in ("allocated_blocks", "len_prev", "len_dead_cache")}))
 check("S1 the result names the side file", res.get("sample_file") == sfile, str(res.get("sample_file")))
+# C-2: the periodic stream itself - at least two samples, one of them BETWEEN two named markers
+seq_of = {x.get("stage"): x["seq"] for x in lines if x.get("kind") == "mark"}
+samples = [x["seq"] for x in lines if x.get("kind") == "sample"]
+mark_seqs = sorted(seq_of.values())
+lo, hi = (mark_seqs[0], mark_seqs[-1]) if mark_seqs else (0, 0)
+check("S1 the sample stream runs: >= 2 samples, one between the first and last named marker", len(samples) >= 2
+      and any(lo < s < hi for s in samples), "samples=%d marks %s..%s between=%s" % (len(samples), lo, hi,
+                                                                                  [s for s in samples if lo < s < hi][:3]))
+check("S1 end says the sampler thread was alive and raised nothing", lines and lines[-1].get("thread_alive") is True
+      and lines[-1].get("thread_error") is None, str({k: lines[-1].get(k) for k in ("thread_alive", "thread_error")} if lines else {}))
+# F-4: the markers NEST - _latest_observations and _identity_map run inside _oldest_survivors (via _enrich), inside build
+nest = ["before-summary.build", "before-summary._oldest_survivors", "before-summary._latest_observations",
+        "after-summary._latest_observations", "before-summary._identity_map", "after-summary._identity_map",
+        "after-summary._oldest_survivors", "after-summary.build"]
+ns = [seq_of.get(w, -1) for w in nest]
+check("S1 the nesting: build > _oldest_survivors > (_latest_observations, _identity_map)", -1 not in ns and ns == sorted(ns),
+      str(dict(zip(nest, ns))))
+# C-1: after the prune, len_prev is the PRUNED dict (the one save_state got), not the loop's
+end_mark = next((x for x in lines if x.get("stage") == "loop-end"), {})
+post = next((x for x in lines if x.get("stage") == "before-promote.run"), {})
+check("S1 after the prune the probe holds a DIFFERENT dict (the saved one; the pre-prune dict is released)",
+      post.get("prev_id") is not None and end_mark.get("prev_id") is not None and post.get("prev_id") != end_mark.get("prev_id"),
+      "loop-end prev_id=%s before-promote prev_id=%s" % (end_mark.get("prev_id"), post.get("prev_id")))
+check("S1 post-prune len_prev = loop size minus last_seen_pruned (the pre-prune dict is not pinned)",
+      post.get("len_prev") == end_mark.get("len_prev", -1) - res.get("stats", {}).get("last_seen_pruned", 0),
+      "loop-end len_prev=%s pruned=%s before-promote len_prev=%s" % (end_mark.get("len_prev"),
+      res.get("stats", {}).get("last_seen_pruned"), post.get("len_prev")))
+
+# ── S3: an existing sample file is refused, never appended to (C-3); a zero interval is refused (nit) ─────────────
+print("S3 expect: --sample at an existing path -> exit 2, file untouched; --sample-interval 0 -> exit 2")
+before = open(sfile, "rb").read()
+p3, r3 = run("live", run_root_s, "--cgroup-dir", cgs, "--sample", sfile, skip_memory=False)
+check("S3 existing file -> exit 2, says so", p3.returncode == 2 and "already exists" in str(r3.get("void")),
+      "rc=%s %s" % (p3.returncode, r3.get("void")))
+check("S3 and the existing file is byte-identical", open(sfile, "rb").read() == before)
+p4, r4 = run("live", run_root_s, "--cgroup-dir", cgs, "--sample", sfile + ".z", "--sample-interval", "0", skip_memory=False)
+check("S3 interval 0 -> exit 2", p4.returncode == 2 and "interval" in str(r4.get("void")), "rc=%s %s" % (p4.returncode, r4.get("void")))
 
 # ── S2: a line written before a SIGKILL survives it (the reason the sampler uses os.write, R3 C-2) ─────────────────
 print("S2 expect: a process that writes two lines and then SIGKILLs itself leaves both lines whole")

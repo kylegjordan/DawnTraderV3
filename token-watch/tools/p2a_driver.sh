@@ -22,11 +22,19 @@ for arm in all_shed live; do
   if [ -e "$RES/$arm-unit.txt" ] && grep -q '^Result=' "$RES/$arm-unit.txt"; then
     echo "$(date -u +%FT%TZ) SKIP $arm: a result already exists in $RES (move it aside to re-run)" >> "$LOG"; continue
   fi
-  NEXT=$(systemctl show apt-daily-upgrade.timer -p NextElapseUSecRealtime --value)
-  NEXT_S=$(date -u -d "$NEXT" +%s 2>/dev/null) || { echo "$(date -u +%FT%TZ) STOP: cannot read the updater's next elapse ('$NEXT')" >> "$LOG"; exit 1; }
-  END_S=$(( $(date -u +%s) + ALLOW_S + MARGIN_S ))
-  if [ "$NEXT_S" -le "$END_S" ]; then
-    echo "$(date -u +%FT%TZ) REFUSED $arm: apt-daily-upgrade next elapse $NEXT falls inside this arm's window (ends $(date -u -d @$END_S +%FT%TZ))" >> "$LOG"; exit 3
+  updater_ok() {   # (Langston nit) checked again right before the arm: prepare runs inside the margin and eats it
+    NEXT=$(systemctl show apt-daily-upgrade.timer -p NextElapseUSecRealtime --value)
+    NEXT_S=$(date -u -d "$NEXT" +%s 2>/dev/null) || { echo "$(date -u +%FT%TZ) STOP: cannot read the updater's next elapse ('$NEXT')" >> "$LOG"; exit 1; }
+    END_S=$(( $(date -u +%s) + ALLOW_S + MARGIN_S ))
+    if [ "$NEXT_S" -le "$END_S" ]; then
+      echo "$(date -u +%FT%TZ) REFUSED $arm ($1): apt-daily-upgrade next elapse $NEXT falls inside this arm's window (ends $(date -u -d @$END_S +%FT%TZ))" >> "$LOG"; exit 3
+    fi
+  }
+  updater_ok "before prepare"
+  # C-3: a previous run's sample file (a killed arm leaves no Result=, so it is re-run) is MOVED ASIDE, never appended to
+  if [ -e "$RES/$arm-samples.jsonl" ]; then
+    mv "$RES/$arm-samples.jsonl" "$RES/$arm-samples.jsonl.void-$(date -u +%Y%m%dT%H%M%SZ)"
+    echo "$(date -u +%FT%TZ) moved a previous $arm-samples.jsonl aside (a re-run is a new population)" >> "$LOG"
   fi
   RUN=/var/lib/token-watch-p1-runs/run-$arm-p2a
   echo "$(date -u +%FT%TZ) START p2a $arm (updater next $NEXT) free=$(df -B1 --output=avail / | tail -1)" >> "$LOG"
@@ -34,6 +42,7 @@ for arm in all_shed live; do
     /usr/bin/python3 "$H" prepare --pristine /var/lib/token-watch-scratch --run-root "$RUN" --now "$NOW" >> "$LOG" 2>&1
   prc=$?; echo "$(date -u +%FT%TZ) prepare rc=$prc" >> "$LOG"
   [ $prc -eq 0 ] || { echo "$(date -u +%FT%TZ) STOP: prepare failed" >> "$LOG"; exit 1; }
+  updater_ok "after prepare"
   bash "$R" "$arm" "$RUN" "$B" "$NOW" "$RES" --sample >> "$LOG" 2>&1
   rc=$?
   echo "$(date -u +%FT%TZ) END p2a $arm rc=$rc samples=$(wc -l < "$RES/$arm-samples.jsonl" 2>/dev/null || echo none) free=$(df -B1 --output=avail / | tail -1)" >> "$LOG"
