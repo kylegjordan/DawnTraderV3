@@ -11,7 +11,7 @@ change-class: architecture · plan home: `SPRINT_TO_LIVE_PLAN.md` row 72 (Phase-
 2. **The Close All confirm and the refusal toast are carried by code fences, not a click.** Langston ruled no click (and no Kyle ask): the outcome follows from the code, and the only way to click it is to close every open paper position or stop the engine.
    - The Close All button is pinned to the dialog's action (fence D-1).
    - The refusal text and both handlers rendering `result?.error` are unit-tested (R-1, C-1).
-3. **The strip-refresh question is WITHDRAWN BY CITATION, not by observation.** `client/src/components/portfolio-summary-strip.tsx:37` polls every 10 s (`refetchInterval: 10000`), unconditionally, in paper mode. Close-all emits no broadcast (`server/routes.ts:13060-13086`); the single-close route does (`:12533`). So the strip refreshes within 10 s of a Close All. Adding the broadcast would only cut that latency.
+3. **The strip-refresh question is WITHDRAWN BY CITATION, not by observation.** `client/src/components/trading/portfolio-summary-strip.tsx:37` polls every 10 s (`refetchInterval: 10000`), unconditionally, in paper mode. Close-all emits no broadcast (`server/routes.ts:13059-13085` at `2a46b5857`); the single-close route does (`:12533`). So the strip refreshes within 10 s of a Close All. Adding the broadcast would only cut that latency.
 
 No scaffolding: every objective below is functional on staging.
 
@@ -52,6 +52,7 @@ The batch has also been live in the joint deploy `9591ba8c2` since 2026-11-14 01
 **Reviews:**
 - Step 4: Langston PROCEED on every increment (change list).
 - Step 8: Langston PROCEED, Discord `1570999454561996932`. He re-derived all four Step-7 claims read-only on staging.
+- Step 11: Langston CONFIRMED at `2a46b5857`, Discord `1571003025248620699`.
 
 ## Record corrections (Langston, Step 8)
 
