@@ -462,3 +462,19 @@ Tests at r1 (`0f7960de7`): 3b 60/60; 3a, harness and amendment2 93/93; tsc 324 =
   - An unrecognised bucket prefix prints as UNKNOWN, not "other owner". Carried for item 4: its delete set comes from `orphanVersions` only, never from the counts.
   - Tests: 3b 69/69.
 - **Item 3 Step 4: Langston PROCEED at `5bc945353`** (Discord `1571109981502312569`). He re-read both fences and the UNKNOWN label, and confirmed an unrecognised prefix can never enter a delete set; no writer flips a cold row off `cold`. CI for r3: run `43584902214`, 4/4 at `5bc945353` (the commit subject says "r2 fold" — it is the r3 fold; to correct at Step 10). **Carry for item 4:** the read-back `readFileSync` after the in-gate `wx` is unguarded, so an ENOENT there throws with no page — one-line try/catch.
+
+### 3b item 4 — Step 3: residue deletion by file id (built; the DELETE RUN waits for deploy and Kyle's explicit yes)
+- **`b75-cold-bind.ts --delete-residue <ids>`** deletes ONLY the intersection of the ids the operator names and the set this run computes. It refuses outright (nothing deleted) if a named id is listed but not in the set, or is bound to a manifest row. An id no longer listed is reported as already gone.
+- **`residueDeleteSet`** = orphans in our own namespaces (`orphanVersions` only, never the owner counts), plus non-chosen versions of a bound row's name — including rows bound in an earlier run — **minus every id a manifest row is bound to.** Fences: token-watch, `_liveness`, an unknown prefix and the chosen version never enter the set; a bound id nominated elsewhere is removed. Mutation (exclusion removed) → red.
+- **Carry from item 3, folded:** the read-back after the in-gate `wx` is guarded, so an ENOENT reads HELD and never throws unpaged.
+- **Report run on staging** (read-only, private copy): the delete set is exactly two versions —
+  - `disk_file.diagnostic_reports/phase-41F-L-trace.ndjson.jsonl.gz` (the P10 orphan, 170,761,082 B; its warm copy is the archive of record);
+  - the older `context_bridge_log/2026-01.jsonl.gz` (13,901,237 B, byte-identical to the version item 3 binds).
+
+  token-watch's 108 versions are untouched.
+- **Run order on staging, after the deploy that follows NEW's 21:04Z read:**
+  1. the report;
+  2. `--apply` (binds the 4 rows, so the chosen 2026-01 id joins `boundIds`);
+  3. the report again;
+  4. `--delete-residue` with the two printed ids — **only after Kyle's explicit yes in chat**, because the deletion is permanent.
+Tests: 3b 73/73; tsc 324 = 324.

@@ -475,7 +475,7 @@ describe('3b item 2 — Langston r3 carries', () => {
 });
 
 // ── 3b item 3: bind the pre-3a cold rows to exact versions; the inventory; the exclusive takeover ────────────────────
-import { COLD_NON_ARCHIVE_PREFIXES, coldPathOf, orphanVersions, otherOwnerCounts, ownColdPrefixes, planColdBindings, type UnboundColdRow } from '../../scripts/b75-cold-bind';
+import { COLD_NON_ARCHIVE_PREFIXES, coldPathOf, orphanVersions, otherOwnerCounts, ownColdPrefixes, planColdBindings, residueDeleteSet, type UnboundColdRow } from '../../scripts/b75-cold-bind';
 import type { B2ListedVersion } from '../../services/data-archive/storage-client';
 
 const ROW: UnboundColdRow = { id: 'r1', source_table: 'context_bridge_log', partition_label: '2026-01', storage_uri: 'b2://dt-archive-cold/context_bridge_log/2026-01.jsonl.gz', bytes_compressed: 13901237, checksum: 'sha256-x' };
@@ -633,5 +633,38 @@ describe('3b item 3 r2 — the binder fixes (Langston item 3)', () => {
   it('the binder checks the version against the LISTING bucket id, not the info response against itself', () => {
     expect(read('server/scripts/b75-cold-bind.ts')).toContain('bucketId: listing.bucketId');
     expect(read('server/scripts/b75-cold-bind.ts')).not.toContain('bucketId: info.bucketId');
+  });
+});
+
+describe('3b item 4 — the residue delete set: our orphans and non-chosen versions only, never a bound id', () => {
+  const own = new Set(['context_bridge_log', 'disk_file.diagnostic_reports', '_proof']);
+  const claimed = new Set(['context_bridge_log/2026-01.jsonl.gz']);
+  const vs = [
+    ver('old', { uploadTimestamp: 1 }),
+    ver('new', { uploadTimestamp: 2 }),
+    ver('p10', { fileName: 'disk_file.diagnostic_reports/phase-41F-L-trace.ndjson.jsonl.gz' }),
+    ver('tw', { fileName: 'token-watch/cold/x.jsonl.gz' }),
+    ver('live', { fileName: '_liveness/canary.txt' }),
+    ver('unk', { fileName: 'mystery/x.gz' }),
+  ];
+  it('this run: the orphan and the losing duplicate; never token-watch, the canary, an unknown prefix, or the chosen version', () => {
+    const decisions = planColdBindings([ROW], vs);
+    const ids = residueDeleteSet(vs, claimed, own, decisions, new Set()).map((v) => v.fileId).sort();
+    expect(ids).toEqual(['old', 'p10']);
+  });
+  it('a row bound in an EARLIER run: its siblings are still found, and its bound id is never in the set', () => {
+    const ids = residueDeleteSet(vs, claimed, own, [], new Set(['new'])).map((v) => v.fileId).sort();
+    expect(ids).toEqual(['old', 'p10']);
+  });
+  it('a bound id is removed even if something else nominated it', () => {
+    const decisions = planColdBindings([ROW], vs);
+    const ids = residueDeleteSet(vs, claimed, own, decisions, new Set(['old'])).map((v) => v.fileId);
+    expect(ids).not.toContain('old');
+  });
+  it('the delete run deletes only the intersection of the named ids and the computed set, and refuses otherwise', () => {
+    const src = read('server/scripts/b75-cold-bind.ts');
+    expect(src).toMatch(/const refused = \[\.\.\.deleteIds\]\.filter\(\(id\) => !byId\.has\(id\) && listed\.has\(id\)\)/);
+    expect(src).toMatch(/\[\.\.\.deleteIds\]\.some\(\(id\) => boundIds\.has\(id\)\)/);
+    expect(src).toContain("'[B75 cold-bind] --apply and --delete-residue are separate runs'");
   });
 });

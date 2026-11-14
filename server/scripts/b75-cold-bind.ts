@@ -20,6 +20,14 @@
  *
  * DEFAULT IS A REPORT. Nothing is written and nothing is downloaded without --apply.
  * Usage (as deploy, on staging):  npx tsx server/scripts/b75-cold-bind.ts [--apply]
+ *
+ * 3b item 4 — RESIDUE DELETION (by file id, with the wide key, before 3d step 5 removes every delete right):
+ *   npx tsx server/scripts/b75-cold-bind.ts --delete-residue <fileId>[,<fileId>...]
+ * deletes ONLY ids that are BOTH named on the command line AND in the delete set this run computes itself (orphans in
+ * DawnTrader's own namespaces + duplicates/losers of bound rows), and NEVER an id any manifest row's provider_file_id
+ * names. An id outside that intersection is refused and nothing is deleted. A named id that is no longer listed is
+ * reported, not an error (already gone). The delete set comes from orphanVersions / planColdBindings ONLY, never from
+ * the owner counts (Langston item 3 r2). Permanent: the operator runs the report first and passes the ids it printed.
  * ═════════════════════════════════════════════════════════════════════════════
  */
 
@@ -123,6 +131,32 @@ export function orphanVersions(versions: B2ListedVersion[], claimedPaths: Set<st
   );
 }
 
+/**
+ * Pure: the residue delete set — orphans in our own namespaces, plus every non-chosen version of a bound row's name —
+ * minus any id a manifest row is bound to. The only source item 4 deletes from. Exported for tests.
+ */
+export function residueDeleteSet(
+  versions: B2ListedVersion[],
+  claimedPaths: Set<string>,
+  ownPrefixes: Set<string>,
+  decisions: BindDecision[],
+  boundIds: Set<string>,
+): B2ListedVersion[] {
+  const out = new Map<string, B2ListedVersion>();
+  for (const v of orphanVersions(versions, claimedPaths, ownPrefixes)) out.set(v.fileId, v);
+  for (const d of decisions) {
+    if (d.kind === 'bind') for (const v of d.residue) out.set(v.fileId, v);
+  }
+  // a bound row's name is claimed, so its OTHER versions reach here only through the decisions; a row bound in an
+  // earlier run has no decision, so its siblings are found directly: same name, not the bound id
+  const boundNames = new Set(versions.filter((v) => boundIds.has(v.fileId)).map((v) => v.fileName));
+  for (const v of versions) {
+    if (v.action === 'upload' && boundNames.has(v.fileName) && !boundIds.has(v.fileId)) out.set(v.fileId, v);
+  }
+  for (const id of boundIds) out.delete(id);
+  return [...out.values()];
+}
+
 /** Pure: stored VERSIONS (uploads only — hide markers are not versions) outside the archive namespaces, counted by
  * first segment and labelled by owner. Reported, never touched. */
 export function otherOwnerCounts(versions: B2ListedVersion[], ownPrefixes: Set<string>): Map<string, number> {
@@ -137,6 +171,10 @@ export function otherOwnerCounts(versions: B2ListedVersion[], ownPrefixes: Set<s
 
 async function main(): Promise<void> {
   const apply = process.argv.includes('--apply');
+  const delIdx = process.argv.indexOf('--delete-residue');
+  const deleteIds = delIdx >= 0 ? new Set((process.argv[delIdx + 1] ?? '').split(',').map((x) => x.trim()).filter(Boolean)) : null;
+  if (deleteIds && apply) throw new Error('[B75 cold-bind] --apply and --delete-residue are separate runs');
+  if (deleteIds && deleteIds.size === 0) throw new Error('[B75 cold-bind] --delete-residue needs the ids the report printed');
   const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
   await client.connect();
   try {
@@ -146,7 +184,10 @@ async function main(): Promise<void> {
     if (typeof c.rows[0]?.value !== 'string') throw new Error('[B75 cold-bind] missing data_lifecycle.cold_bucket');
     const bucket: string = c.rows[0].value;
     const limits = await loadColdLimits(client, 'B75 cold-bind');
-    const all = await client.query<{ storage_uri: string }>(`SELECT storage_uri FROM data_archive_manifest WHERE tier = 'cold'`);
+    const all = await client.query<{ storage_uri: string; provider_file_id: string | null }>(
+      `SELECT storage_uri, provider_file_id FROM data_archive_manifest WHERE tier = 'cold'`,
+    );
+    const boundIds = new Set(all.rows.map((r) => r.provider_file_id).filter((x): x is string => !!x));
     const claimed = new Set(all.rows.map((r) => coldPathOf(r.storage_uri)?.path).filter((x): x is string => !!x));
     const tables = await client.query<{ source_table: string }>(`SELECT DISTINCT source_table FROM data_archive_manifest`);
     const ownPrefixes = ownColdPrefixes(tables.rows.map((t) => t.source_table));
@@ -169,8 +210,34 @@ async function main(): Promise<void> {
     for (const o of orphanVersions(listing.versions, claimed, ownPrefixes)) {
       console.log(`[B75 cold-bind] ORPHAN (no manifest row): ${o.fileName} id=${o.fileId} bytes=${o.contentLength} sha1=${o.contentSha1} uploaded=${new Date(o.uploadTimestamp).toISOString()}`);
     }
+    const decisions = planColdBindings(r.rows, listing.versions);
+    const delSet = residueDeleteSet(listing.versions, claimed, ownPrefixes, decisions, boundIds);
+    for (const v of delSet) {
+      console.log(`[B75 cold-bind] DELETE-SET ${v.fileName} id=${v.fileId} bytes=${v.contentLength} uploaded=${new Date(v.uploadTimestamp).toISOString()}`);
+    }
+    if (deleteIds) {
+      // item 4: the intersection of what the operator named and what this run computed — nothing else, ever
+      const byId = new Map(delSet.map((v) => [v.fileId, v]));
+      const listed = new Set(listing.versions.map((v) => v.fileId));
+      const refused = [...deleteIds].filter((id) => !byId.has(id) && listed.has(id));
+      if (refused.length > 0 || [...deleteIds].some((id) => boundIds.has(id))) {
+        console.error(`[B75 cold-bind] REFUSED — not in the computed delete set (or bound to a manifest row): ${refused.join(', ')}. Nothing deleted.`);
+        process.exitCode = 1;
+        return;
+      }
+      let deleted = 0;
+      for (const id of deleteIds) {
+        const v = byId.get(id);
+        if (!v) { console.log(`[B75 cold-bind] ${id}: no longer listed — already gone, skipped`); continue; }
+        await storage.deleteColdVersion(v.fileName, v.fileId);
+        deleted++;
+        console.log(`[B75 cold-bind] DELETED ${v.fileName} id=${v.fileId} bytes=${v.contentLength}`);
+      }
+      console.log(`[B75 cold-bind] DONE deleted=${deleted} named=${deleteIds.size}`);
+      return;
+    }
     let failures = 0;
-    for (const d of planColdBindings(r.rows, listing.versions)) {
+    for (const d of decisions) {
       const name = `${d.row.source_table}/${d.row.partition_label}`;
       if (d.kind === 'refused') { failures++; console.error(`[B75 cold-bind] ${name}: REFUSED — ${d.reason}`); continue; }
       let version: B2ListedVersion | null = d.kind === 'bind' ? d.version : null;
