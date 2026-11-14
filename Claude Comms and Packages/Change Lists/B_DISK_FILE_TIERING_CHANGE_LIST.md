@@ -420,3 +420,5 @@ NEW Claude cleared the restart (no B-ENTRY-GATE activity since 07:06Z). The depl
 **Fence-only, stated in these words:** the retry on a failure, the lock refusal and takeover, the deferral page and the failure page have not fired live. No live silence from any of them is evidence that it fires (#661 leg 3). Their evidence is the fences and mutations recorded at Step 3/4.
 
 **UI surface: none** — scheduled scripts and a table that no page reads.
+
+- **3b item 1 Step 8: Langston PROCEED** (Discord `1571091106735726724`). He re-derived every claim himself: the table (12 columns, 4 constraints, 3 indexes); the four rows on the full six-column key; candidates = 0 from the query; a hand rotator run (`deferred=0`, lock absent before and after); and the proof via the new path (kernel max RSS 125,804 kB, the third point in the band). Note: "no retry lines" holds because `b2AttemptLog` suppresses a first-try success by design (`storage-client.ts:648`). Item 1 is verified, except its fence-only legs (the retry on failure, the lock refusal and takeover, the two pages), which have not fired live.
