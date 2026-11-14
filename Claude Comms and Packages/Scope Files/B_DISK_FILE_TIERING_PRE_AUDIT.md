@@ -632,3 +632,64 @@ This retires r1's three workarounds: the `upload_failed` probe, the rotator-lock
    - **Paths cited in full:** amendment 3's `fatal` for a 429 whose `code` is `null` is `server/services/data-archive/b2-retry.ts:56`. Line `:55` declines the retry.
 
 **Settings, final (9, all `reqNum`, all seeded in the one migration with a rollback in git):** `cold_meter_warn_bytes` 100,000,000,000 · `cold_meter_tokenwatch_growth_warn_bytes_per_day` 350,000,000 · `cold_meter_liveness_growth_warn_bytes` 10,000,000 · `cold_readback_daily_bytes` 500,000,000 · `cold_readback_min_interval_days` 30 · `cold_readback_stall_days` 3 · `cold_readback_max_age_days` 90 · `cold_readback_max_objects_per_run` 10 · `cold_audit_run_deadline_ms` 2,400,000.
+
+### Amendment 4 — 3d Step 2: audit and plan r1 (2026-11-14, CC-A; code read at `f32b5c9d4`, staging read-only 16:1xZ)
+**What 3d is (plan r2, unchanged):** KD-54's five steps — the cold key narrowed to `dt-archive-cold` with list/read/write and **no delete right** — plus the restore runbook's first line in `STORAGE_POLICY.md`. Kyle, 2026-11-14 ~14:50Z (relayed by PM Claude): amendment 4 runs to the end, 3d included, before close.
+
+**PREVIOUSLY STATED → NOW**
+| | previously stated | now | reason |
+|---|---|---|---|
+| lifecycle reach (r3 item 3, HYPOTHESIS) | "does `daysFromHidingToDeleting` reach a version superseded without an explicit hide?" | **Yes, per Backblaze's documentation:** *"Files are automatically hidden when they are replaced with a new version of the file"*. Its "keep only the last version" preset is exactly `daysFromHidingToDeleting: 1` with an empty prefix. Minimum value 1; `fileNamePrefix` scopes a rule to names beginning with it. **DOCUMENTED, not tested here.** | backblaze.com/docs/cloud-storage-lifecycle-rules, read 16:1xZ |
+| can a no-delete key hide? (r3 item 6, the step-5 gate) | to be tested by one `b2_hide_file` at step 4 | **Measured once already, on a key of the same shape:** token-watch's key (`listFiles`/`readFiles`/`writeFiles`, prefix `token-watch/`) — delete-version REFUSED, hide-file ALLOWED (`tools/prove_cold_key.py` at the 11-04 install; `B_TOKEN_WATCH_STORAGE_COMPLETION_REPORT.md:23`, `#1132`). Step 4 still re-runs it on OUR key: a different key, so a measurement on it is not one on ours. | — |
+| the staging key | "29 capabilities, no bucket restriction" (N3, 11-13) | unchanged, re-read 16:1xZ: 29 capabilities including `deleteFiles`, `writeBucketLifecycleRules`, `writeKeys`, `deleteKeys`; `bucketId` and `namePrefix` null. **`dt-archive-cold` holds NO lifecycle rules today (`[]`).** | read-only `b2_authorize_account` + `b2_list_buckets` on staging |
+
+**Census at `f32b5c9d4` — every site that deletes, hides or sets rules, and every holder of the wide key:**
+| site | today | after 3d |
+|---|---|---|
+| `b75-cold-liveness.ts:122` → `storage-client.ts:1022` `deleteCold` | the canary deletes its 104 B object by name | **step 1:** hides it instead. `deleteCold` has no other caller, so it is deleted under rule 18 in the same commit, and recorded in `DELETED_COMPONENTS_LOG.md` |
+| `b75-cold-proof.ts:103` → `deleteColdVersion` | the 3a proof deletes its two proof versions by id | **step 1:** hides them, and the `_proof/` lifecycle rule (step 2) deletes them a day later. Plan r2's C-1 delete-by-id was "available until 3d step 5" — this is that boundary |
+| `b75-cold-bind.ts:328` → `deleteColdVersion` (`--delete-residue`) | deletes residue by id, named ∩ computed | **needs the wide key, so it runs BEFORE step 5 or never** (see the gate below). After step 5 the code cannot work: `deleteColdVersion` and the `--delete-residue` branch are deleted under rule 18 at 3d's close |
+| bucket lifecycle rules | none | **step 2:** two rules, `_liveness/` and `_proof/`, each `daysFromHidingToDeleting: 1`, `daysFromUploadingToHiding: null` |
+| `token-watch/tools/mint_cold_key.py:47` | Infra's minting tool; reads the wide key from the staging env | **step 3** mints our key with the same API path (its pattern, not its prefix). After step 5 that tool cannot mint again — named for Infra Claude, below |
+| the app server process | uses no cold storage: every `getStorageClient` caller is a cron script under `server/scripts/`, which reads `.env` fresh on each run | **step 4 needs no app restart**, so it is not a deploy and sits outside the deploy windows |
+
+**Plan r1, KD-54's order, each step verified before the next:**
+1. **Code — the canary and the proof hide; nothing else deletes.** A new `hideColdFile(bucket, path)` (`b2_hide_file`, retried like the other metadata calls). `b75-cold-liveness.ts` hides its object; `b75-cold-proof.ts` hides its proof versions. `deleteCold` is removed (rule 18). Reviewed, CI 4/4, then deployed in a normal deploy.
+2. **Lifecycle rules, set with the wide key — one `b2_update_bucket` call.** It REPLACES the whole `lifecycleRules` array, so the call is preceded by a re-read that must still return `[]`. A non-empty read refuses and goes to its owner (token-watch is Infra's).
+   - **Rules on `_liveness/` and `_proof/` ONLY.**
+   - ⛔ **None on our archive prefixes:** a cold row is bound to an EXACT version, and a re-rotation of the same partition would supersede it. A rule there would then delete the very version the manifest names.
+   - ⛔ **None on `token-watch/`:** Infra's to decide.
+   - Verified by `b2_list_buckets` reading the two rules back.
+3. **Mint the narrow key** with the wide one:
+   - capabilities `listFiles`, `readFiles`, `writeFiles`;
+   - `bucketId` = `dt-archive-cold`, no `namePrefix`. A key carries one prefix, and ours spans the archive tables, `_liveness/` and `_proof/`, so the key CAN write under `token-watch/`. Stated, not hidden; the meter's owner split pages any growth there above its baseline.
+   - The new key's secret goes straight into the staging env file by the minting process and is never printed.
+4. **Swap and prove, on staging, as `deploy`:**
+   - **Swap** `B2_KEY_ID` / `B2_APPLICATION_KEY` in `/home/deploy/dawntrader/.env`. The old pair is kept in a root-only file until step 5 passes.
+   - **Authorize** and expect exactly the 3 capabilities, bucket `dt-archive-cold`.
+   - **Prove the rights:** `b2_delete_file_version` on a throwaway `_liveness/` object, expect REFUSED (401); `b2_hide_file` on it, expect ALLOWED (r3 item 6's gate).
+   - **Run the jobs:** the canary, `b75-cold-audit.ts` (its listing and one read-back), and one rotator dry run, all green.
+   - **Rollback is the swap reversed:** no code depends on the key.
+5. **Delete the wide key, and confirm** that authorizing with it now fails.
+
+⛔ **THE GATE BEFORE STEP 5 IS THE RESIDUE, AND IT IS KYLE'S.**
+- The two residue versions are the P10 orphan and the second `context_bridge_log/2026-01`. Deleting them is permanent and waits for Kyle's explicit yes; tonight's cold-bind report names them by id.
+- **If he says yes:** `--delete-residue` runs with the wide key before step 5.
+- **If he says no, or not yet:**
+  - Step 5 waits, or Kyle accepts keeping them. About 0.18 GB, roughly $0.001 a month.
+  - The P10 orphan is the current version of its name: it can be HIDDEN after step 5, but no rule reaches its archive prefix, so it stays stored.
+  - The `2026-01` duplicate is already a superseded version, unreachable for the same reason. Its per-object untracked page stays open until he decides.
+  - Neither path loses data the manifest names.
+
+**The restore runbook's first line (`STORAGE_POLICY.md`, the restore section; Langston, Discord `1568247791065628695`):** a real restore pulls more than the free 1 GB/day. So the FIRST step is that **Kyle raises the daily download cap in the Backblaze dashboard before restoring, and puts it back after** — or the cap reads as "backups are broken" during the incident they exist for. Storage is described as "alerted, uncapped".
+
+**Named for Infra Claude (one post, not a request for work):** after step 5 no DawnTrader key on staging can mint keys, so `token-watch/tools/mint_cold_key.py` stops working from that env. Their key is unaffected. A future token-watch key is minted from Kyle's account or a key he provides.
+
+**Doc set (`architecture`, unchanged):** `STORAGE_POLICY` (the runbook line, the no-delete key, the two rules), SIM (the key and the rules as cross-cutting state), `DELETED_COMPONENTS_LOG` (`deleteCold`; at close, `deleteColdVersion` and `--delete-residue`) — at Step 10.
+
+**No new Kyle gate:** KD-54 is his recorded yes for steps 1-5. The residue deletion is his separate, already-open ask.
+
+**Questions for Langston:**
+- **(a)** No lifecycle rule on the archive prefixes, so superseded archive versions accumulate as residue. Is that right, given exact-version binding? Or should a rule exist there with the binding protected some other way?
+- **(b)** Removing `deleteColdVersion` at close: the only remaining delete path would then be Kyle's dashboard. Agree, or keep it behind a flag for disaster recovery?
+- **(c)** Step 4 needs no app restart, so it is not a deploy. Is it fine inside NEW Claude's 14:30-21:00Z window, which protects the app's price feed?
