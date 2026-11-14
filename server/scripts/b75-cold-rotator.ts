@@ -190,7 +190,9 @@ export async function rotateColdCandidate(
   const freeBytes = deps.freeBytes ?? (() => { const st = fs.statfsSync(tempRoot); return Number(st.bavail) * Number(st.bsize); });
   const need = 2 * Number(candidate.bytes_compressed) + cfg.freeFloorBytes;
   const free = freeBytes();
-  // a missing floor or size would make `need` NaN, and `free < NaN` is false — refuse rather than skip the check
+  // In production a missing / non-numeric / <= 0 floor already fails the run at loadConfig's reqNum, before any candidate
+  // is listed. This guard binds hand-built configs (tests, and the next caller): a missing floor or size makes `need`
+  // NaN, and `free < NaN` is false — so refuse per candidate rather than silently skip the check (Langston, 3a Step 4).
   if (!Number.isFinite(need) || !Number.isFinite(free) || free < need) {
     throw new Error(`[B75 rotator] refused ${candidate.id}: ${free} bytes free, need ${need} (2 x object + the ${cfg.freeFloorBytes} floor)`);
   }

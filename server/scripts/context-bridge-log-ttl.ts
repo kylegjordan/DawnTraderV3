@@ -294,6 +294,8 @@ export async function exportAndUploadContextMonth(
   let actualUri = storageUri;
 
   try {
+    // exportRes.checksum is deliberately NOT passed in: uploadWarmFile hashes the file itself, so the comparison below
+    // stays a real check of what was uploaded rather than a tautology. Do not "optimise" this away.
     upload = await storage.uploadWarmFile(actualBucket, actualPath, exportRes.localPath);
     let readBack: { checksum: string };
     try {
@@ -322,7 +324,6 @@ export async function exportAndUploadContextMonth(
     actualUri = `b2://${actualBucket}/${actualPath}`;
     // Streamed and ATTESTED (upload response + b2_get_file_info by file id) — no whole-object re-download.
     const cold = await storage.uploadColdFile(actualBucket, actualPath, exportRes.localPath);
-    upload = cold;
     if (cold.checksum !== exportRes.checksum) {
       throw new Error(
         `[B75 ctx-bridge] ${month.label}: cold upload hashed a different file ` +
