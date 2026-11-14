@@ -234,7 +234,7 @@ Zero asset-class references in 321 lines, in the component that watches TCL prom
 
 ### HOP E→F — RTB QUEUE → OPEN POSITION (promotion). *Both classes; no divergence found at this edge.*
 
-**Driver:** `active-execution-engine.ts:344` `continuousPromotionInterval`. **Census — writers of `active_open_positions`: EXACTLY ONE** — `storage.ts:3324` (`db.insert(activeOpenPositions)`). Stated explicitly as a single-member list per rule 22; the create-path is not duplicated.
+**Driver:** `active-execution-engine.ts:344` `continuousPromotionInterval`. **Census — writers of `active_open_positions`: EXACTLY ONE** — `storage.ts:3910` (`db.insert(activeOpenPositions)`, a typed spread, so `tsc` enforces every column without a default, `mode` included; line swept 2026-11-14 by B-CLOSE-WRITER-COSTS OBJ-9 at `952a4980b`; raw-SQL inserts: none). Stated explicitly as a single-member list per rule 22; the create-path is not duplicated.
 
 **What is handed over, and in what order — the ordering is the load-bearing part.** Per Directive 8.8.4-A3.R1 the removal from the queue **deliberately precedes** trade creation, to prevent double-activation:
 

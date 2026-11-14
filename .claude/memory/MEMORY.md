@@ -46,7 +46,7 @@
 
 **★ A GEOMETRY THRESHOLD IS ONLY A DIAL IF THE GATED QUANTITY IS DISTRIBUTED (`#1052`, 2026-09-13):** `atrsToTarget` **IS** `target_exit_atr_multiplier`, a SPIKE ⇒ the reach ceiling is an ON/OFF switch, not a dial (`strong_bull_trend`: 0 of 298,731). ⚠️ **Per strategy — `sma_trend_ride` is continuous.** ⇒ **measure the blast radius before seeding one — rule + numbers in `ADJUSTMENT_FRAMEWORK` and `SYSTEM_MANUAL`.**
 
-**Langston runtime:** read his model from the live sites, never from here (5.5). **★ It is set at TWO live sites — switch BOTH or he runs split: `discord-langston-bridge.py:69` (chat) + `langston-call:38` (alert/queue path).** Dispatch model + bridge detail in CLAUDE.md §6/§8; full build record in `LANGSTON_ARCHITECTURE.md`.
+**Langston runtime:** never stated here — two live model sites, switch BOTH (5.5); build record `LANGSTON_ARCHITECTURE.md`.
 
 **★ LANGSTON = STATELESS per-invoke (fresh `claude -p` each message): multi-turn context goes IN the prompt or a staged file, always (CLAUDE.md §6.5).**
 
@@ -54,7 +54,9 @@
 
 **★ LANGSTON'S MEMORY IS FENCED (`B-LANGSTON-MEMORY-WRITE-FENCE`, 2026-11-05):** his memory files are root-owned and immutable — only `langston-memory-write` writes them (recipe: `workflow-10-governance` §10.b). ⛔ **Its exit-7 refusal offers `--allow-growth`; that is NOT a session's to pass without a ruling from Langston or Kyle.**
 
-**★ CLAUDE.md size:** NO-TRIM (#339) still holds — nothing deleted or made unfindable; the PLACEMENT rule (#564) moves depth and evidence to a named runbook behind a short pointer (CLAUDE.md §4).
+**★ CLAUDE.md size:** NO-TRIM (#339) holds; depth and evidence move to a named runbook behind a short pointer (#564, CLAUDE.md §4).
+
+**★ TRADE RECORDS (B-CLOSE-WRITER-COSTS, closed 2026-11-14):** a close books against exactly ONE record (symbol + asset class + mode) or refuses and keeps the position (critical `close-record-unresolved-*`); the trade tables carry NO default on cost, class or mode — every writer states them.
 
 **★ ALERT IDENTITY IS CANONICAL SINCE 2026-09-02 (`#987`, CC-B, `fa563982c`):** `--by` on ack/resolve must be an exact canonical actor or it is REFUSED; the `cc-session-<date>` form is retired. ⛔ **Read the set from `ALERT_ACTORS` in `server/services/system-alerts.ts`, never from here.**
 
