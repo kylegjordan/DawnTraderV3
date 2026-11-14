@@ -91,7 +91,8 @@ async function main(): Promise<void> {
   try {
     ({ bucket: coldBucket, setupMs } = await loadColdBucket());
   } catch (err) {
-    const msg = `Could not resolve cold bucket config: ${err instanceof Error ? err.message : String(err)}`;
+    // 3b item 2 r2 (Langston C-4): this also covers the transfer limits now, so the message names both reads
+    const msg = `Could not resolve cold config (data_lifecycle.cold_bucket or the cold transfer limits): ${err instanceof Error ? err.message : String(err)}`;
     console.error(`[cold-liveness] ${msg}`);
     await raiseAlert(msg);
     process.exit(1);

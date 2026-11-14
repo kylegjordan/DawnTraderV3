@@ -423,6 +423,9 @@ describe('3b item 2 — the restore reads the attestation column (the reader, La
     expect(src).toContain('manifest.provider_file_id');
     expect(src).toMatch(/download\.provider_file_id\s*\?\s*await storage\.downloadColdFileById\(download\.provider_file_id, localPath\)/);
     expect(src).toMatch(/no bound file id yet — reading by NAME/);
+    // the provenance travels in the .completeness.json sidecar, not only on stderr (Langston item 2 (a))
+    expect(src).toContain('provider_file_id: download.provider_file_id ?? null,');
+    expect(src).toContain("version_bound: download.tier === 'warm' ? true : !!download.provider_file_id,");
   });
 });
 
@@ -443,12 +446,29 @@ describe('3b item 2 — Langston r3 carries', () => {
     expect(src).toContain('[B75 rotator] RUN elapsed_ms=${Date.now() - startedAt.getTime()} candidates_done=0');
     expect(src).toMatch(/dry_run=true`,\s*\);\s*console\.log\(\s*`\[B75 rotator\] DONE candidates=\$\{candidates\.length\} rotated=0 failed=0 bytes_moved=0 deferred=\$\{capDeferred\}/);
   });
-  it('a holder older than the run deadline is taken over even on another host; a fresh one is held', () => {
+  it('another host: older than the bound is taken over (a hostname change); within it, held', () => {
     const f = path.join(tmp(), 'lock');
     const now = Date.parse('2026-12-01T03:00:00Z');
+    const bound = 2 * 72_000_000; // 40 h
     fs.writeFileSync(f, JSON.stringify({ pid: 1, host: 'renamed-host', started_at: '2026-11-01T03:00:00Z' }));
-    expect(acquireRotatorLock(f, () => true, 72_000_000, now).kind).toBe('taken_over');
-    fs.writeFileSync(f, JSON.stringify({ pid: 1, host: 'renamed-host', started_at: '2026-12-01T02:00:00Z' }));
-    expect(acquireRotatorLock(f, () => true, 72_000_000, now).kind).toBe('held');
+    expect(acquireRotatorLock(f, () => true, bound, now).kind).toBe('taken_over');
+    fs.writeFileSync(f, JSON.stringify({ pid: 1, host: 'renamed-host', started_at: '2026-11-30T03:00:00Z' })); // 24 h old
+    expect(acquireRotatorLock(f, () => true, bound, now).kind).toBe('held');
+  });
+  it('same host: a LIVE holder is never taken over on age, however old (Langston item 2 C-1)', () => {
+    const f = path.join(tmp(), 'lock');
+    const now = Date.parse('2026-12-01T03:00:00Z');
+    fs.writeFileSync(f, JSON.stringify({ pid: 4242, host: os.hostname(), started_at: '2026-11-01T03:00:00Z' }));
+    // pid alive and started BEFORE the lock was written → the genuine holder, still running
+    expect(acquireRotatorLock(f, () => true, 1, now, () => Date.parse('2026-11-01T02:59:59Z')).kind).toBe('held');
+  });
+  it('same host: a live pid that started AFTER the lock was written is a recycled pid → taken over', () => {
+    const f = path.join(tmp(), 'lock');
+    const now = Date.parse('2026-12-01T03:00:00Z');
+    fs.writeFileSync(f, JSON.stringify({ pid: 4242, host: os.hostname(), started_at: '2026-11-01T03:00:00Z' }));
+    expect(acquireRotatorLock(f, () => true, undefined, now, () => Date.parse('2026-11-20T10:00:00Z')).kind).toBe('taken_over');
+  });
+  it('the rotator passes 2 x the run deadline as the other-host bound', () => {
+    expect(read('server/scripts/b75-cold-rotator.ts')).toContain('acquireRotatorLock(ROTATOR_LOCK_PATH, undefined, 2 * cfg.runDeadlineMs)');
   });
 });

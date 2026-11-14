@@ -521,7 +521,10 @@ async function runColdRotatorCliBody(): Promise<void> {
   } finally {
     await ctl.end();
   }
-  const lock = acquireRotatorLock(ROTATOR_LOCK_PATH, undefined, cfg.runDeadlineMs);
+  // The age bound applies only to a holder on ANOTHER host (a same-host holder is judged by its live pid and that
+  // pid's start time). 2 x the run deadline: the deadline is checked BETWEEN candidates, so a live run may outlast it
+  // by its last candidate's full envelope (pre-audit term list); 2x leaves that envelope 20 h (Langston, item 2 C-1).
+  const lock = acquireRotatorLock(ROTATOR_LOCK_PATH, undefined, 2 * cfg.runDeadlineMs);
   if (lock.kind === 'held') {
     console.error(`[B75 rotator] REFUSED — the rotator lock is held: ${lock.holder}`);
     await pageRotatorLock('refused', `Another cold rotator holds ${ROTATOR_LOCK_PATH}: ${lock.holder}. This run did nothing.`);
@@ -674,18 +677,34 @@ export const ROTATOR_LOCK_PATH = path.join(os.homedir(), '.b75-cold-rotator.lock
 
 export type RotatorLock = { kind: 'acquired' } | { kind: 'held'; holder: string } | { kind: 'taken_over'; holder: string };
 
-/** Atomically creates the lock (O_EXCL). An existing lock whose pid is alive on this host is HELD; a dead or unreadable
- * holder is taken over (logged and paged by the caller). A holder on another host cannot be checked from here, so it
- * is HELD (refuse and page), never taken over. `isAlive` is injectable for tests. */
+/** Atomically creates the lock (O_EXCL). On THIS host: a holder whose pid is alive is HELD, unless that pid started
+ * after the lock was written (a recycled pid — the holder died and the number was reused), which is taken over; a
+ * dead pid or an unreadable file is taken over. On ANOTHER host: HELD, unless its started_at is older than
+ * `staleAfterMs` (a hostname change must not make the lock permanent). Never taken over on age while a same-host pid
+ * is alive (Langston, item 2 C-1). Takeovers are logged and paged by the caller. Probes are injectable for tests. */
 export function acquireRotatorLock(
   file: string,
   isAlive: (pid: number) => boolean = rotatorPidAlive,
-  /** 3b item 2 (Langston r1 (b)): a holder whose started_at is older than this cannot be a live run on ANY host (the
-   *  run deadline bounds a run), so it is taken over even across a hostname change. Omitted ⇒ no age bound. */
+  /** applies to a holder on ANOTHER host only; omitted ⇒ another host's holder is held forever */
   staleAfterMs?: number,
   nowMs: number = Date.now(),
+  pidStartedMs: (pid: number) => number | null = linuxPidStartedMs,
 ): RotatorLock {
-  return acquireRotatorLockImpl(file, isAlive, staleAfterMs, nowMs);
+  return acquireRotatorLockImpl(file, isAlive, staleAfterMs, nowMs, pidStartedMs);
+}
+
+/** A process's start time in epoch ms from /proc (Linux); null where it cannot be read (then the pid is trusted). */
+export function linuxPidStartedMs(pid: number): number | null {
+  try {
+    const stat = fs.readFileSync(`/proc/${pid}/stat`, 'utf-8');
+    const after = stat.slice(stat.lastIndexOf(')') + 2).split(' ');
+    const startTicks = Number(after[19]); // field 22 overall: starttime, clock ticks since boot
+    const btime = /^btime (\d+)$/m.exec(fs.readFileSync('/proc/stat', 'utf-8'));
+    if (!btime || !Number.isFinite(startTicks)) return null;
+    return Number(btime[1]) * 1000 + Math.round((startTicks / 100) * 1000); // USER_HZ is 100 on Linux x86-64
+  } catch {
+    return null;
+  }
 }
 
 function rotatorPidAlive(pid: number): boolean {
@@ -702,6 +721,7 @@ function acquireRotatorLockImpl(
   isAlive: (pid: number) => boolean,
   staleAfterMs: number | undefined,
   nowMs: number,
+  pidStartedMs: (pid: number) => number | null,
 ): RotatorLock {
   const me = JSON.stringify({ pid: process.pid, host: os.hostname(), started_at: new Date().toISOString() });
   try {
@@ -715,9 +735,18 @@ function acquireRotatorLockImpl(
   try {
     holder = fs.readFileSync(file, 'utf-8');
     const h = JSON.parse(holder) as { pid?: unknown; host?: unknown; started_at?: unknown };
-    if (typeof h.pid === 'number') alive = h.host !== os.hostname() ? true : isAlive(h.pid);
     const startedMs = typeof h.started_at === 'string' ? Date.parse(h.started_at) : NaN;
-    if (alive && staleAfterMs !== undefined && Number.isFinite(startedMs) && nowMs - startedMs > staleAfterMs) alive = false;
+    if (typeof h.pid === 'number') {
+      if (h.host !== os.hostname()) {
+        // cannot probe another host: held, unless older than the bound
+        alive = !(staleAfterMs !== undefined && Number.isFinite(startedMs) && nowMs - startedMs > staleAfterMs);
+      } else {
+        alive = isAlive(h.pid);
+        // a live pid that STARTED after the lock was written is not the holder (5 s slack for the writer's own start)
+        const ps = alive && Number.isFinite(startedMs) ? pidStartedMs(h.pid) : null;
+        if (ps !== null && ps > startedMs + 5000) alive = false;
+      }
+    }
   } catch {
     alive = false;
   }

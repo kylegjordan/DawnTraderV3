@@ -520,6 +520,10 @@ export async function rehydrateChosenObject(
       table: args.table,
       partition_label: label,
       tier: download.tier,
+      // 3b item 2 r2 (Langston (a)): the version provenance travels WITH the restored file. A warm read is always the
+      // one object; a cold read is version-bound only when the row carried a provider_file_id.
+      provider_file_id: download.provider_file_id ?? null,
+      version_bound: download.tier === 'warm' ? true : !!download.provider_file_id,
       completeness_basis: basis,
       proven,
       checksum_ok: checksumOk,
