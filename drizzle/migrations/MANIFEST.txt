@@ -255,3 +255,4 @@
 2026-11-05-b-entry-gate-inc-b.sql
 2026-11-13-b-disk-file-tiering-cold-attestation.sql
 2026-11-14-b-disk-file-tiering-cold-retry.sql
+2026-11-14-b-disk-file-tiering-cold-audit.sql

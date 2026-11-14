@@ -157,6 +157,19 @@ const CHECKS: CheckSpec[] = [
     onMissing: 'skip',
   },
   {
+    // B-DISK-FILE-TIERING 3c (plan r1-r3): the cold meter + budgeted read-back — this IS the meter's liveness carrier
+    // (Langston (ii): a size warning whose silence could mean "not running" is an unmonitored meter). 04:10Z so a
+    // failed run is graded the same morning; its own 40-min deadline ends it before 05:00Z (plan r3 edit 1). Both
+    // counters summed: read-back failures and a failed run (a partial listing, a refused config).
+    name: 'b75-cold-audit',
+    label: 'B75 cold meter + read-back (daily 04:10 UTC)',
+    logFile: 'b75-cold-audit.log',
+    schedule: '10 4 * * *',
+    donePattern: /DONE .*\breadback_failed=(\d+)\b.*\bfailed=(\d+)\b/,
+    startPattern: /\[B75 cold-audit\] started at (\S+) /,
+    onMissing: 'skip', // until its first recorded run, then 'alert' (the disk-file-tiering precedent)
+  },
+  {
     // B-DISK-FILE-TIERING (#1233, pre-audit P7): this IS the job's page (no second key). It was 'skip' until
     // its first good run; that run is recorded (2026-11-05 02:45-03:03Z: `DONE moved=1709 failed=0`, all 1,709
     // manifest rows warm/active with checksums, one day restored byte-exact), so it is now 'alert' (O1): a

@@ -889,27 +889,48 @@ export class StorageClient {
   async downloadColdFileById(
     fileId: string,
     localPath: string,
-    bound?: { expectedBytes: number; limits: ColdTransferLimits },
+    bound?: { expectedBytes: number; limits: ColdTransferLimits; onPhase?: (p: TransferPhaseLog) => void },
   ): Promise<{ bytes: number; checksum: string; fileId: string }> {
     if (!this.isColdConfigured()) {
       throw new Error('[B75 storage-client] cold storage not configured');
     }
-    const auth = await this.b2Authorize(bound?.limits.setupMs);
-    const res = await fetch(`${auth.downloadUrl}/b2api/v3/b2_download_file_by_id?fileId=${encodeURIComponent(fileId)}`, {
-      method: 'GET',
-      headers: { Authorization: auth.accountAuthToken },
-      ...(bound ? { signal: AbortSignal.timeout(phaseBudgetMs(bound.expectedBytes, bound.limits)) } : {}),
-    });
-    if (!res.ok) throw await b2Error('download_file_by_id', res);
-    if (!res.body) throw new Error('[B75 storage-client] B2 download by id: response has no body stream');
-    const gotId = res.headers.get('x-bz-file-id');
-    if (gotId !== fileId) {
-      await res.body.cancel().catch(() => {});
-      throw new Error(`[B75 storage-client] B2 download by id returned version ${gotId ?? 'none'}, expected ${fileId}`);
+    // 3c plan r3 edit 6 (Langston): the bound refusal is logged HERE, once, for every bounded caller — the same
+    // outcome-in-finally shape as downloadWarmFile — so a deadline abort is never silent at any call site.
+    const budgetMs = bound ? phaseBudgetMs(bound.expectedBytes, bound.limits) : null;
+    const t0 = Date.now();
+    let outcome: TransferPhaseLog['outcome'] = 'error';
+    try {
+      const auth = await this.b2Authorize(bound?.limits.setupMs);
+      const res = await fetch(`${auth.downloadUrl}/b2api/v3/b2_download_file_by_id?fileId=${encodeURIComponent(fileId)}`, {
+        method: 'GET',
+        headers: { Authorization: auth.accountAuthToken },
+        ...(budgetMs !== null ? { signal: AbortSignal.timeout(budgetMs) } : {}),
+      });
+      if (!res.ok) {
+        outcome = 'refused';
+        throw await b2Error('download_file_by_id', res);
+      }
+      if (!res.body) throw new Error('[B75 storage-client] B2 download by id: response has no body stream');
+      const gotId = res.headers.get('x-bz-file-id');
+      if (gotId !== fileId) {
+        await res.body.cancel().catch(() => {});
+        throw new Error(`[B75 storage-client] B2 download by id returned version ${gotId ?? 'none'}, expected ${fileId}`);
+      }
+      await pipeline(Readable.fromWeb(res.body as Parameters<typeof Readable.fromWeb>[0]), fs.createWriteStream(localPath, { mode: 0o600 }));
+      const checksum = await sha256HexStream(fs.createReadStream(localPath));
+      outcome = 'ok';
+      return { bytes: fs.statSync(localPath).size, checksum, fileId };
+    } catch (err) {
+      if ((err as Error)?.name === 'TimeoutError' || (err as Error)?.name === 'AbortError') outcome = 'deadline';
+      throw err;
+    } finally {
+      if (bound) {
+        const got = fs.existsSync(localPath) ? fs.statSync(localPath).size : 0;
+        const entry = phaseLog('cold_read_by_id', 1, got, Date.now() - t0, budgetMs, outcome);
+        if (bound.onPhase) bound.onPhase(entry);
+        else if (outcome !== 'ok') console.warn(`[B75 storage-client] cold read by id ${fileId} ${JSON.stringify(entry)}`);
+      }
     }
-    await pipeline(Readable.fromWeb(res.body as Parameters<typeof Readable.fromWeb>[0]), fs.createWriteStream(localPath, { mode: 0o600 }));
-    const checksum = await sha256HexStream(fs.createReadStream(localPath));
-    return { bytes: fs.statSync(localPath).size, checksum, fileId };
   }
 
   /** `b2_get_file_info` by file id — metadata only, no file bytes. */
@@ -1063,7 +1084,7 @@ export interface ColdTransferLimits {
 
 /** One transfer phase's own deciding quantity, logged on EVERY attempt including an abort (A-4). */
 export interface TransferPhaseLog {
-  phase: 'warm_read' | 'upload_body';
+  phase: 'warm_read' | 'upload_body' | 'cold_read_by_id';
   attempt: number;
   bytes: number | null;
   elapsed_ms: number;
