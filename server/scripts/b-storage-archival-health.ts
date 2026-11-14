@@ -43,6 +43,7 @@ import pg from 'pg';
 import { addAlert } from '../services/system-alerts.js';
 import { execFileSync } from 'node:child_process';
 import { cadenceVerdict } from '../services/archival-cadence.js';
+import { deferredFromRotatorLog } from '../services/archival-run-check.js';
 import { computePrevFire } from '../services/cron-next-fire.js';
 import {
   ARCHIVAL_TAIL_CAP_BYTES,
@@ -478,6 +479,87 @@ async function checkDailyPartitionRunway(nowMs: number): Promise<boolean> {
   return ok;
 }
 
+/**
+ * B-DISK-FILE-TIERING 3b (plan r4 1c, r5 edits 1-2) — the cold rotator's two durable signals:
+ *  (a) an UNRESOLVED row in data_archive_cold_upload_failure pages (one alert per partition; it stays active and the
+ *      dispatcher re-surfaces it, so it keeps paging across days until a later run resolves it);
+ *  (b) the rotator's last DONE line with `deferred=N>0` pages on the FIRST such run, and escalates to critical when
+ *      the run before it also deferred (the cron is monthly — "two consecutive" alone would be two months of backlog).
+ * Read-only. A DB-unreachable is inconclusive (logged), as in the runway check; it never ends the watchdog run.
+ */
+
+async function checkColdRotationSignals(): Promise<boolean> {
+  let ok = true;
+  const runs = deferredFromRotatorLog(
+    readTail(`${LOG_DIR}/b75-cold-rotator.log.1`, 64 * 1024) + '\n' + readTail(`${LOG_DIR}/b75-cold-rotator.log`, 64 * 1024),
+  );
+  const last = runs.length ? runs[runs.length - 1] : 0;
+  const prev = runs.length > 1 ? runs[runs.length - 2] : 0;
+  if (last > 0) {
+    ok = false;
+    const twice = prev > 0;
+    try {
+      const raised = await raise({
+        triggers_at: new Date(),
+        category: 'health_check',
+        severity: twice ? 'critical' : 'warning',
+        title: twice ? 'Cold rotator deferred candidates on two consecutive runs' : 'Cold rotator deferred candidates',
+        body:
+          `The last cold rotator run deferred ${last} candidate(s)${twice ? ` and the run before it deferred ${prev}` : ''}: ` +
+          `it reached data_lifecycle.cold_rotator_run_deadline_ms or cold_rotator_max_candidates_per_run. Warm objects ` +
+          `older than retention are accumulating. Read the run's RUN line (elapsed_ms, candidates_done, ` +
+          `fixed_ms_per_candidate) in b75-cold-rotator.log before changing either limit.`,
+        metadata: { source: 'b-storage-archival-health', batch: 'B-DISK-FILE-TIERING', check: 'cold-rotator-deferred', deferred: last, previous_deferred: prev },
+        dedupe_key: `archival-health-cold-rotator-deferred${twice ? '-twice' : ''}`,
+      });
+      console.log(`[archival-health] ${raised ? 'ALERT' : 'DRY-ALERT'} cold-rotator/deferred: last=${last} previous=${prev}`);
+    } catch (err) {
+      console.error('[archival-health] failed to raise the cold-rotator deferred alert:', err);
+    }
+  } else {
+    console.log(`[archival-health] cold-rotator deferred: OK (last run deferred 0; runs read ${runs.length})`);
+  }
+  if (!process.env.DATABASE_URL) {
+    console.log('[archival-health] cold-upload-failures: DATABASE_URL unset — skip');
+    return ok;
+  }
+  const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
+  try {
+    await client.connect();
+    const r = await client.query<{ source_table: string; partition_label: string; path: string; failure_count: number; last_failed_at: Date }>(
+      `SELECT source_table, partition_label, path, failure_count, last_failed_at
+         FROM data_archive_cold_upload_failure WHERE resolved_at IS NULL ORDER BY last_failed_at`,
+    );
+    for (const row of r.rows) {
+      ok = false;
+      try {
+        const raised = await raise({
+          triggers_at: new Date(),
+          category: 'health_check',
+          severity: 'warning',
+          title: `Cold upload failed and is unresolved: ${row.source_table}/${row.partition_label}`,
+          body:
+            `The cold rotator failed to upload ${row.path} on all its attempts (${row.failure_count} failed run(s), last ` +
+            `${new Date(row.last_failed_at).toISOString()}). The warm copy is kept and nothing was deleted. A failed ` +
+            `attempt may have left a stored B2 version under that name with no manifest row — the 3b bucket listing ` +
+            `reconciles it. The next monthly run retries the partition and resolves this row on success.`,
+          metadata: { source: 'b-storage-archival-health', batch: 'B-DISK-FILE-TIERING', check: 'cold-upload-failure', path: row.path, failure_count: Number(row.failure_count) },
+          dedupe_key: `archival-health-cold-upload-failure-${row.source_table}-${row.partition_label}`,
+        });
+        console.log(`[archival-health] ${raised ? 'ALERT' : 'DRY-ALERT'} cold-upload-failure: ${row.path} (${row.failure_count})`);
+      } catch (err) {
+        console.error('[archival-health] failed to raise a cold-upload-failure alert:', err);
+      }
+    }
+    if (r.rows.length === 0) console.log('[archival-health] cold-upload-failures: OK (0 unresolved)');
+  } catch (err) {
+    console.error('[archival-health] cold-upload-failures check errored (DB unreachable?) — inconclusive:', err);
+  } finally {
+    await client.end().catch(() => {});
+  }
+  return ok;
+}
+
 async function main(): Promise<void> {
   const nowMs = Date.now();
   const startIso = new Date(nowMs).toISOString();
@@ -516,7 +598,10 @@ async function main(): Promise<void> {
   // Wave D (OBJ-3): daily-partition forward-coverage check.
   const runwayOk = await checkDailyPartitionRunway(nowMs);
   if (!runwayOk) allOk = false;
-  console.log(`[archival-health] DONE — all_ok=${allOk} checks=${CHECKS.length + 1}`);
+  // B-DISK-FILE-TIERING 3b: the cold rotator's durable failure record and deferral signal.
+  const coldOk = await checkColdRotationSignals();
+  if (!coldOk) allOk = false;
+  console.log(`[archival-health] DONE — all_ok=${allOk} checks=${CHECKS.length + 2}`);
   // Exit 0 regardless (alerts are the signal); non-zero would just noise the cron log.
 }
 

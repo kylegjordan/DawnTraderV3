@@ -143,3 +143,17 @@ export function unverifiedStreak(args: { live: string; rotated: string; currentS
   }
   return streak;
 }
+
+/**
+ * B-DISK-FILE-TIERING 3b (r5 edit 2): the `deferred=` value of every cold-rotator DONE line in a log text, in order.
+ * A DONE line written before 3b carries no `deferred=` and reads as 0. archival-health pages when the last value is
+ * > 0 and escalates when the one before it is also > 0.
+ */
+export function deferredFromRotatorLog(logText: string): number[] {
+  const out: number[] = [];
+  for (const line of logText.split('\n')) {
+    const m = /\[B75 rotator\] DONE candidates=\d+ rotated=\d+ failed=\d+ bytes_moved=\d+(?: deferred=(\d+))?/.exec(line);
+    if (m) out.push(m[1] === undefined ? 0 : Number(m[1]));
+  }
+  return out;
+}

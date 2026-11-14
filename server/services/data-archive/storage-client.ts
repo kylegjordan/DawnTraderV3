@@ -34,6 +34,7 @@ import http from 'node:http';
 import https from 'node:https';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
+import { B2CallError, B2_RETRY_DEFAULTS, b2ErrorCode, parseRetryAfterMs, withB2Retry } from './b2-retry.js';
 
 // ───────────────────────────────────────────────────────────────────────────
 // Env + module-level config (read-once at construction)
@@ -458,27 +459,46 @@ export class StorageClient {
     bucket: string,
     path: string,
     localPath: string,
+    bound?: { expectedBytes: number; limits: ColdTransferLimits; onPhase?: (p: TransferPhaseLog) => void },
   ): Promise<{ bytes: number; checksum: string }> {
     const url = `${this.projectUrl}/storage/v1/object/${bucket}/${encodePath(path)}`;
-    const res = await fetch(url, {
-      method: 'GET',
-      headers: {
-        apikey: this.serviceKey,
-        Authorization: `Bearer ${this.serviceKey}`,
-      },
-    });
-    if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      throw new Error(
-        `[B75 storage-client] warm download (file) failed: ${res.status} ${res.statusText} — ${body}`,
-      );
+    // 3b A-2: with `bound`, the whole warm read aborts at setup + expectedBytes ÷ floor (one per-phase budget; a
+    // trickling Supabase read is otherwise bounded by nothing). Not retried (A-5). Without `bound` (rehydrate, the
+    // context bridge) it behaves exactly as before.
+    const budgetMs = bound ? phaseBudgetMs(bound.expectedBytes, bound.limits) : null;
+    const t0 = Date.now();
+    let outcome: TransferPhaseLog['outcome'] = 'error';
+    try {
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: {
+          apikey: this.serviceKey,
+          Authorization: `Bearer ${this.serviceKey}`,
+        },
+        ...(budgetMs !== null ? { signal: AbortSignal.timeout(budgetMs) } : {}),
+      });
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        throw new Error(
+          `[B75 storage-client] warm download (file) failed: ${res.status} ${res.statusText} — ${body}`,
+        );
+      }
+      if (!res.body) {
+        throw new Error('[B75 storage-client] warm download (file): response has no body stream');
+      }
+      // res.body is a WHATWG ReadableStream; adapt to a Node Readable for pipeline
+      // backpressure into the write-stream. The fetch signal aborts the body stream too.
+      await pipeline(Readable.fromWeb(res.body as Parameters<typeof Readable.fromWeb>[0]), fs.createWriteStream(localPath));
+      outcome = 'ok';
+    } catch (err) {
+      if ((err as Error)?.name === 'TimeoutError' || (err as Error)?.name === 'AbortError') outcome = 'deadline';
+      throw err;
+    } finally {
+      if (bound?.onPhase) {
+        const got = fs.existsSync(localPath) ? fs.statSync(localPath).size : 0;
+        bound.onPhase(phaseLog('warm_read', 1, got, Date.now() - t0, budgetMs, outcome));
+      }
     }
-    if (!res.body) {
-      throw new Error('[B75 storage-client] warm download (file): response has no body stream');
-    }
-    // res.body is a WHATWG ReadableStream; adapt to a Node Readable for pipeline
-    // backpressure into the write-stream.
-    await pipeline(Readable.fromWeb(res.body as Parameters<typeof Readable.fromWeb>[0]), fs.createWriteStream(localPath));
     const checksum = await sha256HexStream(fs.createReadStream(localPath));
     const bytes = fs.statSync(localPath).size;
     return { bytes, checksum };
@@ -588,19 +608,19 @@ export class StorageClient {
     const keyId = requireEnv('B2_KEY_ID');
     const appKey = requireEnv('B2_APPLICATION_KEY');
     const basic = Buffer.from(`${keyId}:${appKey}`).toString('base64');
-    const res = await fetch('https://api.backblazeb2.com/b2api/v3/b2_authorize_account', {
-      method: 'GET',
-      headers: { Authorization: `Basic ${basic}` },
-    });
-    if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      throw new Error(`[B75 storage-client] B2 authorize failed: ${res.status} ${res.statusText} — ${body}`);
-    }
-    const j = (await res.json()) as {
-      accountId: string;
-      apiInfo: { storageApi: { apiUrl: string; downloadUrl: string } };
-      authorizationToken: string;
-    };
+    // 3b: retried (B2_RETRY_DEFAULTS) on a retryable (status, code); never re-authorizes itself.
+    const j = await withB2Retry('authorize', async () => {
+      const res = await fetch('https://api.backblazeb2.com/b2api/v3/b2_authorize_account', {
+        method: 'GET',
+        headers: { Authorization: `Basic ${basic}` },
+      });
+      if (!res.ok) throw await b2Error('authorize', res);
+      return (await res.json()) as {
+        accountId: string;
+        apiInfo: { storageApi: { apiUrl: string; downloadUrl: string } };
+        authorizationToken: string;
+      };
+    }, { ...B2_RETRY_DEFAULTS, onAttempt: this.b2AttemptLog });
     this.b2Auth = {
       apiUrl: j.apiInfo.storageApi.apiUrl,
       downloadUrl: j.apiInfo.storageApi.downloadUrl,
@@ -612,6 +632,20 @@ export class StorageClient {
     return this.b2Auth;
   }
 
+  /** Drops the cached token and authorizes again (a 401 expired_auth_token, amendment 5). Keeps a resolved bucket id. */
+  private async b2Reauthorize(): Promise<void> {
+    const keep = this.b2Auth?.bucketId ?? null;
+    this.b2Auth = null;
+    const a = await this.b2Authorize();
+    if (keep && !a.bucketId) a.bucketId = keep;
+  }
+
+  /** Every B2 attempt is logged, ok or not — the retry's own deciding quantity (A-4). */
+  private readonly b2AttemptLog = (r: { op: string; attempt: number; ok: boolean; status: number | null; code: string | null; disposition?: string }) => {
+    if (r.ok && r.attempt === 1) return; // a first-try success is the common case; only retries and failures are logged
+    console.log(`[B75 storage-client] b2 ${r.op} attempt=${r.attempt} ok=${r.ok} status=${r.status ?? 'none'}${r.code ? ` code=${r.code}` : ''}${r.disposition ? ` disposition=${r.disposition}` : ''}`);
+  };
+
   private async b2ResolveBucketId(bucketName: string): Promise<string> {
     const auth = await this.b2Authorize();
     if (auth.bucketId) return auth.bucketId;
@@ -622,22 +656,24 @@ export class StorageClient {
       auth.bucketId = envBucketId;
       return envBucketId;
     }
-    const res = await fetch(`${auth.apiUrl}/b2api/v3/b2_list_buckets`, {
-      method: 'POST',
-      headers: {
-        Authorization: auth.accountAuthToken,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        accountId: auth.accountId,
-        bucketName,
-      }),
-    });
-    if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      throw new Error(`[B75 storage-client] B2 list_buckets failed: ${res.status} — ${body}`);
-    }
-    const j = (await res.json()) as { buckets: Array<{ bucketId: string; bucketName: string }> };
+    // 3b (A-5): in the enumerated retry set. Off the staging live path today — the env value above returns first while
+    // the key is unrestricted, and a bucket-restricted key fills auth.bucketId (3d) — but retried for any env without it.
+    const j = await withB2Retry('list_buckets', async () => {
+      const a = await this.b2Authorize();
+      const res = await fetch(`${a.apiUrl}/b2api/v3/b2_list_buckets`, {
+        method: 'POST',
+        headers: {
+          Authorization: a.accountAuthToken,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          accountId: a.accountId,
+          bucketName,
+        }),
+      });
+      if (!res.ok) throw await b2Error('list_buckets', res);
+      return (await res.json()) as { buckets: Array<{ bucketId: string; bucketName: string }> };
+    }, { ...B2_RETRY_DEFAULTS, reauth: () => this.b2Reauthorize(), onAttempt: this.b2AttemptLog });
     const match = j.buckets.find((b) => b.bucketName === bucketName);
     if (!match) {
       throw new Error(`[B75 storage-client] B2 bucket not found: ${bucketName}`);
@@ -733,39 +769,65 @@ export class StorageClient {
    * body. Throws on ANY mismatch, and on `transaction_cap_exceeded` (fails closed — a caller must never delete warm
    * on a throw).
    */
-  async uploadColdFile(bucket: string, path: string, localPath: string): Promise<ColdFileUpload> {
+  async uploadColdFile(
+    bucket: string,
+    path: string,
+    localPath: string,
+    limits: ColdTransferLimits,
+    onPhase?: (p: TransferPhaseLog) => void,
+  ): Promise<ColdFileUpload> {
     if (!this.isColdConfigured()) {
       throw new Error('[B75 storage-client] cold storage not configured: set B2_KEY_ID, B2_APPLICATION_KEY, B2_BUCKET in env');
     }
     const { bytes, sha256, sha1 } = await hashFileSha256Sha1(localPath);
-    const auth = await this.b2Authorize();
     const bucketId = await this.b2ResolveBucketId(bucket);
-    const upUrlRes = await fetch(`${auth.apiUrl}/b2api/v3/b2_get_upload_url`, {
-      method: 'POST',
-      headers: { Authorization: auth.accountAuthToken, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ bucketId }),
-    });
-    if (!upUrlRes.ok) {
-      const body = await upUrlRes.text().catch(() => '');
-      throw new Error(`[B75 storage-client] B2 get_upload_url failed: ${upUrlRes.status} — ${body}`);
-    }
-    const upUrl = (await upUrlRes.json()) as { uploadUrl: string; authorizationToken: string };
-    // The body goes through `postFileStream` (node:https + stream.pipeline), NOT fetch: with a streamed request body,
-    // Node's fetch keeps what it has sent live until the request ends, so memory grows to the file size — 3a Step 7
-    // measured 614 MB peak RSS uploading a 535 MB file, and 632 MB against a 25 MB/s local sink where node:http stayed
-    // at 111 MB. (Measured behaviour; where inside fetch the chunks are held is not established.)
-    // Content-Length is set so B2 receives a sized body, never chunked.
-    const upRes = await postFileStream(upUrl.uploadUrl, {
-      Authorization: upUrl.authorizationToken,
-      'X-Bz-File-Name': encodePath(path),
-      'X-Bz-Content-Sha1': sha1,
-      'Content-Type': 'application/gzip',
-      'Content-Length': String(bytes),
-    }, localPath);
-    if (upRes.status < 200 || upRes.status >= 300) {
-      throw new Error(`[B75 storage-client] B2 upload failed: ${upRes.status} — ${upRes.text}`);
-    }
-    const up = JSON.parse(upRes.text) as B2FileVersion;
+    // The body's budget is setup + bytes ÷ floor, like the warm read's: the body phase also carries fixed costs that do
+    // not scale with size (the connection to the upload URL, and B2 hashing and answering after the last byte). A pure
+    // bytes ÷ floor gave a 10-byte body 10 ms and aborted every small object (caught by the 3a attestation test at Step 3).
+    const bodyBudgetMs = phaseBudgetMs(bytes, limits);
+    // 3b — the bounded retry (KD-34, amendments 1-9). Every attempt fetches a FRESH upload URL (B2's contract for a
+    // 5xx), re-opens the file (postFileStream takes a path), and has its own per-phase budgets: setup (authorize +
+    // get_upload_url) under `limits.setupMs`, the body under bytes ÷ floor. A 401 expired_auth_token re-authorizes
+    // inside the same 3 attempts. The attestation below runs OUTSIDE the retry: a 200 that does not attest throws at
+    // once (amendment 8). A final throw is fail-closed — the caller writes no manifest row and never deletes warm.
+    const up = await withB2Retry('upload', async (attempt) => {
+      const auth = await this.b2Authorize();
+      const upUrlRes = await fetch(`${auth.apiUrl}/b2api/v3/b2_get_upload_url`, {
+        method: 'POST',
+        headers: { Authorization: auth.accountAuthToken, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bucketId }),
+        signal: AbortSignal.timeout(limits.setupMs),
+      });
+      if (!upUrlRes.ok) throw await b2Error('get_upload_url', upUrlRes);
+      const upUrl = (await upUrlRes.json()) as { uploadUrl: string; authorizationToken: string };
+      // The body goes through `postFileStream` (node:https + stream.pipeline), NOT fetch: with a streamed request
+      // body, Node's fetch keeps what it has sent live until the request ends, so memory grows to the file size — 3a
+      // Step 7 measured 614 MB peak RSS uploading a 535 MB file, and 632 MB against a 25 MB/s local sink where
+      // node:http stayed at 111 MB. (Measured behaviour; where inside fetch the chunks are held is not established.)
+      // Content-Length is set so B2 receives a sized body, never chunked.
+      const t0 = Date.now();
+      let outcome: TransferPhaseLog['outcome'] = 'error';
+      try {
+        const upRes = await postFileStream(upUrl.uploadUrl, {
+          Authorization: upUrl.authorizationToken,
+          'X-Bz-File-Name': encodePath(path),
+          'X-Bz-Content-Sha1': sha1,
+          'Content-Type': 'application/gzip',
+          'Content-Length': String(bytes),
+        }, localPath, { deadlineMs: bodyBudgetMs });
+        if (upRes.status < 200 || upRes.status >= 300) {
+          outcome = 'refused';
+          throw new B2CallError('upload', upRes.status, b2ErrorCode(upRes.text), upRes.text, parseRetryAfterMs(upRes.retryAfter));
+        }
+        outcome = 'ok';
+        return JSON.parse(upRes.text) as B2FileVersion;
+      } catch (err) {
+        if ((err as Error)?.message?.includes(UPLOAD_DEADLINE_MARK)) outcome = 'deadline';
+        throw err;
+      } finally {
+        onPhase?.(phaseLog('upload_body', attempt, outcome === 'ok' ? bytes : null, Date.now() - t0, bodyBudgetMs, outcome));
+      }
+    }, { ...B2_RETRY_DEFAULTS, reauth: () => this.b2Reauthorize(), onAttempt: this.b2AttemptLog });
     // Coltrane 1: the response names the version that was stored — check every field we sent.
     assertB2Version('upload response', up, { action: 'upload', bucketId, fileName: path, sha1, bytes });
     // Coltrane 2: read the SAME version back by its id (metadata) and check again.
@@ -796,17 +858,18 @@ export class StorageClient {
 
   /** `b2_get_file_info` by file id — metadata only, no file bytes. */
   async b2GetFileInfo(fileId: string): Promise<B2FileVersion> {
-    const auth = await this.b2Authorize();
-    const res = await fetch(`${auth.apiUrl}/b2api/v3/b2_get_file_info`, {
-      method: 'POST',
-      headers: { Authorization: auth.accountAuthToken, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fileId }),
-    });
-    if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      throw new Error(`[B75 storage-client] B2 get_file_info failed: ${res.status} — ${body}`);
-    }
-    return (await res.json()) as B2FileVersion;
+    // 3b amendment 1: retried — an idempotent metadata read; a 503 here after an attested upload must not throw that
+    // upload away and manufacture an orphan.
+    return withB2Retry('get_file_info', async () => {
+      const auth = await this.b2Authorize();
+      const res = await fetch(`${auth.apiUrl}/b2api/v3/b2_get_file_info`, {
+        method: 'POST',
+        headers: { Authorization: auth.accountAuthToken, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileId }),
+      });
+      if (!res.ok) throw await b2Error('get_file_info', res);
+      return (await res.json()) as B2FileVersion;
+    }, { ...B2_RETRY_DEFAULTS, reauth: () => this.b2Reauthorize(), onAttempt: this.b2AttemptLog });
   }
 
   /**
@@ -875,6 +938,53 @@ export function sha256Hex(buf: Buffer): string {
   return crypto.createHash('sha256').update(buf).digest('hex');
 }
 
+/**
+ * The cold transfer limits (3b plan r4/r5), read from `data_lifecycle` by every caller — never a literal (A-4):
+ * `cold_upload_setup_ms` bounds authorize + get_upload_url per attempt; `cold_body_min_bytes_per_s` sets each body
+ * phase's budget at bytes ÷ floor (the warm read once, the upload body per attempt). Per phase, not one envelope.
+ */
+export interface ColdTransferLimits {
+  setupMs: number;
+  minBytesPerSec: number;
+}
+
+/** One transfer phase's own deciding quantity, logged on EVERY attempt including an abort (A-4). */
+export interface TransferPhaseLog {
+  phase: 'warm_read' | 'upload_body';
+  attempt: number;
+  bytes: number | null;
+  elapsed_ms: number;
+  budget_ms: number | null;
+  achieved_bytes_per_s: number | null;
+  outcome: 'ok' | 'deadline' | 'refused' | 'error';
+}
+
+/** A body phase's budget: setup + bytes ÷ floor for the warm read (one fetch carries both), bytes ÷ floor for a body. */
+export function phaseBudgetMs(bytes: number, limits: ColdTransferLimits): number {
+  return limits.setupMs + Math.ceil((bytes / limits.minBytesPerSec) * 1000);
+}
+
+export function phaseLog(
+  phase: TransferPhaseLog['phase'],
+  attempt: number,
+  bytes: number | null,
+  elapsedMs: number,
+  budgetMs: number | null,
+  outcome: TransferPhaseLog['outcome'],
+): TransferPhaseLog {
+  const achieved = bytes !== null && elapsedMs > 0 ? Math.round((bytes / elapsedMs) * 1000) : null;
+  return { phase, attempt, bytes, elapsed_ms: elapsedMs, budget_ms: budgetMs, achieved_bytes_per_s: achieved, outcome };
+}
+
+/** A B2 non-2xx response as a classifiable error (status + B2 `code` + Retry-After). */
+async function b2Error(op: string, res: Response): Promise<B2CallError> {
+  const text = await res.text().catch(() => '');
+  return new B2CallError(op, res.status, b2ErrorCode(text), text, parseRetryAfterMs(res.headers.get('retry-after')));
+}
+
+/** The message marker of a body-deadline abort in postFileStream (the upload phase log reads it). */
+export const UPLOAD_DEADLINE_MARK = 'upload body deadline';
+
 /** The cold upload's attested result (amendment 4 / 3a): what the manifest records beside its SHA-256. */
 export interface ColdFileUpload {
   bytes: number;
@@ -936,7 +1046,8 @@ export async function postFileStream(
   url: string,
   headers: Record<string, string>,
   localPath: string,
-): Promise<{ status: number; text: string }> {
+  opts: { deadlineMs?: number } = {},
+): Promise<{ status: number; text: string; retryAfter: string | null }> {
   const u = new URL(url);
   const loopback = u.hostname === '127.0.0.1' || u.hostname === 'localhost';
   const underTest = process.env.VITEST === 'true' || process.env.NODE_ENV === 'test';
@@ -946,9 +1057,11 @@ export async function postFileStream(
   const transport = u.protocol === 'https:' ? https : http;
   return await new Promise((resolve, reject) => {
     let settled = false;
-    const done = (err: Error | null, v?: { status: number; text: string }) => {
+    let deadline: NodeJS.Timeout | null = null;
+    const done = (err: Error | null, v?: { status: number; text: string; retryAfter: string | null }) => {
       if (settled) return;
       settled = true;
+      if (deadline) clearTimeout(deadline);
       // A receiver that answers before the whole body is sent (e.g. a 400 on the headers) and keeps the socket open
       // would otherwise leave the request and the file read stream alive: the open read stream pins the temp file's
       // inode after the caller unlinks it, so its disk space is never reclaimed (Langston, 3a Step-9 Step 4). Destroying
@@ -960,10 +1073,18 @@ export async function postFileStream(
     const req = transport.request(u, { method: 'POST', headers }, (res) => {
       const chunks: Buffer[] = [];
       res.on('data', (c: Buffer) => chunks.push(c));
-      res.on('end', () => done(null, { status: res.statusCode ?? 0, text: Buffer.concat(chunks).toString('utf8') }));
+      res.on('end', () => {
+        const ra = res.headers['retry-after'];
+        done(null, { status: res.statusCode ?? 0, text: Buffer.concat(chunks).toString('utf8'), retryAfter: typeof ra === 'string' ? ra : null });
+      });
       res.on('error', (e) => done(e));
     });
+    // Two independent bounds (3b mechanics): the idle timer catches a dead socket; the deadline catches a trickle that
+    // is never idle for 300 s. The deadline ABORTS — it settles the promise, and done() destroys the request.
     req.setTimeout(300_000, () => req.destroy(new Error('[B75 storage-client] upload socket idle for 300 s')));
+    if (opts.deadlineMs !== undefined) {
+      deadline = setTimeout(() => done(new Error(`[B75 storage-client] ${UPLOAD_DEADLINE_MARK} of ${opts.deadlineMs} ms passed`)), opts.deadlineMs);
+    }
     req.on('error', (e) => done(e));
     // A pipeline failure before the response settles rejects; after it (including the destroy in done()), it is moot.
     pipeline(fs.createReadStream(localPath), req).catch((e) => done(e as Error));

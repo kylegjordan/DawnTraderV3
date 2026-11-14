@@ -28,7 +28,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import pg from 'pg';
-import { getStorageClient, type StorageClient } from '../services/data-archive/storage-client.js';
+import { getStorageClient, type ColdTransferLimits, type StorageClient } from '../services/data-archive/storage-client.js';
+import { loadColdLimits } from '../services/data-archive/cold-limits.js';
 import { isDirectEntry } from './direct-entry.js';
 
 export const PROOF_PREFIX = '_proof';
@@ -55,6 +56,8 @@ export interface ProofResult {
 export interface ProofDependencies {
   storage: Pick<StorageClient, 'downloadWarmFile' | 'uploadColdFile' | 'deleteColdVersion'>;
   coldBucket: string;
+  /** 3b: per-phase transfer limits from data_lifecycle */
+  coldLimits: ColdTransferLimits;
   tempRoot: string;
   sampleMs?: number;
   rssKb?: () => number;
@@ -92,7 +95,7 @@ export async function runColdProof(
       throw new Error(`[B75 cold-proof] warm checksum drift: manifest=${row.checksum} actual=${warm.checksum}`);
     }
     const proofPath = `${PROOF_PREFIX}/${row.source_table}/${row.partition_label}.jsonl.gz`;
-    const cold = await deps.storage.uploadColdFile(deps.coldBucket, proofPath, local);
+    const cold = await deps.storage.uploadColdFile(deps.coldBucket, proofPath, local, deps.coldLimits);
     const t2 = Date.now();
     sample();
     let deleted = false;
@@ -121,6 +124,7 @@ async function main(): Promise<void> {
   await client.connect();
   let row: { id: string; storage_uri: string; checksum: string; source_table: string; partition_label: string };
   let coldBucket: string;
+  let coldLimits: ColdTransferLimits;
   try {
     const r = await client.query(
       `SELECT id, storage_uri, checksum, source_table, partition_label FROM data_archive_manifest
@@ -134,10 +138,11 @@ async function main(): Promise<void> {
     );
     if (typeof c.rows[0]?.value !== 'string') throw new Error('[B75 cold-proof] missing data_lifecycle.cold_bucket');
     coldBucket = c.rows[0].value;
+    coldLimits = await loadColdLimits(client, 'B75 cold-proof');
   } finally {
     await client.end().catch(() => {});
   }
-  const result = await runColdProof(row, { storage: getStorageClient(), coldBucket, tempRoot: os.homedir() });
+  const result = await runColdProof(row, { storage: getStorageClient(), coldBucket, coldLimits, tempRoot: os.homedir() });
   console.log(JSON.stringify(result));
 }
 

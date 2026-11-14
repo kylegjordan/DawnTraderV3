@@ -105,6 +105,9 @@ async function fakeB2(opts: {
   return seen;
 }
 
+/** 3b: generous per-phase limits — these tests are about streaming and attestation, not deadlines. */
+const LIMITS = { setupMs: 60_000, minBytesPerSec: 1024 };
+
 function client(): StorageClient {
   process.env.SUPABASE_URL = 'https://proj.fake';
   process.env.SUPABASE_SERVICE_ROLE_KEY = 'srk';
@@ -124,7 +127,7 @@ describe('3a — uploadColdFile streams the file and attests the stored version 
     for (let i = 0; i < 96; i++) fs.writeSync(fd, chunk);
     fs.closeSync(fd);
     const seen = await fakeB2();
-    const r = await client().uploadColdFile('dt-archive-cold', 'x/2026-06.jsonl.gz', f);
+    const r = await client().uploadColdFile('dt-archive-cold', 'x/2026-06.jsonl.gz', f, LIMITS);
     expect(r.bytes).toBe(96 * 1024 * 1024);
     expect(r.fileId).toBe('file-v1');
     expect(seen.uploads).toBe(1);
@@ -172,7 +175,7 @@ describe('3a — uploadColdFile streams the file and attests the stored version 
     try {
       const url = `http://127.0.0.1:${(raw.address() as { port: number }).port}/upload`;
       const r = await postFileStream(url, { 'Content-Length': String(64 * 1024 * 1024) }, f);
-      expect(r).toEqual({ status: 400, text: 'nope' });
+      expect(r).toEqual({ status: 400, text: 'nope', retryAfter: null });
       const body = streams[streams.length - 1];
       for (let i = 0; i < 40 && !(body.destroyed && socketClosed); i++) await new Promise((z) => setTimeout(z, 50));
       expect(body.destroyed).toBe(true);
@@ -198,7 +201,7 @@ describe('3a — uploadColdFile streams the file and attests the stored version 
     expect(h.sha1).toBe(crypto.createHash('sha1').update('hello cold').digest('hex'));
     expect(h.bytes).toBe(10);
     await fakeB2();
-    const r = await client().uploadColdFile('dt-archive-cold', 'x/a.jsonl.gz', f);
+    const r = await client().uploadColdFile('dt-archive-cold', 'x/a.jsonl.gz', f, LIMITS);
     expect(r).toMatchObject({ checksum: h.sha256, sha1: h.sha1, bytes: 10, uri: 'b2://dt-archive-cold/x/a.jsonl.gz' });
   });
 
@@ -208,7 +211,7 @@ describe('3a — uploadColdFile streams the file and attests the stored version 
     fs.writeFileSync(f, 'hello cold');
     for (const tamper of [{ fileName: 'other' }, { contentSha1: 'deadbeef' }, { contentLength: 9 }, { action: 'hide' }]) {
       await fakeB2({ tamper });
-      await expect(client().uploadColdFile('dt-archive-cold', 'x/a.jsonl.gz', f)).rejects.toThrow(/does not attest/);
+      await expect(client().uploadColdFile('dt-archive-cold', 'x/a.jsonl.gz', f, LIMITS)).rejects.toThrow(/does not attest/);
     }
   });
 

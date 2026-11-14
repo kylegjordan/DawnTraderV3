@@ -31,7 +31,14 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import pg from 'pg';
-import { getStorageClient, type StorageClient } from '../services/data-archive/storage-client.js';
+import {
+  getStorageClient,
+  hashFileSha256Sha1,
+  type ColdTransferLimits,
+  type StorageClient,
+  type TransferPhaseLog,
+} from '../services/data-archive/storage-client.js';
+import { coldLimitsFromMap } from '../services/data-archive/cold-limits.js';
 import { isDirectEntry } from './direct-entry.js';
 
 const { Client } = pg;
@@ -52,6 +59,12 @@ export interface ColdRotatorConfig {
   /** B-DISK-FILE-TIERING 3a: the local free-space floor the temp file must not cross — the SAME setting the disk-file
    *  tiering job uses (`data_lifecycle.disk_file_free_floor_bytes`), because it is the same disk. */
   freeFloorBytes: number;
+  /** 3b (plan r4/r5): per-phase transfer limits, from data_lifecycle (never a literal). */
+  coldLimits: ColdTransferLimits;
+  /** 3b A-1: the per-run candidate cap (data_lifecycle.cold_rotator_max_candidates_per_run). */
+  maxCandidatesPerRun: number;
+  /** 3b r5: the whole-run deadline (data_lifecycle.cold_rotator_run_deadline_ms); checked between candidates. */
+  runDeadlineMs: number;
 }
 
 /** The warm-retention window (days) that applies to a given source_table: its
@@ -113,6 +126,9 @@ async function loadConfig(client: pg.Client): Promise<ColdRotatorConfig> {
     coldPrefix: reqStr('cold_prefix'),
     coldProvider: reqStr('cold_provider'),
     freeFloorBytes: reqNum('disk_file_free_floor_bytes'),
+    coldLimits: coldLimitsFromMap(map, 'B75 rotator'),
+    maxCandidatesPerRun: reqNum('cold_rotator_max_candidates_per_run'),
+    runDeadlineMs: reqNum('cold_rotator_run_deadline_ms'),
   };
 }
 
@@ -171,6 +187,19 @@ export interface ColdRotationDependencies {
   tempRoot?: string;
   /** local free bytes on the temp file's disk (default: statfs of tempRoot); tests pass their own */
   freeBytes?: () => number;
+  /** 3b r5: where this candidate's phase logs are collected (the run sums body time from them) */
+  phaseSink?: TransferPhaseLog[];
+}
+
+/** 3b plan r4 1c: a final upload failure, carrying what the durable record needs. */
+export class ColdUploadFailed extends Error {
+  constructor(
+    readonly cause: unknown,
+    readonly attempt: { bucket: string; path: string; bytes: number; sha1: string | null; phases: TransferPhaseLog[] },
+  ) {
+    super(`[B75 rotator] cold upload failed for ${attempt.path}: ${cause instanceof Error ? cause.message : String(cause)}`);
+    this.name = 'ColdUploadFailed';
+  }
 }
 
 /** Execute one warm-to-cold state transition. Warm deletion is deliberately
@@ -198,9 +227,18 @@ export async function rotateColdCandidate(
   }
   const dir = fs.mkdtempSync(path.join(tempRoot, '.b75-cold-rotator-'));
   fs.chmodSync(dir, 0o700);
+  const phases: TransferPhaseLog[] = deps.phaseSink ?? [];
   try {
     const local = path.join(dir, 'object.jsonl.gz');
-    const warm = await deps.storage.downloadWarmFile(warmBucket, warmPath, local);
+    const onPhase = (ph: TransferPhaseLog) => {
+      phases.push(ph);
+      console.log(`[B75 rotator] phase ${JSON.stringify({ candidate: candidate.id, ...ph })}`);
+    };
+    const warm = await deps.storage.downloadWarmFile(warmBucket, warmPath, local, {
+      expectedBytes: Number(candidate.bytes_compressed),
+      limits: cfg.coldLimits,
+      onPhase,
+    });
     if (warm.checksum !== candidate.checksum) {
       throw new Error(
         `[B75 rotator] warm-tier checksum drift: manifest=${candidate.checksum} actual=${warm.checksum}`,
@@ -209,7 +247,15 @@ export async function rotateColdCandidate(
 
     const coldPath = `${candidate.source_table}/${candidate.partition_label}.jsonl.gz`;
     // Streams the file and attests the stored version (response + b2_get_file_info by file id); throws on any mismatch.
-    const cold = await deps.storage.uploadColdFile(cfg.coldBucket, coldPath, local);
+    let cold: Awaited<ReturnType<ColdRotationDependencies['storage']['uploadColdFile']>>;
+    try {
+      cold = await deps.storage.uploadColdFile(cfg.coldBucket, coldPath, local, cfg.coldLimits, onPhase);
+    } catch (err) {
+      // 3b plan r4 1c: a final upload throw is recorded durably by the caller (the name is otherwise unrecoverable and a
+      // stored version may exist — amendment 6). The SHA-1 is computed here, while the temp file still exists.
+      const h = await hashFileSha256Sha1(local).catch(() => null);
+      throw new ColdUploadFailed(err, { bucket: cfg.coldBucket, path: coldPath, bytes: Number(candidate.bytes_compressed), sha1: h?.sha1 ?? null, phases });
+    }
     if (cold.checksum !== candidate.checksum) {
       throw new Error(
         `[B75 rotator] cold upload hashed a different file: expected=${candidate.checksum} got=${cold.checksum}`,
@@ -325,38 +371,93 @@ export async function rotateColdCandidate(
   return Number(candidate.bytes_compressed);
 }
 
+/** 3b plan r4 1c: the durable failed-upload record (`data_archive_cold_upload_failure`). Injectable for tests. */
+export interface ColdFailureStore {
+  /** unresolved prior failures for this partition (0 when none) */
+  priorFailures(c: ColdRotationCandidate): Promise<number>;
+  /** upsert the failure: one row per partition, attempts appended, count incremented */
+  recordFailure(c: ColdRotationCandidate, f: ColdUploadFailed['attempt'], error: string): Promise<void>;
+  /** a later success resolves the partition's open failure */
+  resolve(c: ColdRotationCandidate): Promise<void>;
+}
+
+export interface ColdRunResult {
+  rotated: number;
+  failed: number;
+  bytesMoved: number;
+  /** 3b r5: candidates not started because the run deadline was reached */
+  deferred: number;
+  /** 3b r5 edit 1: the run gate's own deciding quantity, logged on every run */
+  elapsedMs: number;
+  candidatesDone: number;
+  bodyMs: number;
+  fixedMsPerCandidate: number | null;
+}
+
 export async function runColdRotationCandidates(
   candidates: ColdRotationCandidate[],
   cfg: ColdRotatorConfig,
-  deps: ColdRotationDependencies,
-): Promise<{ rotated: number; failed: number; bytesMoved: number }> {
+  deps: ColdRotationDependencies & { failures?: ColdFailureStore; nowMs?: () => number },
+): Promise<ColdRunResult> {
+  const now = deps.nowMs ?? Date.now;
+  const runStart = now();
   let rotated = 0;
   let failed = 0;
   let bytesMoved = 0;
+  let bodyMs = 0;
+  let done = 0;
   for (const candidate of candidates) {
-    const itemStart = Date.now();
+    // 3b r5: the whole-run deadline is checked BETWEEN candidates — a candidate is never cut mid-transfer by it (its own
+    // per-phase budgets bound it). The rest are deferred to the next run and paged (first deferring run pages).
+    if (now() - runStart >= cfg.runDeadlineMs) break;
+    const itemStart = now();
+    const phases: TransferPhaseLog[] = [];
     try {
+      const prior = deps.failures ? await deps.failures.priorFailures(candidate) : 0;
       console.log(
-        `[B75 rotator] rotating ${candidate.source_table}/${candidate.partition_label} (${candidate.bytes_compressed} bytes)`,
+        `[B75 rotator] rotating ${candidate.source_table}/${candidate.partition_label} (${candidate.bytes_compressed} bytes)` +
+          (prior > 0 ? ` — retrying a previously failed candidate, ${prior} prior failure(s)` : ''),
       );
-      bytesMoved += await rotateColdCandidate(candidate, cfg, deps);
+      bytesMoved += await rotateColdCandidate(candidate, cfg, { ...deps, phaseSink: phases });
       rotated++;
+      if (prior > 0 && deps.failures) await deps.failures.resolve(candidate);
       console.log(
-        `[B75 rotator] ${candidate.source_table}/${candidate.partition_label}: rotated bytes=${candidate.bytes_compressed} duration_ms=${Date.now() - itemStart}`,
+        `[B75 rotator] ${candidate.source_table}/${candidate.partition_label}: rotated bytes=${candidate.bytes_compressed} duration_ms=${now() - itemStart}`,
       );
     } catch (err) {
       failed++;
       console.error(
         `[B75 rotator] ${candidate.source_table}/${candidate.partition_label}: FAILED — ${err instanceof Error ? err.message : String(err)}`,
       );
+      if (err instanceof ColdUploadFailed && deps.failures) {
+        try {
+          await deps.failures.recordFailure(candidate, err.attempt, err.message);
+        } catch (recErr) {
+          // The record is the durable instrument; failing to write it is itself loud (the run exits non-zero anyway).
+          console.error(`[B75 rotator] could NOT record the upload failure for ${err.attempt.path}:`, recErr);
+        }
+      }
+    } finally {
+      done++;
+      for (const ph of phases) bodyMs += ph.elapsed_ms;
     }
   }
-  return { rotated, failed, bytesMoved };
+  const elapsedMs = now() - runStart;
+  return {
+    rotated,
+    failed,
+    bytesMoved,
+    deferred: candidates.length - done,
+    elapsedMs,
+    candidatesDone: done,
+    bodyMs,
+    fixedMsPerCandidate: done > 0 ? Math.round((elapsedMs - bodyMs) / done) : null,
+  };
 }
 
 export interface ColdRotationPlanDependencies {
   runCandidates: typeof runColdRotationCandidates;
-  rotationDependencies: ColdRotationDependencies;
+  rotationDependencies: ColdRotationDependencies & { failures?: ColdFailureStore };
 }
 
 /** Execute the terminal dry-run/real-rotation decision without duplicating the
@@ -367,9 +468,11 @@ export async function runColdRotationPlan(
   cfg: ColdRotatorConfig,
   coldConfigured: boolean,
   deps: ColdRotationPlanDependencies,
-): Promise<{ dryRun: boolean; rotated: number; failed: number; bytesMoved: number }> {
+): Promise<{ dryRun: boolean } & ColdRunResult> {
   const dryRun = cfg.coldRotatorDryRun || !coldConfigured;
-  if (dryRun) return { dryRun: true, rotated: 0, failed: 0, bytesMoved: 0 };
+  if (dryRun) {
+    return { dryRun: true, rotated: 0, failed: 0, bytesMoved: 0, deferred: 0, elapsedMs: 0, candidatesDone: 0, bodyMs: 0, fixedMsPerCandidate: null };
+  }
   const result = await deps.runCandidates(candidates, cfg, deps.rotationDependencies);
   return { dryRun: false, ...result };
 }
@@ -401,6 +504,26 @@ export async function runColdRotatorCli(
 }
 
 async function runColdRotatorCliBody(): Promise<void> {
+  // 3b plan r4 1b: one rotator at a time, and a refusal or a dead-holder takeover is LOUD (it pages) — a silent refusal
+  // would invent a third shape beside "0 candidates" and "crashed" that reads like the first.
+  const lock = acquireRotatorLock(ROTATOR_LOCK_PATH);
+  if (lock.kind === 'held') {
+    console.error(`[B75 rotator] REFUSED — the rotator lock is held: ${lock.holder}`);
+    await pageRotatorLock('refused', `Another cold rotator holds ${ROTATOR_LOCK_PATH}: ${lock.holder}. This run did nothing.`);
+    process.exit(1);
+  }
+  if (lock.kind === 'taken_over') {
+    console.error(`[B75 rotator] TOOK OVER a dead holder's lock: ${lock.holder}`);
+    await pageRotatorLock('taken_over', `The cold rotator lock ${ROTATOR_LOCK_PATH} was left by a dead process (${lock.holder}); this run took it over. The previous run crashed or was killed.`);
+  }
+  try {
+    await runColdRotatorBodyLocked();
+  } finally {
+    releaseRotatorLock(ROTATOR_LOCK_PATH);
+  }
+}
+
+async function runColdRotatorBodyLocked(): Promise<void> {
   const startedAt = new Date();
   const ctl = new Client({ connectionString: process.env.DATABASE_URL });
   await ctl.connect();
@@ -443,6 +566,14 @@ async function runColdRotatorCliBody(): Promise<void> {
     );
     candidates = applyColdRotationLimit(candidates, limitOverride);
   }
+  // 3b A-1: the per-run cap from data_lifecycle, applied on EVERY run (the monthly cron passes no --limit).
+  if (candidates.length > cfg.maxCandidatesPerRun) {
+    console.log(
+      `[B75 rotator] capping ${candidates.length} candidates → ${cfg.maxCandidatesPerRun} (data_lifecycle.cold_rotator_max_candidates_per_run; oldest-first; deferred=${candidates.length - cfg.maxCandidatesPerRun})`,
+    );
+  }
+  const capDeferred = Math.max(0, candidates.length - cfg.maxCandidatesPerRun);
+  candidates = applyColdRotationLimit(candidates, cfg.maxCandidatesPerRun);
 
   if (candidates.length === 0) {
     console.log('[B75 rotator] no candidates older than warm retention window');
@@ -470,6 +601,7 @@ async function runColdRotatorCliBody(): Promise<void> {
     rotationDependencies: {
       storage,
       createClient: () => new Client({ connectionString: process.env.DATABASE_URL }),
+      failures: pgColdFailureStore(() => new Client({ connectionString: process.env.DATABASE_URL })),
     },
   });
 
@@ -504,12 +636,137 @@ async function runColdRotatorCliBody(): Promise<void> {
   // for safe retry.
 
   const { rotated, failed, bytesMoved } = plan;
+  const deferred = plan.deferred + capDeferred;
 
+  // 3b r5 edit 1: the run gate's deciding quantity on EVERY real run, completed or deferred — elapsed, done, bytes and
+  // the derived fixed per-candidate cost (elapsed minus measured body time, per candidate). archival-health reads
+  // `deferred=` from the DONE line: it pages on the FIRST deferring run and escalates on two consecutive (r5 edit 2).
+  console.log(
+    `[B75 rotator] RUN elapsed_ms=${plan.elapsedMs} candidates_done=${plan.candidatesDone} bytes_moved=${bytesMoved} ` +
+      `body_ms=${plan.bodyMs} fixed_ms_per_candidate=${plan.fixedMsPerCandidate ?? 'n/a'} run_deadline_ms=${cfg.runDeadlineMs} ` +
+      `max_candidates_per_run=${cfg.maxCandidatesPerRun}`,
+  );
   console.log(
     `[B75 rotator] DONE candidates=${candidates.length} rotated=${rotated} failed=${failed} ` +
-      `bytes_moved=${bytesMoved} duration_ms=${Date.now() - startedAt.getTime()}`,
+      `bytes_moved=${bytesMoved} deferred=${deferred} duration_ms=${Date.now() - startedAt.getTime()}`,
   );
   if (failed > 0) process.exit(1);
+}
+
+/** 0600, under deploy's home — never /tmp (1777, shared; #979). */
+export const ROTATOR_LOCK_PATH = path.join(os.homedir(), '.b75-cold-rotator.lock');
+
+export type RotatorLock = { kind: 'acquired' } | { kind: 'held'; holder: string } | { kind: 'taken_over'; holder: string };
+
+/** Atomically creates the lock (O_EXCL). An existing lock whose pid is alive on this host is HELD; a dead or unreadable
+ * holder is taken over (logged and paged by the caller). A holder on another host cannot be checked from here, so it
+ * is HELD (refuse and page), never taken over. `isAlive` is injectable for tests. */
+export function acquireRotatorLock(
+  file: string,
+  isAlive: (pid: number) => boolean = (pid) => {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch (e) {
+      return (e as NodeJS.ErrnoException).code === 'EPERM';
+    }
+  },
+): RotatorLock {
+  const me = JSON.stringify({ pid: process.pid, host: os.hostname(), started_at: new Date().toISOString() });
+  try {
+    fs.writeFileSync(file, me, { flag: 'wx', mode: 0o600 });
+    return { kind: 'acquired' };
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e;
+  }
+  let holder = '(unreadable)';
+  let alive = false;
+  try {
+    holder = fs.readFileSync(file, 'utf-8');
+    const h = JSON.parse(holder) as { pid?: unknown; host?: unknown };
+    if (typeof h.pid === 'number') alive = h.host !== os.hostname() ? true : isAlive(h.pid);
+  } catch {
+    alive = false;
+  }
+  if (alive) return { kind: 'held', holder };
+  fs.writeFileSync(file, me, { mode: 0o600 });
+  return { kind: 'taken_over', holder };
+}
+
+export function releaseRotatorLock(file: string): void {
+  try {
+    const h = JSON.parse(fs.readFileSync(file, 'utf-8')) as { pid?: unknown };
+    if (h.pid === process.pid) fs.rmSync(file, { force: true });
+  } catch {
+    // already gone or not ours — nothing to release
+  }
+}
+
+async function pageRotatorLock(reason: 'refused' | 'taken_over', body: string): Promise<void> {
+  try {
+    const { addAlert } = await import('../services/system-alerts.js');
+    await addAlert({
+      triggers_at: new Date(),
+      category: 'health_check',
+      severity: 'warning',
+      title: reason === 'refused' ? 'Cold rotator refused: its lock is held' : 'Cold rotator took over a dead lock',
+      body,
+      metadata: { source: 'b75-cold-rotator', batch: 'B-DISK-FILE-TIERING', reason },
+      dedupe_key: `b75-cold-rotator-lock-${reason}`,
+    });
+  } catch (err) {
+    console.error('[B75 rotator] failed to raise the lock alert:', err);
+  }
+}
+
+/** The durable failed-upload record in Postgres (3b plan r4 1c). One row per (source_table, partition_label). */
+export function pgColdFailureStore(createClient: () => pg.Client): ColdFailureStore {
+  async function withClient<T>(fn: (c: pg.Client) => Promise<T>): Promise<T> {
+    const c = createClient();
+    await c.connect();
+    try {
+      return await fn(c);
+    } finally {
+      await c.end().catch(() => {});
+    }
+  }
+  return {
+    priorFailures: (cand) =>
+      withClient(async (c) => {
+        const r = await c.query<{ failure_count: number }>(
+          `SELECT failure_count FROM data_archive_cold_upload_failure
+            WHERE source_table = $1 AND partition_label = $2 AND resolved_at IS NULL`,
+          [cand.source_table, cand.partition_label],
+        );
+        return r.rows[0] ? Number(r.rows[0].failure_count) : 0;
+      }),
+    recordFailure: (cand, f, error) =>
+      withClient(async (c) => {
+        const attempt = { at: new Date().toISOString(), error: error.slice(0, 1000), sha1: f.sha1, phases: f.phases };
+        await c.query(
+          `INSERT INTO data_archive_cold_upload_failure
+             (source_table, partition_label, bucket, path, sha1, bytes, attempts, first_failed_at, last_failed_at, failure_count)
+           VALUES ($1, $2, $3, $4, $5, $6, jsonb_build_array($7::jsonb), NOW(), NOW(), 1)
+           ON CONFLICT (source_table, partition_label) DO UPDATE
+             SET bucket = EXCLUDED.bucket, path = EXCLUDED.path,
+                 sha1 = COALESCE(EXCLUDED.sha1, data_archive_cold_upload_failure.sha1),
+                 bytes = EXCLUDED.bytes,
+                 attempts = data_archive_cold_upload_failure.attempts || EXCLUDED.attempts,
+                 last_failed_at = NOW(),
+                 failure_count = data_archive_cold_upload_failure.failure_count + 1,
+                 resolved_at = NULL`,
+          [cand.source_table, cand.partition_label, f.bucket, f.path, f.sha1, f.bytes, JSON.stringify(attempt)],
+        );
+      }),
+    resolve: (cand) =>
+      withClient(async (c) => {
+        await c.query(
+          `UPDATE data_archive_cold_upload_failure SET resolved_at = NOW()
+            WHERE source_table = $1 AND partition_label = $2 AND resolved_at IS NULL`,
+          [cand.source_table, cand.partition_label],
+        );
+      }),
+  };
 }
 
 function parseSupabaseUri(uri: string): { bucket: string; path: string } {

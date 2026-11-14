@@ -225,7 +225,9 @@ describe('AP-7 fences — the patterns match what each subject writes (C-5, the 
   it('a dry run never prints ALERT, and a plant run announces itself (Langston C-1, C-2)', () => {
     const raiseCalls = (checker.match(/const raised = await raise\(\{/g) ?? []).length;
     const labelled = (checker.match(/\$\{raised \? 'ALERT' : 'DRY-ALERT'\}/g) ?? []).length;
-    expect(raiseCalls).toBe(3);
+    // 3: the cron checks, the runway and the crontab page; +2 in B-DISK-FILE-TIERING 3b: cold-rotator deferred and
+    // cold-upload-failure. Every one is DRY-labelled (the next line).
+    expect(raiseCalls).toBe(5);
     expect(labelled).toBe(raiseCalls);
     expect(checker).not.toMatch(/console\.log\(`\[archival-health\] ALERT /);
     expect(checker).toContain('[archival-health] PLANT RUN (not production)');

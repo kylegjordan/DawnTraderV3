@@ -23,6 +23,7 @@ import fs from 'node:fs';
 import pg from 'pg';
 import { countGzipJsonlLines, exportPartition } from '../services/data-archive/partition-exporter.js';
 import { getStorageClient, type StorageClient } from '../services/data-archive/storage-client.js';
+import { loadColdLimits } from '../services/data-archive/cold-limits.js';
 import {
   evidenceExistsForManifest,
   proofCountStillMatches,
@@ -323,7 +324,9 @@ export async function exportAndUploadContextMonth(
     actualTier = 'cold';
     actualUri = `b2://${actualBucket}/${actualPath}`;
     // Streamed and ATTESTED (upload response + b2_get_file_info by file id) — no whole-object re-download.
-    const cold = await storage.uploadColdFile(actualBucket, actualPath, exportRes.localPath);
+    // 3b: the per-phase transfer limits from data_lifecycle (never a literal); a missing row refuses here.
+    const coldLimits = await loadColdLimits(ctlClient, 'B75 ctx-bridge');
+    const cold = await storage.uploadColdFile(actualBucket, actualPath, exportRes.localPath, coldLimits);
     if (cold.checksum !== exportRes.checksum) {
       throw new Error(
         `[B75 ctx-bridge] ${month.label}: cold upload hashed a different file ` +

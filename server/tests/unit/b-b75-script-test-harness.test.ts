@@ -552,6 +552,10 @@ describe('context lane deletion fence', () => {
     const ctl = { query: vi.fn(async (sql: string) => {
       if (sql.includes('SELECT id, state')) return { rows: [] };
       if (sql.includes('INSERT INTO data_archive_manifest')) return { rows: [{ id: 'ctx-2' }] };
+      // B-DISK-FILE-TIERING 3b: the cold fallback reads its per-phase limits from data_lifecycle (never a literal)
+      if (sql.includes('cold_upload_setup_ms') || sql.includes('constant_name = ANY')) {
+        return { rows: [{ constant_name: 'cold_upload_setup_ms', value: 60000 }, { constant_name: 'cold_body_min_bytes_per_s', value: 1048576 }] };
+      }
       if (sql === 'BEGIN') events.push('begin');
       else if (sql.includes("SET state = 'verified'")) events.push('verified');
       else if (sql === 'COMMIT') events.push('commit');
@@ -579,6 +583,7 @@ describe('context lane deletion fence', () => {
     expect(events).toEqual(['begin', 'evidence:cold', 'verified', 'commit']);
     expect(storage.uploadColdFile).toHaveBeenCalledOnce();
     expect(storage.uploadColdFile.mock.calls[0][2]).toBe('fake.gz'); // the export FILE, never a buffer
+    expect(storage.uploadColdFile.mock.calls[0][3]).toEqual({ setupMs: 60000, minBytesPerSec: 1048576 }); // 3b: the limits ride along
     expect(storage.downloadColdFile).not.toHaveBeenCalled(); // attested, not read back
     const update = ctl.query.mock.calls.find((c) => String(c[0]).includes("SET tier = 'cold'"));
     expect(update?.[0]).toContain("verification_method = 'b2-sha1-attested'");
@@ -750,7 +755,7 @@ describe('cold rotation state machine', () => {
     await expect(runColdRotationPlan([candidate], dryRunCfg, true, {
       runCandidates,
       rotationDependencies: { storage: {} as never, createClient: vi.fn() },
-    })).resolves.toEqual({ dryRun: true, rotated: 0, failed: 0, bytesMoved: 0 });
+    })).resolves.toEqual({ dryRun: true, rotated: 0, failed: 0, bytesMoved: 0, deferred: 0, elapsedMs: 0, candidatesDone: 0, bodyMs: 0, fixedMsPerCandidate: null });
     expect(runCandidates).not.toHaveBeenCalled();
   });
 
@@ -857,7 +862,8 @@ describe('cold rotation state machine', () => {
     const result = await runColdRotationCandidates([bad, good], cfg, {
       storage: storage as never, createClient: () => client as never, tempRoot, freeBytes: () => 1e12,
     });
-    expect(result).toEqual({ rotated: 1, failed: 1, bytesMoved: 8 });
+    // 3b r5: the run result also carries its own deciding quantity (deferred, elapsed, done, body time, fixed cost)
+    expect(result).toMatchObject({ rotated: 1, failed: 1, bytesMoved: 8, deferred: 0, candidatesDone: 2 });
     expect(deleted).toEqual(['good']);
   });
 });
