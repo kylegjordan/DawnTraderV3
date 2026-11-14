@@ -498,3 +498,11 @@ Tests: 3b 73/73; tsc 324 = 324.
   - **CARRY-1:** the ordering fence is anchored on the report loop's TERMINAL statement (`` `[B75 cold-bind] ${name}: BOUND` ``, 1×). His one-line-window mutant (the block between `let failures = 0;` and the loop) → red.
   - **CARRY-2:** `claimed` is built from EVERY manifest row, whatever its tier, so a non-cold row's object in the cold bucket can never read as an orphan. Staging today: 0 non-cold rows carry `b2://` — latent. The unparseable-uri refusal still reads cold rows only, because `supabase://` does not parse as a cold path.
   - 3b 77/77; tsc 324 = 324.
+
+### 3b item 5 — Step 3: the context bridge's `.verify` copy checks free space
+- **`context-bridge-log-ttl.ts`:** `ContextBridgeConfig.freeFloorBytes` reads `data_lifecycle.disk_file_free_floor_bytes` through the existing `reqNum`, the same setting the rotator and disk-file tiering use, because it is the same disk. Before the read-back writes its second full copy, the check is free ≥ the object's bytes + floor, otherwise it refuses with both numbers.
+  - The export is already on disk at that point, so this is the rotator's `need = 2 × bytes + floor` counted from before the export.
+  - `freeBytes` is an injectable dependency (default `statfs`).
+  - Reachable only on a hand run: the job has never been scheduled (`#169`).
+- **Fence** (harness): 1,500 free against 1,000 + 600 → refused, and `downloadWarmFile` is never called; 1,600 free → the read-back is reached. Mutation (check removed) → red.
+- Tests: harness 44/44; 3b, 3a and amendment2 127/127; tsc 324 = 324.

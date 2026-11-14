@@ -79,6 +79,7 @@ const contextCfg: ContextBridgeConfig = {
   warmBucket: 'warm',
   warmPrefix: 'archive',
   coldBucket: 'cold',
+  freeFloorBytes: 1,
 };
 
 const sweepCfg: B75SweepConfig = {
@@ -117,6 +118,7 @@ function contextDeps(over: Partial<ContextMonthDependencies> = {}): ContextMonth
     evidenceExistsForManifest: vi.fn().mockResolvedValue(false),
     proofCountStillMatches: vi.fn().mockResolvedValue(true),
     recordExactArchiveEvidence: vi.fn().mockResolvedValue(undefined),
+    freeBytes: () => 1e15,
     ...over,
   };
 }
@@ -511,6 +513,29 @@ describe('retention executable gates', () => {
 });
 
 describe('context lane deletion fence', () => {
+  it('3b item 5: the read-back copy is refused before any download when free space is under bytes + floor', async () => {
+    const ctl = { query: vi.fn(async (sql: string) => {
+      if (sql.includes('SELECT id, state')) return { rows: [] };
+      if (sql.includes('INSERT INTO data_archive_manifest')) return { rows: [{ id: 'ctx-3' }] };
+      return { rows: [], rowCount: 1 };
+    }) };
+    const storage = {
+      uploadWarmFile: vi.fn().mockResolvedValue({ checksum: 'ck', bytes: 1000, uri: 'supabase://warm/x' }),
+      downloadWarmFile: vi.fn(),
+      isColdConfigured: vi.fn().mockReturnValue(false),
+    };
+    const exportRes = { localPath: 'fake.gz', checksum: 'ck', sourceRowCount: 1, rowCount: 1, bytesCompressed: 1000, minTs: month.start, maxTs: new Date('2026-01-01T00:00:01Z') };
+    const tight = contextDeps({ exportPartition: vi.fn().mockResolvedValue(exportRes), getStorageClient: vi.fn().mockReturnValue(storage), freeBytes: () => 1500 });
+    await expect(exportAndUploadContextMonth({} as never, ctl as never, { ...contextCfg, freeFloorBytes: 600 }, month, tight))
+      .rejects.toThrow(/refused the read-back copy — 1500 bytes free, need 1600/);
+    expect(storage.downloadWarmFile).not.toHaveBeenCalled();
+    // with room: the read-back proceeds (the download is reached)
+    storage.downloadWarmFile.mockResolvedValue({ checksum: 'ck', bytes: 1000 });
+    const roomy = contextDeps({ exportPartition: vi.fn().mockResolvedValue(exportRes), getStorageClient: vi.fn().mockReturnValue(storage), freeBytes: () => 1600 });
+    await exportAndUploadContextMonth({} as never, ctl as never, { ...contextCfg, freeFloorBytes: 600 }, month, roomy).catch(() => {});
+    expect(storage.downloadWarmFile).toHaveBeenCalledOnce();
+  });
+
   it('recounts verified reuse and refuses a mismatch before the month completes', async () => {
     const ctl = { query: vi.fn().mockResolvedValue({ rows: [{
       id: 'ctx-1', state: 'verified', tier: 'warm', completeness_basis: 'source-count-matched',

@@ -50,6 +50,9 @@ export interface ContextBridgeConfig {
   warmBucket: string;
   warmPrefix: string;
   coldBucket: string;
+  /** 3b item 5: the local free-space floor — the SAME setting the rotator and disk-file tiering use
+   *  (data_lifecycle.disk_file_free_floor_bytes), because it is the same disk */
+  freeFloorBytes: number;
 }
 
 async function loadConfig(client: pg.Client): Promise<ContextBridgeConfig> {
@@ -81,6 +84,7 @@ async function loadConfig(client: pg.Client): Promise<ContextBridgeConfig> {
     warmBucket: reqStr('warm_bucket'),
     warmPrefix: reqStr('warm_prefix'),
     coldBucket: reqStr('cold_bucket'),
+    freeFloorBytes: reqNum('disk_file_free_floor_bytes'),
   };
 }
 
@@ -186,6 +190,8 @@ export interface ContextMonthDependencies {
   evidenceExistsForManifest: typeof evidenceExistsForManifest;
   proofCountStillMatches: typeof proofCountStillMatches;
   recordExactArchiveEvidence: typeof recordExactArchiveEvidence;
+  /** free bytes on the disk holding `path` (default: statfs); tests pass their own */
+  freeBytes: (path: string) => number;
 }
 
 const DEFAULT_CONTEXT_MONTH_DEPS: ContextMonthDependencies = {
@@ -196,6 +202,10 @@ const DEFAULT_CONTEXT_MONTH_DEPS: ContextMonthDependencies = {
   evidenceExistsForManifest,
   proofCountStillMatches,
   recordExactArchiveEvidence,
+  freeBytes: (p: string) => {
+    const st = fs.statfsSync(p.slice(0, Math.max(p.lastIndexOf('/'), 1)) || '.');
+    return Number(st.bavail) * Number(st.bsize);
+  },
 };
 
 export async function exportAndUploadContextMonth(
@@ -298,6 +308,17 @@ export async function exportAndUploadContextMonth(
     // exportRes.checksum is deliberately NOT passed in: uploadWarmFile hashes the file itself, so the comparison below
     // stays a real check of what was uploaded rather than a tautology. Do not "optimise" this away.
     upload = await storage.uploadWarmFile(actualBucket, actualPath, exportRes.localPath);
+    // 3b item 5 (Langston r4): the read-back writes a SECOND full copy beside the export. The export is already on disk,
+    // so the check is free >= bytes + floor here — the rotator's `need = 2 x bytes + floor` counted from before the
+    // export (two concurrent local copies). A missing / non-numeric / <= 0 floor already refused at loadConfig.
+    const needVerify = Number(exportRes.bytesCompressed) + cfg.freeFloorBytes;
+    const freeVerify = deps.freeBytes(verifyPath);
+    if (!Number.isFinite(needVerify) || !Number.isFinite(freeVerify) || freeVerify < needVerify) {
+      throw new Error(
+        `[B75 ctx-bridge] ${month.label}: refused the read-back copy — ${freeVerify} bytes free, need ${needVerify} ` +
+          `(the ${exportRes.bytesCompressed}-byte object + the ${cfg.freeFloorBytes} floor)`,
+      );
+    }
     let readBack: { checksum: string };
     try {
       readBack = await storage.downloadWarmFile(actualBucket, actualPath, verifyPath);
