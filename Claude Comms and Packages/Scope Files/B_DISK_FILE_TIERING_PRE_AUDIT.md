@@ -323,3 +323,48 @@ The cadence-aware form exists: `computePrevFire(expression, timezone, from)` (`s
 **6. 3d step 5 gate, narrowed (Langston, Discord `1571065560979218544`):** KD-54 step 4 adds one `b2_hide_file` call with the narrow key on a throwaway `_liveness/` object, made after the mint and before step 5. If it is permitted, step 5 is unblocked and residue is hidden explicitly. If it is refused, the order is agreed with CC-INFRA first. Their `#1132` OBJ-6 census is read-only and is not blocked either way; only its removal step needs a right (Infra Claude, Discord `1571064942004797533`: P11 comes after P2).
 
 **Order inside 3b:** the retry plus the failed-upload record and the lock (storage-client and rotator) → by-id reads and the reader → binding the 4 rows → residue deletion → `.verify` → the function-arm run on a claimed day. Each lands as its own commit with its own fence, all inside 3b's single Step 3 → 4 → 6 → 7.
+
+### Amendment 4 — 3b plan r4: Langston CHANGES on r3 folded (Discord `1571068123581386843`, graded at `59e0785d8`)
+Folded into 3b items 1-2 (§13 disposition 1); no new slot. Change-class `architecture` (a new primitive and a new table). No `DEPLOY_WINDOWS` open row: 3b is verified by the function arm and the bindings, not by an observation window.
+
+**Item 1, the bounded B2 retry — r4:**
+- **A-1, a per-RUN bound.** New `data_lifecycle.cold_rotator_max_candidates_per_run`, read through `loadConfig`'s `reqNum` (refuses when absent). The monthly cron passes no `--limit` (`b75-cold-rotator.ts:440`), and the live manifest holds 6,414 `tier='warm' state='active'` rows, so the per-run count was an assumed population until this exists. The run takes the oldest N (`applyColdRotationLimit`), and logs the deferred count when candidates exceed N.
+- **A-2, the warm download is bounded.** One per-candidate deadline covers warm read → upload → `get_file_info`. `downloadWarmFile` gets an `AbortSignal` and the same body-rate floor; its retry disposition is no retry in 3b (Supabase egress is not budget-capped, but a slow warm read must abort, not trickle).
+- **A-3, the rate applies to the body-transfer phase only.**
+  - Per-attempt deadline = `cold_upload_setup_ms` (authorize + `get_upload_url`) + `bytes` ÷ `cold_body_min_bytes_per_s`, the floor on the body alone, so a small object gets no looser gate than a large one.
+  - Starting values: setup 60 s, floor 1 MiB/s (Langston: keep 1 MiB/s, err loose).
+  - Both come from `data_lifecycle` via `reqNum`, never a literal.
+- **A-4, the gate logs its own deciding quantity on every attempt**, including a deadline abort: `bytes`, `elapsed_ms` and `achieved_bytes_per_s` per phase (warm read, upload body). It is logged on success too, so the floor is tunable from data.
+- **A-5, downloads are not retried in 3b.** `downloadColdFileById` and every B2 download spend budget; a failed download throws, and 3c's budget-aware scheduler takes it another day, counting every attempt. `b2_list_buckets` joins the enumerated retry set, and the set is what the fence tests.
+- **Mechanics.** The 300 s idle timer stays alongside the deadline: idle catches a dead socket, the deadline catches a trickle. The deadline aborts: an `AbortSignal` on the B2 `fetch` calls, and a hard `req.destroy()` in `postFileStream` through its existing `done()`. `postFileStream` takes a `localPath`, so every retry re-opens the read stream. *Recorded:* r2's N2 `duplex` concern is moot, and the `node:https` fallback named in r2 is what shipped.
+
+**Item 1b, the rotator lock (Langston (b)) — built for crash visibility, not overlap:**
+- The file holds pid, host and start time; mode `0600`, under `/home/deploy/` (never `/tmp`, `#979`).
+- A refusal because the lock is held **pages**. `:447-452` deliberately separates 0-candidate from never-ran/crashed, and a silent refusal would invent a third shape that reads like the first.
+- A dead holder (pid not alive on this host) is taken over, with the takeover logged loudly and paged.
+- The lock covers the rotator only. The canary's independence is asserted in a test, not implied: the 1st is a Monday on 2027-02-01, 2027-03-01 and 2027-11-01, and the canary at `0 4 * * 1` sits 60 min behind the rotator.
+- A fence exercises the refusal and the takeover.
+
+**Item 1c, the durable failed-upload record — its own table (Langston (c)).** The manifest option is withdrawn, for three measured reasons:
+1. `data_archive_manifest_state_chk` permits only `pending|uploaded|verified|active|migrating|migrated`.
+2. `UNIQUE (source_table, partition_label, tier)` plus `:238-243`'s `ON CONFLICT … DO UPDATE SET state='active'` would overwrite the attempt history.
+3. **Decisive:** `listColdRotationCandidates` excludes any warm row having any `tier='cold'` row (`:148-154`), so a failure row would retire the partition from every future run.
+
+The table:
+- New `data_archive_cold_upload_failure`: id, `source_table`, `partition_label`, `bucket`, `path`, `sha1`, `bytes`, `attempts` (jsonb: per-attempt timestamps, phase, status, B2 `code`, `bytes`, `elapsed_ms`, `achieved_bytes_per_s`), `first_failed_at`, `last_failed_at`, `failure_count`, `resolved_at`.
+- Migration plus rollback; rollback dry-run before deploy.
+
+**Readers, named in the same increment:**
+- **archival-health**: an unresolved failure keeps paging across days, not once.
+- **The next rotator run**: it logs "retrying a previously failed candidate, N prior failures", and on success sets `resolved_at`.
+- **3b's listing**: it reconciles these names against B2 versions (orphan-possible).
+
+**(d) `B2_BUCKET_ID` — which guard, written down.** `b2ResolveBucketId` returns `auth.bucketId` before the env branch (`storage-client.ts:617`). With today's unrestricted key, `allowed.bucketId` is empty, so the env value (set, 24 characters, prefix `a39ddd`, loaded through the rotator's `import 'dotenv/config'` with cwd `/home/deploy/dawntrader`) is the guard that keeps `list_buckets` off the path. Once 3d mints the `dt-archive-cold`-only key, `allowed.bucketId` fills and the env branch goes dead — the same outcome from a different guard. Neither may be dropped on the belief that the other covers it.
+
+**(e) Order, with its reasons:**
+1. retry + deadline + record + lock;
+2. by-id reads and the reader;
+3. bind the 4 rows;
+4. **residue deletion — this must precede the function arm**, because it is a dependency. The cold path is `${source_table}/${partition_label}.jsonl.gz` (`:210`), and the P10 orphan sits at exactly the name the function arm's rotation of `disk_file.diagnostic_reports` / `phase-41F-L-trace.ndjson` (170,761,082 B) will write. Its SHA-256 equals the new version's, so "the manifest SHA-256 decides between two versions" cannot disambiguate them. Reversing these two steps manufactures the ambiguity 3b removes.
+5. `.verify` free space — reachable only on a hand run (`context-bridge-log-ttl.ts` has never been scheduled, `#169`). It reuses the rotator's `need = 2 × bytes + freeFloorBytes` (`:191`) with `data_lifecycle.disk_file_free_floor_bytes` through `reqNum`, with no new literal; the export plus `.verify` are exactly two concurrent local copies.
+6. the function-arm run, on a day claimed with Infra Claude.
