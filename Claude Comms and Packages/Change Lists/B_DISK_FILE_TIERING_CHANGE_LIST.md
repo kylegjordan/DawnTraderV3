@@ -214,4 +214,7 @@ Procedure: copies (`cp -p`, mtimes kept) of the four real logs and the real root
 | rotatemid | start in `.1`, DONE alone in live | OK |
 | unverified | crontab file missing, 3 runs | runs 1-2 print the marker only; run 3 `DRY-ALERT crontab/schedule_unverified: 3 consecutive runs` |
 - Note, no work: a run whose only page is a schedule page (`not_scheduled`, `schedule_unverified`) still ends `all_ok=true`. The value has no reader — the watchdog reads only that a `DONE — all_ok=` line exists (`staging-liveness-watchdog.mjs:321`); the pages are the signal.
-- **Still owed for Step 7:** the first production run on this build, 2026-11-14 05:00Z — expect 4/4 OK with the crontab read via `sudo -n` (no `schedule_unverified` line).
+- **Step 7 production leg — the first production run on this build, 2026-11-14 05:00:02Z: PASS as expected.** `/var/log/dawntrader/archival-health.log` lines 1122-1139 (70,770 B, mtime 05:00:03):
+  - `b75-retention: OK (age 2.5h)`, `b75-cold-rotator: OK (age 314.0h)`, `b75-cold-liveness: OK (age 121.0h)`, `disk-file-tiering: OK (age 2.2h)`. Daily-runway: 6 OK (14 days ahead), 6 pre-cutover skips. Ends `DONE — all_ok=true checks=5`.
+  - No `schedule_unverified`, `schedule_drift` or `not_scheduled` line: `grep -c "schedule_"` over the whole file = 0. The marker is `[archival-health] schedule_unverified` (`archival-run-check.ts:122`) and it prints on EVERY unreadable run (`b-storage-archival-health.ts:498`), not only the paging 3rd; the plant `unverified` row above is its positive control. Direct read: `sudo -u deploy sudo -n crontab -l` succeeds.
+  - So the crontab was read and the box's four schedules match the repo's.
