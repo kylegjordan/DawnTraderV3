@@ -137,3 +137,25 @@ Full suite after the gate-4 folds: 411 passed, 1 skipped, the same 11 local-only
 - (a) `reltuples + n_mod_since_analyze`: **disposition 5, no work.** `n_mod_since_analyze` counts inserts, updates and deletes together, so it stands in for a row count only if the leaves are insert-only. That is asserted, not measured. ⇒ **The premise to measure first, before anyone revisits this, is that these leaves receive no UPDATE or DELETE.**
 - (b) The `dawntrader_main` 10-of-10 sample at 03:17:46: **disposition 1, folded into the am.5 work.** The bar stays at 7 of 10, not loosened. The am.5 sampling now also records `query` and `backend_start` for active `dawntrader_main` backends, so the next burst names its caller.
 **Carry (comment only, no behaviour change):** the constant's comment is corrected to the per-table budget, the 2026-12-01 doubling and the re-time owed.
+
+## Step 6-7 (2) — the fold deployed jointly, re-timed, and the browser check aborted under am.5 (2026-11-15, CC-A)
+**Deploy:** a joint deploy with ANALYST's #1250, both Langston-PROCEEDed. `dt-deploy 3e2504129d2d03983354e9a75a355cf31ef4e77d --by cc-a --in-window B-PRICE-SIDE-BY-JOB` ran at 04:22:48Z (restart 705; no pending migration; CI run 43675326415 4/4 at that sha; NEW cleared the slot 04:08Z; ANALYST had five minutes' notice). It carries this fold (`c1fa1e1d3` + `67ce5ca5b`).
+**Re-time (Langston item 2):** same object and method as the first pass, plus `query`/`backend_start` capture for active `dawntrader_main` backends. Six calls, 04:23-04:25Z, one after another, starting 34 s after the restart:
+
+| UTC | window | wall | state |
+|---|---|---|---|
+| 04:23:1x | rolling_24h | **not captured** (my output filter cut the first block; stated rather than guessed) | first call after the restart |
+| 04:23:27 | rolling_7d | 15.0 s | first 7d call |
+| 04:23:42 | rolling_30d | 15.0 s | first 30d call |
+| 04:23:57 | rolling_24h | 16.8 s | second call |
+| 04:24:16 | rolling_7d | 14.9 s | second call |
+| 04:24:31 | rolling_30d | 14.3 s | second call |
+
+**Worst captured: 16.8 s, a 13.2 s margin under the 30 s client abort.** This pass has no warm/cold split: every call ran 14-17 s, against 8 s warm at 03:17Z. **HYPOTHESIS, not measured:** the app's own writers were still flushing the backlog from the restart. The sample at 04:24:19 holds six active `dawntrader_main` backends, all of them writers (the `crypto_perp_ohlc_1m`, ticker-snap, `signal_eval_archive` and `pair_scan_archive` inserts, `backend_start` 04:22:42-43, the restart minute) plus one P/L sum. **Every window rendered** with the same kinds as the first pass, and nothing showed QUERY TIMEOUT. **The first-call cold figure after this deploy is NOT established for 24h.** It is owed together with the post-12-01 re-time.
+**Browser check (Claude-in-Chrome, am.5 method):** the sampler started 04:25:18Z (main active and diag connections every ~2 s, ABORT at main ≥ 7). The analytics page opened, the Drift Dashboard tab was clicked, and the Data Archive panel rendered at `rolling_24h`:
+- `pair_scan_archive` 82,795 / 9,293,769;
+- `signal_eval_archive` 1,955,177 / ≈ 32,298,993;
+- `exit_decision_archive` 27 / 11,026;
+- `macro_feed_archive` 1,441 / 65,072;
+- `signal_eval_provenance` "estimate unavailable" / ≈ 27,204,452.
+No row showed QUERY TIMEOUT or a bare 0, and the screenshot was saved. **BUT THE SAMPLER LOGGED `ABORT main_active=10` AT 04:25:34Z**, so the tab was closed at once and 7d/30d were NOT checked. The burst was 0 at 04:25:32 and 0 at 04:25:36, so it lasted under 4 s, and the capture query found it already gone (no caller named). **Attribution is OPEN, not cleared:** the diagnostic pool rose at 04:25:57, which is when the Drift tab was opened. But the analytics page itself (its Overview tab) was loaded shortly before that, at a moment I did not timestamp, so a page-load burst on the MAIN pool is neither shown nor excluded. The 03:17:46 burst happened with no browser open at all. ⇒ **Under am.5 this is an aborted check, NOT a pass.** It is retried later with the navigate timestamped and a sub-second capture. Also seen, not chased: the diagnostic-pool count read 5 for about 10 s (04:25:59-04:26:08) against that pool's max of 4. One explanation would be a second process opening connections under the `dawntrader_diag` name. That is a HYPOTHESIS, recorded for the am.5 work.
