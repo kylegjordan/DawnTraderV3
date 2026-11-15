@@ -26,8 +26,9 @@ MUTANTS = [
     ("P5 never abandons", T5,
      [("follow_up.py", "                giving_up = attempts >= MAX_ERROR_ATTEMPTS", "                giving_up = False")]),
     ("P6(c) a past point is written to a bucket too", T6,
-     [("store.py", "                \"first_seen_at\": now.isoformat()," + NL + "            })" + NL + "            continue",
-       "                \"first_seen_at\": now.isoformat()," + NL + "            })")]),
+     # re-anchored at P7 (the record now ends with the stamped created_at): drop the `continue` after it
+     [("store.py", "                \"created_at\": created_at.astimezone(UTC).isoformat()," + NL + "            })" + NL + "            continue",
+       "                \"created_at\": created_at.astimezone(UTC).isoformat()," + NL + "            })")]),
     ("P6(c) a same-hour point goes to the current bucket", T6,
      [("store.py", "            due_bucket = due + timedelta(hours=1)", "            due_bucket = due")]),
     ("P6(d) the summary timer builds without the lock", T6,
