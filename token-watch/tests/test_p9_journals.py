@@ -235,6 +235,15 @@ check("R2 the drain stops short of a torn last line (the waiting state is real)"
 rc1, err1 = tier_main_rc()
 check("R2 first seen short: quiet (exit 0), refused, not failed", rc1 == 0
       and "short since" in err1, (rc1, err1[-300:]))
+# the run itself must WRITE the first-seen record: it is what starts the 3-day clock (Langston, P9 re-roll: with
+# `setdefault` -> `get` the clock never starts and a short journal warns quietly forever)
+_first = store.load_state(tier.JOURNAL_SHORT_STATE, {}).get("2026-09")
+try:
+    _age = abs((datetime.now(UTC) - datetime.fromisoformat(_first)).total_seconds())
+except (TypeError, ValueError):
+    _age = None
+check("R2 the first-seen-short record is written BY THE RUN, within a minute of now", _age is not None and _age < 60,
+      (_first, _age))
 store.save_state(tier.JOURNAL_SHORT_STATE, {"2026-09": (datetime.now(UTC) - timedelta(days=4)).isoformat()})
 rc2, err2 = tier_main_rc()
 check("R2 still short 4 days later: exit 1, named as a torn line or a stopped drain", rc2 == 1

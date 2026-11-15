@@ -153,6 +153,7 @@ jobs:
           python3 token-watch/tests/test_p6_fence_and_writer.py
           python3 token-watch/tests/test_p9_journals.py
           python3 token-watch/tests/test_p11_cold_census.py
+          python3 token-watch/tests/test_p8_census.py
           python3 token-watch/tests/test_collector.py
           python3 token-watch/tests/test_round2.py
           python3 token-watch/tests/test_wiring.py

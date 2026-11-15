@@ -10,6 +10,7 @@ T6 = "tests/test_p6_fence_and_writer.py"
 TC = "tests/test_collector.py"
 T9 = "tests/test_p9_journals.py"
 T11 = "tests/test_p11_cold_census.py"
+T8 = "tests/test_p8_census.py"
 MUTANTS = [
     ("P5 the failed entry is dropped again (no requeue)", T5,
      [("follow_up.py", "                    _append_next_bucket(dict(entry, attempts=attempts), now)" + NL,
@@ -62,6 +63,8 @@ MUTANTS = [
      [("tier.py", "        j = tier_closed_journals(now)", "        j = {\"journals_moved\": [], \"journals_refused\": [], \"journals_failed\": [], \"journals_freed_bytes\": 0}")]),
     ("P9 a failed journal move is not counted into refused", T9,
      [("tier.py", "        out[\"refused\"] = out.get(\"refused\", 0) + len(j[\"journals_failed\"])" + NL, "")]),
+    ("P9 the first-seen-short record is never written", T9,
+     [("tier.py", "first = short_since.setdefault(key, now.isoformat())", "first = short_since.get(key, now.isoformat())")]),
     ("P9 a short journal never fails", T9,
      [("tier.py", "            if age > JOURNAL_SHORT_STALE_AFTER:", "            if False:")]),
     ("P9 an existing cold file is not failed", T9,
@@ -69,6 +72,19 @@ MUTANTS = [
        "            refused.append(key)" + NL + "            continue" + NL + "        h_src")]),
     ("P9 a short-since record is never forgotten", T9,
      [("tier.py", "        if key not in refused:" + NL + "            short_since.pop(key)", "        if False:" + NL + "            short_since.pop(key)")]),
+    ("P8 the census reads the cursor's own bucket", T8,
+     [("tools/backlog_census.py", "    h, end = _hour(cursor) + timedelta(hours=1), _hour(census_hour)", "    h, end = _hour(cursor), _hour(census_hour)")]),
+    ("P8 the census reads past the census hour", T8,
+     [("tools/backlog_census.py", "        while h <= end:", "        while h <= end + timedelta(hours=1):")]),
+    ("P8 an unreadable line is not counted", T8,
+     [("tools/backlog_census.py", "                    except (ValueError, KeyError, TypeError):" + NL + "                        bad += 1",
+       "                    except (ValueError, KeyError, TypeError):" + NL + "                        pass")]),
+    ("P8 an existing artifact is overwritten", T8,
+     [("tools/backlog_census.py", "        if os.path.exists(dst):" + NL + "            print(\"REFUSED: %s already exists", "        if False:" + NL + "            print(\"REFUSED: %s already exists")]),
+    ("P8 the cursor moves without a matching census", T8,
+     [("tools/move_followup_cursor.py", "        if where is None:", "        if False:")]),
+    ("P8 the cursor move does not check it is after the cursor", T8,
+     [("tools/move_followup_cursor.py", "        if a.census_hour <= last:", "        if False:")]),
     ("P11 pagination stops after the first page", T11,
      [("tools/census_cold_versions.py", "        if not start_name:" + NL + "            return out", "        if True:" + NL + "            return out")]),
     ("P11 orphans are not looked for", T11,
