@@ -604,3 +604,11 @@ Tests: 3b 73/73; tsc 324 = 324.
 - **What it does not prove:** that B2 executes the rules. That is measured at 3d step 4 (the `_liveness/` throwaway pair, and the `_proof/` pair, at the day-3/day-4 re-lists). Tomorrow's 04:00Z canary leaves one upload + one hide under `_liveness/`; the 04:10Z audit's ceiling (> 2 upload versions) is not reached by it.
 - **Rollback:** one `b2_update_bucket` with `lifecycleRules: []`.
 - **Next:** step 3 (mint the narrow key) runs directly before step 4, so a minted key never sits unused; step 4 waits on Kyle's KD-79 residue decision (C-4). Minting a key is confirmed with Kyle in chat at that point.
+
+### 3b item 4 / KD-79 — the two residue versions deleted (2026-11-15 22:25Z, CC-A, wide key on staging, at deployed `84eeb168e`)
+- **Authority:** Kyle's direct yes in CC-A's chat, 2026-11-15 ~22:23Z, to the question "permanently delete the two leftover cold copies (171 MB and 14 MB)". C-4 (residue settled before 3d step 4) is discharged.
+- **Report first (no flags):** 117 versions listed, 0 unbound cold rows, `token-watch/` 110 (never touched). DELETE-SET exactly two: `disk_file.diagnostic_reports/phase-41F-L-trace.ndjson.jsonl.gz` id `…f1111cfdd24ee9ee3…u01793874123798`, 170,761,082 B (the P10 orphan, no manifest row); `context_bridge_log/2026-01.jsonl.gz` id `…f1092db162c8811c7…u01783464755637`, 13,901,237 B (the non-bound duplicate).
+- **Delete:** `b75-cold-bind.ts --delete-residue <those two ids>` → `DELETED` ×2, `DONE deleted=2 named=2`, exit 0. No refusal fired (neither id bound, none unproven, no unparseable uri).
+- **After:** the report re-lists 115 versions, no ORPHAN line, empty DELETE-SET. The cold audit run by hand at 22:26:51Z: `cold_rows=4 unbound=0 missing=0 untracked=0 failed=0` (the 04:10Z run read `untracked=2`). **Control:** the kept `context_bridge_log/2026-01` version is the bound id `…f1038e96b476c1e0c…`, read back OK by this morning's audit; the deleted id was a different version.
+- **Alerts:** `ca8493db` and `e51cebc9` named exactly these two ids (`cold-reconcile-untracked-<id>`); resolved with this commit as evidence.
+- **Next:** 3d step 3 (mint the narrow key) — confirmed with Kyle in chat first — then step 4 directly after.
