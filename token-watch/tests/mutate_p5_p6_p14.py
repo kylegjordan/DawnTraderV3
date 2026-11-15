@@ -2,7 +2,7 @@
 """P5 / P6 / P14 mutants (B-TOKEN-WATCH-FOLLOWUP-MEMORY). Run from token-watch/ on a scratch COPY of the tree:
     python3 tests/mutate_p5_p6_p14.py
 exit 0 = every mutant killed (its test file exits non-zero WITH a FAIL line). NOT-APPLIED counts as a failure."""
-import subprocess, sys
+import os, subprocess, sys
 
 NL = chr(10)
 T5 = "tests/test_p5_error_requeue.py"
@@ -165,7 +165,9 @@ try:
         for f in files:
             if texts[f] != orig[f]:
                 open(f, "w", encoding="utf-8", newline="").write(texts[f])
-        p = subprocess.run([sys.executable, test], capture_output=True, text=True, timeout=900)
+        # no cached bytecode (Langston, P12 FOLD-B): a size-preserving mutant restored within the same second leaves
+        # the .pyc valid on (mtime-seconds, size), so the NEXT run would serve the mutated bytecode
+        p = subprocess.run([sys.executable, test], capture_output=True, env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"), text=True, timeout=900)
         fails = [l.strip()[:110] for l in p.stdout.splitlines() if l.strip().startswith("FAIL")]
         killed = p.returncode != 0 and bool(fails)
         print(("KILLED  " if killed else "SURVIVED") + " %-55s rc=%d %s" % (name, p.returncode, fails[:1]))

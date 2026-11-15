@@ -5,7 +5,7 @@ files in place and restores them in `finally`):
 exit 0 = every mutant killed: its test file exits non-zero WITH a FAIL line. A mutant whose anchor does not match exactly
 once is NOT-APPLIED and counts as a failure; a crash with no FAIL line counts as survived (judged by exit code AND a
 FAIL line, never by grepping alone)."""
-import subprocess, sys
+import os, subprocess, sys
 
 NL = chr(10)
 T2 = "tests/test_p2b2_memory_fixes.py"
@@ -84,7 +84,9 @@ try:
         for f in files:
             if texts[f] != orig[f]:
                 open(f, "w", encoding="utf-8", newline="").write(texts[f])
-        p = subprocess.run([sys.executable, test], capture_output=True, text=True, timeout=1800)
+        # no cached bytecode (Langston, P12 FOLD-B): a size-preserving mutant restored within the same second leaves
+        # the .pyc valid on (mtime-seconds, size), so the NEXT run would serve the mutated bytecode
+        p = subprocess.run([sys.executable, test], capture_output=True, env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"), text=True, timeout=1800)
         fails = [l.strip()[:110] for l in p.stdout.splitlines() if l.strip().startswith("FAIL")]
         killed = p.returncode != 0 and bool(fails)
         print(("KILLED  " if killed else "SURVIVED") + " %-62s rc=%d %s" % (name, p.returncode, fails[:1]))
