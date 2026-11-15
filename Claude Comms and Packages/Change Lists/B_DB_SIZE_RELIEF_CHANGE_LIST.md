@@ -270,3 +270,12 @@ The premise test is updated to the new wording (33/33).
 **Not covered:** 7d/30d (not owed); sustained load (the tab was open 38.1 s, measuring the pre-fold-r2 panel). Fold r2 raises diag-pool burn (the 30d slice burns 6 s every refetch; 18 s worst case per call). Diag is panel-only, so the blast radius is diagnostics. **Disposition: an input to row 119 beside the price-liveness caller; no new slot.** **Row 119:** the "unrun am.5 check" clause of its acceptance is DISCHARGED. It keeps the burst caller, the pooled-slot-after-client-timeout question (`price-liveness.ts:155-160`), the sustained-refetch load and the writer timeouts, with the reopen condition verbatim.
 **Owed after the fold r2 deploy, at Step 10 (no new browser check):** a `dt-api` read at `rolling_24h` showing `signal_eval_provenance` `rowsInWindowKind: 'exact'` with a number and `timedOut: false`, recorded. If it reads `unavailable`, that is a Step-9 iterate, not a close.
 **Diag 5-against-4:** HYPOTHESIS, ranked not closed (`dawntrader_diag` is set at one site, `db.ts:167`; the reaped-connection reading is the cheaper one). No work.
+
+## Step 6 (3) — fold r2 deployed, and Langston's post-deploy read (2026-11-15, CC-A)
+**Deploy:** `dt-deploy 84eeb168ef8656fc9dc5d0e757c0a1afc8776b48 --by cc-a --in-window B-PRICE-SIDE-BY-JOB` ran at 11:05:28Z (restart 706, engine resumed, identity asserted, no pending migration). CI run `43687247633` was 4/4 at that sha. Clearances:
+- NEW: 08:11Z.
+- Infra: its P7 page, Langston PROCEED at `84eeb168e`, 08:10Z.
+- ANALYST: 11:04Z. It changes none of #1250's six files, and no measurement at the instant was needed.
+
+Runtime commits carried: mine (fold r2 `7bce81c0b` + `d37751b0c`; `15e579c43`) and Infra's P7 page. All are Step-4 PROCEED.
+**The owed `dt-api` read (Langston's Step-8 line):** `rolling_24h` at 11:05:39-11:05:50Z, the first call after the restart, wall 10.7 s. **`signal_eval_provenance` `rowsInWindow: 93,505`, `rowsInWindowKind: 'exact'`, `timedOut: false`.** The 0.153 s slice is reproduced live: UNAVAILABLE before, EXACT now. Other rows: `pair_scan_archive` 83,583 exact; `signal_eval_archive` 1,951,654 exact / ≈ 32,833,305; `exit_decision_archive` 27; `macro_feed_archive` 1,442. 5 of 5 `timedOut: false`.
