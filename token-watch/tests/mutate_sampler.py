@@ -23,8 +23,11 @@ MUTS = [
      [('        store.open = marked_open', '        pass')]),
     ("C-2 the sample thread never starts",
      [('        self.thread.start()', '        pass')]),
+    # re-aimed at P7 (the full sweep found it NOT-APPLIED): since P2b-2 F-e the harness no longer re-points prev at
+    # the save, it RELEASES it and records the pruned dict's length -- dropping that release pins the pre-prune dict
     ("C-1 the pruned dict is not re-pointed (pre-prune dict pinned)",
-     [('            if name == "last_seen":' + NL + '                held["prev"] = value', '            pass')]),
+     [('                held.pop("prev", None)' + NL + '                held["len"], held["id"] = len(value), id(value)',
+       '                pass')]),
     ("C-3 an existing sample file is appended to",
      [('        if os.path.lexists(a.sample):', '        if False:')]),
     ("FOLD-2 a timed-out join reads as stopped",

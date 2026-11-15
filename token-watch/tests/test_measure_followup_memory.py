@@ -460,6 +460,15 @@ check("S1 P2b-0: births file reads are marked with their size",
       any("births/" in x["stage"] for x in opens)
       and all("file_bytes" in x for x in opens) and all(isinstance(x.get("file_bytes"), int) for x in opens),
       str(sorted(set(x["stage"] for x in opens))))
+# ⛔ AND ONE MARK ONLY store.open CAN MAKE (P7 full mutation sweep): promote reads the births files too and is marked
+#    as well (P2b-2 F-f), so "a births read is marked" survived dropping store's hook. promote runs BEFORE
+#    summary.build, so a births read INSIDE the _oldest_in_file bracket is the census read, through store.open.
+_ob0 = next((x["seq"] for x in lines if x.get("stage") == "before-summary._oldest_in_file"), None)
+_ob1 = next((x["seq"] for x in lines if x.get("stage") == "after-summary._oldest_in_file"), None)
+check("S1 P2b-0: a births read is marked INSIDE _oldest_in_file - the census read, through store's own open",
+      _ob0 is not None and _ob1 is not None
+      and any("births/" in x["stage"] and _ob0 < x["seq"] < _ob1 for x in opens),
+      "bracket %s..%s, births marks at %s" % (_ob0, _ob1, [x["seq"] for x in opens if "births/" in x["stage"]]))
 # P2b-2: an APPEND is not marked. The loop appends one observation per entry, so before P2b-2 the span between the
 # loop's first marker and loop-end held one open:observations mark per observation; a read-only mark leaves none.
 _l0 = next((x["seq"] for x in lines if x.get("stage") == "loop"), None)
