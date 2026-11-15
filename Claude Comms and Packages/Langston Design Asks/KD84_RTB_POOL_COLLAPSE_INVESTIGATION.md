@@ -1,4 +1,4 @@
-# KD-84 — ready-to-buy pool collapse: investigation record (r3)
+# KD-84 — ready-to-buy pool collapse: investigation record (r4)
 
 **Owner:** NEW Claude (CC-B), with ANALYST Claude on the 11-08 deploy lead · **Directive:** KD-84 (Kyle 2026-11-15 ~22:50Z, `1-system-manual/pm/DECISIONS.md` at `1613c8122`) — investigation only; any fix comes back for its own placement · **Written:** 2026-11-15 ~23:40Z, a Sunday (xStock closed).
 **Status (r3):** mechanism **CONFIRMED by Langston** at `ebaf73f09`, every load-bearing number re-derived by him (Discord 1571667253282341051). r3 folds his four corrections: §2(3) restated, §5's Monday test replaced by a per-refusal read (done, §5), §6 pointed at the rows already on Kyle's list, and the pot drawdown surfaced through row 52.
@@ -69,3 +69,15 @@ Sample lines: 11-12 23:58Z `current=$558.38, projected=$585.68, max=$562.96 (100
 ## 7. For Kyle, through row 52's reporting (surfaced, not placed)
 
 The paper pot has lost **$252.92 realized on its $820 anchor (−30.8 %) over 707 closes**, $172 of it between 11-04 and 11-07. Row 52 already reported its own early stop to Kyle on 11-06; this pot-level figure goes with row 52's next report. Not asserted to be the same losses.
+
+## 8. Kyle's design intent for the fix (via PM, his chat ~23:20Z 2026-11-15) and my proposal — for Langston to shape, not a build order
+
+**Kyle (1):** promotion happens when a slot frees up; at that moment check BOTH the free slots AND the money. If the money is not there, do not promote and do not consume the signal; check back periodically.
+**Kyle (2):** the 20-slot "Guardrail Max" on the Open Trades screen is static from the $820 launch; recalculate it continuously from the actual balance — and which balance?
+
+**Proposal (NEW Claude):**
+- **One number answers both:** *positions the money supports now* = open positions + ⌊(money held − Σ entry cost of open positions) ÷ today's ticket⌋, capped at the derived 20. The promotion pass uses it as its free-slot count (so it never pulls a signal the cap would refuse), and the screen shows it as the live Guardrail Max beside the static 20.
+- **Which balance: money held (anchor + realized P/L, no unrealized)** — the same figure the sizer and the exposure cap already read. Unrealized would let paper gains on open trades raise capacity and then vanish, and would make the count move tick by tick; a different basis from the cap would rebuild exactly the disagreement this investigation found. (Kyle decides; this is the recommendation.)
+- **"Check back periodically":** the promotion pass already runs every 30 s and the new check is arithmetic on two numbers already read, so no new timer is needed — a pass with 0 money-supported slots simply leaves the pool alone. The RTB refresh keeps evicting stale signals as today, so the pool cannot fill with dead entries.
+- **Belt and braces:** if a guardrail still refuses a promoted signal (a race, or another guardrail), the row is restored rather than lost — `#1136`'s defect leg.
+- **Home:** row 9j `B-RTB-PROMOTION-RETRY-STORM` (`#1136`, CC-B), re-scoped at its Step 1 to carry Kyle's (1) and (2); row 9i stays the class-allocation question. **Order (proposal to Kyle via PM):** right after B-ENTRY-GATE closes (its xStock week read runs to 2026-11-20 and a change to promotion inside it would split that window), ahead of row 172.
