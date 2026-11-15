@@ -1,7 +1,11 @@
 """
 token-watch — B-TOKEN-WATCH-FOLLOWUP-MEMORY P7: summary._read_new is STREAMED. A from-empty build read the 258 MB
 tombstone file whole (1,915 MiB peak measured on staging 2026-11-15). The streamed reader must return the same rows,
-the same skipped count and the same cursor as the whole-remainder reader it replaced, on every edge case.
+the same skipped count and the same cursor as a reference reader with the INTENDED semantics (binary-exact cursor,
+split on newline only) on every edge case.
+⚠️ The reference is NOT the reader it replaced on two axes (Langston): the old one read in text mode (its cursor
+   undershot on CRLF) and split with splitlines(); both differences are bugs the new reader fixes, recorded in its
+   docstring. This fence proves the intended behaviour, not equivalence to the old code.
 
 Run:  python tests/test_p7_summary_stream.py        (exit 0 = every check passed)
 """
@@ -38,7 +42,8 @@ def check(label, cond, detail=""):
 
 
 def old_read_new(path, offset):
-    """The whole-remainder reader as it stood before P7 (summary.py at 93037f05f), kept as the reference."""
+    """A whole-remainder reference with the INTENDED semantics (newline-only split, exact byte cursor) -- see the
+    module docstring for how it differs from the pre-P7 reader."""
     skipped = 0
     if not os.path.exists(path):
         return [], offset, 0

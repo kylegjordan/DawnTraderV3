@@ -40,8 +40,9 @@ MUTANTS = [
      "    if not isinstance(rec, dict):          # valid JSON that is not a row",
      "    if False:          # valid JSON that is not a row"),
     ("fold-in 1: _read_new returns a non-object line", "summary.py",
-     "        if not isinstance(r, dict):" + NL + "            _READ_NEW_SKIPPED[\"lines\"] += 1" + NL + "            continue" + NL + "        rows.append(r)",
-     "        rows.append(r)"),
+     # re-anchored at P7 (Langston part 1a C-1): the reader is now streamed, so the fence sits on its yield
+     "                if not isinstance(r, dict):" + NL + "                    _READ_NEW_SKIPPED[\"lines\"] += 1" + NL + "                    continue" + NL + "                yield r",
+     "                yield r"),
     ("fold-in 2: the bad-line count is last-build, not monotone", "store.py",
      "    _DEAD_STATUS[\"bad_lines\"] = max(_DEAD_STATUS[\"bad_lines\"], bad)",
      "    _DEAD_STATUS[\"bad_lines\"] = bad"),

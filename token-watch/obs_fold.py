@@ -146,6 +146,9 @@ def fold_observations(st: dict, now: datetime, watch: dict | None = None) -> dic
         o["rebuild_cause"] = {"reason": "no usable fold state (first build, a re-seed of the watch set, or a new "
                                         "fold version)"}
     files = _obs_files()
+    # a version-2 state written before the head check existed carries no `heads`: adopt the current first lines as
+    # the baseline rather than force a byte-0 rebuild (Langston, part 1a re-roll C-2)
+    heads = o.setdefault("heads", {})
     # A file that is no longer the history we folded -- it SHRANK, or its first line changed (truncated and regrown
     # past the cursor) -- rebuilds from byte 0, never double-counts. Observation files are never tiered
     # (tier.NEVER_TOUCH), so the rebuild is exact WITH RESPECT TO THE BYTES STILL ON DISK; what the change removed
@@ -160,8 +163,10 @@ def fold_observations(st: dict, now: datetime, watch: dict | None = None) -> dic
         except OSError:
             continue
         head = _head(path)
+        # ⚠️ PARTIAL BY CONSTRUCTION: a regrow whose first line is byte-identical (a restore, a replay) passes both
+        #    the size and the head test. It catches truncate-and-regrow, not every rewrite.
         why = ("shrank" if size < cur else
-               "first line changed" if o["heads"].get(name) and head != o["heads"][name] else None)
+               "first line changed" if heads.get(name) and head != heads[name] else None)
         if why:
             LOG.error("observation file %s %s (cursor %d, size now %d): the observation fold is rebuilt from byte 0",
                       name, why, cur, size)
@@ -215,7 +220,9 @@ def fold_observations(st: dict, now: datetime, watch: dict | None = None) -> dic
         except OSError as exc:
             LOG.error("observation file %s could not be read (%s); its cursor stays at %d", name, exc, cur)
         o["cursors"][name] = cur
-        if cur and name not in o["heads"]:
+        # `is None`, not `not in`: a head that could not be read at that instant is re-tried next build, so an
+        # unreadable moment does not disarm the check for that file for good (C-2)
+        if cur and o["heads"].get(name) is None:
             o["heads"][name] = _head(path)
     for hours in list(o["hourly"].values()) + [o["hourly_any"]]:
         for h in [h for h in hours if h < keep_from]:
@@ -439,6 +446,11 @@ def label_states(obs: dict, born_by_hour: dict, births_first_at: str | None, bir
         job_state = "observing"
     elif any_due == 0:
         # nothing was due: neither green nor a fault -- its own state (Langston, part 1a Q3; #1132 2026-11-05 item)
+        # ⚠️ KNOWN CONTRADICTION, written down so it is not rediscovered as a bug (Langston, part 1a re-roll): with
+        #    the job judged on 3 cycles, a dead job with nothing due in them pages nothing, while a checkpoint whose
+        #    own wider window has due > 0 reads `stale` (which does not page either) -- N label faults, not one job
+        #    verdict. Reachable only with zero launches across every birth hour the 3-cycle window looks back to
+        #    (a young store, or a long feed outage); it clears as the window slides.
         job_state = "nothing_due"
     else:
         job_state = "shedding" if any_rows > 0 else "not_running"

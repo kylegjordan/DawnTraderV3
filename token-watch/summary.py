@@ -94,7 +94,15 @@ class _read_new:
        whole remainder into one string, then a line list, then a row list. Incremental runs read a few MB, but a
        build from an EMPTY state (a lost or reset state file) read the 258 MB tombstone file whole -- measured on
        staging 2026-11-15: births + tombstone fold from empty = 1,915 MiB peak RSS, against the summary unit's
-       planned 384M cap. One line in memory at a time now; the counts and the cursor are byte-for-byte the same.
+       planned 384M cap. One line in memory at a time now.
+    ★ NOT BYTE-FOR-BYTE THE SAME -- DIFFERENT IN THREE PLACES, EACH A FIX (Langston fuzzed both, P7 part 1a re-roll):
+      (1) the old text-mode read translated CRLF, so its cursor undershot one byte per line and the next build
+      re-read and DOUBLE-COUNTED the tail; the binary read is exact; (2) the old splitlines() split a raw U+2028 /
+      U+0085 inside a row into two unparseable fragments and LOST the row, the new reader parses it; (3) an invalid
+      UTF-8 byte made the old fh.read() raise and kill the whole build, the new one counts one skipped line.
+      Identical everywhere else (18,150 fuzz cases).
+    ★ AND A SECOND FIX: the old whole-remainder read beat the periodic lock zero times across a 258 MB read, so a
+      from-empty build could let the lock go stale and be stolen mid-build; this beats per line (time-gated in store).
     """
 
     def __init__(self, path: str, offset: int):
@@ -726,6 +734,19 @@ def memory_exit_code(peak: int, cap: int | None) -> int:
     return 0
 
 
+def final_exit_code(payload: dict, mem: int) -> int:
+    """The summary unit's exit code: the memory gauge's code if set, else the job-fault code.
+
+    ⛔ BOTH ARE COMPUTED, THEN COMBINED (Langston, P7 part 2 C-B): `mem or job_fault_exit_code(...)` never called the
+       second when the first was set, so its error line -- the only thing that tells 3 / 4 / 5 apart, since the unit
+       has OnFailure= and no SuccessExitStatus= -- was never written. A named function so the combine is testable
+       (Langston's condition on the part-2 PROCEED: `__main__` never runs under a test).
+    """
+    job = (payload.get("observation_states") or {}).get("job")
+    fault = obs_fold.job_fault_exit_code(job, (job or {}).get("switch", "unknown"))
+    return mem or fault
+
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -738,11 +759,6 @@ if __name__ == "__main__":
         sys.exit(code)
     print(json.dumps({k: v for k, v in p.items() if k != "oldest_survivors"},
                      indent=2, sort_keys=True))
-    mem = memory_exit_code(*memory_headroom())
-    job = (p.get("observation_states") or {}).get("job")
     # P7, Langston condition 1: a follow-up meant to run that has observed nothing for a whole window pages here,
     # on the summary unit's own hourly run -- a carrier that does not depend on the follow-up running at all.
-    # ⛔ BOTH ARE COMPUTED, THEN COMBINED (part 2, C-B): `mem or job_fault_exit_code(...)` never called the second
-    #    when the first was set, so its error line was never written.
-    fault = obs_fold.job_fault_exit_code(job, (job or {}).get("switch", "unknown"))
-    sys.exit(mem or fault)
+    sys.exit(final_exit_code(p, memory_exit_code(*memory_headroom())))

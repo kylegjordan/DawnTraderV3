@@ -139,6 +139,28 @@ check("F3 a state of another fold version is rebuilt from what is on disk now (t
       o6["version"] == of.OBS_FOLD_VERSION and o6["by_day"] == {"24h": {"2026-09-19": {"covered": 30}}}
       and "no usable fold state" in g(o6, "rebuild_cause", "reason"), (o6["by_day"], o6.get("rebuild_cause")))
 
+print(NL + "=== F3b. A STATE WRITTEN BEFORE THE HEAD CHECK (no `heads`) IS ADOPTED, NOT CRASHED ON; A MISSED HEAD IS RE-TRIED")
+reset()
+write("2026-09-21", [obs("H1", "24h", "2026-09-21T10:00:00+00:00")])
+st = {}
+of.fold_observations(st, NOW)
+old = dict(st["obs"])
+old.pop("heads")
+old.pop("rebuild_cause", None)
+st_old2 = {"obs": old}
+try:
+    o7 = of.fold_observations(st_old2, NOW + timedelta(minutes=5))
+    crashed = None
+except Exception as exc:                       # noqa: BLE001 - a crash must be a FAIL line, not an abort
+    o7, crashed = {}, exc
+check("F3b a version-2 state with no `heads` folds without crashing and without a byte-0 rebuild (C-2)",
+      crashed is None and o7.get("rebuilt_at") == old.get("rebuilt_at")
+      and g(o7, "heads", "2026-09-21.jsonl") is not None, (crashed, o7.get("rebuilt_at"), o7.get("heads")))
+st["obs"]["heads"]["2026-09-21.jsonl"] = None   # a head that could not be read at that instant
+of.fold_observations(st, NOW + timedelta(minutes=6))
+check("F3b a head recorded as None is re-tried next build, so the check is not disarmed for good (C-2)",
+      g(st, "obs", "heads", "2026-09-21.jsonl") is not None, g(st, "obs", "heads"))
+
 print(NL + "=== F4. HOURLY COUNTS: covered rows only, trailing 7 days, pruned")
 reset()
 recent = (NOW - timedelta(hours=2)).isoformat()

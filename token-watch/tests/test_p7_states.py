@@ -184,6 +184,24 @@ st = of.label_states(obs_with({}, {}), quiet, first.isoformat(), NOW.isoformat()
 check("Q3 nothing due in the job window and no rows -> nothing_due: neither green nor a fault, and it does not page",
       st["job"]["state"] == "nothing_due" and of.job_fault_exit_code(st["job"], "enabled") == 0, st["job"])
 
+print(NL + "=== S2e. C-B: THE UNIT'S EXIT COMBINES BOTH CODES AND ALWAYS RUNS THE JOB-FAULT CHECK (Langston part 2 condition)")
+import summary as _sm  # noqa: E402
+logged = []
+_err = of.LOG.error
+of.LOG.error = lambda *a, **k: logged.append(a[0] % a[1:] if len(a) > 1 else a[0])
+try:
+    dead_job = {"observation_states": {"job": {"state": "not_running", "window_s": 11700, "switch": "enabled"}}}
+    rc_mem = _sm.final_exit_code(dead_job, 3)
+    logged_mem = list(logged)                # what THIS call wrote, before the next call can write it
+    rc_job = _sm.final_exit_code(dead_job, 0)
+    rc_ok = _sm.final_exit_code({"observation_states": {"job": {"state": "observing", "switch": "enabled"}}}, 0)
+finally:
+    of.LOG.error = _err
+check("C-B memory code set -> the unit exits 3, AND the job-fault line is still written",
+      rc_mem == 3 and any("observed nothing for a whole window" in m for m in logged_mem), (rc_mem, logged_mem))
+check("C-B no memory code -> the job fault's own code (4)", rc_job == 4, rc_job)
+check("C-B neither -> 0", rc_ok == 0, rc_ok)
+
 print(NL + "=== S2b. CHANGE-1: THE RE-DERIVATION TRIGGER IS A DUE-BUT-EMPTY RUN OF K - 1, while the job observed")
 week = [NOW.replace(minute=0) - timedelta(hours=i) for i in range(1, 7 * 24)]
 cov4 = {L: {H(t): 50 for t in week + recent} for L in of.GRID_LABELS}
