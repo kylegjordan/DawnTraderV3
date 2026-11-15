@@ -189,7 +189,15 @@ from datetime import timedelta  # noqa: E402
 
 
 def tier_main_rc():
-    """tier.py's __main__ as the timer runs it (no lock held), against this test's store."""
+    """tier.py's __main__ as the timer runs it (no lock held), against this test's store.
+    The completion record is cleared first, so the timer takes its RUN path: since the P10 tail fold the timer is the
+    backstop and runs tier only when that record is absent or older than 26 h (the gate is fenced in
+    test_p10_tier_tail.py T9). Without the clear, the second call here would read the first call's record and exit 0
+    without running -- which is the backstop working, not the journal step under test."""
+    try:
+        os.remove(store.state_path(tier.TIER_STATE))
+    except FileNotFoundError:
+        pass
     r = subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                                                       "tier.py")], capture_output=True, text=True,
                        env=dict(os.environ, TOKEN_WATCH_ROOT=ROOT), timeout=120)

@@ -417,6 +417,38 @@ TIER_SKIP_STALE_AFTER = timedelta(hours=26)
 TIER_STATE = "tier_last_run"
 
 
+# ⛔ TIER IS CARRIED BY THE FOLLOW-UP'S TAIL (B-TOKEN-WATCH-FOLLOWUP-MEMORY P10 fold, Langston 2026-11-15, Discord
+#    `1571573900708679733`). MEASURED at the P10 switch-on: the follow-up holds the lock 52-55 min of every hour
+#    (promote runs to MAX_CHECKS_PER_RUN at the paced rate) with gaps of 3 s and 2 min between runs, so this timer
+#    could not get a slot on any day -- the "~45+ min, collide most days" above was the plan, not the measurement.
+#    The follow-up now runs `run_locked` at the end of its own run, inside its own lock, once a UTC day from 04:30Z
+#    (`tail_due`) -- the same choice already made for `summary.build`. This timer STAYS as the BACKSTOP (`timer_entry`).
+TIER_TAIL_FROM_UTC = (4, 30)
+
+
+def _completed_at() -> datetime | None:
+    rec = load_state(TIER_STATE, {})
+    try:
+        return datetime.fromisoformat(rec["completed_at"])
+    except (KeyError, ValueError, TypeError):
+        return None
+
+
+def tail_due(now: datetime) -> tuple:
+    """(due, why) for the follow-up's tail: due when no completed run is on record, or the last completion's UTC date
+    is before `now`'s AND `now` is at or past 04:30Z (the daily cadence the timer had). `now` must be read at the call
+    site, never the follow-up's run-start (Langston C-3: `_age_days` floors to UTC midnight, so a stale `now` that
+    straddles midnight makes every age a day short)."""
+    done = _completed_at()
+    if done is None:
+        return True, "no completed tier run on record"
+    if done.astimezone(UTC).date() >= now.astimezone(UTC).date():
+        return False, "already completed today (%s)" % done.isoformat()
+    if (now.astimezone(UTC).hour, now.astimezone(UTC).minute) < TIER_TAIL_FROM_UTC:
+        return False, "before %02d:%02dZ" % TIER_TAIL_FROM_UTC
+    return True, "last completed %s" % done.isoformat()
+
+
 def skip_exit_code(now: datetime | None = None) -> tuple:
     """(exit code, reason) for a run that SKIPPED: 0 if tier completed within TIER_SKIP_STALE_AFTER, 75 if it
     did not or there is no record (absent is never read as fresh)."""
@@ -432,30 +464,56 @@ def skip_exit_code(now: datetime | None = None) -> tuple:
     return 0, "skipped; the last completed tier run was %s ago" % age
 
 
+def run_locked(now: datetime) -> dict:
+    """The tier work. ⛔ THE CALLER HOLDS periodic_lock -- `run` (this timer) or the follow-up's tail."""
+    out = tier_payloads(now)
+    j = tier_closed_journals(now)
+    out.update(j)
+    # a FAILED journal move reaches the same carrier as a refused payload: `refused` is what __main__ exits 1 on
+    out["refused"] = out.get("refused", 0) + len(j["journals_failed"])
+    out.update(prune_due_buckets(now))
+    save_state(TIER_STATE, {"completed_at": now.isoformat()})
+    return out
+
+
 def run(now: datetime | None = None) -> dict:
     now = now or datetime.now(UTC)
     with periodic_lock("tier") as held:
         if not held:
             LOG.warning("another periodic job holds the lock — tiering SKIPPED (held by: %s)", last_refusal())
             return {"skipped": True}
-        out = tier_payloads(now)
-        j = tier_closed_journals(now)
-        out.update(j)
-        # a FAILED journal move reaches the same carrier as a refused payload: `refused` is what __main__ exits 1 on
-        out["refused"] = out.get("refused", 0) + len(j["journals_failed"])
-        out.update(prune_due_buckets(now))
-        save_state(TIER_STATE, {"completed_at": now.isoformat()})
+        out = run_locked(now)
     LOG.info("tier %s", out)
     return out
+
+
+def timer_entry(now: datetime | None = None) -> int:
+    """The tier TIMER, now the BACKSTOP. Returns the exit code.
+
+    ⛔ IT READS THE RECORD BEFORE IT TOUCHES THE LOCK (Langston C-4). Inside TIER_SKIP_STALE_AFTER it exits 0 with the
+       lock untouched: at 04:32Z the record is the previous day's tail (04:30-06:30Z), 22-24 h old, inside 26 h -- that
+       margin is the quiet. Taking the lock anyway would, on a day it landed in a 3 s-2 min gap, hold it ~50 s, make the
+       next follow-up skip (exit 75) and lose its hour, for nothing.
+    ★ AND THE SAME ARITHMETIC IS THE TAIL'S WATCHDOG (C-5): if the tail stops calling tier, the record ages past 26 h,
+       this timer then reaches for the lock, finds the follow-up holding it, and pages (75). With the follow-up off,
+       the lock is free and this timer runs tier itself."""
+    now = now or datetime.now(UTC)
+    done = _completed_at()
+    age = (now - done) if done is not None else None
+    if age is not None and age <= TIER_SKIP_STALE_AFTER:
+        LOG.info("tier not run by the timer: last completion %s ago, inside %s; the follow-up's tail carries it, "
+                 "lock untouched", age, TIER_SKIP_STALE_AFTER)
+        return 0
+    r = run(now)
+    if r.get("skipped"):
+        # ⛔ A SKIP MUST NOT READ AS A COMPLETION AT THE SUPERVISOR (follow_up.py's __main__ states the rule)
+        code, why = skip_exit_code(now)
+        (LOG.error if code else LOG.info)(why)
+        return code
+    return 1 if r.get("refused") else 0
 
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s %(message)s")
-    r = run()
-    if r.get("skipped"):
-        # ⛔ A SKIP MUST NOT READ AS A COMPLETION AT THE SUPERVISOR (follow_up.py's __main__ states the rule)
-        code, why = skip_exit_code()
-        (LOG.error if code else LOG.info)(why)
-        sys.exit(code)
-    sys.exit(1 if r.get("refused") else 0)
+    sys.exit(timer_entry())

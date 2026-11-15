@@ -23,6 +23,7 @@ from datetime import datetime, timedelta, timezone
 
 import promote
 import summary
+import tier
 import budget
 import providers
 from store import (
@@ -240,6 +241,17 @@ def _append_next_bucket(entry: dict, now: datetime) -> None:
     store_append(due_path(now + timedelta(hours=1)), entry)
 
 
+def _clock() -> datetime:
+    return datetime.now(UTC)
+
+
+def exit_code(stats: dict) -> int:
+    """⛔ A SKIPPED CYCLE MUST NOT EXIT 0 (75, EX_TEMPFAIL); a per-entry error OR a failed later stage exits 1."""
+    if stats.get("skipped"):
+        return 75
+    return 1 if stats.get("errors") or stats.get("stage_errors") else 0
+
+
 def run_hour(now: datetime | None = None) -> dict:
     now = now or datetime.now(UTC)
     ensure_dirs()
@@ -253,7 +265,10 @@ def run_hour(now: datetime | None = None) -> dict:
              "last_seen_pruned": 0, "unclassified_by_age": {},
              "requeued_not_yet_due": 0, "buckets_read": 0,
              "buckets_skipped_too_old": 0,
-             "error_requeued": 0, "error_abandoned": 0}
+             "error_requeued": 0, "error_abandoned": 0,
+             # a stage AFTER the sweep that failed (promote, summary, tier): each exits 1 below (Langston C-2 -- the
+             # fault used to be logged into its own sub-dict and exit 0; promote has no other carrier at all)
+             "stage_errors": []}
 
     # 🗑 THE DEAD-MAN'S SWITCH NO LONGER RUNS HERE (B-TOKEN-WATCH-STORAGE
     #    amendment 1, A9). It ran from this sweep until 2026-11-05, and that
@@ -522,6 +537,7 @@ def run_hour(now: datetime | None = None) -> dict:
         except Exception as exc:
             LOG.error("socials sweep failed: %s", exc)
             stats["promote"] = {"error": str(exc)}
+            stats["stage_errors"].append("promote")
 
         # ⛔ THE PUBLISHED SUMMARY — INSIDE the lock, unlike the dead-man's
         #    switch above. It uses save_state, which is read-modify-write, and
@@ -535,6 +551,29 @@ def run_hour(now: datetime | None = None) -> dict:
         except Exception as exc:
             LOG.error("summary build failed: %s", exc)
             stats["summary"] = {"error": str(exc)}
+            stats["stage_errors"].append("summary")
+
+        # ⛔ TIER, FROM THE TAIL, INSIDE THE LOCK (P10 fold, Langston 2026-11-15 `1571573900708679733`). The follow-up
+        #    holds the lock ~52-55 min of every hour, so tier's own timer never gets a slot; tier now runs here once a
+        #    UTC day from 04:30Z (`tier.tail_due`), and its timer is the backstop. LAST, after this run's own work, so
+        #    a tier fault can never cost a follow-up hour; a fault or a refusal exits 1 and pages, as tier's unit did.
+        #    Memory: tier has run daily under its own MemoryMax=256M with no OOM kill, and `prev` is released above.
+        tnow = _clock()                 # C-3: a fresh clock, never the run-start `now`
+        try:
+            due, why = tier.tail_due(tnow)
+            if due:
+                t = tier.run_locked(tnow)
+                LOG.info("tier (follow-up tail; %s) %s", why, t)
+                stats["tier"] = {k: t.get(k) for k in ("moved", "freed_bytes", "refused", "journals_moved",
+                                                       "due_buckets_removed", "due_bytes_removed")}
+                if t.get("refused"):
+                    stats["stage_errors"].append("tier refused")
+            else:
+                stats["tier"] = {"not_due": why}
+        except Exception as exc:
+            LOG.error("tier (follow-up tail) failed: %s", exc)
+            stats["tier"] = {"error": str(exc)}
+            stats["stage_errors"].append("tier")
 
     LOG.info("follow-up %s", stats)
     burn = budget.burn_report(now)
@@ -555,6 +594,4 @@ if __name__ == "__main__":
     #    hour while no spend was folded and no burn check ran. The log line was
     #    right and did not reach the exit code, which is what a supervisor
     #    actually reads. Found by a fresh reader.
-    if result.get("skipped"):
-        sys.exit(75)          # EX_TEMPFAIL — retry-able, not a crash
-    sys.exit(1 if result.get("errors") else 0)
+    sys.exit(exit_code(result))
