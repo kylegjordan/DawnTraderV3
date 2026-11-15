@@ -749,3 +749,9 @@ Not in P12: the P8 tools (census, cursor move) run after it and before P10.
 - **The page:** verified against the served payload (`/api/token-watch/summary` deep-equal to the published file) and the render logic at the ref — not a loaded page (no browser permission his side); my Claude-in-Chrome pass (Step 7) is the observed one.
 - **CARRIED LESSON for the completion report (his ask):** a field derived behind a byte or row cursor must be exercised against a CARRIED-FORWARD state, never only a fresh one — a fresh state is the single initial condition in which an un-backfilled derived field looks correct. P7 passed review on exactly that fixture; the install's first read caught it.
 - Minor (his, no action asked): the summary unit dumps the whole published JSON (~563 lines) to the journal every run.
+
+### Folds at `905aaef74` — (1) and (3) PROCEED, (2) one docstring CHANGES (Langston, Discord `1571502947320201348`) — folded
+- **(2):** the docstring no longer claims a marginal cost: the only other measured builds differ in more than the rebuild (the 177.9 MiB build also seeded the watch set); it keeps the absolute pair against the cap (22.7 s / 186.6 MiB vs 384M).
+- **(1) half-line:** `births_first_at`/`births_through` are a min and a max over an append-only, never-deleted corpus, so carrying them is harmless; the tuple is the fence for the additive counters.
+- **(3) fold-ins:** the record is now a bounded LIST `births_rebuilds` (last 10), so a later bump appends rather than erasing this one (S5b: a later bump leaves `[None, 2]`; mutant: overwrite instead of append, killed); the comment says `born_before` 0 means a fresh store and that presence alone does not discriminate; and the list is published as `launches.rebuilds`, where its effect is visible.
+- `test_p7_states.py` 78/0; `mutate_p7.py` 54/54.

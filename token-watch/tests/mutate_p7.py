@@ -74,7 +74,9 @@ MUTANTS = [
     ("births fold: born_by_hour carried over a rebuild", TS,
      [("summary.py", "\"born_by_hour\", \"cursors\", \"births_first_at\"", "\"cursors\", \"births_first_at\"")]),
     ("births fold: the recount is not recorded", TS,
-     [("summary.py", "        st[\"births_rebuild\"] = {", "        _unused = {")]),
+     [("summary.py", "        st[\"births_rebuilds\"] = (list(", "        _unused = (list(")]),
+    ("births fold: the recount record is overwritten, not appended", TS,
+     [("summary.py", "list(st.get(\"births_rebuilds\") or []) + [", "[] + [")]),
     # D4
     ("D4: the settle window is ignored", TS, [("obs_fold.py", "t + OFFSET[L] + timedelta(seconds=settle_s.get(L, 0)) <= now",
                                                "t + OFFSET[L] <= now")]),
