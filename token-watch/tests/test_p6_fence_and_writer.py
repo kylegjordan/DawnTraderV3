@@ -111,6 +111,66 @@ finally:
     summary.build = _real_build
 check("W2 a second job is refused while the summary builds", seen.get("other") is False, seen)
 
+import subprocess  # noqa: E402
+import tier  # noqa: E402
+
+HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def run_main(script, held_by="tier 4242 cafe 2026-11-15T00:00:00"):
+    """Run a job's __main__ as the timer would, with ANOTHER job holding a fresh periodic lock."""
+    with open(store.LOCK_PATH, "w", encoding="utf-8") as fh:
+        fh.write(held_by + NL)
+    try:
+        r = subprocess.run([sys.executable, os.path.join(HERE, script)], capture_output=True, text=True,
+                           env=dict(os.environ, TOKEN_WATCH_ROOT=ROOT), timeout=120)
+    finally:
+        os.remove(store.LOCK_PATH)
+    return r
+
+
+def publish(age):
+    os.makedirs(os.path.dirname(summary.SUMMARY_PATH), exist_ok=True)
+    with open(summary.SUMMARY_PATH, "w", encoding="utf-8") as fh:
+        json.dump({"generated_at": (datetime.now(UTC) - age).isoformat()}, fh)
+
+
+print(NL + "=== X1. A SKIPPED SUMMARY RUN DOES NOT READ AS A PUBLISH: exit 75 when the published file is stale or missing"
+      " (Langston, P6 Step 4 CHANGES-1)")
+try:
+    os.remove(summary.SUMMARY_PATH)
+except FileNotFoundError:
+    pass
+r_missing = run_main("summary.py")
+publish(timedelta(hours=3))
+r_stale = run_main("summary.py")
+publish(timedelta(minutes=20))
+r_fresh = run_main("summary.py")
+check("X1 no published file -> exit 75", r_missing.returncode == 75, (r_missing.returncode, r_missing.stderr[-200:]))
+check("X1 published 3 h ago -> exit 75", r_stale.returncode == 75, (r_stale.returncode, r_stale.stderr[-200:]))
+check("X1 POSITIVE CONTROL: published 20 min ago (the follow-up holding the lock publishes) -> exit 0",
+      r_fresh.returncode == 0, (r_fresh.returncode, r_fresh.stderr[-200:]))
+check("X1 the log names WHO held the lock", "held by: tier 4242" in r_stale.stderr, r_stale.stderr[-300:])
+
+print(NL + "=== X2. A SKIPPED TIER RUN DOES NOT READ AS A COMPLETION: exit 75 when no run completed in 26 h")
+try:
+    os.remove(store.state_path(tier.TIER_STATE))
+except FileNotFoundError:
+    pass
+r_none = run_main("tier.py", held_by="follow_up 77 beef 2026-11-15T00:00:00")
+store.save_state(tier.TIER_STATE, {"completed_at": (datetime.now(UTC) - timedelta(hours=27)).isoformat()})
+r_old = run_main("tier.py", held_by="follow_up 77 beef 2026-11-15T00:00:00")
+store.save_state(tier.TIER_STATE, {"completed_at": (datetime.now(UTC) - timedelta(hours=2)).isoformat()})
+r_recent = run_main("tier.py", held_by="follow_up 77 beef 2026-11-15T00:00:00")
+check("X2 no completion on record -> exit 75", r_none.returncode == 75, (r_none.returncode, r_none.stderr[-200:]))
+check("X2 last completion 27 h ago -> exit 75", r_old.returncode == 75, (r_old.returncode, r_old.stderr[-200:]))
+check("X2 POSITIVE CONTROL: completed 2 h ago -> exit 0", r_recent.returncode == 0,
+      (r_recent.returncode, r_recent.stderr[-200:]))
+check("X2 the log names WHO held the lock", "held by: follow_up 77" in r_old.stderr, r_old.stderr[-300:])
+os.remove(store.state_path(tier.TIER_STATE))
+tier.run(datetime.now(UTC))
+check("X2 a completed tier run records itself", bool(store.load_state(tier.TIER_STATE, {}).get("completed_at")))
+
 shutil.rmtree(ROOT, ignore_errors=True)
 print(NL + "%d passed, %d failed" % (PASS, FAIL))
 sys.exit(1 if FAIL else 0)

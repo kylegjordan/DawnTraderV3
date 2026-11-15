@@ -62,7 +62,9 @@ from config import (
     SHED_ORDER,
     STATE_DIR,
 )
-from store import load_state, save_state
+# closed_journal_months lives in store so tier can use it without importing budget (the ops/ import boundary,
+# tests/test_ops_boundary.py: budget is a provider-path module)
+from store import JOURNAL_PREFIX, JOURNAL_SUFFIX, closed_journal_months, load_state, save_state
 
 UTC = timezone.utc
 STATE = "budget"
@@ -191,23 +193,34 @@ def _previous_month(now: datetime) -> datetime:
     return first - timedelta(days=1)
 
 
-def _drain_previous_month(now: datetime) -> dict:
-    """Fold anything left in LAST month's journal.
+def _drain_closed_months(now: datetime) -> dict:
+    """Fold whatever is left in EVERY closed month's journal (each from its own cursor).
 
-    ⛔ SPEND IS ARCHIVED AND LOGGED, NEVER CHARGED TO THE NEW MONTH — it came
+    It replaced `_drain_previous_month`, which drained only last month (P9, OBJ-7).
+    """
+    by_month = {}
+    for key in closed_journal_months(now):
+        n = _drain_month(key)["drained"]
+        if n:
+            by_month[key] = n
+    return {"drained": sum(by_month.values()), "by_month": by_month}
+
+
+def _drain_month(key: str) -> dict:
+    """Fold anything left in ONE closed month's journal, from its recorded cursor.
+
+    ⛔ SPEND IS ARCHIVED AND LOGGED, NEVER CHARGED TO THE CURRENT MONTH — it came
        out of an allowance that has already reset. Charging it forward would
        make a new month open pre-spent, which is the very defect the per-month
        journal was introduced to remove.
     ✅ INCLUSION TALLIES ARE FOLDED NORMALLY: they belong to a DAY and are the
        study's weighting denominator, not a billing quantity.
     """
-    prev = _previous_month(now)
-    path = journal_path(prev)
+    path = f"{STATE_DIR}/{JOURNAL_PREFIX}{key}{JOURNAL_SUFFIX}"
     if not os.path.exists(path):
         return {"drained": 0}
 
     cursor = load_state("journal_cursors", {})
-    key = _month_key(prev)
     offset = cursor.get(key, 0)
     size = os.path.getsize(path)
     if offset >= size:
@@ -284,7 +297,7 @@ def fold_pending(now: datetime | None = None) -> dict:
     #   denominator and belong to a DAY, not to a billing period. Losing them
     #   would corrupt the pre-registered weighting; losing the spend figure
     #   only under-reports a month that has closed.
-    _drain_previous_month(now)
+    _drain_closed_months(now)
 
     st = _load(now)
     offset = st.get("journal_offset", 0)

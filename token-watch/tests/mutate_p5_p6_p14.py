@@ -8,6 +8,7 @@ NL = chr(10)
 T5 = "tests/test_p5_error_requeue.py"
 T6 = "tests/test_p6_fence_and_writer.py"
 TC = "tests/test_collector.py"
+T9 = "tests/test_p9_journals.py"
 MUTANTS = [
     ("P5 the failed entry is dropped again (no requeue)", T5,
      [("follow_up.py", "                    _append_next_bucket(dict(entry, attempts=attempts), now)" + NL,
@@ -32,6 +33,32 @@ MUTANTS = [
     ("P14 the follow-up is not shed when the account has no room", TC,
      [("budget.py", "    if kind == \"follow_up\":" + NL + "        return non_birth < headroom and remaining > 0",
        "    if kind == \"follow_up\":" + NL + "        return non_birth < headroom")]),
+    ("P6(d) a skipped summary always exits 0", T6,
+     [("summary.py", "        (LOG.error if code else LOG.info)(why)" + NL + "        sys.exit(code)" + NL + "    print(",
+       "        (LOG.error if code else LOG.info)(why)" + NL + "        sys.exit(0)" + NL + "    print(")]),
+    ("P6(d) a stale published file reads as fresh", T6,
+     [("summary.py", "    if age > SKIP_STALE_AFTER:", "    if False:")]),
+    ("P6(d) the refusing holder is not captured", T6,
+     [("store.py", "                _LAST_REFUSAL[\"line\"] = stale_line.strip()" + NL, "")]),
+    ("tier: a skipped run always exits 0", T6,
+     [("tier.py", "        (LOG.error if code else LOG.info)(why)" + NL + "        sys.exit(code)" + NL + "    sys.exit(1 if",
+       "        (LOG.error if code else LOG.info)(why)" + NL + "        sys.exit(0)" + NL + "    sys.exit(1 if")]),
+    ("tier: an old completion reads as fresh", T6,
+     [("tier.py", "    if age > TIER_SKIP_STALE_AFTER:", "    if False:")]),
+    ("tier: a completed run is not recorded", T6,
+     [("tier.py", "        save_state(TIER_STATE, {\"completed_at\": now.isoformat()})" + NL, "")]),
+    ("P9 the current month counts as closed", T9,
+     [("store.py", "                if len(key) == 7 and key[4] == \"-\" and key < cur:", "                if len(key) == 7 and key[4] == \"-\" and key <= cur:")]),
+    ("P9 only the previous month is drained", T9,
+     [("budget.py", "    for key in closed_journal_months(now):" + NL + "        n = _drain_month(key)", "    for key in closed_journal_months(now)[-1:]:" + NL + "        n = _drain_month(key)")]),
+    ("P9 a short journal is tiered anyway", T9,
+     [("tier.py", "        if cursors.get(key, 0) < size:", "        if False:")]),
+    ("P9 an existing cold file is overwritten", T9,
+     [("tier.py", "        if os.path.exists(dst):" + NL + "            LOG.error(\"closed journal", "        if False:" + NL + "            LOG.error(\"closed journal")]),
+    ("P9 the cold copy is not verified", T9,
+     [("tier.py", "        if n_cold != size or h_cold.digest() != h_src.digest():", "        if False:")]),
+    ("P9 tier.run skips the journals", T9,
+     [("tier.py", "        out.update(tier_closed_journals(now))" + NL, "")]),
 ]
 files = sorted({f for _n, _t, edits in MUTANTS for f, _a, _b in edits})
 orig = {f: open(f, encoding="utf-8").read() for f in files}

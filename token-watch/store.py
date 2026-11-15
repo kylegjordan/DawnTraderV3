@@ -211,6 +211,16 @@ class LockHolder:
         return True
 
 
+# the line of the lock that REFUSED this process last (holder, pid, token, time), so a job that skips can say
+# WHO held it (Langston, P6 Step 4: the refusal path used to throw the holder away)
+_LAST_REFUSAL = {"line": None}
+
+
+def last_refusal() -> str | None:
+    """The lock line that refused this process's most recent periodic_lock, or None."""
+    return _LAST_REFUSAL["line"]
+
+
 # the holder of the lock THIS process took, if any -- so code running inside a
 # locked job (promote.run, tier's sources) can beat without the object being
 # threaded through every call
@@ -296,6 +306,7 @@ def periodic_lock(holder: str, wait: bool = False):
                           age, LOCK_STALE_AFTER, stale_line.strip())
                 continue
             if time.time() >= deadline:
+                _LAST_REFUSAL["line"] = stale_line.strip()
                 yield False
                 return
             time.sleep(2)
@@ -1218,6 +1229,29 @@ def record_observation(mint: str, age_label: str, when: datetime, fields: dict) 
 # STATE — small counters the periodic jobs keep. Read-modify-write, which is
 # exactly why every caller must hold periodic_lock().
 # ─────────────────────────────────────────────────────────────────────────────
+JOURNAL_PREFIX, JOURNAL_SUFFIX = "spend-journal-", ".jsonl"
+
+
+def closed_journal_months(now: datetime) -> list:
+    """Every month with a spend journal on disk that is BEFORE the current month, oldest first.
+
+    (B-TOKEN-WATCH-FOLLOWUP-MEMORY P9, OBJ-7.) Read from the directory, not derived from "the previous
+    month": the follow-up was off from 2026-09-30, so when it returns in November, October is the previous
+    month and September's tail -- 6,930,128 B after its last fold (pre-audit A8) -- belongs to no one.
+    ⚠️ HERE, NOT IN budget: tier needs it, and the ops/ import closure (which reaches tier) must never reach
+       budget, a provider-path module (tests/test_ops_boundary.py).
+    """
+    cur = now.astimezone(UTC).strftime("%Y-%m")
+    out = []
+    if os.path.isdir(STATE_DIR):
+        for name in os.listdir(STATE_DIR):
+            if name.startswith(JOURNAL_PREFIX) and name.endswith(JOURNAL_SUFFIX):
+                key = name[len(JOURNAL_PREFIX):-len(JOURNAL_SUFFIX)]
+                if len(key) == 7 and key[4] == "-" and key < cur:
+                    out.append(key)
+    return sorted(out)
+
+
 def state_path(name: str) -> str:
     return f"{STATE_DIR}/{name}.json"
 

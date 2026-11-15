@@ -42,14 +42,15 @@ from __future__ import annotations
 
 import heapq
 import json
+import sys
 import logging
 import os
 from datetime import datetime, timedelta, timezone
 
 from config import (BIRTHS_DIR, DISPLAY_AGES, GRID, GRID_LABELS,
                     OBSERVATIONS_DIR, ROOT)
-from store import (iter_census as store_iter_census, identity_for as _identity_for, load_state, lock_beat,
-                   periodic_lock, save_state,
+from store import (iter_census as store_iter_census, identity_for as _identity_for, last_refusal, load_state,
+                   lock_beat, periodic_lock, save_state,
                    tombstone_path, _correction_index, dead_set, dead_set_status,
                    latest_observations_uncorrected)
 
@@ -506,6 +507,29 @@ def build(now: datetime = None) -> dict:
     return payload
 
 
+# A skipped summary run pages (exit 75) only when the PUBLISHED file is older than this: two missed hourly
+# publishes. The follow-up publishes inside its own lock every run, so a skip while it holds the lock leaves a fresh
+# file and exits 0; a skip behind any other holder (tier, a one-time tool) with no recent publish is a lost hour and
+# must not read as a publish at the supervisor (Langston, P6 Step 4 CHANGES-1). Unconditional 75 would page every
+# hour the sweep runs past :12.
+SKIP_STALE_AFTER = timedelta(hours=2)
+
+
+def skip_exit_code(now: datetime | None = None) -> tuple:
+    """(exit code, reason) for a run that SKIPPED: 0 if the published summary is fresh, 75 if it is stale,
+    missing or unreadable (absent is never read as fresh)."""
+    now = now or _now()
+    try:
+        with open(SUMMARY_PATH, encoding="utf-8") as fh:
+            published = datetime.fromisoformat(json.load(fh)["generated_at"])
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        return 75, "skipped and the published summary could not be read (%s)" % type(exc).__name__
+    age = now - published
+    if age > SKIP_STALE_AFTER:
+        return 75, "skipped and the published summary is %s old (past %s)" % (age, SKIP_STALE_AFTER)
+    return 0, "skipped; the published summary is %s old" % age
+
+
 def main(now: datetime | None = None) -> dict | None:
     """The `token-watch-summary` timer's entry point: build ONLY under the store's
     periodic lock, and skip when another job holds it.
@@ -520,8 +544,8 @@ def main(now: datetime | None = None) -> dict | None:
     """
     with periodic_lock("summary") as held:
         if not held:
-            LOG.warning("another periodic job holds the lock — summary build SKIPPED "
-                        "(the holder, if it is the follow-up, publishes inside its own lock)")
+            LOG.warning("another periodic job holds the lock — summary build SKIPPED (held by: %s)",
+                        last_refusal())
             return None
         return build(now)
 
@@ -530,6 +554,11 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s %(message)s")
     p = main()
-    if p is not None:
-        print(json.dumps({k: v for k, v in p.items() if k != "oldest_survivors"},
-                         indent=2, sort_keys=True))
+    if p is None:
+        # ⛔ A SKIP MUST NOT READ AS A PUBLISH AT THE SUPERVISOR (Langston, P6 Step 4 CHANGES-1;
+        #    follow_up.py's own __main__ states the rule): exit 75 when the published file is stale.
+        code, why = skip_exit_code()
+        (LOG.error if code else LOG.info)(why)
+        sys.exit(code)
+    print(json.dumps({k: v for k, v in p.items() if k != "oldest_survivors"},
+                     indent=2, sort_keys=True))

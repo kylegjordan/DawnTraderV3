@@ -44,7 +44,9 @@ from datetime import datetime, timedelta, timezone
 from config import BULKY_HOT_DAYS, COLD_DIR, DUE_SPENT_HOT_DAYS
 from provenance import FOLLOW_UP_DIR as PROVENANCE_FOLLOW_UP_DIR
 from provenance import RAW_DIR as PROVENANCE_RAW_DIR
-from store import DUE_DIR, ensure_dirs, load_state, lock_beat, periodic_lock
+from config import STATE_DIR
+from store import (DUE_DIR, JOURNAL_PREFIX, JOURNAL_SUFFIX, closed_journal_months, ensure_dirs, last_refusal,
+                   load_state, lock_beat, periodic_lock, save_state)
 
 UTC = timezone.utc
 LOG = logging.getLogger("token-watch.tier")
@@ -322,14 +324,91 @@ def prune_due_buckets(now: datetime | None = None) -> dict:
             "due_classes": counts}
 
 
+def tier_closed_journals(now: datetime | None = None) -> dict:
+    """Move each CLOSED month's spend journal to the cold tier, once it is fully folded.
+
+    (B-TOKEN-WATCH-FOLLOWUP-MEMORY P9, OBJ-7.) A closed journal is ~260-287 MB a month and never left the
+    box. A journal whose month is closed AND whose cursor equals its size is gzipped to
+    `cold/spend-journal-<month>.jsonl.gz` -- compress, then verify, then remove, as `tier_payloads` does,
+    with a stronger verify: the WHOLE cold copy is read back and its length and sha256 must equal the
+    source's -- and the nightly off-box run uploads it like every other `cold/*.gz`.
+    ⛔ A JOURNAL SHORT OF ITS SIZE IS REFUSED AND LOGGED: unfolded spend rows would leave the box unread
+       (the drain reads the hot file), so it waits for `budget._drain_closed_months`.
+    ⛔ AN EXISTING COLD FILE IS NEVER OVERWRITTEN -- it may be the only copy of a month already uploaded.
+    """
+    import hashlib
+    now = now or datetime.now(UTC)
+    cursors = load_state("journal_cursors", {})
+    moved, refused, freed = [], [], 0
+    os.makedirs(COLD_DIR, exist_ok=True)
+    for key in closed_journal_months(now):
+        lock_beat()
+        name = "%s%s%s" % (JOURNAL_PREFIX, key, JOURNAL_SUFFIX)
+        src = os.path.join(STATE_DIR, name)
+        size = os.path.getsize(src)
+        if cursors.get(key, 0) < size:
+            LOG.warning("closed journal %s NOT tiered: folded to %d of %d bytes", name, cursors.get(key, 0), size)
+            refused.append(key)
+            continue
+        dst = os.path.join(COLD_DIR, name + ".gz")
+        if os.path.exists(dst):
+            LOG.error("closed journal %s NOT tiered: %s already exists, never overwritten", name, dst)
+            refused.append(key)
+            continue
+        h_src = hashlib.sha256()
+        with open(src, "rb") as fin, gzip.open(dst + ".tmp", "wb") as fout:
+            for chunk in iter(lambda: fin.read(1 << 20), b""):
+                h_src.update(chunk)
+                fout.write(chunk)
+        h_cold, n_cold = hashlib.sha256(), 0
+        with gzip.open(dst + ".tmp", "rb") as fh:
+            for chunk in iter(lambda: fh.read(1 << 20), b""):
+                h_cold.update(chunk)
+                n_cold += len(chunk)
+        if n_cold != size or h_cold.digest() != h_src.digest():
+            LOG.error("closed journal %s: cold copy does not match (%d of %d bytes) - HOT COPY KEPT", name, n_cold, size)
+            os.unlink(dst + ".tmp")
+            refused.append(key)
+            continue
+        os.replace(dst + ".tmp", dst)
+        os.unlink(src)
+        moved.append(key)
+        freed += size
+    return {"journals_moved": moved, "journals_refused": refused, "journals_freed_bytes": freed}
+
+
+# A skipped tier run pages (exit 75) only when tier has not COMPLETED for longer than this (Langston, P6 Step 4
+# §13 fold): it runs daily, the follow-up runs ~45+ min of every hour, so they collide most days and an
+# unconditional 75 would page most days; a day's skip behind a fresh completion is not news, a second missed day is.
+TIER_SKIP_STALE_AFTER = timedelta(hours=26)
+TIER_STATE = "tier_last_run"
+
+
+def skip_exit_code(now: datetime | None = None) -> tuple:
+    """(exit code, reason) for a run that SKIPPED: 0 if tier completed within TIER_SKIP_STALE_AFTER, 75 if it
+    did not or there is no record (absent is never read as fresh)."""
+    now = now or datetime.now(UTC)
+    rec = load_state(TIER_STATE, {})
+    try:
+        done = datetime.fromisoformat(rec["completed_at"])
+    except (KeyError, ValueError, TypeError):
+        return 75, "skipped and there is no record of a completed tier run"
+    age = now - done
+    if age > TIER_SKIP_STALE_AFTER:
+        return 75, "skipped and the last completed tier run was %s ago (past %s)" % (age, TIER_SKIP_STALE_AFTER)
+    return 0, "skipped; the last completed tier run was %s ago" % age
+
+
 def run(now: datetime | None = None) -> dict:
     now = now or datetime.now(UTC)
     with periodic_lock("tier") as held:
         if not held:
-            LOG.warning("another periodic job holds the lock — tiering SKIPPED")
+            LOG.warning("another periodic job holds the lock — tiering SKIPPED (held by: %s)", last_refusal())
             return {"skipped": True}
         out = tier_payloads(now)
+        out.update(tier_closed_journals(now))
         out.update(prune_due_buckets(now))
+        save_state(TIER_STATE, {"completed_at": now.isoformat()})
     LOG.info("tier %s", out)
     return out
 
@@ -338,4 +417,9 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s %(message)s")
     r = run()
+    if r.get("skipped"):
+        # ⛔ A SKIP MUST NOT READ AS A COMPLETION AT THE SUPERVISOR (follow_up.py's __main__ states the rule)
+        code, why = skip_exit_code()
+        (LOG.error if code else LOG.info)(why)
+        sys.exit(code)
     sys.exit(1 if r.get("refused") else 0)

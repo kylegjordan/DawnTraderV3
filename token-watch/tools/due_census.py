@@ -45,10 +45,12 @@ def lineage(now: datetime | None = None, floor: float = 0.5) -> dict:
     day or the two days after. A bucket under `floor` is a GAP: evidence that the cursor's lineage may have skipped
     it, so the backfilled consumed_from is not proven for it (Langston, Step-4 part 1). Read-only; one day's
     observation set in memory at a time.
-    ⚠️ NOT EVERY READ WRITES A ROW (Langston R-3): an observation, a shed and a recorded death do (`store.
-       record_observation`, keyed mint+age), but a REQUEUE (the entry is copied to a later bucket and its row is
-       written only when that copy is read) and an observation ERROR write none for this bucket. So a fully read
-       bucket can score below 1.0. FLOOR = 0.5: a bucket in which at least half the entries left a row was read; a
+    ⚠️ NOT EVERY READ WRITES A ROW (Langston R-3): an observation, a shed, a recorded death and — since
+       B-TOKEN-WATCH-FOLLOWUP-MEMORY P5 — an observation ERROR do (`store.record_observation`, keyed mint+age; an
+       error row is genuine evidence the bucket was read, so crediting it is the right direction), but a REQUEUE of
+       a not-yet-due entry (copied to a later bucket; its row is written only when that copy is read) writes none
+       for this bucket. So a fully read bucket can score below 1.0. (Before P5 an error wrote no row either; the
+       error retry's own copy carries the same (mint, age) key, and `seen` spans the bucket's day + 2 days.) FLOOR = 0.5: a bucket in which at least half the entries left a row was read; a
        never-read bucket scores ~0, because nothing reads it to write any row (a requeue copy carries no row until
        read, and the next-age entry has a different age - Langston tried to build an aliasing path and could not).
        The residual is conservative: a read bucket with heavy requeues can be flagged as a gap, never the reverse.
