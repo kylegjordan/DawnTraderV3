@@ -145,6 +145,52 @@ r = run_guard({"r.service": ("receiver.py", "512M")}, [f for f in _all if f != "
 check("S1 CONTROL: the same unit with summary.py dropped from the run REFUSES", r.returncode != 0
       and "summary.py is not installed" in r.stderr, (r.returncode, r.stderr[-300:]))
 
+print(NL + "=== THE UNIT-FILE BOX-EDIT GUARD (Langston, P12 Step 4 CHANGES-4), extracted and run like the cap guard")
+ustart = src.index("# ⛔ THE SAME BOX-EDIT GUARD FOR THE UNIT FILES")
+uend = src.index(NL + "done", ustart) + len(NL + "done")
+UGUARD = src[ustart:uend]
+check("U0 no stderr is suppressed on a git object read in the unit guard", "2>/dev/null" not in UGUARD)
+check("U0 the unit guard runs before anything is installed", uend < src.index("# ── 3. install"), (uend,))
+
+
+def run_unit_guard(live, unit_files):
+    """`live` {name: bytes} as the box's /etc/systemd/system; PREV's committed units are a.service and r.service."""
+    units = os.path.join(work, "live-units")
+    shutil.rmtree(units, ignore_errors=True)
+    os.makedirs(units)
+    for n, data in live.items():
+        with open(os.path.join(units, n), "wb") as fh:
+            fh.write(data)
+    stage = os.path.join(work, "ustage")
+    shutil.rmtree(stage, ignore_errors=True)
+    os.makedirs(os.path.join(stage, "prev"))
+    script = (
+        "set -eu" + NL +
+        "fail() { echo \"FAIL: $*\" >&2; exit 1; }" + NL +
+        "g() { git -C \"$REPO\" \"$@\"; }" + NL +
+        "REPO=%r; PREV=%s; stage=%r; UNITS=%r" % (repo, PREV, stage, units) + NL +
+        "UNIT_FILES=%r" % " ".join(unit_files) + NL +
+        UGUARD + NL + "echo UGUARD-PASSED" + NL)
+    return subprocess.run(["bash", "-c", script], capture_output=True, text=True)
+
+
+prev_a = git("show", PREV + ":token-watch/systemd/a.service")
+same = (prev_a + NL).encode()
+r = run_unit_guard({"a.service": same}, ["a.service"])
+check("U1 a live unit equal to its PREV blob passes", r.returncode == 0 and "UGUARD-PASSED" in r.stdout,
+      (r.returncode, r.stderr[-300:]))
+r = run_unit_guard({"a.service": same.replace(NL.encode(), b"\r\n")}, ["a.service"])
+check("U2 the same unit with CRLF line ends passes (carriage returns are ignored)", r.returncode == 0,
+      (r.returncode, r.stderr[-300:]))
+r = run_unit_guard({"a.service": same + b"MemoryMax=1G\n"}, ["a.service"])
+check("U3 a live unit EDITED on the box refuses", r.returncode != 0 and "edited on the box" in r.stderr,
+      (r.returncode, r.stderr[-300:]))
+r = run_unit_guard({"z.timer": b"[Timer]\nOnCalendar=hourly\n"}, ["z.timer"])
+check("U4 a live unit with NO blob at the previous install refuses (never reviewed)", r.returncode != 0
+      and "has no blob at the previous install" in r.stderr, (r.returncode, r.stderr[-300:]))
+r = run_unit_guard({}, ["z.timer"])
+check("U5 a unit NOT yet on the box is new: nothing to guard", r.returncode == 0, (r.returncode, r.stderr[-300:]))
+
 shutil.rmtree(work, ignore_errors=True)
 print(NL + "%d passed, %d failed" % (PASS, FAIL))
 sys.exit(1 if FAIL else 0)

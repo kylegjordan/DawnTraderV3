@@ -24,12 +24,15 @@ User=tokenwatch
 Group=tokenwatch
 ExecStart=/usr/bin/python3 /opt/token-watch/summary.py
 # ⛔ A MEMORY CAP, SET FROM ITS OWN MEASURED PEAK (B-TOKEN-WATCH-FOLLOWUP-MEMORY P3) — RESTORED AT P12, IN THE SAME
-#    INSTALL THAT PLACES THE CODE IT WAS MEASURED ON (Langston, P3 Step 4 C-4). The reconcile of the box's 2026-09-02
+#    INSTALL THAT PLACES summary.py (Langston, P3 Step 4 C-4). ⚠️ NOT YET MEASURED ON THE SHIPPING CODE AT THE CAP
+#    (Langston, P12 Step 4 CHANGES-3): the 384M run below was on the P2b-2 tree, which has no obs_fold.py and a
+#    different summary.py, over a non-empty store; the from-empty 176 MiB figure ran outside a cgroup. The at-the-cap
+#    measurement on the shipping code is the P12 install's first build -- its sha and numbers replace this note.
+#    The reconcile of the box's 2026-09-02
 #    summary.py, recorded: it equals its blob at the previous install 5e6f1cec once carriage returns are stripped
 #    (sha256 2b6f2b73…, same for budget.py and promote.py), so the installer's guard passes and nothing hand-written
 #    is overwritten unseen. The installer refuses a unit whose MemoryMax= is new or changed when its script is not
 #    placed by that run; P12's CORE places summary.py.
-MemoryMax=384M
 #    P7 (2026-11-15, staging, read-only, committed code, writes redirected): a summary build from an EMPTY state —
 #    births, tombstones, the 1.8 GB observation fold and the 5,000-member watch set — 64.3 s, 176 MiB peak, after
 #    summary._read_new was streamed (it was 1,915 MiB from empty: the 258 MB tombstone file read whole).
@@ -43,6 +46,7 @@ MemoryMax=384M
 #    ⚠️ HEADROOM IS SPENT IN MONTHS (Langston): the dead-set build dominates (+158 MiB for 766,794 deaths), so 384M
 #    binds near ~1.8M dead records, ~3 months at the observed death rate. summary.py logs its peak every run and exits 3
 #    (OnFailure pages) past 70% of its cgroup's cap; raising or removing the cap is a P10/P15 item of the batch.
+MemoryMax=384M
 # ⚠️ Nothing here touches the trading app. It reads the study's own store and writes ONE
 #    derived file into the published directory — the isolation summary.py's own docstring
 #    describes ("the study publishes one derived file and the app reads that").

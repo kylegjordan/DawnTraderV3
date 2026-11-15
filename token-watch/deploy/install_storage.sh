@@ -20,8 +20,11 @@
 #   equal that closure exactly — tests/test_ops_boundary.py). follow_up.py is the first. TOOLS: the one-time
 #   operator tools this batch runs as tokenwatch. Both get the same CR, compile, guard and record treatment, and the
 #   four lists are asserted disjoint.
-# ⛔ NOT dt-deploy, AND NOTHING IS RESTARTED. token-watch is not part of the app. The long-running receiver keeps the
-#    code it loaded: receiver.py is byte-identical at the ref, and its imports differ only in CR bytes (A6).
+# ⛔ NOT dt-deploy, AND THIS SCRIPT RESTARTS NOTHING. token-watch is not part of the app. The long-running receiver
+#    keeps the code it loaded until it is restarted BY HAND -- and whether that is owed is decided per install from
+#    its import closure (receiver.py imports budget, provenance, config, store). ⚠️ At the B-TOKEN-WATCH-FOLLOWUP-MEMORY
+#    P12 install it IS owed: store.py and budget.py changed (Langston, P12 Step 4). The older wording here ("byte-
+#    identical, imports differ only in CR bytes", A6) was true of the storage batch's install and false of this one.
 # Writes /opt/token-watch/INSTALLED: the sha, each file's sha256, the actor and a UTC time. ⚠️ The actor is TWO
 #    fields, never one (Langston, Step-4 part 3 C-2, after #1004 — never name a field we cannot prove):
 #    `actor_declared` is the constant below, a CLAIM; `actor_transport` is what the box observed (SUDO_USER, else
@@ -55,7 +58,7 @@ tools/backlog_census.py tools/move_followup_cursor.py tools/derive_obs_window.py
 UNIT_FILES="token-watch-cold-offbox.service token-watch-cold-offbox.timer token-watch-store-watch.service
 token-watch-store-watch.timer token-watch-failed@.service token-watch-tier.service token-watch-receiver.service
 token-watch-followup.service token-watch-summary.service token-watch-feed-watch.service token-watch-feed-watch.timer
-token-watch-followup.timer token-watch-summary.timer"
+token-watch-followup.timer token-watch-summary.timer token-watch-tier.timer"
 ALL="$OPS $PINNED $CORE $TOOLS"
 # the four lists are disjoint: a file in two would be installed, guarded and recorded twice
 DUP=$(printf '%s\n' $ALL | sort | uniq -d)
@@ -106,6 +109,18 @@ for f in $ALL; do
     || fail "$DEST/$f is live but has no blob at the previous install $PREV ($(cat "$stage/prev.err")) — stop and look"
   tr -d '\r' < "$DEST/$f" | cmp -s - "$prev" \
     || fail "$DEST/$f differs from its blob at the previous install $PREV by more than carriage returns — it was edited on the box, OR an earlier install copied files and then failed before writing INSTALLED (its 'NOT recorded' FAIL line says so) — stop and look"
+done
+# ⛔ THE SAME BOX-EDIT GUARD FOR THE UNIT FILES (Langston, P12 Step 4 CHANGES-4): units used to be installed over
+#    whatever was on the box and hashed only afterwards. P12 is the first install to bring timers under the
+#    installer (hand-placed until now), so every live unit file must equal its blob at the previous install, ignoring
+#    carriage returns -- and a live unit with NO blob at that sha was never reviewed, which refuses too.
+for u in $UNIT_FILES; do
+  [ -f "$UNITS/$u" ] || continue                      # new on this box: nothing to guard
+  prevu="$stage/prev/unit_$u"
+  g cat-file blob "$PREV:token-watch/systemd/$u" > "$prevu" 2>"$stage/prev.err" \
+    || fail "$UNITS/$u is live but has no blob at the previous install $PREV ($(cat "$stage/prev.err")) — stop and look"
+  tr -d '\r' < "$UNITS/$u" | cmp -s - "$prevu" \
+    || fail "$UNITS/$u differs from its blob at the previous install $PREV by more than carriage returns — it was edited on the box — stop and look"
 done
 # ALL, not OPS+CORE+TOOLS (Langston C-1): the guard rewrite makes a CHANGED pinned file installable, so a syntax
 # error in store.py must stop here, not install clean and surface as every timer failing at import.

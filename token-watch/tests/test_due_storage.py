@@ -507,12 +507,20 @@ check("check as tokenwatch, mint as root, failure pages",
       and "ExecStartPost=+/usr/bin/python3 /opt/token-watch/ops/feed_watch.py --mint" in svc
       and "OnFailure=token-watch-failed@%n.service" in svc, svc)
 inst = open(os.path.join(PKG, "deploy", "install_storage.sh"), encoding="utf-8").read()
+import re as _re2  # noqa: E402
 check("the installer installs both units and verifies the service",
       "token-watch-feed-watch.service token-watch-feed-watch.timer" in inst
       and "token-watch-store-watch.service token-watch-feed-watch.service token-watch-followup.service "
           "token-watch-summary.service; do" in inst)
 check("P12: the installer places the follow-up and summary TIMERS too (the INSTALLED record covers them, A10)",
       "token-watch-followup.timer token-watch-summary.timer" in inst)
+_units = (_re2.search(r'^UNIT_FILES="([^"]*)"', inst, _re2.M | _re2.S) or [None, ""])[1].split()
+_shipped = sorted(f for f in os.listdir(os.path.join(PKG, "systemd")) if f.endswith((".service", ".timer")))
+check("P12 (Langston): EVERY unit file the repo ships is installed by the installer, and nothing else -- "
+      "token-watch-tier.timer was live, hand-placed and in no list", sorted(_units) == _shipped,
+      (sorted(set(_shipped) - set(_units)), sorted(set(_units) - set(_shipped))))
+check("P12 (Langston CHANGES-4): the installer guards live UNIT files against box edits, like the .py files",
+      'g cat-file blob "$PREV:token-watch/systemd/$u"' in inst and "for u in $UNIT_FILES; do" in inst)
 check("★ the installer's box-edit guard reads the PREVIOUS install's blob",
       '"$PREV:token-watch/$f"' in inst and "INSTALLED" in inst)
 check("★ the installer compiles EVERY list, PINNED included (C-1)",
