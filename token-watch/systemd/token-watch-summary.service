@@ -23,12 +23,16 @@ Type=oneshot
 User=tokenwatch
 Group=tokenwatch
 ExecStart=/usr/bin/python3 /opt/token-watch/summary.py
-# ⛔ A MEMORY CAP, SET FROM ITS OWN MEASURED PEAK (B-TOKEN-WATCH-FOLLOWUP-MEMORY P3) — AND HELD OUT OF THIS FILE UNTIL
-#    P12 INSTALLS THE CODE IT WAS MEASURED ON (Langston, P3 Step 4 C-4). install_storage.sh does not yet place
-#    summary.py: the box carries a hand-written 2026-09-02 build, measured nowhere, so a cap here would land on THAT
-#    file, with no gauge. P12 adds summary.py to the installer, with a recorded reconcile of the hand-written file, and
-#    restores this line in the same install:      MemoryMax=384M
-#    The installer now refuses a unit whose MemoryMax= is new or changed when its script is not placed by that run.
+# ⛔ A MEMORY CAP, SET FROM ITS OWN MEASURED PEAK (B-TOKEN-WATCH-FOLLOWUP-MEMORY P3) — RESTORED AT P12, IN THE SAME
+#    INSTALL THAT PLACES THE CODE IT WAS MEASURED ON (Langston, P3 Step 4 C-4). The reconcile of the box's 2026-09-02
+#    summary.py, recorded: it equals its blob at the previous install 5e6f1cec once carriage returns are stripped
+#    (sha256 2b6f2b73…, same for budget.py and promote.py), so the installer's guard passes and nothing hand-written
+#    is overwritten unseen. The installer refuses a unit whose MemoryMax= is new or changed when its script is not
+#    placed by that run; P12's CORE places summary.py.
+MemoryMax=384M
+#    P7 (2026-11-15, staging, read-only, committed code, writes redirected): a summary build from an EMPTY state —
+#    births, tombstones, the 1.8 GB observation fold and the 5,000-member watch set — 64.3 s, 176 MiB peak, after
+#    summary._read_new was streamed (it was 1,915 MiB from empty: the 258 MB tombstone file read whole).
 #    Measured 2026-11-15 on staging, summary.build with the P2b-2 code (/opt/token-watch-p1 = 9aebff599) over a copy of
 #    the scratch store (its dead.jsonl byte-identical to the live one, 258,564,193 B): under MemoryMax=512M ru_maxrss
 #    175,228 KiB (171 MiB), 6.8 s; re-run AT THE CAP TO SHIP, a fresh copy ~03:05Z: MemoryMax=384M -> 7.1 s, 175,336

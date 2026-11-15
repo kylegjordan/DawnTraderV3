@@ -43,15 +43,19 @@ g merge-base --is-ancestor "$SHA" origin/migration/aws-supabase || fail "$SHA is
 
 OPS="ops/alert_mint.py ops/cold_offbox.py ops/feed_watch.py ops/store_watch.py ops/unit_failed.py"
 PINNED="config.py liveness.py provenance.py store.py tier.py"
-CORE="follow_up.py"
+# P12 (B-TOKEN-WATCH-FOLLOWUP-MEMORY): the plan row named summary.py + budget.py; promote.py (P2b-2 F-f, streamed
+# read) and obs_fold.py (P7, new; summary imports it) are imported by follow_up/summary too, so all five are installed
+# together - a follow-up importing a NEW store/summary beside an OLD promote is a mixed tree.
+CORE="follow_up.py summary.py budget.py promote.py obs_fold.py"
 # B-TOKEN-WATCH-FOLLOWUP-MEMORY added four of these six tools (its docstrings tell the operator to run them from
 # /opt/token-watch/tools)
 # (Langston, P11 Step 4 C-1: a documented tool the installer never placed cannot be run as documented)
 TOOLS="tools/backfill_consumed_from.py tools/due_census.py tools/census_cold_versions.py tools/drain_closed_journals.py
-tools/backlog_census.py tools/move_followup_cursor.py"
+tools/backlog_census.py tools/move_followup_cursor.py tools/derive_obs_window.py"
 UNIT_FILES="token-watch-cold-offbox.service token-watch-cold-offbox.timer token-watch-store-watch.service
 token-watch-store-watch.timer token-watch-failed@.service token-watch-tier.service token-watch-receiver.service
-token-watch-followup.service token-watch-summary.service token-watch-feed-watch.service token-watch-feed-watch.timer"
+token-watch-followup.service token-watch-summary.service token-watch-feed-watch.service token-watch-feed-watch.timer
+token-watch-followup.timer token-watch-summary.timer"
 ALL="$OPS $PINNED $CORE $TOOLS"
 # the four lists are disjoint: a file in two would be installed, guarded and recorded twice
 DUP=$(printf '%s\n' $ALL | sort | uniq -d)
@@ -112,7 +116,7 @@ install -d -o root -g root -m 0755 "$DEST/ops" "$DEST/tools"
 for f in $ALL; do install -o root -g root -m 0644 "$stage/$f" "$DEST/$f"; done
 for u in $UNIT_FILES; do install -o root -g root -m 0644 "$stage/units/$u" "$UNITS/$u"; done
 systemctl daemon-reload
-for u in token-watch-cold-offbox.service token-watch-store-watch.service token-watch-feed-watch.service; do   # a template cannot be verified bare
+for u in token-watch-cold-offbox.service token-watch-store-watch.service token-watch-feed-watch.service token-watch-followup.service token-watch-summary.service; do   # a template cannot be verified bare
   systemd-analyze verify "$UNITS/$u" || fail "systemd-analyze rejects $u — files are in place but NOT recorded: INSTALLED still names $PREV, so the next run's guard will report every changed file as edited on the box. Fix the unit and re-run this sha, or restore the files from $PREV"
 done
 

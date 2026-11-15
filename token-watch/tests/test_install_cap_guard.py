@@ -130,8 +130,20 @@ check("H4 POSITIVE CONTROL: a template unit whose script is placed passes", r.re
 print(NL + "=== THE SHIPPED UNIT FILES PASS THE GUARD AS THEY STAND")
 units_dir = os.path.join(PKG, "systemd")
 summary_unit = open(os.path.join(units_dir, "token-watch-summary.service"), encoding="utf-8").read()
-check("S1 the summary unit carries NO active MemoryMax (indented or not) until P12 places summary.py",
-      not any(line.strip().startswith("MemoryMax=") for line in summary_unit.splitlines()))
+import re as _re  # noqa: E402
+_lists = {}
+for _name in ("OPS", "PINNED", "CORE", "TOOLS"):
+    _m = _re.search(r'^%s="([^"]*)"' % _name, src, _re.M)
+    _lists[_name] = _m.group(1).split() if _m else []
+_all = _lists["OPS"] + _lists["PINNED"] + _lists["CORE"] + _lists["TOOLS"]
+check("S1 P12: the shipped summary unit DOES carry MemoryMax=384M again (restored with the code it was measured on)",
+      any(line.strip() == "MemoryMax=384M" for line in summary_unit.splitlines()))
+r = run_guard({"r.service": ("receiver.py", "512M")}, _all, raw={"a.service": summary_unit})
+check("S1 the SHIPPED summary unit passes the guard with the installer's own lists (summary.py is in CORE)",
+      r.returncode == 0 and "GUARD-PASSED" in r.stdout and "summary.py" in _lists["CORE"], (r.returncode, r.stderr[-300:]))
+r = run_guard({"r.service": ("receiver.py", "512M")}, [f for f in _all if f != "summary.py"], raw={"a.service": summary_unit})
+check("S1 CONTROL: the same unit with summary.py dropped from the run REFUSES", r.returncode != 0
+      and "summary.py is not installed" in r.stderr, (r.returncode, r.stderr[-300:]))
 
 shutil.rmtree(work, ignore_errors=True)
 print(NL + "%d passed, %d failed" % (PASS, FAIL))
