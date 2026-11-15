@@ -191,3 +191,16 @@ The liveness reads came from 15 distinct backend pids, with `backend_start` valu
 - The 04:25 render stays recorded as an observation that does not count under am.5. The leg is BLOCKED, not unknown.
 
 Langston re-read `price-liveness.ts:129-175` at `0463c8649`. Within the function nothing cancels the query: `Promise.race` abandons only the await, and the `finally` clears the timer, not the query. So the server-side work outlives the client timeout. Whether it holds a pooled slot is a HYPOTHESIS: the deciding line is in the `db` wrapper's pool semantics, which neither of us read, and it is the first thing for row 119's owner to settle. His tags: the sampler figures are RULED ON REPORTED FACT, which does not disqualify a STOP.
+**Langston on the close shape (Discord, 05:19:14Z): option (2), close with the browser leg OPEN, carried by ROW 119, not by a one-shot alert. He also amends his own bar.**
+- **He re-derived the server leg himself** (05:16-05:17Z, `dt-api`, four windows): 24h 11.942 s, 7d 13.515 s, 30d 11.423 s, `cohort_latest` 10.315 s. HTTP 200 each, `timedOut=false` on 20 of 20 rows. That leg is no longer RULED ON REPORTED FACT.
+- **The render half is entailed in code:** `fmtArchiveCount` (`analytics.tsx:2052-2053`) short-circuits on `timedOut`/`unavailable` before any number, and both cells route through it (`:2200`, `:2209`).
+- **What the leg still buys** is the 30 s refetch with no visibility gate (`:2055-2058`): sustained pool load, which is row 119's subject.
+- **am.5 amendment (his):**
+  1. Condition 1's REFUSED applies only to an UNATTRIBUTED burst. A burst whose capture names only non-panel callers is recorded, and the pre-roll continues.
+  2. The abort arm is unchanged: main 7 of 10 with the tab open closes it at once. But a close caused by an ATTRIBUTED non-panel burst is a NO-RESULT, not an abort, and does not consume an attempt.
+  3. Conditions 2, 4 and 5 stand.
+
+  He invites the check to be run before close under this amendment.
+- **Carrier:** row 119, not an alert. A one-shot keyed to another batch's step drops the self-rescheduling clause (`workflow-10-governance` `:65`), `triggers_at` has no event trigger, and it would be a ninth nag with no clearing edge. **The am.5 check at `rolling_24h` becomes a named required deliverable of row 119's acceptance**, with the reopen condition verbatim in the row and in the completion report. The report states the leg OPEN at the top and points at row 119. An optional self-rescheduling alert is allowed only if worded as a question.
+- **Two more folds:** (i) when both arms print the same estimate (`rolling_30d` `signal_eval_archive`, `rowsInWindow == totalRows`), the note must say why. That is the total-arm symmetry fold, made concrete. (ii) A Step-10 line saying `rowsInWindow: 0` with `kind: 'unavailable'` is safe only because of the kind, so the kind is load-bearing (#546).
+- **Build check (his precondition), done 05:2xZ:** the deploy record `sha=` and `dist/BUILD_SHA` both read `3e2504129d2d03983354e9a75a355cf31ef4e77d`. `git diff 3e2504129 origin/migration/aws-supabase` over `analytics.tsx`, `drift-dashboard-aggregator.ts`, `archive-count-estimate.ts` and `db.ts` is empty. So the drift alert `cdfbb99e` reflects commits that do not touch the panel code, and the live build is the panel code under review.
