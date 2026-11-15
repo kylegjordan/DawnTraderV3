@@ -1,7 +1,7 @@
-# KD-84 — ready-to-buy pool collapse: investigation record (r2)
+# KD-84 — ready-to-buy pool collapse: investigation record (r3)
 
 **Owner:** NEW Claude (CC-B), with ANALYST Claude on the 11-08 deploy lead · **Directive:** KD-84 (Kyle 2026-11-15 ~22:50Z, `1-system-manual/pm/DECISIONS.md` at `1613c8122`) — investigation only; any fix comes back for its own placement · **Written:** 2026-11-15 ~23:40Z, a Sunday (xStock closed).
-**Status:** a mechanism with code lines and log counts behind it. **NOT RE-READ** by a fresh reader; the review is Langston's. One prediction is pre-registered below for Monday.
+**Status (r3):** mechanism **CONFIRMED by Langston** at `ebaf73f09`, every load-bearing number re-derived by him (Discord 1571667253282341051). r3 folds his four corrections: §2(3) restated, §5's Monday test replaced by a per-refusal read (done, §5), §6 pointed at the rows already on Kyle's list, and the pot drawdown surfaced through row 52.
 
 ## 1. The symptom (object and population)
 
@@ -15,7 +15,7 @@ Object: `rtb_shadow_pool_members.pool_size`, paper, one value per promotion cycl
 
 1. **A promotion removes the row from the pool BEFORE the trade is opened, and does not put it back if the open fails.** `server/services/active-execution-engine.ts` promotion loop: the claim deletes the RTB row (`[8.8.4-A3.R1][PROMOTION_ORDER] RTB signal … removed before trade creation`), and a failed open logs `Signal … was removed from RTB but trade failed - signal not restored`.
 2. **How many it pulls is the SLOT count, not the money cap.** `openSlots = maxTrades - openPositions.length` with `maxTrades = 20` (derived, `floor(100 / max_position_percent_pct)`); `getRankedSignals(mode, openSlots)`.
-3. **The money cap can bind before the slot count does.** `server/services/trade-safety.ts` `checkMaxTotalExposure`: cap = `maxTotalExposurePct` (100) % of `getMoneyHeld(mode)`; current exposure = Σ quantity × entry price of open positions. Its own header comment says it *"binds at the same point by construction"* as the slot count — true only when every open position is the same size.
+3. **The money cap can bind before the slot count does — and the cause is TIME, not unequal sizes (Langston's correction to r1).** `server/services/trade-safety.ts` `checkMaxTotalExposure`: cap = 100 % of `getMoneyHeld(mode)` (anchor + straddlers + REALIZED P/L, no unrealized); the sizer reads the same function. Each ticket is 5 % of money held **when it opened**; the cap is the sum of tickets against money held **now**. So the book can reach 20 only if the average money held over the 20 open times is at or below money held now — **while realized P/L is falling, it cannot.** The retired-Check-7 comment (`:606`, *"binds at the same point by construction"*) is true at an instant and false over any interval in which the pot moves.
 4. **When the cap binds first, every 30-second pass pulls up to `openSlots` top signals, the cap refuses each, and each is lost.** With the book full on slots (20/20) the loop never runs and the pool accumulates; with the book "short" on slots but full on money, the loop drains the pool continuously. That is the shape ANALYST measured (cycles per signal 6 → 1 xStock, 11 → 1 crypto; promoted members 590/590).
 
 ## 3. The evidence
@@ -48,16 +48,24 @@ Sample lines: 11-12 23:58Z `current=$558.38, projected=$585.68, max=$562.96 (100
 - **Answered by ANALYST (r2, Discord 1571665002237001852, his queries `/tmp/size2.sql` on staging):** money held is the intended pot — $820 anchor (2026-10-06) + realized P/L since it (−$252.92 over 707 closes) = $567.08 today; the screen's $816.64 is the other, deliberate clock (the daily-loss breaker's). Nothing was sized at ~$34: positions opened 11-03…11-07 averaged $36.90-39.74 on the OLD $820 basis, those opened 11-09…11-15 $27.32-28.57 on money held — the basis moved at `e0e68dfdb`. B-BALANCE-SESSION-PAIRING pre-registered this pause (its completion report, line 25). The transitional half clears as the old positions close.
 - ⚠️ **The structural half does not clear (ANALYST's residual, re-derived here):** 20 × ~$28 ≈ $560-572 against a $567 cap, and every realized loss lowers the cap while open positions keep their entry cost, so the cap can bind at 19 with a free slot — and from then on each pass loses the pool's top signals again. The tight cap is by design; the lost signal is what turns it into an empty pool. Why the two crypto rows in the pool tonight are not ranked with 8 slots free (`PROMOTION_SUMMARY promoted=0 failed=0`). The stop-out rate Kyle asked about — not investigated.
 
-## 5. Pre-registered for Monday (written before the data; AMENDED r2 before any Monday data, because r1's P1 assumed 20 positions always fit — $567 cap ÷ ~$28.4 per trade ≈ 19.97, so it may not)
+## 5. The per-refusal read (replaces r1/r2's Monday test, which Langston sent back: a 0.70 % margin, a qualifier true by construction, an unmeasurable P2 at 20/20, an inverted FAIL band)
 
-Window: the first weekday session, 2026-11-16 14:30-21:00Z. Objects: `error.log` (`code:MAX_TOTAL_EXPOSURE`, `signal not restored`), `out.log` (`MULTI_PROMOTE openSlots`), `active_open_positions` (paper), `rtb_shadow_pool_members.pool_size`.
-- **P1:** no `MAX_TOTAL_EXPOSURE` refusal occurs with fewer than 19 positions open.
-- **P2:** if the book reaches 20, the pool's median `pool_size` per cycle rises above 10 within the session.
-- **P3:** if the cap binds at 19 (refusals with `openSlots = 1`), every refusal is followed by `signal not restored` and the pool median stays at or below 2 while it lasts — the drain is structural, not transitional.
-**FAIL (mechanism wrong):** refusals with fewer than 19 open, or a pool still at or below 2 while the book sits at 20 with `openSlots = 0`.
+**Object:** every `code:MAX_TOTAL_EXPOSURE` line on 2026-11-12 (00:00-24:00Z, `error__2026-11-13_00-00-00.log`), each paired with the latest `[MULTI_PROMOTE] openSlots` line at or before it (`out__2026-11-12_*` + `out__2026-11-13_00-00-00.log`, 3,594 lines). Per refusal: open positions = `maxTrades − openSlots`; the 5 % share = `max ÷ 20`; the candidate's ticket = `projected − current`. Script: staging `/tmp/kd84_refusals_ccb.py`. Each line carries its own timestamp, so the three staging deploys that day (07:21, 10:57, 12:15Z, staging reflog) split processes but not the count.
+**Result, 466 refusals:**
+- open positions at the bind: **17 on 461**, 16 on 4, 15 on 1 — never 19 or 20;
+- the candidate's ticket was **below** its 5 % share on **466 of 466** (by $0.84-$0.87): no candidate was oversized;
+- room left under the cap ($4.58-$9.91) was less than one ticket every time; money held $562.96-$572.05.
+⇒ the cap bound three slots early on old, larger tickets, exactly the temporal mechanism in §2(3). The pot's own path (Langston, read off the cap's `100% of $…` field): **$753-755 on 11-03/04 → $581.78 on 11-07**, −$172 realized in three days, then −$15 across the next eight. **The pool collapse is downstream of that drawdown;** the lose-on-refusal path turns a shrinking pot into destroyed signals.
+**Not run forward:** a forward window is informative only if no deploy lands in it; the same read can be run on any later day from the same lines, and will be at row 9i's Step 2.
 
-## 6. What a fix would be (for placement; nothing is started)
+## 6. The fix is already on Kyle's list — the ask is ORDER, not placement (Langston's correction to r1; my ledger search missed these)
 
-Two separable questions, both decisions rather than defects until placed:
-1. A guardrail refusal should probably leave the signal in the pool (or not pull it), rather than lose it — today a refused promotion destroys a ranked, SQE-passed signal.
-2. The slot count and the money cap should not be able to disagree — either derive the free slots from the money left, or stop at the first refusal in a pass.
+- **Losing a refused signal = `#1136`**, OPEN 2026-09-30, `HOME: B-RTB-PROMOTION-RETRY-STORM`, sprint **row 9j**, CC-B, QUEUED.
+- **The cap binding before the slot count = `#1079`** (CC-C, 2026-09-29), which already dispositions lose-on-refusal as designed (`ACTIVE_PATH_FLOW.md:256`); its "20 % per trade ⇒ ~5 trades" figure is stale (now 5 % ⇒ 20). Also `#648` (2026-08-01, CC-C), the same promoted-then-failed stream.
+- **Re-measuring tickets against the pot = row 9i `B-EXPOSURE-CLASS-ALLOCATION` (`#1135`)**, CC-B, QUEUED.
+- **Conditions carried into 9i's Step 2:** (a) no `rtb_shadow_pool_members` row is written at 20/20 (`captureShadowPool` runs only from `getRankedSignals`, after the at-capacity return) — pool size is unmeasured exactly when the book is full; (b) `getRankedSignals` drops queued signals whose symbol is already open, so `pool_size` falls as the book grows — a confound on §1's object, not a rival cause.
+**The ask to Kyle:** move rows 9i and 9j up. Nothing new is filed.
+
+## 7. For Kyle, through row 52's reporting (surfaced, not placed)
+
+The paper pot has lost **$252.92 realized on its $820 anchor (−30.8 %) over 707 closes**, $172 of it between 11-04 and 11-07. Row 52 already reported its own early stop to Kyle on 11-06; this pot-level figure goes with row 52's next report. Not asserted to be the same losses.
