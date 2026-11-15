@@ -85,7 +85,7 @@ try:
             if texts[f] != orig[f]:
                 open(f, "w", encoding="utf-8", newline="").write(texts[f])
         p = subprocess.run([sys.executable, test], capture_output=True, text=True, timeout=1800)
-        fails = [l.strip()[:110] for l in p.stdout.splitlines() if "FAIL" in l]
+        fails = [l.strip()[:110] for l in p.stdout.splitlines() if l.strip().startswith("FAIL")]
         killed = p.returncode != 0 and bool(fails)
         print(("KILLED  " if killed else "SURVIVED") + " %-62s rc=%d %s" % (name, p.returncode, fails[:1]))
         bad += not killed

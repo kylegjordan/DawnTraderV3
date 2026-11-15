@@ -48,7 +48,8 @@ from datetime import datetime, timedelta, timezone
 
 from config import (BIRTHS_DIR, DISPLAY_AGES, GRID, GRID_LABELS,
                     OBSERVATIONS_DIR, ROOT)
-from store import (iter_census as store_iter_census, identity_for as _identity_for, load_state, save_state,
+from store import (iter_census as store_iter_census, identity_for as _identity_for, load_state, periodic_lock,
+                   save_state,
                    tombstone_path, _correction_index, dead_set, dead_set_status,
                    latest_observations_uncorrected)
 
@@ -502,9 +503,30 @@ def build(now: datetime = None) -> dict:
     return payload
 
 
+def main(now: datetime | None = None) -> dict | None:
+    """The `token-watch-summary` timer's entry point: build ONLY under the store's
+    periodic lock, and skip when another job holds it.
+
+    ⛔ ONE WRITER FOR state/summary.json AND public/summary.json (B-TOKEN-WATCH-
+       FOLLOWUP-MEMORY P6(d), pre-audit A5). The follow-up calls `build()` inside
+       its own lock and `build()` both advances the fold's cursors and publishes;
+       this timer called it with no lock, so two builds could fold the same new
+       census lines twice. A skip here costs nothing: the follow-up run holding
+       the lock publishes the same file itself.
+    Returns the payload, or None when skipped (and says so).
+    """
+    with periodic_lock("summary") as held:
+        if not held:
+            LOG.warning("another periodic job holds the lock — summary build SKIPPED "
+                        "(the holder, if it is the follow-up, publishes inside its own lock)")
+            return None
+        return build(now)
+
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s %(message)s")
-    p = build()
-    print(json.dumps({k: v for k, v in p.items() if k != "oldest_survivors"},
-                     indent=2, sort_keys=True))
+    p = main()
+    if p is not None:
+        print(json.dumps({k: v for k, v in p.items() if k != "oldest_survivors"},
+                         indent=2, sort_keys=True))

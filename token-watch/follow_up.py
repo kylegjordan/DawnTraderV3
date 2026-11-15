@@ -111,6 +111,14 @@ def classify_death(state: dict, previous: dict | None) -> str | None:
 #    a reported number rather than a silence.
 CATCHUP_MAX_BUCKETS = 48
 
+# A failed observation (any exception other than Shed) is RECORDED and retried
+# next hour, up to this many attempts in all, then recorded `abandoned`
+# (B-TOKEN-WATCH-FOLLOWUP-MEMORY P5, OBJ-4b(b)). It mirrors promote's
+# MAX_RESOLUTION_ATTEMPTS: the error branch used to count the failure, log it
+# and DROP the entry while the cursor advanced, so the checkpoint vanished with
+# no row naming it and the error rate was not a measured rate.
+MAX_ERROR_ATTEMPTS = 3
+
 
 def _last_consumed(now):
     """The last hour-bucket this job finished, or None on a first run.
@@ -231,7 +239,8 @@ def run_hour(now: datetime | None = None) -> dict:
              "errors": 0, "skipped": False, "folded_spend_rows": 0,
              "last_seen_pruned": 0, "unclassified_by_age": {},
              "requeued_not_yet_due": 0, "buckets_read": 0,
-             "buckets_skipped_too_old": 0}
+             "buckets_skipped_too_old": 0,
+             "error_requeued": 0, "error_abandoned": 0}
 
     # 🗑 THE DEAD-MAN'S SWITCH NO LONGER RUNS HERE (B-TOKEN-WATCH-STORAGE
     #    amendment 1, A9). It ran from this sweep until 2026-11-05, and that
@@ -331,9 +340,29 @@ def run_hour(now: datetime | None = None) -> dict:
                 stats["shed"] += 1
                 record_observation(mint, age, now, {"shed": str(s), "observed": False})
                 continue
-            except Exception:
+            except Exception as exc:
+                # ⛔ RECORDED, AND RETRIED -- NEVER DROPPED (P5, OBJ-4b(b)). The
+                #    failure is an observation that did not happen, so it gets a
+                #    row like the shed does; the entry goes to the next hour's
+                #    bucket carrying its attempt count, and after
+                #    MAX_ERROR_ATTEMPTS it is recorded `abandoned` -- the third
+                #    state, on the record, never neither.
                 stats["errors"] += 1
-                LOG.exception("observation failed for %s at %s", mint, age)
+                attempts = int(entry.get("attempts", 0)) + 1
+                giving_up = attempts >= MAX_ERROR_ATTEMPTS
+                LOG.exception("observation failed for %s at %s (attempt %d%s)", mint, age, attempts,
+                              ", abandoned" if giving_up else "")
+                record_observation(mint, age, now, {
+                    "observed": False,
+                    "reason": "abandoned" if giving_up else "error",
+                    "error": type(exc).__name__,
+                    "attempts": attempts,
+                })
+                if giving_up:
+                    stats["error_abandoned"] += 1
+                else:
+                    _append_next_bucket(dict(entry, attempts=attempts), now)
+                    stats["error_requeued"] += 1
                 continue
 
             fields = dict(state)

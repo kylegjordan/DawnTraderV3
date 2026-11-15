@@ -443,9 +443,16 @@ def allowed(kind: str, now: datetime | None = None) -> bool:
 
     LIQUIDITY: sheds FIRST, once total spend would breach the births reserve.
     FOLLOW_UP: sheds SECOND. It costs 0 credits (it runs on the free
-    aggregator), so in practice it sheds only if that leg is ever re-homed
-    onto the paid provider — the ordering is encoded now so a later change
-    cannot quietly invert it.
+    aggregator), BUT IT IS STILL SHED WHEN THE ACCOUNT HAS NO ROOM LEFT: bound
+    (b) below (`remaining > 0`) applies to it, so once births alone take total
+    spend to the cap, the free follow-up stops too — by design, for the reason
+    bound (b)'s comment gives (a births overrun must shed everything else).
+    ⚠️ THIS DOCSTRING USED TO SAY the follow-up "in practice sheds only if that
+       leg is ever re-homed onto the paid provider". False: it shed from
+       2026-09-27 to 09-30 with the paid budget exhausted (B-TOKEN-WATCH-
+       FOLLOWUP-MEMORY pre-audit A3, P14). The code was right; the sentence was
+       not. The ordering is still encoded so a later change cannot quietly
+       invert it.
     """
     now = now or datetime.now(UTC)
     if kind in NEVER_SHED:
