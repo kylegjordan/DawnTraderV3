@@ -132,7 +132,7 @@ describe('#1250 P0 — the stamp survives every hop, strategy → eval cycle →
     expect(orch).toContain('const _isCap = resolveTargetIsCap((rawSignal.metadata as { levelSpec?: unknown } | undefined)?.levelSpec, strategyId);');
     expect(orch).not.toContain('_stampSpec.targetIsCap');
   });
-  it('Step 9 §13 D3: the active re-base grades on the BIRTH grid from gridAtBirth, and passes the strategy for the cap fallback', () => {
+  it('Step 9 §13 D3: the active re-base grades on the BIRTH grid from gridAtBirth and passes its storage quantum', () => {
     expect(E).toContain("const _rbPlanTick = _gab?.resolved === true && typeof _gab.tick === 'number' && Number.isFinite(_gab.tick) && _gab.tick > 0");
     expect(E).toContain('fill: actualEntryPrice, spec: _rbSpec, tick: _rbTick, planTick: _rbPlanTick,');
     expect(E).toContain('planStorageQuantum: 1e-8 });'); // Step-4 FINDING-1 (a): the RTB queue's decimal(20,8) columns

@@ -223,8 +223,8 @@ describe('#1250 Step-4 FINDING-1 (a) — a plan read back from a decimal(20,8) c
     expect(r1.targetBasis).toBe('fill_rebased');
   });
   it('the quantum does not blunt the check: a plan two storage units (2e-8) off its stamp fails', () => {
-    // Detection floor on this path = half a unit of storage error + half a unit of band + the 1e-9 slack ≈ 1e-8 — one unit
-    // can hide inside it; two cannot.
+    // The band is eps + q/2 ≈ 7.1e-9 here (eps = 2.13·1e-9, q/2 = 5e-9), and the 8-dp storage itself moves the arriving
+    // value by up to 5e-9, so a one-unit (1e-8) offset can land inside the band; a two-unit offset cannot.
     const r2 = rebaseLevels({ ...arriving, planTarget: arriving.planTarget + 2e-8, fill: 2.12, tick: null, planTick: null, planStorageQuantum: 1e-8, spec });
     if (!r2.ok) throw new Error(r2.reason);
     expect(r2.inconsistent).toEqual(['target']);
