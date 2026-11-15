@@ -1,0 +1,21 @@
+{
+  "artifact": "followup-backlog-census-2026-09-30T13-2026-11-15T15.jsonl.gz",
+  "artifact_bytes": 403682842,
+  "artifact_sha256": "2b0d85ac75f1b06f6682900937bb52ea9ff7efef8638456c6ce679deb0c8fef2",
+  "buckets_absent": 6,
+  "buckets_read": 1100,
+  "census_at": "2026-11-15T15:08:32.956023+00:00",
+  "census_hour": "2026-11-15T15",
+  "cursor": "2026-09-30T13",
+  "payload_sha256": "c1db8e5de34a1746a7dee330415b49c16bf9f2bcb77e9a58d5468da1b89624e4",
+  "rows": 10046525,
+  "rows_by_age": {
+    "1h": 1662695,
+    "24h": 1672362,
+    "30d": 1723449,
+    "3d": 1670732,
+    "6h": 1664384,
+    "7d": 1652903
+  },
+  "unreadable_lines": 0
+}
