@@ -77,6 +77,12 @@ MUTANTS = [
      [("summary.py", "        st[\"births_rebuilds\"] = (list(", "        _unused = (list(")]),
     ("births fold: the recount record is overwritten, not appended", TS,
      [("summary.py", "list(st.get(\"births_rebuilds\") or []) + [", "[] + [")]),
+    ("#1258: a non-object census line is yielded again", TS,
+     [("store.py", "        if not isinstance(r, dict):" + NL + "            seen += 1", "        if False:" + NL + "            seen += 1")]),
+    ("#1258: the skipped line is not counted", TS,
+     [("store.py", "            CENSUS_SKIPPED[day_file] = max(CENSUS_SKIPPED.get(day_file, 0), seen)" + NL, "")]),
+    ("#1258: a second read of a file counts its lines again", TS,
+     [("store.py", "CENSUS_SKIPPED[day_file] = max(CENSUS_SKIPPED.get(day_file, 0), seen)", "CENSUS_SKIPPED[day_file] = CENSUS_SKIPPED.get(day_file, 0) + 1")]),
     # D4
     ("D4: the settle window is ignored", TS, [("obs_fold.py", "t + OFFSET[L] + timedelta(seconds=settle_s.get(L, 0)) <= now",
                                                "t + OFFSET[L] <= now")]),

@@ -699,8 +699,27 @@ def _iter_census_uncorrected(day_file: str):
     ⚠️ LAZY: `_read` raises an unparseable line's ValueError when the consumer
        reaches it, not when this is called -- a caller's try must wrap the
        CONSUMPTION (P2b-2 C-2).
+    ⛔ A VALID-JSON LINE THAT IS NOT AN OBJECT (`123`, `[1]`) IS SKIPPED AND COUNTED, never yielded (#1258, folded into
+       B-TOKEN-WATCH-FOLLOWUP-MEMORY, Langston 2026-11-15). It used to reach `r.get(...)` in every census reader and
+       raise AttributeError, which no caller caught -- one such line failed the whole summary build. The sweep's own
+       reader of the same files (`promote._read_new`) already skips and counts this class. The count is in
+       CENSUS_SKIPPED and the summary publishes it, so a dropped line is visible, never silent. Unparseable lines are
+       unchanged (they still raise ValueError and the caller drops that day file, P2b-2 C-2): widening that catch
+       would hide real defects. Scoped to the CENSUS path only; `_read`'s other callers are untouched.
     """
-    return _read(f"{BIRTHS_DIR}/{day_file}")
+    seen = 0
+    for r in _read(f"{BIRTHS_DIR}/{day_file}"):
+        if not isinstance(r, dict):
+            seen += 1
+            # per FILE, the most seen in one read: a build reads a day file more than once (the watch-set seed and
+            # the survivor walk), and the count is of LINES, not of reads
+            CENSUS_SKIPPED[day_file] = max(CENSUS_SKIPPED.get(day_file, 0), seen)
+            continue
+        yield r
+
+
+# day file -> valid-JSON non-object lines the census readers skipped (#1258); cleared by summary.build
+CENSUS_SKIPPED = {}
 
 
 def census(day_file: str, _idx=None):

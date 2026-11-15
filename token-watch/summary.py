@@ -54,6 +54,7 @@ from store import (iter_census as store_iter_census, identity_for as _identity_f
                    tombstone_path, _correction_index, dead_set, dead_set_status,
                    latest_observations_uncorrected)
 import obs_fold
+import store
 
 UTC = timezone.utc
 LOG = logging.getLogger("token-watch.summary")
@@ -493,6 +494,7 @@ def build(now: datetime = None) -> dict:
     """Compute the published summary. Pure read + one atomic write."""
     now = now or _now()
     _READ_NEW_SKIPPED["lines"] = 0
+    store.CENSUS_SKIPPED.clear()
     st = _fold(load_state(STATE, {}), now)
 
     # ⭐ ONE DEAD SET (P2b F-a). build used to re-read the whole tombstone file into its own set here, beside
@@ -650,6 +652,10 @@ def build(now: datetime = None) -> dict:
         # census / tombstone lines this build's fold could not use (unparseable or not an object) - counted, never
         # raised, never silently dropped
         "fold_skipped_lines": _READ_NEW_SKIPPED["lines"],
+        # census lines this build's survivor walk / watch-set seed skipped because they were valid JSON but not an
+        # object (#1258): counted and published, never silently dropped. Only the files those walks read.
+        "census_skipped_non_object_lines": sum(store.CENSUS_SKIPPED.values()),
+        "census_skipped_by_file": dict(sorted(store.CENSUS_SKIPPED.items())),
         # ⭐ WHAT THE FOLLOW-UP ACTUALLY LOOKED AT (P7, OBJ-5). Every figure above is derived from births and
         #    tombstones, and a death is recorded only when the follow-up looks -- so a stopped follow-up reads as
         #    "nobody died". This block is the evidence of looking, per checkpoint.

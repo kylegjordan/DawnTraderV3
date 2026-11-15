@@ -389,6 +389,35 @@ check("S5b a LATER bump appends to the record instead of erasing the earlier rec
 st6 = summary._fold(st5, NOW)
 check("S5b a second pass adds nothing (no double count)", st6["born_by_day"] == {old_day: 3, new_day: 1}, st6["born_by_day"])
 
+print(NL + "=== S5c. #1258 (folded): A NON-OBJECT CENSUS LINE IS SKIPPED AND COUNTED, AND THE GOOD ROW AFTER IT STILL LANDS")
+shutil.rmtree(ROOT, ignore_errors=True)
+os.makedirs(ROOT)
+store.ensure_dirs()
+os.makedirs(BIRTHS_DIR, exist_ok=True)
+bday = (NOW - timedelta(days=40)).strftime("%Y-%m-%d")
+with open(os.path.join(BIRTHS_DIR, bday + ".jsonl"), "w", encoding="utf-8", newline="") as fh:
+    fh.write(json.dumps({"mint": "G0", "created_at": bday + "T00:00:00+00:00"}) + NL)
+    fh.write("123" + NL)                                  # valid JSON, not an object
+    fh.write("[1, 2]" + NL)
+    fh.write(json.dumps({"mint": "G1", "created_at": bday + "T01:00:00+00:00"}) + NL)   # the good row AFTER them
+summary.OLDEST_N = 5
+try:
+    p8 = summary.build(NOW)
+    crashed8 = None
+except Exception as exc:                                  # noqa: BLE001 - a crash must be a FAIL line
+    p8, crashed8 = {}, exc
+summary.OLDEST_N = 100
+mints8 = sorted(r["mint"] for r in p8.get("oldest_survivors", []))
+check("S5c the build does not fail on the non-object lines", crashed8 is None, repr(crashed8))
+check("S5c the good row AFTER the bad lines still lands, and the one before it", mints8 == ["G0", "G1"], mints8)
+check("S5c the two skipped lines are counted ONCE each and published, though the build reads the file twice",
+      p8.get("census_skipped_non_object_lines") == 2 and p8.get("census_skipped_by_file") == {bday + ".jsonl": 2},
+      (p8.get("census_skipped_non_object_lines"), p8.get("census_skipped_by_file")))
+p9 = summary.build(NOW + timedelta(hours=1))
+check("S5c the count is per build: the next build reads the file again and still reports 2, not 4 (cleared, not accumulated)",
+      p9.get("census_skipped_non_object_lines") == 2,
+      p9.get("census_skipped_non_object_lines"))
+
 print(NL + "=== S6. THE DERIVATION: shed-only hours are a job fault, K = 3 is recorded as a floor, written once")
 shutil.rmtree(ROOT, ignore_errors=True)
 os.makedirs(ROOT)
