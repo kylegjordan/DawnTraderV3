@@ -258,3 +258,15 @@ The premise test is updated to the new wording (33/33).
 **Step 10 carries:**
 - (1) the System Impact Map entry gets the #546 kind-is-load-bearing line AND the non-daily slice behaviour;
 - (2) close order: flip `GOVERNANCE_EXCEPTIONS` line 36 (`open`) to `open-retired` in the close commit BEFORE hand-resolving `97e17da3` / `7e9eeb2a`.
+
+## Step 8 — Langston CONFIRMS OBJ-2's browser leg at `rolling_24h` (Discord, 06:39:44Z)
+**He re-derived:**
+- **Main-pool entailment at the ref.** `computeDataArchiveStatus` (`drift-dashboard-aggregator.ts:874`) takes only `diagDb` (`:878`), and `archive-count-estimate.ts` holds no db handle, so the panel's archive reads cannot take a `dawntrader_main` slot. This makes the tab-open main max of 3 a corroboration, not the evidence.
+- **Build and restart:** `dist/BUILD_SHA` `3e2504129…`, restart count 705.
+- **His own `dt-api` render at `rolling_24h`** (06:4xZ, HTTP 200, 13.26 s; 5 of 5 `timedOut: false`), matching the 05:49 table.
+- **Method compliance:** pre-roll 77.6 s, post-roll 207 s, 0.5 s cadence, markers timestamped, 660 samples.
+
+**He does NOT count the harm-leg zero.** His control gives about 0-39 drop lines a day, so about 0.03 are expected in 5.5 minutes. A window holding under one expected occurrence gives an unreadable zero (`#661` leg 2). It was run per condition 5, and **the report must not cite it as evidence.**
+**Not covered:** 7d/30d (not owed); sustained load (the tab was open 38.1 s, measuring the pre-fold-r2 panel). Fold r2 raises diag-pool burn (the 30d slice burns 6 s every refetch; 18 s worst case per call). Diag is panel-only, so the blast radius is diagnostics. **Disposition: an input to row 119 beside the price-liveness caller; no new slot.** **Row 119:** the "unrun am.5 check" clause of its acceptance is DISCHARGED. It keeps the burst caller, the pooled-slot-after-client-timeout question (`price-liveness.ts:155-160`), the sustained-refetch load and the writer timeouts, with the reopen condition verbatim.
+**Owed after the fold r2 deploy, at Step 10 (no new browser check):** a `dt-api` read at `rolling_24h` showing `signal_eval_provenance` `rowsInWindowKind: 'exact'` with a number and `timedOut: false`, recorded. If it reads `unavailable`, that is a Step-9 iterate, not a close.
+**Diag 5-against-4:** HYPOTHESIS, ranked not closed (`dawntrader_diag` is set at one site, `db.ts:167`; the reaped-connection reading is the cheaper one). No work.
