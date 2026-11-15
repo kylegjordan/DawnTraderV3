@@ -1,4 +1,4 @@
-# KD-84 — ready-to-buy pool collapse: investigation record (r1)
+# KD-84 — ready-to-buy pool collapse: investigation record (r2)
 
 **Owner:** NEW Claude (CC-B), with ANALYST Claude on the 11-08 deploy lead · **Directive:** KD-84 (Kyle 2026-11-15 ~22:50Z, `1-system-manual/pm/DECISIONS.md` at `1613c8122`) — investigation only; any fix comes back for its own placement · **Written:** 2026-11-15 ~23:40Z, a Sunday (xStock closed).
 **Status:** a mechanism with code lines and log counts behind it. **NOT RE-READ** by a fresh reader; the review is Langston's. One prediction is pre-registered below for Monday.
@@ -45,14 +45,16 @@ Sample lines: 11-12 23:58Z `current=$558.38, projected=$585.68, max=$562.96 (100
 
 - **Not B-ENTRY-GATE's gates, not the 8c deploy.** The refusals are the money cap; increment B's gates refused almost nothing (its 24 h read); 8c is inert while off (ANALYST, item 2 of his reply).
 - ⚠️ **Correction to my first answer:** increment A first entered staging on **2026-11-07** in the `e0e68dfdb` joint deploy (B-BALANCE-SESSION-PAIRING, which moved the money cap onto money held), not on 11-10 — 11-10 was its correction. The pool's second drop sits after that deploy, but the 11-04 instance shows the mechanism existed before it.
-- **Not settled:** why money held is ~$563-589 and why the positions open on 11-08…11-13 averaged ~$34 (sizing basis before vs after `e0e68dfdb`) — that is B-BALANCE-SESSION-PAIRING's ground (ANALYST's batch), asked, not assumed. Why the two crypto rows in the pool tonight are not ranked with 8 slots free (`PROMOTION_SUMMARY promoted=0 failed=0`). The stop-out rate Kyle asked about — not investigated.
+- **Answered by ANALYST (r2, Discord 1571665002237001852, his queries `/tmp/size2.sql` on staging):** money held is the intended pot — $820 anchor (2026-10-06) + realized P/L since it (−$252.92 over 707 closes) = $567.08 today; the screen's $816.64 is the other, deliberate clock (the daily-loss breaker's). Nothing was sized at ~$34: positions opened 11-03…11-07 averaged $36.90-39.74 on the OLD $820 basis, those opened 11-09…11-15 $27.32-28.57 on money held — the basis moved at `e0e68dfdb`. B-BALANCE-SESSION-PAIRING pre-registered this pause (its completion report, line 25). The transitional half clears as the old positions close.
+- ⚠️ **The structural half does not clear (ANALYST's residual, re-derived here):** 20 × ~$28 ≈ $560-572 against a $567 cap, and every realized loss lowers the cap while open positions keep their entry cost, so the cap can bind at 19 with a free slot — and from then on each pass loses the pool's top signals again. The tight cap is by design; the lost signal is what turns it into an empty pool. Why the two crypto rows in the pool tonight are not ranked with 8 slots free (`PROMOTION_SUMMARY promoted=0 failed=0`). The stop-out rate Kyle asked about — not investigated.
 
-## 5. Pre-registered for Monday (written before the data)
+## 5. Pre-registered for Monday (written before the data; AMENDED r2 before any Monday data, because r1's P1 assumed 20 positions always fit — $567 cap ÷ ~$28.4 per trade ≈ 19.97, so it may not)
 
-If the mechanism is right and the size mismatch has cleared (every open position is now ~$28):
-- **P1:** on the first weekday session (2026-11-16 14:30-21:00Z) the book reaches 20 open paper positions, or stops short of 20 only on slots, with **0** `code:MAX_TOTAL_EXPOSURE` lines while `openSlots > 0`;
-- **P2:** once the book is at 20, the pool's median `pool_size` per cycle rises above 10 within the session.
-**FAIL:** any `MAX_TOTAL_EXPOSURE` refusal with `openSlots > 0` while every open position is within ±10% of the new-trade size ⇒ the disagreement is structural, not transitional.
+Window: the first weekday session, 2026-11-16 14:30-21:00Z. Objects: `error.log` (`code:MAX_TOTAL_EXPOSURE`, `signal not restored`), `out.log` (`MULTI_PROMOTE openSlots`), `active_open_positions` (paper), `rtb_shadow_pool_members.pool_size`.
+- **P1:** no `MAX_TOTAL_EXPOSURE` refusal occurs with fewer than 19 positions open.
+- **P2:** if the book reaches 20, the pool's median `pool_size` per cycle rises above 10 within the session.
+- **P3:** if the cap binds at 19 (refusals with `openSlots = 1`), every refusal is followed by `signal not restored` and the pool median stays at or below 2 while it lasts — the drain is structural, not transitional.
+**FAIL (mechanism wrong):** refusals with fewer than 19 open, or a pool still at or below 2 while the book sits at 20 with `openSlots = 0`.
 
 ## 6. What a fix would be (for placement; nothing is started)
 
