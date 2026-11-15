@@ -49,6 +49,12 @@ MUTANTS = [
     ("C2: an underived K reads as measured", TS, [("obs_fold.py", "\"floor_bound\": w.get(\"floor_bound\", True),",
                                                   "\"floor_bound\": w.get(\"floor_bound\", False),")]),
     ("C1: the switch is not published", TS, [("summary.py", "        states[\"job\"][\"switch\"] = obs_fold.timer_switch()" + NL, "        pass" + NL)]),
+    ("C-A: an unreadable cadence does not page", TS, [("obs_fold.py", "        return CADENCE_UNKNOWN_EXIT" + NL, "        return 0" + NL)]),
+    ("C-A: the survivor table guesses a cycle", TS, [("summary.py", "    settle = None if cadence is None else {L: rec[\"window_s\"]",
+                                                      "    settle = {L: 11700 for L in states[\"labels\"]} if cadence is None else {L: rec[\"window_s\"]")]),
+    ("C-A: only the word 'hourly' is understood", TS, [("obs_fold.py", "r\"^(hourly|\\*-\\*-\\* \\*:[0-5][0-9]:00( UTC)?)$\"", "r\"^(hourly)$\"")]),
+    ("C-A: an unloaded unit reads as a cadence", TS, [("obs_fold.py", "    if not loaded or len(cal) != 1", "    if len(cal) != 1")]),
+    ("watch: grown keyed on nothing", TS, [("obs_fold.py", "    grown = births_folded > int(watch.get(\"births_folded_at_seed\") or 0)", "    grown = False")]),
     # D4
     ("D4: the settle window is ignored", TS, [("obs_fold.py", "t + OFFSET[L] + timedelta(seconds=settle_s.get(L, 0)) <= now",
                                                "t + OFFSET[L] <= now")]),

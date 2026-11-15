@@ -25,6 +25,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import subprocess
 from datetime import datetime, timedelta, timezone
 
@@ -272,38 +273,73 @@ def covering_by_day(obs: dict) -> dict:
 # ─────────────────────────────────────────────────────────────────────────────
 # D2 — IS ANYONE LOOKING, PER CHECKPOINT (Langston r2 ruling + CHANGE-1..3, folds a and b)
 # ─────────────────────────────────────────────────────────────────────────────
-TIMER_PATH = "/etc/systemd/system/token-watch-followup.timer"
+TIMER_UNIT = "token-watch-followup.timer"
 WINDOW_STATE = "obs_window"                 # state/obs_window.json, written by tools/derive_obs_window.py
 K_FLOOR = 3
 # births per hour are kept long enough to answer "was anything due at the 90d checkpoint in this cycle"
 BIRTHS_HOURLY_KEEP = max(GRID) + HOURLY_KEEP
 
 
-def read_cadence(path: str | None = None) -> dict | None:
-    """The follow-up timer's cadence, read from the unit EVERY build (fold b), or None when unreadable.
+_HOURLY_SPEC = re.compile(r"^(hourly|\*-\*-\* \*:[0-5][0-9]:00( UTC)?)$")
+_SPAN_UNITS = {"us": 1e-6, "ms": 1e-3, "s": 1, "sec": 1, "min": 60, "m": 60, "h": 3600, "hr": 3600}
 
-    cycle_s = the OnCalendar period + RandomizedDelaySec. Only `hourly` is understood; anything else returns
-    None, which renders every checkpoint `unknown` rather than guessing a period.
-    """
-    try:
-        with open(path or TIMER_PATH, encoding="utf-8") as fh:
-            text = fh.read()
-    except OSError:
+
+def _timespan_s(v: str) -> int | None:
+    """A systemd time span ('5min', '300', '1min 30s', '0') in whole seconds, or None when not understood."""
+    v = v.strip()
+    if not v:
         return None
-    cal, delay = None, 0
+    if v.isdigit():
+        return int(v)
+    total = 0.0
+    for num, unit in re.findall(r"(\d+)\s*([a-z]+)", v):
+        if unit not in _SPAN_UNITS:
+            return None
+        total += int(num) * _SPAN_UNITS[unit]
+    if not re.fullmatch(r"(\s*\d+\s*[a-z]+)+\s*", v):
+        return None
+    return int(total)
+
+
+def parse_cadence(text: str) -> dict | None:
+    """The cadence from `systemctl show` output (TimersCalendar / RandomizedDelayUSec / LoadState) or from a unit
+    file (OnCalendar / RandomizedDelaySec). None when not understood -- ONE answer for that, everywhere: every
+    checkpoint `unknown`, every survivor `unknown`, and the summary unit pages (Langston, P7 part 2, C-A).
+
+    ★ `hourly` and systemd's own normalised form of it (`*-*-* *:MM:00`, what `systemctl show` reports and what
+      the sibling summary timer is written as) are the same schedule; the first version understood only the
+      word, so a semantically identical edit of the unit turned the instrument off.
+    """
+    cal, delay, loaded = [], 0, True
     for line in text.splitlines():
         line = line.strip()
-        if line.startswith("OnCalendar="):
-            cal = line.split("=", 1)[1].strip()
-        elif line.startswith("RandomizedDelaySec="):
-            v = line.split("=", 1)[1].strip()
-            try:
-                delay = int(v[:-3]) * 60 if v.endswith("min") else int(v.rstrip("s"))
-            except ValueError:
+        if line.startswith("LoadState="):
+            loaded = line.split("=", 1)[1].strip() == "loaded"
+        elif line.startswith("TimersCalendar="):
+            cal += re.findall(r"OnCalendar=([^;}]+?)\s*;", line)
+        elif line.startswith("OnCalendar="):
+            cal.append(line.split("=", 1)[1].strip())
+        elif line.startswith("RandomizedDelayUSec=") or line.startswith("RandomizedDelaySec="):
+            d = _timespan_s(line.split("=", 1)[1])
+            if d is None:
                 return None
-    if cal != "hourly":
+            delay = d
+    if not loaded or len(cal) != 1 or not _HOURLY_SPEC.match(cal[0].strip()):
         return None
-    return {"on_calendar": cal, "randomized_delay_s": delay, "cycle_s": 3600 + delay}
+    return {"on_calendar": cal[0].strip(), "randomized_delay_s": delay, "cycle_s": 3600 + delay}
+
+
+def read_cadence() -> dict | None:
+    """The follow-up timer's cadence as systemd itself reports it, read EVERY build (fold b) -- not a parse of
+    the unit file, which would be a second copy of a repo file (Langston, P7 part 2, C-A). None when unreadable."""
+    try:
+        p = subprocess.run(["systemctl", "show", TIMER_UNIT, "-p", "TimersCalendar", "-p", "RandomizedDelayUSec",
+                            "-p", "LoadState"], capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if p.returncode != 0:
+        return None
+    return parse_cadence(p.stdout or "")
 
 
 def _hour(t: datetime) -> str:
@@ -434,8 +470,8 @@ def label_states(obs: dict, born_by_hour: dict, births_first_at: str | None, bir
     return out
 
 
-TIMER_UNIT = "token-watch-followup.timer"
 JOB_FAULT_EXIT = 4
+CADENCE_UNKNOWN_EXIT = 5
 
 
 def timer_switch() -> str:
@@ -454,6 +490,13 @@ def job_fault_exit_code(job: dict | None, switch: str) -> int:
     without observing anything -- `not_running` or `shedding` (Langston condition 1: a visible state WITH a bound,
     on its own carrier, never a quiet reason). A switched-off job is a decision, not a fault: it is published
     as such and does not page."""
+    if job and job.get("state") == "unknown":
+        # ⛔ AN INSTRUMENT THAT CANNOT READ ITS OWN CLOCK PAGES (Langston, P7 part 2, C-A): the first version
+        #    returned 0 here, so one unreadable cadence silently disarmed the only thing that pages when the
+        #    follow-up has stopped -- the opposite of timer_switch's "unknown is treated as on". Its own code,
+        #    so the page says which fault it is.
+        LOG.error("the follow-up's cadence could not be read: no checkpoint can be judged (%s)", job.get("reason"))
+        return CADENCE_UNKNOWN_EXIT
     if not job or job.get("state") not in ("not_running", "shedding"):
         return 0
     if switch == "disabled":
@@ -471,12 +514,17 @@ WATCH_N = 5000
 WATCH_VERSION = 1
 
 
-def watch_needs_seed(watch: dict | None, dead, oldest_n: int, births_through: str | None = None) -> str | None:
+def watch_usable(watch) -> bool:
+    return isinstance(watch, dict) and watch.get("version") == WATCH_VERSION and isinstance(watch.get("members"), dict)
+
+
+def watch_needs_seed(watch: dict | None, dead, oldest_n: int, births_folded: int = 0) -> str | None:
     """'seeded' (no usable watch set), 'rebuilt' (fewer than 2 x oldest_n not-dead members left AND a re-seed can
     change the membership), or None.
 
     ⛔ A RE-SEED THAT CANNOT ADD ANYONE IS NOT DONE. If the seed took every not-dead launch there was (`capped`
-       false) and no launch has been folded since (`births_through_at_seed`), re-seeding returns the same set --
+       false) and no launch has been folded since (`births_folded_at_seed`, a COUNT -- Langston: a max created_at
+       misses a late-discovered launch older than the max), re-seeding returns the same set --
        and every re-seed discards the observation fold, so on a small population the old test re-read every
        observation file on every build.
 
@@ -485,13 +533,12 @@ def watch_needs_seed(watch: dict | None, dead, oldest_n: int, births_through: st
       the true oldest oldest_n are necessarily inside. The 2 x oldest_n floor keeps that true. Do not seed it
       any other way.
     """
-    if (not isinstance(watch, dict) or watch.get("version") != WATCH_VERSION
-            or not isinstance(watch.get("members"), dict)):
+    if not watch_usable(watch):
         return "seeded"
     alive = sum(1 for m in watch["members"] if m not in dead)
     if alive >= 2 * oldest_n:
         return None
-    grown = (births_through or "") > (watch.get("births_through_at_seed") or "")
+    grown = births_folded > int(watch.get("births_folded_at_seed") or 0)
     return "rebuilt" if (watch.get("capped") or grown) else None
 
 
@@ -502,7 +549,7 @@ def prune_dead(watch: dict, dead) -> int:
     return len(gone)
 
 
-def survivor_status(created_at: str | None, member: dict | None, settle_s: dict, now: datetime) -> dict:
+def survivor_status(created_at: str | None, member: dict | None, settle_s: dict | None, now: datetime) -> dict:
     """verified_alive | unverified | never_observed | not_yet_due | unknown, for one listed survivor.
 
     ⛔ THE CLOCK IS THE BIRTH ROW'S created_at, EXACT (Langston condition 2) -- never observed_at minus the
@@ -513,6 +560,9 @@ def survivor_status(created_at: str | None, member: dict | None, settle_s: dict,
        from the births fold, observations are joined on, so a member with no join is never-observed by
        construction. A listed mint OUTSIDE the set is `unknown`, never `never_observed`.
     """
+    if settle_s is None:
+        # one answer for an unreadable cadence (C-A): the checkpoint table says `unknown`, so does every row
+        return {"status": "unknown", "reason": "the follow-up's cadence could not be read"}
     t = _parse(created_at)
     if t is None:
         return {"status": "unknown", "reason": "the birth row has no created_at"}

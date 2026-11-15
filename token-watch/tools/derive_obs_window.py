@@ -140,7 +140,14 @@ def main(argv=None, now: datetime | None = None) -> int:
     ap.add_argument("--timer", default=None)
     a = ap.parse_args(argv)
     now = now or datetime.now(UTC)
-    cadence = obs_fold.read_cadence(a.timer)
+    if a.timer:                                  # a unit file or saved `systemctl show` output (tests, a dry run)
+        try:
+            with open(a.timer, encoding="utf-8") as fh:
+                cadence = obs_fold.parse_cadence(fh.read())
+        except OSError:
+            cadence = None
+    else:
+        cadence = obs_fold.read_cadence()
     if cadence is None:
         print("REFUSED: the follow-up timer's cadence could not be read", file=sys.stderr)
         return 2

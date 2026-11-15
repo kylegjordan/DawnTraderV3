@@ -468,19 +468,22 @@ def build(now: datetime = None) -> dict:
     #    set is neither seeded nor pruned: the survivor table is withheld anyway.
     watch = st.get("watch")
     if dead is not None:
-        why = obs_fold.watch_needs_seed(watch, dead, OLDEST_N, st.get("births_through"))
+        why = obs_fold.watch_needs_seed(watch, dead, OLDEST_N, sum(st["born_by_day"].values()))
         if why:
             seeded_at = now.isoformat() if why == "seeded" else watch.get("seeded_at")
             members = _seed_watch(dead)
             watch = {"version": obs_fold.WATCH_VERSION, "members": members,
-                     "capped": len(members) >= obs_fold.WATCH_N, "births_through_at_seed": st.get("births_through"),
+                     "capped": len(members) >= obs_fold.WATCH_N,
+                     "births_folded_at_seed": sum(st["born_by_day"].values()),
                      "seeded_at": seeded_at, "rebuilt_at": now.isoformat() if why == "rebuilt" else None}
             st["obs"] = None
             LOG.warning("watch set %s: %d members", why, len(watch["members"]))
         else:
             obs_fold.prune_dead(watch, dead)
         st["watch"] = watch
-    obs = obs_fold.fold_observations(st, now, watch["members"] if isinstance(watch, dict) else None)
+    # ⚠️ An unreadable dead set still folds WITH the existing members (Langston, part 2 item 2): cursors advance
+    #    unconditionally, so folding without them would move past rows nobody re-reads.
+    obs = obs_fold.fold_observations(st, now, watch["members"] if obs_fold.watch_usable(watch) else None)
     cadence = obs_fold.read_cadence()
     window = load_state(obs_fold.WINDOW_STATE, {}) or None
     states = obs_fold.label_states(obs, st.get("born_by_hour", {}), st.get("births_first_at"),
@@ -517,8 +520,11 @@ def build(now: datetime = None) -> dict:
     else:
         survivors, unresolved = _oldest_survivors(dead, OLDEST_N, now)
     # P7 D4: every listed row says what we actually know; nothing is filtered or refilled on it
-    settle = {L: rec.get("window_s") or obs_fold.K_FLOOR * 3900 for L, rec in states["labels"].items()}
-    members = watch["members"] if isinstance(watch, dict) else {}
+    # ⛔ NO GUESSED CYCLE (Langston, part 2, C-A): with an unreadable cadence the checkpoint table says `unknown`,
+    #    and so does every survivor row -- the old `or K_FLOOR * 3900` was a second copy of the unit's value, armed
+    #    exactly when the first could not be read.
+    settle = None if cadence is None else {L: rec["window_s"] for L, rec in states["labels"].items()}
+    members = watch["members"] if obs_fold.watch_usable(watch) else {}
     for r in survivors:
         r.update(obs_fold.survivor_status(r.get("created_at"), members.get(r.get("mint")), settle, now))
     status_counts = {}
@@ -573,6 +579,8 @@ def build(now: datetime = None) -> dict:
             "watch_set_size": len(members),
             "watch_set_seeded_at": watch.get("seeded_at") if isinstance(watch, dict) else None,
             "watch_set_rebuilt_at": watch.get("rebuilt_at") if isinstance(watch, dict) else None,
+            "watch_set_note": "The current membership dates from rebuilt_at when it is set, else from seeded_at; "
+                              "seeded_at moves only when the set was lost or never existed.",
             "note": "verified_alive = seen alive at its most recent due checkpoint; unverified = seen at some "
                     "checkpoint but not at its most recent due one; never_observed = never seen at all.",
         },
@@ -725,4 +733,7 @@ if __name__ == "__main__":
     job = (p.get("observation_states") or {}).get("job")
     # P7, Langston condition 1: a follow-up meant to run that has observed nothing for a whole window pages here,
     # on the summary unit's own hourly run -- a carrier that does not depend on the follow-up running at all.
-    sys.exit(mem or obs_fold.job_fault_exit_code(job, (job or {}).get("switch", "unknown")))
+    # ⛔ BOTH ARE COMPUTED, THEN COMBINED (part 2, C-B): `mem or job_fault_exit_code(...)` never called the second
+    #    when the first was set, so its error line was never written.
+    fault = obs_fold.job_fault_exit_code(job, (job or {}).get("switch", "unknown"))
+    sys.exit(mem or fault)

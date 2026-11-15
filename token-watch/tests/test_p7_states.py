@@ -57,14 +57,26 @@ def timer(text):
 
 os.makedirs(ROOT, exist_ok=True)
 
-print(NL + "=== S1. THE CADENCE IS READ FROM THE UNIT (fold b)")
-check("S1 hourly + 300 s -> a 3,900 s cycle", of.read_cadence(timer("[Timer]" + NL + "OnCalendar=hourly" + NL +
-      "RandomizedDelaySec=300" + NL)) == {"on_calendar": "hourly", "randomized_delay_s": 300, "cycle_s": 3900})
-check("S1 '5min' is understood", (of.read_cadence(timer("OnCalendar=hourly" + NL + "RandomizedDelaySec=5min" + NL))
-                                  or {}).get("cycle_s") == 3900)
+print(NL + "=== S1. THE CADENCE, AS systemd REPORTS IT (fold b; Langston part 2 C-A)")
+SHOW = ("TimersCalendar={ OnCalendar=*-*-* *:00:00 ; next_elapse=(null) }" + NL + "RandomizedDelayUSec=5min" + NL
+        + "LoadState=loaded" + NL)
+check("S1 systemctl show's normalised hourly form + 5min -> a 3,900 s cycle (the form the box reports)",
+      of.parse_cadence(SHOW) == {"on_calendar": "*-*-* *:00:00", "randomized_delay_s": 300, "cycle_s": 3900},
+      of.parse_cadence(SHOW))
+check("S1 the unit-file spelling 'hourly' + 300 is the same schedule",
+      (of.parse_cadence("OnCalendar=hourly" + NL + "RandomizedDelaySec=300" + NL) or {}).get("cycle_s") == 3900)
+check("S1 a fixed minute (the sibling summary timer's '*:12:00 UTC') is hourly too",
+      (of.parse_cadence("TimersCalendar={ OnCalendar=*-*-* *:12:00 UTC ; next_elapse=x }" + NL
+                        + "RandomizedDelayUSec=0" + NL + "LoadState=loaded") or {}).get("cycle_s") == 3600)
+check("S1 a compound span '1min 30s' -> 90 s", (of.parse_cadence("OnCalendar=hourly" + NL + "RandomizedDelayUSec=1min 30s")
+                                                or {}).get("randomized_delay_s") == 90)
 check("S1 a period it does not understand -> None (unknown), never a guess",
-      of.read_cadence(timer("OnCalendar=*:0/30" + NL)) is None)
-check("S1 an unreadable unit -> None", of.read_cadence(os.path.join(ROOT, "absent.timer")) is None)
+      of.parse_cadence("OnCalendar=*:0/30" + NL) is None)
+check("S1 an unloaded unit -> None", of.parse_cadence("RandomizedDelayUSec=0" + NL + "LoadState=not-found") is None)
+check("S1 a unit not LOADED (masked) is None even when a calendar is shown",
+      of.parse_cadence(SHOW.replace("LoadState=loaded", "LoadState=masked")) is None)
+check("S1 a span it cannot read -> None", of.parse_cadence("OnCalendar=hourly" + NL + "RandomizedDelayUSec=5parsecs") is None)
+check("S1 two calendars -> None", of.parse_cadence("OnCalendar=hourly" + NL + "OnCalendar=daily") is None)
 CAD = {"on_calendar": "hourly", "randomized_delay_s": 300, "cycle_s": 3900}
 
 print(NL + "=== S2. PER-CHECKPOINT STATES AND THE ONE JOB-LEVEL VERDICT")
@@ -134,6 +146,9 @@ check("C1 a job switched OFF is a decision, published, not paged", of.job_fault_
                                                                                          "disabled") == 0)
 check("C1 observing / no verdict -> 0", of.job_fault_exit_code({"state": "observing"}, "enabled") == 0
       and of.job_fault_exit_code(None, "enabled") == 0)
+check("C1 an unreadable cadence PAGES with its own code (5), switch or no switch (part 2 C-A)",
+      of.job_fault_exit_code({"state": "unknown", "reason": "x"}, "enabled") == of.CADENCE_UNKNOWN_EXIT == 5
+      and of.job_fault_exit_code({"state": "unknown"}, "disabled") == 5)
 st = of.label_states(obs_with({}, {}), born, first.isoformat(), NOW.isoformat(), None, CAD, NOW)
 check("C1 the bound is published on the verdict: pages_after_s = the job window (3 cycles, 11,700 s)",
       st["job"].get("pages_after_s") == 11700, st["job"])
@@ -170,7 +185,7 @@ check("S2b two hours where NOTHING was observed are a job fault, not a checkpoin
                                                                        for L, v in st["labels"].items()})
 
 print(NL + "=== S3. D4 SURVIVOR STATUS (positive control in the same test: a member with rows, one without)")
-settle = {L: 11700 for L in of.GRID_LABELS}
+settle = {L: 7200 for L in of.GRID_LABELS}         # NOT the production window, so a fallback cannot pass
 born40 = (NOW - timedelta(days=40)).isoformat()
 m7 = {"created_at": born40, "obs": {"7d": {"at": "x7", "alive": True}, "24h": {"at": "x1", "alive": True}}}
 m30 = {"created_at": born40, "obs": {"7d": {"at": "x7", "alive": True}, "30d": {"at": "x30", "alive": True}}}
@@ -185,9 +200,11 @@ check("S3 a member with no observation -> never_observed", of.survivor_status(bo
 check("S3 a listed mint OUTSIDE the watch set -> unknown, never never_observed",
       of.survivor_status(born40, None, settle, NOW)["status"] == "unknown")
 check("S3 no created_at on the birth row -> unknown", of.survivor_status(None, m7, settle, NOW)["status"] == "unknown")
+check("S3 an unreadable cadence (settle None) -> unknown for every row, never a guessed cycle (part 2 C-A)",
+      of.survivor_status(born40, m30, None, NOW)["status"] == "unknown")
 just = (NOW - timedelta(days=7, hours=1)).isoformat()
 r = of.survivor_status(just, {"obs": {"3d": {"at": "x", "alive": True}}}, settle, NOW)
-check("S3 the clock is the birth's created_at: 7d fell due 1 h ago, inside its 3 h 15 min window -> latest due is 3d",
+check("S3 the clock is the birth's created_at: 7d fell due 1 h ago, inside its 2 h settle -> latest due is 3d",
       r["status"] == "verified_alive" and r["latest_due_age"] == "3d", r)
 r = of.survivor_status(born40, {"obs": {"30d": {"at": "x", "alive": False}}}, settle, NOW)
 check("S3 seen at its latest due point but not alive (and not tombstoned) -> unverified, never verified_alive",
@@ -196,17 +213,20 @@ check("S3 seen at its latest due point but not alive (and not tombstoned) -> unv
 print(NL + "=== S4. THE WATCH SET IS SEEDED, KEPT AND REBUILT ONLY WHEN A REBUILD CAN CHANGE IT")
 dead = set()
 check("S4 none -> seeded", of.watch_needs_seed(None, dead, 2) == "seeded")
-w = {"version": of.WATCH_VERSION, "members": {str(i): {} for i in range(5)}, "capped": True, "births_through_at_seed": "a"}
-check("S4 enough not-dead members -> kept", of.watch_needs_seed(w, dead, 2, "a") is None)
-check("S4 depleted below 2 x N and capped -> rebuilt", of.watch_needs_seed(w, {"0", "1"}, 2, "a") == "rebuilt")
+w = {"version": of.WATCH_VERSION, "members": {str(i): {} for i in range(5)}, "capped": True, "births_folded_at_seed": 9}
+check("S4 enough not-dead members -> kept", of.watch_needs_seed(w, dead, 2, 9) is None)
+check("S4 depleted below 2 x N and capped -> rebuilt", of.watch_needs_seed(w, {"0", "1"}, 2, 9) == "rebuilt")
 w["capped"] = False
 check("S4 depleted, NOT capped, nothing born since the seed -> kept (a re-seed would return the same set)",
-      of.watch_needs_seed(w, {"0", "1"}, 2, "a") is None)
-check("S4 depleted, not capped, launches since the seed -> rebuilt", of.watch_needs_seed(w, {"0", "1"}, 2, "b") == "rebuilt")
+      of.watch_needs_seed(w, {"0", "1"}, 2, 9) is None)
+check("S4 depleted, not capped, launches folded since the seed (a COUNT, so a late launch older than the newest "
+      "counts) -> rebuilt", of.watch_needs_seed(w, {"0", "1"}, 2, 10) == "rebuilt")
 check("S4 prune_dead removes the dead members", of.prune_dead(w, {"0", "1"}) == 2 and sorted(w["members"]) == ["2", "3", "4"])
 
 print(NL + "=== S5. THROUGH summary.build: statuses on the table, the set seeded once, the fold not re-read")
 import summary  # noqa: E402
+_real_cadence = of.read_cadence
+of.read_cadence = lambda: CAD      # S5 runs with a READ cadence; the None case is tested on its own below
 shutil.rmtree(ROOT, ignore_errors=True)
 os.makedirs(ROOT)
 store.ensure_dirs()
@@ -253,6 +273,22 @@ finally:
     of.timer_switch = _sw
 check("S5 the timer's switch is published on the job verdict (the page says 'switched off', nothing pages)",
       p2b["observation_states"]["job"].get("switch") == "disabled", p2b["observation_states"]["job"])
+check("S5 the build used the cadence it read (Langston's hypothesis: S5 had been ratifying the fallback)",
+      p2b["observation_states"].get("cadence") == CAD, p2b["observation_states"].get("cadence"))
+of.read_cadence = lambda: None
+try:
+    p2c = summary.build(NOW + timedelta(hours=1, minutes=40))
+finally:
+    of.read_cadence = lambda: CAD
+rows_c = p2c["oldest_survivors"]
+check("S5 cadence unreadable -> every checkpoint unknown, the job unknown, every survivor row unknown: ONE answer",
+      {v["state"] for v in p2c["observation_states"]["labels"].values()} == {"unknown"}
+      and p2c["observation_states"]["job"]["state"] == "unknown"
+      and rows_c and all(r["status"] == "unknown" for r in rows_c), ({r["mint"]: r["status"] for r in rows_c},
+                                                                      p2c["observation_states"]["job"]))
+check("S5 and that build's exit code pages (5)", of.job_fault_exit_code(p2c["observation_states"]["job"],
+                                                                        p2c["observation_states"]["job"].get("switch",
+                                                                                                             "unknown")) == 5)
 st2.pop("watch")
 store.save_state("summary", st2)
 T3 = NOW + timedelta(hours=2)
@@ -264,6 +300,7 @@ check("S5 a LOST watch set re-seeds (seeded_at moves - Langston's fold) AND its 
       and rows3.get("A", {}).get("status") == "unverified" and rows3["A"].get("last_verified_age") == "7d",
       (p3["oldest_survivors_status"], {m: r.get("status") for m, r in rows3.items()}))
 summary.OLDEST_N = 100
+of.read_cadence = _real_cadence
 
 print(NL + "=== S6. THE DERIVATION: shed-only hours are a job fault, K = 3 is recorded as a floor, written once")
 shutil.rmtree(ROOT, ignore_errors=True)
