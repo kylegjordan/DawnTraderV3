@@ -145,6 +145,8 @@ def _birth_files() -> list:
 
 
 BIRTHS_FOLD_VERSION = 2          # 2: born_by_hour, births_first_at, births_through (P7)
+# every key the births fold accumulates -- all of them are dropped on a rebuild, so none is double-counted
+BIRTHS_FIELDS = ("born_by_day", "followed_by_day", "born_by_hour", "cursors", "births_first_at", "births_through")
 
 
 def _fold(st: dict, now: datetime) -> dict:
@@ -160,15 +162,22 @@ def _fold(st: dict, now: datetime) -> dict:
        cursors already stood at the end of every births file, so the first build under the new code counted only the
        rows since the previous build -- `births_first_at` read 11:12 TODAY, every checkpoint `not_yet_due`, the job
        `nothing_due`. Every test and measurement had started from an EMPTY state, the one shape that worked.
-    ⇒ BIRTHS_FOLD_VERSION: a state written by an older births fold has its births side rebuilt from byte 0 once
-      (streamed, ~18 s and ~14 MiB on the live store); the tombstone side is untouched. Bump it whenever a births-
-      derived field is added.
+    ⇒ BIRTHS_FOLD_VERSION: a state written by an older births fold has its births side rebuilt from byte 0 once;
+      the tombstone side is untouched. MEASURED on the live store at the 2026-11-15 install: the whole summary build
+      WITH the rebuild took 22.7 s and peaked at 186.6 MiB (summary's own logged line, under the 384M cap) -- the
+      ordinary build is ~177.9 MiB, so the rebuild adds little memory. ⛔ When you bump it, ADD THE NEW FIELD TO
+      BIRTHS_FIELDS TOO: a births-derived accumulator left out of that tuple is carried over and double-counted on
+      the rebuild (Langston, Step 9: two of the six had no test that would notice).
     """
     if st.get("births_fold_version") != BIRTHS_FOLD_VERSION:
-        for k in ("born_by_day", "followed_by_day", "born_by_hour", "cursors", "births_first_at", "births_through"):
+        before = sum((st.get("born_by_day") or {}).values())
+        prev_version = st.get("births_fold_version")
+        for k in BIRTHS_FIELDS:
             st.pop(k, None)
         st["births_fold_version"] = BIRTHS_FOLD_VERSION
-        LOG.warning("births fold rebuilt from byte 0 (state from an older births fold)")
+        # a durable record of the one-shot recount (Langston, Step 9): when, and the launch total it replaced
+        st["births_rebuild"] = {"at": now.isoformat(), "born_before": before, "from_version": prev_version}
+        LOG.warning("births fold rebuilt from byte 0 (state from an older births fold; %d launches counted before)", before)
     born = st.setdefault("born_by_day", {})
     # P7 D2: births per hour, kept for 90 d + 7 d so "was anything due at this checkpoint in this cycle?" can be
     # answered for the 90d point too; plus the first and newest launch STAMPS (`births_first_at`, `births_through`).

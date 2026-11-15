@@ -69,6 +69,12 @@ MUTANTS = [
        "    return mem or obs_fold.job_fault_exit_code(job, (job or {}).get(\"switch\", \"unknown\"))")]),
     ("births fold: an older state is extended, not rebuilt", TS,
      [("summary.py", "    if st.get(\"births_fold_version\") != BIRTHS_FOLD_VERSION:", "    if False:")]),
+    ("births fold: followed_by_day carried over a rebuild", TS,
+     [("summary.py", "BIRTHS_FIELDS = (\"born_by_day\", \"followed_by_day\", ", "BIRTHS_FIELDS = (\"born_by_day\", ")]),
+    ("births fold: born_by_hour carried over a rebuild", TS,
+     [("summary.py", "\"born_by_hour\", \"cursors\", \"births_first_at\"", "\"cursors\", \"births_first_at\"")]),
+    ("births fold: the recount is not recorded", TS,
+     [("summary.py", "        st[\"births_rebuild\"] = {", "        _unused = {")]),
     # D4
     ("D4: the settle window is ignored", TS, [("obs_fold.py", "t + OFFSET[L] + timedelta(seconds=settle_s.get(L, 0)) <= now",
                                                "t + OFFSET[L] <= now")]),

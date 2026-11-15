@@ -352,8 +352,12 @@ with open(os.path.join(BIRTHS_DIR, old_day + ".jsonl"), "w", encoding="utf-8", n
         fh.write(json.dumps({"mint": "O%d" % i, "created_at": "%sT0%d:00:00+00:00" % (old_day, i)}) + NL)
 # the state a pre-P7 summary.py leaves: counters and cursors at the end of every births file, no births_fold_version
 pre = summary._fold({}, NOW)
-for k in ("born_by_hour", "births_first_at", "births_through", "births_fold_version"):
+for k in ("births_first_at", "births_through", "births_fold_version"):
     pre.pop(k, None)
+# what the live state actually carried: hourly counts from one hour only, and (to fence every accumulator) a stale
+# followed_by_day entry -- both must be REPLACED by the rebuild, never carried and added to (Langston, Step 9)
+pre["born_by_hour"] = {NOW.strftime("%Y-%m-%dT") + "09": 99}
+pre["followed_by_day"] = dict(pre["followed_by_day"], **{"1999-01-01": 7})
 store.save_state("summary", pre)
 new_day = NOW.strftime("%Y-%m-%d")
 with open(os.path.join(BIRTHS_DIR, new_day + ".jsonl"), "w", encoding="utf-8", newline="") as fh:
@@ -365,6 +369,14 @@ check("S5b born_by_day counts every launch exactly once (rebuilt, not added to: 
       st5["born_by_day"] == {old_day: 3, new_day: 1}, st5["born_by_day"])
 check("S5b the version is stamped, so the next build is incremental again",
       st5.get("births_fold_version") == summary.BIRTHS_FOLD_VERSION, st5.get("births_fold_version"))
+check("S5b born_by_hour is REBUILT from the files (the stale one-hour entry is gone, history is in)",
+      st5.get("born_by_hour") == {old_day + "T00": 1, old_day + "T01": 1, old_day + "T02": 1, new_day + "T11": 1},
+      st5.get("born_by_hour"))
+check("S5b followed_by_day is REBUILT too (the stale entry is gone, nothing added twice)",
+      st5["followed_by_day"] == {old_day: 3, new_day: 1}, st5["followed_by_day"])
+check("S5b the recount is recorded: when, the total it replaced (3), the version it came from (none)",
+      st5.get("births_rebuild") == {"at": NOW.isoformat(), "born_before": 3, "from_version": None},
+      st5.get("births_rebuild"))
 st6 = summary._fold(st5, NOW)
 check("S5b a second pass adds nothing (no double count)", st6["born_by_day"] == {old_day: 3, new_day: 1}, st6["born_by_day"])
 
