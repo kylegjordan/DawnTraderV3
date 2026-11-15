@@ -25,13 +25,19 @@ from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from config import COLD_DIR, ROOT  # noqa: E402
+from config import COLD_DIR, ROOT, STATE_DIR  # noqa: E402
 from store import load_state, periodic_lock, save_state  # noqa: E402
 from backlog_census import artifact_name  # noqa: E402
 
 UTC = timezone.utc
 CURSOR = "follow_up_cursor"
 MANIFEST_PATH = os.path.join(ROOT, "offbox", "cold-offbox-manifest.jsonl")   # = cold_offbox.MANIFEST_PATH
+# ⛔ THE DURABLE ON-BOX RECORD OF THE SKIP (Langston, P8 Step 4): after the move, tier reads every bucket in
+#    [consumed_from, last_bucket] as read, and anything added to the cursor state is ERASED by the next follow-up run
+#    (`_advance_cursor` rebuilds it with last_bucket + consumed_from only). So each move APPENDS one line here - the
+#    range it skipped and the census that covers it - in a file nothing rewrites. The census artifact (in B2 and the
+#    off-box manifest) and the batch record carry the same facts.
+MOVES_PATH = os.path.join(STATE_DIR, "followup-cursor-moves.jsonl")
 
 
 def artifact_sha_ok(name: str, sha: str, cold_dir: str = COLD_DIR, manifest: str = MANIFEST_PATH) -> str | None:
@@ -87,6 +93,14 @@ def main(argv: list[str]) -> int:
             print("DRY RUN: nothing written (pass --apply)")
             return 0
         save_state(CURSOR, new)
+        rec = {"moved_at": datetime.now(UTC).isoformat(), "skipped_after": last, "skipped_through": a.census_hour,
+               "census_artifact": name, "census_sha256": a.census_sha256, "confirmed_in": where,
+               "consumed_from": cur.get("consumed_from")}
+        os.makedirs(os.path.dirname(MOVES_PATH), exist_ok=True)
+        with open(MOVES_PATH, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(rec, sort_keys=True) + "\n")
+            fh.flush()
+            os.fsync(fh.fileno())
         print("WRITTEN at %s: %s" % (datetime.now(UTC).isoformat(), json.dumps(load_state(CURSOR, {}), sort_keys=True)))
     return 0
 

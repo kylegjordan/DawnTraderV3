@@ -53,6 +53,7 @@ def census(cursor: str, census_hour: str, now: datetime, out_path: str) -> dict:
     """Write the artifact for buckets in (cursor, census_hour]; return the summary (without the file hash)."""
     rows, bad, buckets_read, missing = 0, 0, 0, 0
     by_age = {}
+    payload = hashlib.sha256()                  # the UNCOMPRESSED lines as written, compared on the re-read
     h, end = _hour(cursor) + timedelta(hours=1), _hour(census_hour)
     with gzip.open(out_path, "wt", encoding="utf-8") as out:
         while h <= end:
@@ -79,14 +80,16 @@ def census(cursor: str, census_hour: str, now: datetime, out_path: str) -> dict:
                         age_now = round((now - datetime.fromisoformat(created)).total_seconds(), 1) if created else None
                     except (ValueError, TypeError):
                         age_now = None
-                    out.write(json.dumps({"bucket": bucket, "mint": mint, "age": age, "due_at": e.get("due_at"),
-                                          "created_at": created, "age_now_s": age_now}, sort_keys=True) + "\n")
+                    line = json.dumps({"bucket": bucket, "mint": mint, "age": age, "due_at": e.get("due_at"),
+                                       "created_at": created, "age_now_s": age_now}, sort_keys=True) + "\n"
+                    out.write(line)
+                    payload.update(line.encode("utf-8"))
                     rows += 1
                     by_age[age] = by_age.get(age, 0) + 1
             h += timedelta(hours=1)
     return {"cursor": cursor, "census_hour": census_hour, "census_at": now.isoformat(), "buckets_read": buckets_read,
             "buckets_absent": missing, "rows": rows, "rows_by_age": dict(sorted(by_age.items())),
-            "unreadable_lines": bad}
+            "unreadable_lines": bad, "payload_sha256": payload.hexdigest()}
 
 
 def main(argv: list[str], now: datetime | None = None) -> int:
@@ -120,27 +123,30 @@ def main(argv: list[str], now: datetime | None = None) -> int:
             print("REFUSED: %s already exists; it is never overwritten" % dst, file=sys.stderr)
             return 2
         summary = census(cursor, a.census_hour, now, dst + ".tmp")
-        # re-read the written artifact: its row count must equal what was written, and its hash is the summary's
-        n, h = 0, hashlib.sha256()
+        # re-read the written artifact: its row count AND the sha256 of its uncompressed lines must equal what was
+        # written (a content check, not only a truncation check - Langston, P8 Step 4), and its file hash is the
+        # summary's
+        n, h, back = 0, hashlib.sha256(), hashlib.sha256()
         with gzip.open(dst + ".tmp", "rt", encoding="utf-8") as fh:
-            for _line in fh:
+            for line in fh:
                 n += 1
+                back.update(line.encode("utf-8"))
         with open(dst + ".tmp", "rb") as fh:
             for chunk in iter(lambda: fh.read(1 << 20), b""):
                 h.update(chunk)
-        if n != summary["rows"]:
+        if n != summary["rows"] or back.hexdigest() != summary["payload_sha256"]:
             os.unlink(dst + ".tmp")
-            print("REFUSED: the artifact re-read %d rows, %d were written; nothing kept" % (n, summary["rows"]),
-                  file=sys.stderr)
+            print("REFUSED: the artifact re-read %d rows (content %s), %d were written (content %s); nothing kept"
+                  % (n, back.hexdigest()[:12], summary["rows"], summary["payload_sha256"][:12]), file=sys.stderr)
             return 2
         os.replace(dst + ".tmp", dst)
         summary.update({"artifact": os.path.basename(dst), "artifact_bytes": os.path.getsize(dst),
                         "artifact_sha256": h.hexdigest()})
     text = json.dumps(summary, indent=2, sort_keys=True)
+    print(text)                                 # FIRST: an unwritable --summary must not lose the sha (Langston nit)
     if a.summary:
         with open(a.summary, "w", encoding="utf-8") as fh:
             fh.write(text + "\n")
-    print(text)
     return 0
 
 

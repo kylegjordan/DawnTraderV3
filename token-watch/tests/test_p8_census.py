@@ -90,8 +90,16 @@ rows = [json.loads(x) for x in gzip.open(art, "rt", encoding="utf-8")] if os.pat
 check("C1 exit 0 and the artifact is in cold/ under the (cursor, census hour) name", rc == 0 and os.path.exists(art), rc)
 check("C1 exactly the 3 readable entries of T14 and T15 - not the cursor's own bucket, not T17",
       sorted(r["mint"] for r in rows) == ["A", "B", "C"], [r["mint"] for r in rows])
-check("C1 each row carries bucket, mint, age, due_at, created_at, age_now_s",
-      set(rows[0]) == {"bucket", "mint", "age", "due_at", "created_at", "age_now_s"} if rows else False, rows[:1])
+expect = sorted([
+    {"bucket": "2026-09-30T14", "mint": "A", "age": "1h", "due_at": "2026-09-30T14:00:00+00:00",
+     "created_at": "2026-09-29T14:00:00+00:00", "age_now_s": (NOW - datetime(2026, 9, 29, 14, tzinfo=UTC)).total_seconds()},
+    {"bucket": "2026-09-30T14", "mint": "B", "age": "24h", "due_at": "2026-09-30T14:00:00+00:00",
+     "created_at": "2026-09-29T14:00:00+00:00", "age_now_s": (NOW - datetime(2026, 9, 29, 14, tzinfo=UTC)).total_seconds()},
+    {"bucket": "2026-09-30T15", "mint": "C", "age": "24h", "due_at": "2026-09-30T14:00:00+00:00",
+     "created_at": None, "age_now_s": None},
+], key=lambda r: r["mint"])
+check("C1 the three rows IN FULL - bucket label, due_at, created_at and age_now_s exactly as recorded (Langston C-1)",
+      sorted(rows, key=lambda r: r["mint"]) == expect, rows)
 check("C1 age_now_s is from created_at to the census time; None when created_at is absent",
       next(r for r in rows if r["mint"] == "A")["age_now_s"] == (NOW - datetime(2026, 9, 29, 14, tzinfo=UTC)).total_seconds()
       and next(r for r in rows if r["mint"] == "C")["age_now_s"] is None, rows)
@@ -153,6 +161,62 @@ store.save_state("follow_up_cursor", {"consumed_from": "2026-08-31T11", "last_bu
 check("M3 the cursor moved after the census -> refused", mc.main(["--census-hour", "2026-09-30T16", "--census-sha256",
                                                                  s["artifact_sha256"], "--apply"]) == 2
       and store.load_state("follow_up_cursor", {})["last_bucket"] == "2026-09-30T14")
+
+print(NL + "=== C3. THE RE-READ GUARD, THE ABSENT-CURSOR REFUSALS AND THE LOCK BEAT (Langston C-2)")
+seed()
+_real_census = bc.census
+
+
+def lying_census(cursor, hour, now, out_path):
+    s = _real_census(cursor, hour, now, out_path)
+    return dict(s, payload_sha256="0" * 64)          # what was written disagrees with what is read back
+
+
+bc.census = lying_census
+try:
+    rc_lie = bc.main(["--census-hour", "2026-09-30T16"], now=NOW)
+finally:
+    bc.census = _real_census
+check("C3 an artifact whose re-read content disagrees with what was written is refused and NOTHING is kept",
+      rc_lie == 2 and not any(n.startswith("followup-backlog-census") for n in os.listdir(COLD_DIR)),
+      (rc_lie, os.listdir(COLD_DIR)))
+store.save_state("follow_up_cursor", {"consumed_from": "2026-08-31T11"})
+
+
+def rc_of(fn, *a, **k):
+    """exit code, or ('RAISED', type) - a crash is NOT a refusal and must read as a FAIL line"""
+    try:
+        return fn(*a, **k)
+    except Exception as exc:
+        return ("RAISED", type(exc).__name__)
+
+
+r_c = rc_of(bc.main, ["--census-hour", "2026-09-30T16"], now=NOW)
+check("C3 the census REFUSES (exit 2, not a crash) a cursor with no last_bucket", r_c == 2, r_c)
+r_m = rc_of(mc.main, ["--census-hour", "2026-09-30T16", "--census-sha256", "0" * 64, "--apply"])
+check("C3 the move REFUSES (exit 2, not a crash) a cursor with no last_bucket", r_m == 2, r_m)
+seed()
+beats = []
+_rb = bc.lock_beat
+bc.lock_beat = lambda: beats.append(1) or True
+try:
+    bc.main(["--census-hour", "2026-09-30T16"], now=NOW)
+finally:
+    bc.lock_beat = _rb
+check("C3 the census beats the lock once per hour in its range (3 hours: T14, T15, absent T16)", len(beats) == 3, len(beats))
+
+print(NL + "=== M5. EACH MOVE APPENDS ITS SKIP TO A FILE NOTHING REWRITES (Langston: the cursor state is rebuilt each run)")
+seed()
+summ5 = os.path.join(ROOT, "s5.json")
+bc.main(["--census-hour", "2026-09-30T16", "--summary", summ5], now=NOW)
+s5 = json.load(open(summ5, encoding="utf-8"))
+mc.main(["--census-hour", "2026-09-30T16", "--census-sha256", s5["artifact_sha256"], "--apply"])
+moves = [json.loads(x) for x in open(mc.MOVES_PATH, encoding="utf-8")] if os.path.exists(mc.MOVES_PATH) else []
+check("M5 one line: the range skipped and the census that covers it", len(moves) == 1
+      and moves[0]["skipped_after"] == "2026-09-30T13" and moves[0]["skipped_through"] == "2026-09-30T16"
+      and moves[0]["census_sha256"] == s5["artifact_sha256"] and moves[0]["consumed_from"] == "2026-08-31T11", moves)
+check("M5 a dry run appends nothing", mc.main(["--census-hour", "2026-09-30T17", "--census-sha256", "0" * 64]) == 2
+      and len([1 for _ in open(mc.MOVES_PATH, encoding="utf-8")]) == 1)
 
 print(NL + "=== M4. THE CURSOR NEVER MOVES BACKWARD, EVEN WITH A MATCHING ARTIFACT FOR AN EARLIER HOUR")
 reset()
