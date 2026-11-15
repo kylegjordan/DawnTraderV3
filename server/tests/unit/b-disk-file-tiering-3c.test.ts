@@ -381,6 +381,21 @@ describe('B-DISK-FILE-TIERING 3c — fences on the wiring', () => {
     const m = re.exec('[B75 cold-audit] DONE versions=1 readback_ok=0 readback_failed=2 budget_stop=none N=undefined failed=1 elapsed_ms=5');
     expect(m?.slice(1)).toEqual(['2', '1']);
   });
+  it('after its first recorded run (2026-11-15 04:10Z), a missing cold-audit log pages instead of passing silently', () => {
+    const ah = read('server/scripts/b-storage-archival-health.ts');
+    const start = ah.indexOf("name: 'b75-cold-audit'");
+    const end = ah.indexOf('\n  },', start);
+    expect(start).toBeGreaterThan(0);
+    expect(end).toBeGreaterThan(start); // the bound exists, so the slice cannot run on into the next check
+    const block = ah.slice(start, end);
+    expect(block.split('name:').length - 1).toBe(1); // exactly one check in the slice (control)
+    expect(block).toContain("logFile: 'b75-cold-audit.log'");
+    expect(block).toMatch(/onMissing: 'alert'/);
+    // the real first-run DONE line is graded by this check's own pattern: both counters read 0
+    const donePattern = /donePattern: (\/.*\/),/.exec(block)?.[1] as string;
+    const real = '[B75 cold-audit] DONE versions=114 bytes=7440776510 due=4 bytes_due=117461261 read=4 bytes_read=117461261 deferred_budget=0 readback_ok=4 readback_failed=0 budget_stop=none skipped_unbound=0 untracked=2 kept=0 missing=0 size_mismatch=0 in_flight=0 N=1.0 failed=0 elapsed_ms=9720';
+    expect(new RegExp(donePattern.slice(1, -1)).exec(real)?.slice(1)).toEqual(['0', '0']);
+  });
   it('the migration is registered, and its rollback is in git but not in the manifest', () => {
     const manifest = read('drizzle/migrations/MANIFEST.txt');
     expect(manifest).toContain('2026-11-14-b-disk-file-tiering-cold-audit.sql');

@@ -167,7 +167,10 @@ const CHECKS: CheckSpec[] = [
     schedule: '10 4 * * *',
     donePattern: /DONE .*\breadback_failed=(\d+)\b.*\bfailed=(\d+)\b/,
     startPattern: /\[B75 cold-audit\] started at (\S+) /,
-    onMissing: 'skip', // until its first recorded run, then 'alert' (the disk-file-tiering precedent)
+    // It was 'skip' until its first recorded run; that run is recorded (2026-11-15 04:10:02-04:10:12Z: `DONE versions=114
+    // ... readback_ok=4 readback_failed=0 ... untracked=2 ... failed=0`, meter baseline written), so it is now 'alert':
+    // a missing log means the job never ran (the disk-file-tiering precedent below).
+    onMissing: 'alert',
   },
   {
     // B-DISK-FILE-TIERING (#1233, pre-audit P7): this IS the job's page (no second key). It was 'skip' until
