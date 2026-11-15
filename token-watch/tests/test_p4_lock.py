@@ -1,7 +1,8 @@
 """
 token-watch — B-TOKEN-WATCH-FOLLOWUP-MEMORY P4 (OBJ-4b(a)): the periodic lock's heartbeat, its logged stale-only steal,
-and its release by token; and the three places that beat it (the follow-up per bucket and every 500 entries, promote
-every 500 rows, tier per source).
+its release by token, and the TIME-GATED beat (Langston CHANGES-1: at most one touch per BEAT_EVERY_S, called per
+entry by run_hour, per row by promote, per source and per file by tier, and per census row by the summary walk), with
+a LOST lock latched (logged once, never re-read) and a read fault retried at the gate's cadence.
 
 Run:  python tests/test_p4_lock.py        (exit 0 = every check passed)
 """
@@ -203,6 +204,77 @@ def driven_run(n_entries, secs_per_entry):
          follow_up.summary.build) = saved
     return st, touches, t_start, fake.t
 
+
+print(NL + "=== L6. A LOST LOCK IS LATCHED: logged once, never re-read (Langston, P4 re-roll PROCEED)")
+reads = {"n": 0}
+_ro = open
+
+
+def counting_open(path, *a, **k):
+    if str(path) == store.LOCK_PATH:
+        reads["n"] += 1
+    return _ro(path, *a, **k)
+
+
+fake = FakeTime()
+store.time = fake
+try:
+    with store.periodic_lock("latch") as held:
+        with open(store.LOCK_PATH, "w", encoding="utf-8") as fh:
+            fh.write("thief 999 deadbeef now" + NL)
+        cap.lines.clear()
+        store.open = counting_open
+        try:
+            fake.t += store.BEAT_EVERY_S + 1
+            results = []
+            for i in range(10000):
+                fake.t += 1                      # 10,000 s of calls: 55 gate intervals
+                results.append(store.lock_beat())
+        finally:
+            del store.open
+        lost_errors = [x for x in cap.lines if "REFUSED" in x]
+        lost_reads = reads["n"]
+    os.remove(store.LOCK_PATH)
+finally:
+    store.time = _real_time
+check("L6 every call after the loss returns False", not any(results))
+check("L6 ONE refusal is logged for 10,000 calls", len(lost_errors) == 1, len(lost_errors))
+check("L6 and the lock file is read once, not per call", lost_reads == 1, lost_reads)
+
+print(NL + "=== L7. A READ FAULT IS NOT TERMINAL: retried once per BEAT_EVERY_S, and the beat resumes when it clears")
+fault = {"on": True}
+
+
+def faulty_open(path, *a, **k):
+    if str(path) == store.LOCK_PATH and fault["on"]:
+        raise PermissionError(13, "simulated fault")
+    return _ro(path, *a, **k)
+
+
+fake = FakeTime()
+store.time = fake
+try:
+    with store.periodic_lock("fault") as held:
+        cap.lines.clear()
+        store.open = faulty_open
+        try:
+            fake.t += store.BEAT_EVERY_S + 1
+            r_fault = store.lock_beat()
+            fake.t += 10
+            r_inside = store.lock_beat()
+            errs_after_two = len([x for x in cap.lines if "could not be read" in x])
+            fault["on"] = False
+            fake.t += store.BEAT_EVERY_S
+            r_back = store.lock_beat()
+        finally:
+            del store.open
+        not_lost = not held.lost
+finally:
+    store.time = _real_time
+check("L7 the fault refuses and names the error, without latching", r_fault is False and not_lost
+      and errs_after_two == 1, (r_fault, not_lost, errs_after_two))
+check("L7 inside the gate it does not retry (one error for two calls)", r_inside is False)
+check("L7 once the fault clears, the next gate beats again", r_back is True, r_back)
 
 print(NL + "=== G2. SLOW LOOKUPS STILL BEAT IN TIME: 500 entries at 3.6 s each never leave the lock unbeaten for 30 min")
 # the breakeven Langston derived: 30 min / 500 = 3.6 s per entry. Run past it, at 4 s, for 1,200 entries (80 min).

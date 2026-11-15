@@ -153,6 +153,7 @@ def tier_payloads(now: datetime | None = None) -> dict:
       listing = sorted(os.listdir(src_dir)) if os.path.isdir(src_dir) else []
       by_source[prefix] = 0
       for name in listing:
+        lock_beat()                     # and per file: a source's gzip loop has no bound in code (Langston, P4)
         src = os.path.join(src_dir, name)
         if not os.path.isfile(src):
             continue

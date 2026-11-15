@@ -158,7 +158,10 @@ class LockHolder:
 
     def __init__(self, holder: str, token: str, fd: int | None = None):
         self.holder, self.token, self.fd = holder, token, fd
-        self.last_beat = time.monotonic()
+        self.last_beat = time.monotonic()   # the last SUCCESSFUL touch
+        self.last_try = self.last_beat      # the last attempt, successful or not (the gate's clock)
+        self.last_ok = True
+        self.lost = False                   # absent or foreign once = lost for good: our token never returns
         self.read_error = None          # the last OSError other than absence, for the release log
 
     def __bool__(self) -> bool:
@@ -178,10 +181,21 @@ class LockHolder:
             return False
 
     def beat(self) -> bool:
+        self.last_try = time.monotonic()
+        if self.lost:
+            return False
         if not self.ours():
-            LOG.error("lock beat REFUSED: the periodic lock %s (holder %s, token %s)",
+            # ⛔ ABSENT OR FOREIGN IS TERMINAL, A READ FAULT IS NOT (Langston, P4 re-roll PROCEED): our token
+            #    can never come back to that file, so a lost lock is LATCHED -- logged once, False ever after,
+            #    and the file is not read again. Unlatched, every per-entry call re-read the file and logged
+            #    (measured: 10,000 calls -> 10,000 errors and reads). A read FAULT stays retryable, at the
+            #    gate's cadence (last_try), because the lock may still be ours.
+            if self.read_error is None:
+                self.lost = True
+            LOG.error("lock beat REFUSED: the periodic lock %s (holder %s, token %s)%s",
                       "could not be read (%s)" % self.read_error if self.read_error else "is gone or no longer ours",
-                      self.holder, self.token)
+                      self.holder, self.token, "" if self.read_error else " - not retried for this holder")
+            self.last_ok = False
             return False
         # ⛔ BY FILE DESCRIPTOR WHERE THE PLATFORM ALLOWS IT (Langston, P4 Step 4 non-blocking):
         #    `ours()` then a utime BY PATH is check-then-act -- a steal in between would extend the
@@ -192,7 +206,8 @@ class LockHolder:
             os.utime(self.fd)
         else:
             os.utime(LOCK_PATH)
-        self.last_beat = time.monotonic()
+        self.last_beat = self.last_try = time.monotonic()
+        self.last_ok = True
         return True
 
 
@@ -214,14 +229,15 @@ BEAT_EVERY_S = LOCK_STALE_AFTER.total_seconds() / 10
 def lock_beat() -> bool:
     """Keep this process's periodic lock fresh; cheap enough to call per entry.
 
-    True if the lock is ours and was beaten within the last BEAT_EVERY_S (beating it now if
-    that interval has passed); False if this process holds no lock or the beat was refused.
+    Inside the gate (less than BEAT_EVERY_S since the last ATTEMPT) it returns that attempt's result
+    WITHOUT re-checking ownership; past it, it beats (which checks ownership) and returns the result.
+    False if this process holds no lock, the lock is lost (latched), or the last attempt failed.
     """
     h = _HELD["holder"]
-    if h is None:
+    if h is None or h.lost:
         return False
-    if time.monotonic() - h.last_beat < BEAT_EVERY_S:
-        return True
+    if time.monotonic() - h.last_try < BEAT_EVERY_S:
+        return h.last_ok
     return h.beat()
 
 

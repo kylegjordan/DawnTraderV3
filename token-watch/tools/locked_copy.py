@@ -85,7 +85,9 @@ def main(argv: list[str], copy_cmd=None) -> int:
                     return 1
         finally:
             stop.set()
-        t.join()
+            # joined BEFORE any return leaves the with-block (Langston, P4 re-roll (d)): a beat thread waking
+            # between the return and the release would otherwise lose() on our own just-released lock
+            t.join()
         # ⛔ OWNERSHIP IS CHECKED AT THE RELEASE EDGE TOO (Langston r2 fold): whatever ended the beat thread, the
         #    lock is ours here or periodic_lock's finally must not run.
         if not held.ours():
