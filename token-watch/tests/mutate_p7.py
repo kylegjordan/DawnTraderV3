@@ -67,6 +67,8 @@ MUTANTS = [
     ("C-B: the job-fault check is skipped when memory is set", TS,
      [("summary.py", "    fault = obs_fold.job_fault_exit_code(job, (job or {}).get(\"switch\", \"unknown\"))" + NL + "    return mem or fault",
        "    return mem or obs_fold.job_fault_exit_code(job, (job or {}).get(\"switch\", \"unknown\"))")]),
+    ("births fold: an older state is extended, not rebuilt", TS,
+     [("summary.py", "    if st.get(\"births_fold_version\") != BIRTHS_FOLD_VERSION:", "    if False:")]),
     # D4
     ("D4: the settle window is ignored", TS, [("obs_fold.py", "t + OFFSET[L] + timedelta(seconds=settle_s.get(L, 0)) <= now",
                                                "t + OFFSET[L] <= now")]),

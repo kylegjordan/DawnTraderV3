@@ -341,6 +341,33 @@ check("S5 a LOST watch set re-seeds (seeded_at moves - Langston's fold) AND its 
 summary.OLDEST_N = 100
 of.read_cadence = _real_cadence
 
+print(NL + "=== S5b. A STATE FROM THE PRE-P7 BIRTHS FOLD IS REBUILT, NOT EXTENDED (the P12 install's live finding)")
+shutil.rmtree(ROOT, ignore_errors=True)
+os.makedirs(ROOT)
+store.ensure_dirs()
+os.makedirs(BIRTHS_DIR, exist_ok=True)
+old_day = (NOW - timedelta(days=40)).strftime("%Y-%m-%d")
+with open(os.path.join(BIRTHS_DIR, old_day + ".jsonl"), "w", encoding="utf-8", newline="") as fh:
+    for i in range(3):
+        fh.write(json.dumps({"mint": "O%d" % i, "created_at": "%sT0%d:00:00+00:00" % (old_day, i)}) + NL)
+# the state a pre-P7 summary.py leaves: counters and cursors at the end of every births file, no births_fold_version
+pre = summary._fold({}, NOW)
+for k in ("born_by_hour", "births_first_at", "births_through", "births_fold_version"):
+    pre.pop(k, None)
+store.save_state("summary", pre)
+new_day = NOW.strftime("%Y-%m-%d")
+with open(os.path.join(BIRTHS_DIR, new_day + ".jsonl"), "w", encoding="utf-8", newline="") as fh:
+    fh.write(json.dumps({"mint": "N0", "created_at": new_day + "T11:00:00+00:00"}) + NL)
+st5 = summary._fold(store.load_state("summary", {}), NOW)
+check("S5b births_first_at is the FIRST launch on disk, not the first row since the last build",
+      st5.get("births_first_at") == old_day + "T00:00:00+00:00", st5.get("births_first_at"))
+check("S5b born_by_day counts every launch exactly once (rebuilt, not added to: 3 old + 1 new)",
+      st5["born_by_day"] == {old_day: 3, new_day: 1}, st5["born_by_day"])
+check("S5b the version is stamped, so the next build is incremental again",
+      st5.get("births_fold_version") == summary.BIRTHS_FOLD_VERSION, st5.get("births_fold_version"))
+st6 = summary._fold(st5, NOW)
+check("S5b a second pass adds nothing (no double count)", st6["born_by_day"] == {old_day: 3, new_day: 1}, st6["born_by_day"])
+
 print(NL + "=== S6. THE DERIVATION: shed-only hours are a job fault, K = 3 is recorded as a floor, written once")
 shutil.rmtree(ROOT, ignore_errors=True)
 os.makedirs(ROOT)

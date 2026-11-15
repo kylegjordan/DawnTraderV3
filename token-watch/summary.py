@@ -144,6 +144,9 @@ def _birth_files() -> list:
     return sorted(f for f in os.listdir(BIRTHS_DIR) if f.endswith(".jsonl"))
 
 
+BIRTHS_FOLD_VERSION = 2          # 2: born_by_hour, births_first_at, births_through (P7)
+
+
 def _fold(st: dict, now: datetime) -> dict:
     """Advance the incremental counters over any new births and deaths.
 
@@ -152,7 +155,20 @@ def _fold(st: dict, now: datetime) -> dict:
        is ~1.86M rows and several hundred megabytes. Re-reading that hourly on
        the box that runs live trading is exactly the cost the co-tenancy clause
        exists to prevent. A byte cursor makes each pass O(new rows).
+    ⛔ AND THEREFORE A NEW DERIVED FIELD NEEDS A BACKFILL, OR IT ONLY EVER SEES ROWS FROM ITS FIRST RUN ON (found at the
+       P12 install, 2026-11-15): P7 added `born_by_hour`, `births_first_at` and `births_through`, but the live state's
+       cursors already stood at the end of every births file, so the first build under the new code counted only the
+       rows since the previous build -- `births_first_at` read 11:12 TODAY, every checkpoint `not_yet_due`, the job
+       `nothing_due`. Every test and measurement had started from an EMPTY state, the one shape that worked.
+    ⇒ BIRTHS_FOLD_VERSION: a state written by an older births fold has its births side rebuilt from byte 0 once
+      (streamed, ~18 s and ~14 MiB on the live store); the tombstone side is untouched. Bump it whenever a births-
+      derived field is added.
     """
+    if st.get("births_fold_version") != BIRTHS_FOLD_VERSION:
+        for k in ("born_by_day", "followed_by_day", "born_by_hour", "cursors", "births_first_at", "births_through"):
+            st.pop(k, None)
+        st["births_fold_version"] = BIRTHS_FOLD_VERSION
+        LOG.warning("births fold rebuilt from byte 0 (state from an older births fold)")
     born = st.setdefault("born_by_day", {})
     # P7 D2: births per hour, kept for 90 d + 7 d so "was anything due at this checkpoint in this cycle?" can be
     # answered for the 90d point too; plus the first and newest launch STAMPS (`births_first_at`, `births_through`).

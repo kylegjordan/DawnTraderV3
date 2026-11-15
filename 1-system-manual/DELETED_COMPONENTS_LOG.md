@@ -1654,3 +1654,19 @@ Archive: git history is authoritative (this is a field-retirement within live fi
 **RESTORE PATH:** the archived copy below, or git at `f187b1862`. A restored `deleteCold` cannot run once the wide key is deleted (3d step 5); it needs a delete-capable key Kyle mints.
 **ARCHIVE:** `1-system-manual/_archive/deleted-code/storage-client.deleteCold.20261114-B-DISK-FILE-TIERING.ts.removed`.
 **COMMIT:** the B-DISK-FILE-TIERING 3d step-1 Step-3 commit.
+
+## 2026-11-15 — four stale token-watch backup files on staging — B-TOKEN-WATCH-FOLLOWUP-MEMORY P12 (pre-audit A10), Infra Claude
+
+| what | where | why |
+|---|---|---|
+| `providers.py.pre-deadpool-20260902`, `providers.py.pre-quote-fix-20260902`, `receiver.py.pre-creator-stake`, `store.py.pre-corrections-20260902` | `/opt/token-watch/` on staging (188.245.193.8) — box-only, never in git | Hand-made backups left beside the live modules by 2026-09-02 fixes; sent to this batch by `B_TOKEN_WATCH_STORAGE_PRE_AUDIT.md:68` and approved into P12 by Langston (rule 18). Lingering copies of superseded code are the confusion rule 18 exists to remove. |
+
+**WHEN:** removed 2026-11-15T11:51:13Z, after the P12 install's guard passed (`INSTALLED` = `a57bf6788`), each only after its sha256 matched the hash recorded before archiving.
+
+**BLAST RADIUS:** census before removal — repo-wide only the two pre-audits name them; on the box no systemd unit, `/etc/cron.d` entry or `.py` file names them (the one grep hit, `repair_pool_sol.py`, is the phrase "the pre-quote-fix decoder" in its docstring). Not importable (no `.py` suffix). They wrote no state. Secret scan: only key-reading code (`helius_key()`, the `HELIUS_API_KEY=` prefix), no key.
+
+**ARCHIVE (sha256, box file → in-repo blob; git stores three of them CR-normalised, content identical):**
+- `1-system-manual/_archive/deleted-code/token-watch.providers.py.pre-deadpool-20260902.20261115-B-TOKEN-WATCH-FOLLOWUP-MEMORY.removed` — `970c3687…` → `970c3687…` (byte-exact)
+- `…token-watch.providers.py.pre-quote-fix-20260902.20261115-B-TOKEN-WATCH-FOLLOWUP-MEMORY.removed` — `91bd9f4f…` → `7ac576bd…` (453 CRs)
+- `…token-watch.receiver.py.pre-creator-stake.20261115-B-TOKEN-WATCH-FOLLOWUP-MEMORY.removed` — `c6534bd1…` → `a6bf6b53…` (571 CRs)
+- `…token-watch.store.py.pre-corrections-20260902.20261115-B-TOKEN-WATCH-FOLLOWUP-MEMORY.removed` — `49605848…` → `52ed5fcd…` (659 CRs)
