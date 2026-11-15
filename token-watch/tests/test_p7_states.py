@@ -126,8 +126,10 @@ check("S2 first launch 10 days ago -> 30d and 90d not_yet_due, with the hour the
       st["labels"]["30d"]["state"] == "not_yet_due" and st["labels"]["90d"]["first_due_at"]
       == (young + timedelta(days=90)).isoformat(), st["labels"]["90d"])
 st = of.label_states(obs_with({}, {}), born, first.isoformat(), (NOW - timedelta(hours=5)).isoformat(), None, CAD, NOW)
-check("S2 the births fold lags behind a birth hour the 1h window needs -> unknown, NEVER instrumented (fold a)",
+check("S2 no launch recorded since 5 h ago -> the 1h checkpoint is unknown, NEVER instrumented (fold a)",
       st["labels"]["1h"]["state"] == "unknown" and st["labels"]["7d"]["state"] != "unknown", st["labels"]["1h"])
+check("S2 and its reason names the condition that fires: a silent launch feed, not a lagging fold (Langston Q2)",
+      st["labels"]["1h"].get("reason") == "feed_silent", st["labels"]["1h"])
 gap = {k: (0 if k >= H(NOW - timedelta(hours=8)) and k <= H(NOW - timedelta(hours=1)) else v) for k, v in born.items()}
 cov3 = dict(cov)
 cov3["1h"] = {}
@@ -162,6 +164,25 @@ check("C2 with a derived window, its run, floor flag and cycles counted ride on 
       st["labels"]["6h"]["k_basis"] == {"derived": True, "floor_bound": True, "observed_longest_run": 1,
                                         "cycles_counted": 643, "counted": st["labels"]["6h"]["k_basis"]["counted"]},
       st["labels"]["6h"].get("k_basis"))
+
+print(NL + "=== S2d. Q3: THE JOB IS JUDGED ON ITS OWN CADENCE -- job_not_running arrives BEFORE any checkpoint reads stale")
+old = [NOW.replace(minute=0) - timedelta(hours=i) for i in range(5, 10)]      # the job died ~4.5 h ago
+cov_old = {L: {H(t): 50 for t in old} for L in of.GRID_LABELS}
+any_old = {H(t): 400 for t in old}
+wide = {"cadence": CAD, "labels": {"7d": {"k_cycles": 10, "window_s": 39000, "floor_bound": False,
+                                          "observed_longest_run": 8, "beating_due_cycles": 500}}}
+st = of.label_states(obs_with(cov_old, any_old), born, first.isoformat(), NOW.isoformat(), wide, CAD, NOW)
+check("Q3 one checkpoint calibrated wide (7d K = 10) does not slow the job verdict: not_running at the 3-cycle window",
+      st["job"]["state"] == "not_running" and st["job"]["pages_after_s"] == 11700, st["job"])
+check("Q3 so the short checkpoints read job_not_running, not N separate stale faults",
+      st["labels"]["1h"]["state"] == "job_not_running" and st["labels"]["6h"]["state"] == "job_not_running",
+      {L: v["state"] for L, v in st["labels"].items()})
+check("Q3 and the wide checkpoint keeps its own window (still sees the old rows -> instrumented)",
+      st["labels"]["7d"]["state"] == "instrumented" and st["labels"]["7d"]["window_s"] == 39000, st["labels"]["7d"])
+quiet = {k: (0 if k >= H(NOW - timedelta(days=91)) else v) for k, v in born.items()}
+st = of.label_states(obs_with({}, {}), quiet, first.isoformat(), NOW.isoformat(), None, CAD, NOW)
+check("Q3 nothing due in the job window and no rows -> nothing_due: neither green nor a fault, and it does not page",
+      st["job"]["state"] == "nothing_due" and of.job_fault_exit_code(st["job"], "enabled") == 0, st["job"])
 
 print(NL + "=== S2b. CHANGE-1: THE RE-DERIVATION TRIGGER IS A DUE-BUT-EMPTY RUN OF K - 1, while the job observed")
 week = [NOW.replace(minute=0) - timedelta(hours=i) for i in range(1, 7 * 24)]

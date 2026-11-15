@@ -119,10 +119,25 @@ write("2026-09-20", [obs("Z", "24h", "2026-09-20T10:00:00+00:00")], mode="w")
 o5 = of.fold_observations(st, NOW + timedelta(minutes=1))
 check("F3 rebuilt: exactly the one row now on disk", o5["by_day"] == {"24h": {"2026-09-19": {"covered": 1}}}, o5["by_day"])
 check("F3 the rebuild is stamped", o5["rebuilt_at"] == (NOW + timedelta(minutes=1)).isoformat(), o5["rebuilt_at"])
+check("F3 and records WHAT it lost, so a short count does not read as a quiet period (Langston part 1a Q1)",
+      g(o5, "rebuild_cause", "reason") == "shrank" and g(o5, "rebuild_cause", "file") == "2026-09-20.jsonl"
+      and g(o5, "rebuild_cause", "cursor_before") == 963 and g(o5, "rebuild_cause", "size_now") == 83
+      and g(o5, "rebuild_cause", "bytes_lost_at_least") == 880, o5.get("rebuild_cause"))
+regrow = [obs("R%d" % i, "24h", "2026-09-20T1%d:00:00+00:00" % (i % 10)) for i in range(30)]
+write("2026-09-20", regrow, mode="w")
+o5b = of.fold_observations(st, NOW + timedelta(minutes=2))
+before_size = os.path.getsize(os.path.join(OBSERVATIONS_DIR, "2026-09-20.jsonl"))
+check("F3 a file truncated and REGROWN past the cursor (first line changed) is caught and rebuilt (Langston Q1)",
+      g(o5b, "rebuild_cause", "reason") == "first line changed" and g(o5b, "by_day", "24h", "2026-09-19", "covered") == 30
+      and before_size > 83, (o5b.get("rebuild_cause"), g(o5b, "by_day", "24h")))
+o5c = of.fold_observations(st, NOW + timedelta(minutes=3))
+check("F3 an unchanged file does not rebuild again", o5c["rebuilt_at"] == (NOW + timedelta(minutes=2)).isoformat(),
+      o5c["rebuilt_at"])
 st_old = {"obs": dict(o5, version=0)}
 o6 = of.fold_observations(st_old, NOW)
-check("F3 a state of another fold version is rebuilt", o6["version"] == of.OBS_FOLD_VERSION
-      and o6["by_day"] == {"24h": {"2026-09-19": {"covered": 1}}}, o6)
+check("F3 a state of another fold version is rebuilt from what is on disk now (the 30 regrown rows), with its cause",
+      o6["version"] == of.OBS_FOLD_VERSION and o6["by_day"] == {"24h": {"2026-09-19": {"covered": 30}}}
+      and "no usable fold state" in g(o6, "rebuild_cause", "reason"), (o6["by_day"], o6.get("rebuild_cause")))
 
 print(NL + "=== F4. HOURLY COUNTS: covered rows only, trailing 7 days, pruned")
 reset()

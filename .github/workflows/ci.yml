@@ -157,6 +157,7 @@ jobs:
           python3 token-watch/tests/test_p7_obs_fold.py
           python3 token-watch/tests/test_p7_birth_stamp.py
           python3 token-watch/tests/test_p7_states.py
+          python3 token-watch/tests/test_p7_summary_stream.py
           python3 token-watch/tests/test_install_cap_guard.py
           python3 token-watch/tests/test_collector.py
           python3 token-watch/tests/test_round2.py

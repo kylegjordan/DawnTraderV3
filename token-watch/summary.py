@@ -84,45 +84,50 @@ def _day(iso: str) -> str | None:
 _READ_NEW_SKIPPED = {"lines": 0}
 
 
-def _read_new(path: str, offset: int):
-    """Complete lines from `offset`. Torn-tail-safe, truncation-detecting.
+class _read_new:
+    """Complete lines from `offset`, STREAMED: iterate for the JSON-object rows; `.end` is the new cursor.
 
-    The same cursor idiom as `liveness` and the spend journal: a final line
-    with no newline is a row still being written, so it is not consumed.
-    Only JSON OBJECTS are returned; anything else is skipped and counted (_READ_NEW_SKIPPED).
+    Torn-tail-safe and truncation-detecting, as before: a final line with no newline is a row still being written
+    and is not consumed; a file smaller than the cursor restarts at 0 (logged). Only JSON OBJECTS are rows; anything
+    else is skipped and counted (_READ_NEW_SKIPPED).
+    ⛔ STREAMED (B-TOKEN-WATCH-FOLLOWUP-MEMORY P7, found measuring Langston's part-1a condition 1): this read the
+       whole remainder into one string, then a line list, then a row list. Incremental runs read a few MB, but a
+       build from an EMPTY state (a lost or reset state file) read the 258 MB tombstone file whole -- measured on
+       staging 2026-11-15: births + tombstone fold from empty = 1,915 MiB peak RSS, against the summary unit's
+       planned 384M cap. One line in memory at a time now; the counts and the cursor are byte-for-byte the same.
     """
-    if not os.path.exists(path):
-        return [], offset
-    size = os.path.getsize(path)
-    if size < offset:
-        LOG.error("summary: %s shrank (%d -> %d) — cursor restarted", path, offset, size)
-        offset = 0
-    if size == offset:
-        return [], offset
-    with open(path, "r", encoding="utf-8") as fh:
-        fh.seek(offset)
-        raw = fh.read()
-    if not raw:
-        return [], offset
-    if not raw.endswith("\n"):
-        cut = raw.rfind("\n")
-        if cut < 0:
-            return [], offset
-        raw = raw[: cut + 1]
-    rows = []
-    for line in raw.splitlines():
-        if not line.strip():
-            continue
-        try:
-            r = json.loads(line)
-        except ValueError:
-            _READ_NEW_SKIPPED["lines"] += 1
-            continue
-        if not isinstance(r, dict):
-            _READ_NEW_SKIPPED["lines"] += 1
-            continue
-        rows.append(r)
-    return rows, offset + len(raw.encode("utf-8"))
+
+    def __init__(self, path: str, offset: int):
+        self.path = path
+        self.end = offset
+
+    def __iter__(self):
+        if not os.path.exists(self.path):
+            return
+        size = os.path.getsize(self.path)
+        if size < self.end:
+            LOG.error("summary: %s shrank (%d -> %d) — cursor restarted", self.path, self.end, size)
+            self.end = 0
+        if size == self.end:
+            return
+        with open(self.path, "rb") as fh:
+            fh.seek(self.end)
+            for raw in fh:
+                if not raw.endswith(b"\n"):
+                    return                      # a row still being written -- not consumed
+                self.end += len(raw)
+                lock_beat()                     # a from-empty build is long; store gates it on elapsed time
+                if not raw.strip():
+                    continue
+                try:
+                    r = json.loads(raw)
+                except ValueError:
+                    _READ_NEW_SKIPPED["lines"] += 1
+                    continue
+                if not isinstance(r, dict):
+                    _READ_NEW_SKIPPED["lines"] += 1
+                    continue
+                yield r
 
 
 def _birth_files() -> list:
@@ -142,7 +147,9 @@ def _fold(st: dict, now: datetime) -> dict:
     """
     born = st.setdefault("born_by_day", {})
     # P7 D2: births per hour, kept for 90 d + 7 d so "was anything due at this checkpoint in this cycle?" can be
-    # answered for the 90d point too; plus the first and newest birth folded (the births fold's own progress).
+    # answered for the 90d point too; plus the first and newest launch STAMPS (`births_first_at`, `births_through`).
+    # ⚠️ `births_through` is the newest launch recorded, NOT the fold's progress (Langston, part 1a Q2): the fold
+    #    reads every complete line of every births file each build, so it is never behind the files.
     born_h = st.setdefault("born_by_hour", {})
     keep_from = (now - obs_fold.BIRTHS_HOURLY_KEEP).strftime("%Y-%m-%dT%H")
     followed = st.setdefault("followed_by_day", {})
@@ -153,7 +160,7 @@ def _fold(st: dict, now: datetime) -> dict:
 
     for name in _birth_files():
         path = os.path.join(BIRTHS_DIR, name)
-        rows, cursors[name] = _read_new(path, cursors.get(name, 0))
+        rows = _read_new(path, cursors.get(name, 0))
         for r in rows:
             day = _day(r.get("created_at")) or _day(r.get("first_seen_at"))
             if not day:
@@ -179,9 +186,10 @@ def _fold(st: dict, now: datetime) -> dict:
             #    that the SUMMARY no longer treats a superseded field as the
             #    measurement. `follow_reason` still carries the arm.
             followed[day] = followed.get(day, 0) + 1
+        cursors[name] = rows.end
 
     tomb = tombstone_path()
-    rows, st["tomb_cursor"] = _read_new(tomb, st.get("tomb_cursor", 0))
+    rows = _read_new(tomb, st.get("tomb_cursor", 0))
     for r in rows:
         age = r.get("age_at_death") or "unknown"
         d_age[age] = d_age.get(age, 0) + 1
@@ -198,6 +206,7 @@ def _fold(st: dict, now: datetime) -> dict:
                 day = None
         if day:
             d_birth[day] = d_birth.get(day, 0) + 1
+    st["tomb_cursor"] = rows.end
     for h in [h for h in born_h if h < keep_from]:
         del born_h[h]
     return st

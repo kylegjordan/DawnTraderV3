@@ -22,6 +22,7 @@ checkpoint, whether anyone was looking.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -109,9 +110,20 @@ def iter_complete(path: str, offset: int):
 
 
 def _empty() -> dict:
-    return {"version": OBS_FOLD_VERSION, "cursors": {}, "by_day": {}, "split": {"exact": 0, "approximated": 0},
+    return {"version": OBS_FOLD_VERSION, "cursors": {}, "heads": {}, "by_day": {}, "split": {"exact": 0, "approximated": 0},
             "last_observed_at": {}, "observed_through": None, "hourly": {}, "hourly_any": {}, "skipped_lines": 0,
-            "rebuilt_at": None}
+            "rebuilt_at": None, "rebuild_cause": None}
+
+
+def _head(path: str) -> str | None:
+    """sha256 of a file's first line -- the identity check beside each cursor. A file truncated and regrown PAST
+    the old cursor has a different first line, which the size check alone cannot see (Langston, part 1a Q1)."""
+    try:
+        with open(path, "rb") as fh:
+            first = fh.readline()
+    except OSError:
+        return None
+    return hashlib.sha256(first).hexdigest() if first.endswith(b"\n") else None
 
 
 def _bump(d: dict, *keys) -> None:
@@ -131,18 +143,32 @@ def fold_observations(st: dict, now: datetime, watch: dict | None = None) -> dic
     if not isinstance(o, dict) or o.get("version") != OBS_FOLD_VERSION:
         o = _empty()
         o["rebuilt_at"] = now.isoformat()
+        o["rebuild_cause"] = {"reason": "no usable fold state (first build, a re-seed of the watch set, or a new "
+                                        "fold version)"}
     files = _obs_files()
-    # A file that shrank is no longer the history we folded: rebuild from byte 0, never double-count.
+    # A file that is no longer the history we folded -- it SHRANK, or its first line changed (truncated and regrown
+    # past the cursor) -- rebuilds from byte 0, never double-counts. Observation files are never tiered
+    # (tier.NEVER_TOUCH), so the rebuild is exact WITH RESPECT TO THE BYTES STILL ON DISK; what the change removed
+    # is gone, and the cause records it so a short count does not read as a quiet period (Langston, part 1a Q1).
     for name in files:
+        path = os.path.join(OBSERVATIONS_DIR, name)
+        cur = o["cursors"].get(name, 0)
+        if not cur:
+            continue
         try:
-            size = os.path.getsize(os.path.join(OBSERVATIONS_DIR, name))
+            size = os.path.getsize(path)
         except OSError:
             continue
-        if size < o["cursors"].get(name, 0):
-            LOG.error("observation file %s shrank (%d -> %d): the observation fold is rebuilt from byte 0",
-                      name, o["cursors"][name], size)
+        head = _head(path)
+        why = ("shrank" if size < cur else
+               "first line changed" if o["heads"].get(name) and head != o["heads"][name] else None)
+        if why:
+            LOG.error("observation file %s %s (cursor %d, size now %d): the observation fold is rebuilt from byte 0",
+                      name, why, cur, size)
             o = _empty()
             o["rebuilt_at"] = now.isoformat()
+            o["rebuild_cause"] = {"reason": why, "file": name, "cursor_before": cur, "size_now": size,
+                                  "bytes_lost_at_least": max(0, cur - size)}
             break
     keep_from = (now - HOURLY_KEEP).strftime("%Y-%m-%dT%H")
     for name in files:
@@ -189,6 +215,8 @@ def fold_observations(st: dict, now: datetime, watch: dict | None = None) -> dic
         except OSError as exc:
             LOG.error("observation file %s could not be read (%s); its cursor stays at %d", name, exc, cur)
         o["cursors"][name] = cur
+        if cur and name not in o["heads"]:
+            o["heads"][name] = _head(path)
     for hours in list(o["hourly"].values()) + [o["hourly_any"]]:
         for h in [h for h in hours if h < keep_from]:
             del hours[h]
@@ -396,15 +424,22 @@ def label_states(obs: dict, born_by_hour: dict, births_first_at: str | None, bir
         out["job"] = {"state": "unknown", "reason": "cadence unreadable"}
         return out
     windows = {L: int((labels_w.get(L) or {}).get("window_s") or K_FLOOR * cadence["cycle_s"]) for L in GRID_LABELS}
-    win_job = max(windows.values())
+    # ⛔ THE JOB IS JUDGED ON ITS OWN CADENCE, NOT ON THE WIDEST CHECKPOINT WINDOW (Langston, part 1a Q3). With `max`,
+    #    the verdict was LESS sensitive than the checkpoints it speaks for: in the first hours of an outage each short
+    #    checkpoint emptied, read `stale` -- N separate faults -- and `job_` arrived only when the widest window
+    #    emptied. "Is the hourly job alive" is a question about the job's rhythm: K_FLOOR cycles.
+    win_job = K_FLOOR * cadence["cycle_s"]
     job_hours = _hours_back(now, win_job)
     first_h = first.replace(minute=0, second=0, microsecond=0) if first is not None else None
     any_rows = sum(hourly_any.get(_hour(h), 0) for h in job_hours)
     covered_any = sum(_covered_any(obs, _hour(h)) for h in job_hours)
     any_due = sum(_due(born_by_hour, h, L) for h in job_hours for L in GRID_LABELS
                   if first_h is not None and h - OFFSET[L] >= first_h)
-    if covered_any > 0 or any_due == 0:
+    if covered_any > 0:
         job_state = "observing"
+    elif any_due == 0:
+        # nothing was due: neither green nor a fault -- its own state (Langston, part 1a Q3; #1132 2026-11-05 item)
+        job_state = "nothing_due"
     else:
         job_state = "shedding" if any_rows > 0 else "not_running"
     out["job"] = {"state": job_state, "window_s": win_job, "follow_up_rows_in_window": any_rows,
@@ -436,8 +471,15 @@ def label_states(obs: dict, born_by_hour: dict, births_first_at: str | None, bir
             continue
         hours = _hours_back(now, window_s)
         if through is None or _hour(hours[-1] - OFFSET[L]) > _hour(through):
+            # ⛔ THE REASON IS THE CONDITION THAT FIRES (Langston, part 1a Q2): the births fold consumes every complete
+            #    line of every births file on each build, so it is never BEHIND the files; `births_through` is the
+            #    newest launch STAMP. What fires here is a silent launch feed -- quiet market or feed outage -- and
+            #    from inside the store the two cannot be told apart. Long checkpoints are unaffected (their birth
+            #    hours sit far below the newest launch); a silent feed darkens the short ones only.
             rec["state"] = "unknown"
-            rec["reason"] = "the births fold has not reached the birth hours this window needs"
+            rec["reason"] = "feed_silent"
+            rec["detail"] = ("no launch has been recorded since %s, so whether anything was due at this age in this "
+                             "window cannot be told (quiet market or feed outage)" % (births_through,))
             out["labels"][L] = rec
             continue
         covered = sum(obs["hourly"].get(L, {}).get(_hour(h), 0) for h in hours)
@@ -446,7 +488,7 @@ def label_states(obs: dict, born_by_hour: dict, births_first_at: str | None, bir
         if covered > 0 or due == 0:
             rec["state"] = "instrumented"
         else:
-            rec["state"] = "stale" if job_state == "observing" else "job_" + job_state
+            rec["state"] = "stale" if job_state in ("observing", "nothing_due") else "job_" + job_state
         # CHANGE-1: the trigger is anchored on the derivation's own input -- a due-but-empty RUN of cycles in
         # which the job DID beat (a job miss is CHANGE-3's verdict, not a label fault)
         run = cur = 0

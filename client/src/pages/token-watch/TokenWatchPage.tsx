@@ -76,6 +76,7 @@ type Summary = {
         state: LabelState;
         last_observed_at?: string | null;
         first_due_at?: string | null;
+        reason?: string;
         k_basis?: { derived: boolean; floor_bound: boolean };
       }
     >;
@@ -97,7 +98,12 @@ type LabelState =
 
 // What a checkpoint's figure means when nobody is looking at it. ⛔ The figure is never shown bare in that case:
 // a recorded death count is only a FLOOR, and an alive count is only a CEILING.
-function stateText(st: { state: LabelState; last_observed_at?: string | null; first_due_at?: string | null }) {
+function stateText(st: {
+  state: LabelState;
+  last_observed_at?: string | null;
+  first_due_at?: string | null;
+  reason?: string;
+}) {
   const since = st.last_observed_at ? new Date(st.last_observed_at).toLocaleDateString() : null;
   switch (st.state) {
     case 'stale':
@@ -111,7 +117,10 @@ function stateText(st: { state: LabelState; last_observed_at?: string | null; fi
     case 'not_yet_due':
       return st.first_due_at ? `not due until ${new Date(st.first_due_at).toLocaleDateString()}` : 'not yet due';
     case 'unknown':
-      return 'cannot tell whether it is being checked';
+      // A silent launch feed darkens only the short ages: the long ones look back past it.
+      return st.reason === 'feed_silent'
+        ? 'no new launches recorded lately (quiet market or feed outage) — cannot tell'
+        : 'cannot tell whether it is being checked';
     default:
       return null;
   }
@@ -176,7 +185,10 @@ function AgeTable({
   denominator: number;
   total: number;
   totalLabel: string;
-  states?: Record<string, { state: LabelState; last_observed_at?: string | null; first_due_at?: string | null }>;
+  states?: Record<
+    string,
+    { state: LabelState; last_observed_at?: string | null; first_due_at?: string | null; reason?: string }
+  >;
   bound: 'at most' | 'at least';
   unchecked?: Record<string, { uncovered_days: number }>;
 }) {
