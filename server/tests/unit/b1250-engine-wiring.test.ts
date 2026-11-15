@@ -134,11 +134,12 @@ describe('#1250 P0 — the stamp survives every hop, strategy → eval cycle →
   });
   it('Step 9 §13 D3: the active re-base grades on the BIRTH grid from gridAtBirth, and passes the strategy for the cap fallback', () => {
     expect(E).toContain("const _rbPlanTick = _gab?.resolved === true && typeof _gab.tick === 'number' && Number.isFinite(_gab.tick) && _gab.tick > 0");
-    expect(E).toContain('fill: actualEntryPrice, spec: _rbSpec, tick: _rbTick, planTick: _rbPlanTick, strategyId: signal.strategy });');
+    expect(E).toContain('fill: actualEntryPrice, spec: _rbSpec, tick: _rbTick, planTick: _rbPlanTick,');
+    expect(E).toContain('planStorageQuantum: 1e-8 });'); // Step-4 FINDING-1 (a): the RTB queue's decimal(20,8) columns
     expect(E).toContain('levelSpecMalformed: _rb.ok ? _rb.malformed : null,'); // §13.1 C-5
     expect(E).toContain('planTick: _rbPlanTick, fillTick: _rbTick,');
     const vts = src('server/asset_classes/xstock_spot/eval-cycle.ts');
-    expect(vts).toContain('tick: null, planTick: null, strategyId: strategyKey });');
+    expect(vts).toContain('tick: null, planTick: null, planStorageQuantum: null });');
     expect(vts).toContain('levelSpecMalformed: _xRb.malformed,');
   });
 });

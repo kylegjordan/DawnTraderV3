@@ -1159,7 +1159,7 @@ export async function evaluateXstockPairForVTS(
           const _xRbSpec = (strategySignal.metadata as { levelSpec?: LevelSpec } | undefined)?.levelSpec;
           // Step 9 §13 D3: this lane's plan is UNROUNDED (`roundTripleToGrid` has one caller, the orchestrator) ⇒ planTick null,
           // so a rebuilt leg must equal the arriving plan within 1e-9.
-          const _xRb = rebaseLevels({ planEntry: entryPrice, planStop: stopLoss, planTarget: takeProfit, fill: _xBookedEntry, spec: _xRbSpec, tick: null, planTick: null, strategyId: strategyKey });
+          const _xRb = rebaseLevels({ planEntry: entryPrice, planStop: stopLoss, planTarget: takeProfit, fill: _xBookedEntry, spec: _xRbSpec, tick: null, planTick: null, planStorageQuantum: null });
           if (!_xRb.ok) {
             _xRefuseBooking(`level_rebase_${_xRb.reason}`, `taker ask ${_xBookedEntry} vs plan ${entryPrice}/${stopLoss}/${takeProfit}`);
             continue;

@@ -6556,7 +6556,10 @@ export class ActiveExecutionEngine {
       const _rbPlanTick = _gab?.resolved === true && typeof _gab.tick === 'number' && Number.isFinite(_gab.tick) && _gab.tick > 0
         ? _gab.tick : null;
       const _rb = rebaseLevels({ planEntry: signal.entryPrice, planStop: signal.stopPrice, planTarget: signal.targetPrice,
-        fill: actualEntryPrice, spec: _rbSpec, tick: _rbTick, planTick: _rbPlanTick, strategyId: signal.strategy });
+        fill: actualEntryPrice, spec: _rbSpec, tick: _rbTick, planTick: _rbPlanTick,
+        // Step-4 FINDING-1 (a): the plan reaches here through the RTB queue's decimal(20,8) entry/stop/target columns
+        // (`shared/schema.ts`, `rtbSignals`), so an unrounded (passthrough) plan arrives quantised to 1e-8.
+        planStorageQuantum: 1e-8 });
       if (_rb.ok) {
         _carriedStop = _rb.stopPrice;
         _carriedTarget = _rb.targetPrice;

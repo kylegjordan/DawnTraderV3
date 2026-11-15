@@ -161,8 +161,16 @@ export function rebaseLevels(i: {
    * was rounded with, never on whatever the map says at the fill (Langston finding 4).
    */
   planTick: number | null;
-  /** §13.1 C-1: for `resolveTargetIsCap`'s fallback, exactly as at birth. */
-  strategyId: string | null | undefined;
+  /**
+   * Step-4 FINDING-1 (Langston 2026-11-15, disposition (a)): the decimal quantum the plan was STORED at before it arrived,
+   * or null when it arrives in memory (VTS, crypto birth). The active arm's plan comes back through the RTB queue's
+   * `decimal(20,8)` columns, so an UNROUNDED plan (the xStock passthrough, `planTick` null) arrives quantised to 1e-8 — up to
+   * 5e-9 off the built value, which is MORE than the 1e-9-relative slack for any price under $5. With a quantum, a rebuilt
+   * leg on the planTick-null path is graded within HALF that quantum (the storage error's own bound, plus the slack), never a
+   * blanket floor: the scale belongs to the caller whose plan came out of a column. Grid-rounded plans are ≤ 8 dp and
+   * survive the column losslessly, so on the planTick path this input is not read.
+   */
+  planStorageQuantum: number | null;
 }): RebaseOutcome {
   const { planEntry, planStop, planTarget, fill, tick, planTick } = i;
   const entryBasis = i.entryBasis ?? fill;
@@ -170,7 +178,10 @@ export function rebaseLevels(i: {
   if (!(planStop < planEntry && planTarget > planEntry)) return { ok: false, reason: 'plan_not_long' };
 
   const spec = i.spec ?? {};
-  const isCap = resolveTargetIsCap(i.spec, i.strategyId); // null stays null: "present, not a cap" — exactly as at birth
+  // §13.1 C-1: the shared derivation. Step-4 NOTE-2 (Langston): its strategy-name fallback can never matter HERE — with no
+  // spec every leg is anchor-only and the cap bit is read by neither the check nor the output rounding — so no name is passed
+  // rather than carrying an argument nothing exercises. A present spec (including `null`, "present, not a cap") decides alone.
+  const isCap = resolveTargetIsCap(i.spec, null);
   const stopSpec = spec.stop !== undefined && isWellFormedLegSpec(spec.stop) ? spec.stop : undefined;
   const targetSpec = spec.target !== undefined && isWellFormedLegSpec(spec.target) ? spec.target : undefined;
   const malformed: Array<'stop' | 'target'> = [];
@@ -186,10 +197,13 @@ export function rebaseLevels(i: {
   const reproduces = (s: LegSpec, arriving: number, role: 'stop' | 'target'): boolean => {
     const built = atPlan(s, arriving);
     if (!Number.isFinite(built)) return false;
-    const expect = isReconstruction(s) && planTick !== null && finitePos(planTick)
-      ? roundPriceForRole(built, planTick, role, true, role === 'target' && isCap)
-      : built;
-    return Math.abs(expect - arriving) <= eps;
+    if (!isReconstruction(s)) return Math.abs(built - arriving) <= eps; // C-2: a value defined as itself
+    if (planTick !== null && finitePos(planTick)) {
+      return Math.abs(roundPriceForRole(built, planTick, role, true, role === 'target' && isCap) - arriving) <= eps;
+    }
+    // Unrounded plan: exact, unless it came out of a column — then within half the column's quantum (FINDING-1 (a)).
+    const storageSlack = i.planStorageQuantum !== null && finitePos(i.planStorageQuantum) ? i.planStorageQuantum / 2 : 0;
+    return Math.abs(built - arriving) <= eps + storageSlack;
   };
   const stopUsable = stopSpec !== undefined && !isAnchorOnly(stopSpec) && reproduces(stopSpec, planStop, 'stop');
   if (stopSpec !== undefined && !isAnchorOnly(stopSpec) && !stopUsable) inconsistent.push('stop');

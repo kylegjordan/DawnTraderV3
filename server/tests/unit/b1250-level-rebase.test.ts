@@ -6,7 +6,7 @@ import { describe, it, expect } from 'vitest';
 import { rebaseLevels, isWellFormedLegSpec, resolveTargetIsCap, type LevelSpec } from '../../core/trading/level-rebase.js';
 import { roundPriceForRole } from '../../core/calculations/venue-price-grid.js';
 
-const base = { planEntry: 100, planStop: 98, planTarget: 104, tick: null as number | null, planTick: null as number | null, strategyId: 'test' };
+const base = { planEntry: 100, planStop: 98, planTarget: 104, tick: null as number | null, planTick: null as number | null, planStorageQuantum: null as number | null };
 // Step 9 §13 D1: a single-form r_multiple carries the operands the strategy multiplied (here the plan's own 100 / 98).
 const R2 = { form: 'r_multiple' as const, r: 2, builtEntry: 100, builtStop: 98 };
 
@@ -113,7 +113,7 @@ describe('#1250 Step 9 §13 D3 — self-consistency is EXACT on the birth grid (
     expect(ps).toBeCloseTo(5.9793, 12);
     expect(pt).toBeCloseTo(6.4382, 12);
     expect(Math.abs((pe + (pe - ps) * r) - pt)).toBeGreaterThan(0.00015); // the old reconstruction misses by > 1 tick
-    const res = rebaseLevels({ planEntry: pe, planStop: ps, planTarget: pt, fill: 6.12, tick: 0.0001, planTick: 0.0001, strategyId: 'sma_trend_ride',
+    const res = rebaseLevels({ planEntry: pe, planStop: ps, planTarget: pt, fill: 6.12, tick: 0.0001, planTick: 0.0001, planStorageQuantum: 1e-8,
       spec: { stop: { form: 'anchor' }, target: { form: 'r_multiple', r, builtEntry, builtStop } } });
     if (!res.ok) throw new Error(res.reason);
     expect(res.inconsistent).toEqual([]);
@@ -203,11 +203,44 @@ describe('#1250 Step 9 §13.1 C-5 — a malformed leg is VISIBLE, not a silent a
   });
 });
 
+describe('#1250 Step-4 FINDING-1 (a) — a plan read back from a decimal(20,8) column, unrounded at birth', () => {
+  // A sub-$5 xStock passthrough plan (planTick null): built unrounded, stored at 8 dp by the RTB queue, parsed back.
+  const builtEntry = 2.13377777, builtStop = 2.0912345678, r = 2;
+  const q8 = (v: number) => Number(v.toFixed(8));
+  const builtTarget = builtEntry + (builtEntry - builtStop) * r;
+  const arriving = { planEntry: q8(builtEntry), planStop: q8(builtStop), planTarget: q8(builtTarget) };
+  const spec: LevelSpec = { stop: { form: 'anchor' }, target: { form: 'r_multiple', r, builtEntry, builtStop } };
+  it('POSITIVE CONTROL: without the storage quantum the 8-dp residual alone fails the 1e-9-relative slack (the false FAIL)', () => {
+    expect(Math.abs(builtTarget - arriving.planTarget)).toBeGreaterThan(2.2 * 1e-9);
+    const r0 = rebaseLevels({ ...arriving, fill: 2.12, tick: null, planTick: null, planStorageQuantum: null, spec });
+    if (!r0.ok) throw new Error(r0.reason);
+    expect(r0.inconsistent).toEqual(['target']);
+  });
+  it('with the active arm 1e-8 storage quantum it is consistent and re-based', () => {
+    const r1 = rebaseLevels({ ...arriving, fill: 2.12, tick: null, planTick: null, planStorageQuantum: 1e-8, spec });
+    if (!r1.ok) throw new Error(r1.reason);
+    expect(r1.inconsistent).toEqual([]);
+    expect(r1.targetBasis).toBe('fill_rebased');
+  });
+  it('the quantum does not blunt the check: a plan two storage units (2e-8) off its stamp fails', () => {
+    // Detection floor on this path = half a unit of storage error + half a unit of band + the 1e-9 slack ≈ 1e-8 — one unit
+    // can hide inside it; two cannot.
+    const r2 = rebaseLevels({ ...arriving, planTarget: arriving.planTarget + 2e-8, fill: 2.12, tick: null, planTick: null, planStorageQuantum: 1e-8, spec });
+    if (!r2.ok) throw new Error(r2.reason);
+    expect(r2.inconsistent).toEqual(['target']);
+  });
+  it('on the planTick path the quantum is not read (a grid price survives the column losslessly)', () => {
+    const a = rebaseLevels({ ...base, planTarget: 104.2, planTick: 0.01, fill: 99, planStorageQuantum: 1e-8, spec: { target: R2 } });
+    const b = rebaseLevels({ ...base, planTarget: 104.2, planTick: 0.01, fill: 99, planStorageQuantum: null, spec: { target: R2 } });
+    expect(a).toEqual(b);
+  });
+});
+
 describe('#1250 Step 9 §13.1 C-3 — the VTS lane and the stamp through the database', () => {
   it('VTS: an unrounded plan passes exact at planTick = null', () => {
     const be = 61.44638499999999, bs = 61.17692071428571;
     const pt = be + (be - bs) * 2;
-    const r = rebaseLevels({ planEntry: be, planStop: bs, planTarget: pt, fill: 61.39, tick: null, planTick: null, strategyId: 'sma_trend_ride',
+    const r = rebaseLevels({ planEntry: be, planStop: bs, planTarget: pt, fill: 61.39, tick: null, planTick: null, planStorageQuantum: null,
       spec: { stop: { form: 'anchor' }, target: { form: 'r_multiple', r: 2, builtEntry: be, builtStop: bs } } });
     if (!r.ok) throw new Error(r.reason);
     expect(r.inconsistent).toEqual([]);
@@ -224,18 +257,18 @@ describe('#1250 Step 9 §13.1 C-3 — the VTS lane and the stamp through the dat
 
 describe('#1250 C-2 + F-G-1 — rounding by role, the cap toward entry', () => {
   it('a re-based stop rounds AWAY from entry and a floor target AWAY', () => {
-    const r = rebaseLevels({ planEntry: 100, planStop: 98, planTarget: 104, tick: 0.05, fill: 99.03, spec: { stop: { form: 'distance' }, target: { form: 'distance' } } });
+    const r = rebaseLevels({ planEntry: 100, planStop: 98, planTarget: 104, tick: 0.05, fill: 99.03, planTick: null, planStorageQuantum: null, spec: { stop: { form: 'distance' }, target: { form: 'distance' } } });
     if (!r.ok) throw new Error(r.reason);
     expect(r.stopPrice).toBeCloseTo(97.0, 9);   // 97.03 → down
     expect(r.targetPrice).toBeCloseTo(103.05, 9); // 103.03 → up
   });
   it('a CAP target rounds TOWARD entry', () => {
-    const r = rebaseLevels({ planEntry: 100, planStop: 98, planTarget: 104, tick: 0.05, fill: 99.03, spec: { target: { form: 'distance' }, targetIsCap: true } });
+    const r = rebaseLevels({ planEntry: 100, planStop: 98, planTarget: 104, tick: 0.05, fill: 99.03, planTick: null, planStorageQuantum: null, spec: { target: { form: 'distance' }, targetIsCap: true } });
     if (!r.ok) throw new Error(r.reason);
     expect(r.targetPrice).toBeCloseTo(103.0, 9); // 103.03 → down
   });
   it('an anchor leg is never re-rounded (it arrived on the grid already)', () => {
-    const r = rebaseLevels({ planEntry: 100, planStop: 98.02, planTarget: 104, tick: 0.05, fill: 99, spec: { stop: { form: 'anchor' } } });
+    const r = rebaseLevels({ planEntry: 100, planStop: 98.02, planTarget: 104, tick: 0.05, fill: 99, planTick: null, planStorageQuantum: null, spec: { stop: { form: 'anchor' } } });
     if (!r.ok) throw new Error(r.reason);
     expect(r.stopPrice).toBe(98.02);
   });
@@ -247,7 +280,7 @@ describe('#1250 — refusals', () => {
   });
   it('invalid inputs and a non-long plan are refused', () => {
     expect(rebaseLevels({ ...base, fill: NaN, spec: {} })).toEqual({ ok: false, reason: 'invalid_inputs' });
-    expect(rebaseLevels({ planEntry: 100, planStop: 101, planTarget: 104, tick: null, planTick: null, strategyId: 'test', fill: 99, spec: {} })).toEqual({ ok: false, reason: 'plan_not_long' });
+    expect(rebaseLevels({ planEntry: 100, planStop: 101, planTarget: 104, tick: null, planTick: null, planStorageQuantum: null, fill: 99, spec: {} })).toEqual({ ok: false, reason: 'plan_not_long' });
   });
   it('a malformed stamp is ignored (anchor), never trusted', () => {
     expect(isWellFormedLegSpec({ form: 'r_multiple' })).toBe(false);
@@ -259,7 +292,7 @@ describe('#1250 — refusals', () => {
 
 describe('8c amendment 4 item 3 — entryBasis beside the level basis (one transform, two moments)', () => {
   // birth: plan built on the mid 100; bid 99.9, ask 100.1
-  const birth = { planEntry: 100, planStop: 98, planTarget: 104, tick: null as number | null, planTick: null as number | null, strategyId: null, fill: 99.9, entryBasis: 100.1 };
+  const birth = { planEntry: 100, planStop: 98, planTarget: 104, tick: null as number | null, planTick: null as number | null, planStorageQuantum: null as number | null, fill: 99.9, entryBasis: 100.1 };
   it('an r_multiple target is a ratio over OUR geometry: R holds exactly against the ask (prediction (b))', () => {
     const r = rebaseLevels({ ...birth, spec: { stop: { form: 'anchor' }, target: R2 } });
     if (!r.ok) throw new Error(r.reason);
