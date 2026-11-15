@@ -9,6 +9,7 @@ T5 = "tests/test_p5_error_requeue.py"
 T6 = "tests/test_p6_fence_and_writer.py"
 TC = "tests/test_collector.py"
 T9 = "tests/test_p9_journals.py"
+T11 = "tests/test_p11_cold_census.py"
 MUTANTS = [
     ("P5 the failed entry is dropped again (no requeue)", T5,
      [("follow_up.py", "                    _append_next_bucket(dict(entry, attempts=attempts), now)" + NL,
@@ -58,7 +59,31 @@ MUTANTS = [
     ("P9 the cold copy is not verified", T9,
      [("tier.py", "        if n_cold != size or h_cold.digest() != h_src.digest():", "        if False:")]),
     ("P9 tier.run skips the journals", T9,
-     [("tier.py", "        out.update(tier_closed_journals(now))" + NL, "")]),
+     [("tier.py", "        j = tier_closed_journals(now)", "        j = {\"journals_moved\": [], \"journals_refused\": [], \"journals_failed\": [], \"journals_freed_bytes\": 0}")]),
+    ("P9 a failed journal move is not counted into refused", T9,
+     [("tier.py", "        out[\"refused\"] = out.get(\"refused\", 0) + len(j[\"journals_failed\"])" + NL, "")]),
+    ("P9 a short journal never fails", T9,
+     [("tier.py", "            if age > JOURNAL_SHORT_STALE_AFTER:", "            if False:")]),
+    ("P9 an existing cold file is not failed", T9,
+     [("tier.py", "            refused.append(key)" + NL + "            failed.append(key)" + NL + "            continue" + NL + "        h_src",
+       "            refused.append(key)" + NL + "            continue" + NL + "        h_src")]),
+    ("P9 a short-since record is never forgotten", T9,
+     [("tier.py", "        if key not in refused:" + NL + "            short_since.pop(key)", "        if False:" + NL + "            short_since.pop(key)")]),
+    ("P11 pagination stops after the first page", T11,
+     [("tools/census_cold_versions.py", "        if not start_name:" + NL + "            return out", "        if True:" + NL + "            return out")]),
+    ("P11 orphans are not looked for", T11,
+     [("tools/census_cold_versions.py", "for v in cold if v.get(\"action\") == \"upload\" and v.get(\"fileId\") not in seen_ids]",
+       "for v in cold if False]")]),
+    ("P11 hide markers are not listed", T11,
+     [("tools/census_cold_versions.py", "             for v in cold if v.get(\"action\") == \"hide\"]", "             for v in cold if False]")]),
+    ("P11 manifest/ and proof/ count as cold (orphans)", T11,
+     [("tools/census_cold_versions.py", "    cold = [v for v in versions if str(v.get(\"fileName\", \"\")).startswith(co.COLD_PREFIX)]",
+       "    cold = [v for v in versions if str(v.get(\"fileName\", \"\")).startswith(co.KEY_PREFIX)]")]),
+    ("P11 size and sha1 are not compared", T11,
+     [("tools/census_cold_versions.py", "        if v.get(\"fileName\") != row.get(\"b2_name\") or int(v.get(\"contentLength\", -1)) != row.get(\"bytes\") or not sha_ok:",
+       "        if v.get(\"fileName\") != row.get(\"b2_name\"):")]),
+    ("P11 an unreadable manifest line is ignored", T11,
+     [("tools/census_cold_versions.py", "    if bad:" + NL + "        print(\"REFUSED: the manifest has", "    if False:" + NL + "        print(\"REFUSED: the manifest has")]),
 ]
 files = sorted({f for _n, _t, edits in MUTANTS for f, _a, _b in edits})
 orig = {f: open(f, encoding="utf-8").read() for f in files}

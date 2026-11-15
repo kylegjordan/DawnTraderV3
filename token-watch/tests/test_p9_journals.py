@@ -184,6 +184,74 @@ store.save_state("journal_cursors", {"2026-09": s9})
 r = tier.run(NOW)
 check("T4 tier.run moved the folded closed journal", r.get("journals_moved") == ["2026-09"], r)
 
+import subprocess  # noqa: E402
+from datetime import timedelta  # noqa: E402
+
+
+def tier_main_rc():
+    """tier.py's __main__ as the timer runs it (no lock held), against this test's store."""
+    r = subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                                      "tier.py")], capture_output=True, text=True,
+                       env=dict(os.environ, TOKEN_WATCH_ROOT=ROOT), timeout=120)
+    return r.returncode, r.stderr
+
+
+print(NL + "=== R1. A FAILED MOVE REACHES THE CARRIER: an existing cold file, or a copy that does not read back, exits 1"
+      " (Langston, P9 Step 4 BLOCKER)")
+reset()
+s9 = write_journal("2026-09", [birth_row("2026-09-10")] * 3)
+store.save_state("journal_cursors", {"2026-09": s9})
+os.makedirs(COLD_DIR, exist_ok=True)
+with gzip.open(cold("2026-09"), "wb") as fh:
+    fh.write(b"an earlier copy")
+rc, err = tier_main_rc()
+check("R1 an existing cold file -> tier exits 1 and names it", rc == 1 and "already exists" in err, (rc, err[-300:]))
+reset()
+s9 = write_journal("2026-09", [birth_row("2026-09-10")] * 3)
+store.save_state("journal_cursors", {"2026-09": s9})
+r = tier.tier_closed_journals(NOW)
+check("R1 POSITIVE CONTROL: a clean move is not failed", r["journals_failed"] == [] and r["journals_moved"] == ["2026-09"], r)
+reset()
+s9 = write_journal("2026-09", [birth_row("2026-09-10")] * 20)
+store.save_state("journal_cursors", {"2026-09": s9})
+tier.gzip.open = short_gzip_open
+try:
+    r = tier.run(NOW)
+finally:
+    tier.gzip.open = _real_gzip_open
+check("R1 a copy that does not read back -> counted in run's refused (what __main__ exits 1 on)",
+      r.get("journals_failed") == ["2026-09"] and r.get("refused", 0) >= 1, r)
+
+print(NL + "=== R2. A SHORT JOURNAL WAITS QUIETLY, THEN FAILS AFTER JOURNAL_SHORT_STALE_AFTER; a torn last line is the case")
+reset()
+write_journal("2026-09", [birth_row("2026-09-10")] * 2)
+with open(jpath("2026-09"), "a", encoding="utf-8", newline="") as fh:
+    fh.write('{"kind": "birth", "n": 1, "day": "2026-09-30"')        # a torn last line: no newline, never completed
+budget._drain_closed_months(NOW)
+cur = store.load_state("journal_cursors", {}).get("2026-09")
+size = os.path.getsize(jpath("2026-09"))
+check("R2 the drain stops short of a torn last line (the waiting state is real)", cur is not None and cur < size,
+      (cur, size))
+rc1, err1 = tier_main_rc()
+check("R2 first seen short: quiet (exit 0), refused, not failed", rc1 == 0
+      and "short since" in err1, (rc1, err1[-300:]))
+store.save_state(tier.JOURNAL_SHORT_STATE, {"2026-09": (datetime.now(UTC) - timedelta(days=4)).isoformat()})
+rc2, err2 = tier_main_rc()
+check("R2 still short 4 days later: exit 1, named as a torn line or a stopped drain", rc2 == 1
+      and "torn last line" in err2, (rc2, err2[-300:]))
+reset()
+s9 = write_journal("2026-09", [birth_row("2026-09-10")] * 2)
+store.save_state("journal_cursors", {"2026-09": s9})
+store.save_state(tier.JOURNAL_SHORT_STATE, {"2026-09": (NOW - timedelta(days=1)).isoformat()})
+tier.tier_closed_journals(NOW)
+check("R2 once the journal is folded and moved, its short-since record is forgotten",
+      store.load_state(tier.JOURNAL_SHORT_STATE, {}) == {}, store.load_state(tier.JOURNAL_SHORT_STATE, {}))
+
+print(NL + "=== R3. THE WRITER AND THE FINDER SHARE ONE NAME; the dead _previous_month is gone")
+check("R3 journal_path is built from store's constants", os.path.basename(budget.journal_path(NOW)) == "%s%s%s" % (
+    store.JOURNAL_PREFIX, "2026-11", store.JOURNAL_SUFFIX), budget.journal_path(NOW))
+check("R3 budget._previous_month no longer exists", not hasattr(budget, "_previous_month"))
+
 print(NL + "=== D1. THE ONE-TIME TOOL: dry run writes nothing; --apply drains under the lock")
 reset()
 write_journal("2026-10", [birth_row("2026-10-10")] * 4)

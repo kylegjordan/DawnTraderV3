@@ -335,11 +335,22 @@ def tier_closed_journals(now: datetime | None = None) -> dict:
     ⛔ A JOURNAL SHORT OF ITS SIZE IS REFUSED AND LOGGED: unfolded spend rows would leave the box unread
        (the drain reads the hot file), so it waits for `budget._drain_closed_months`.
     ⛔ AN EXISTING COLD FILE IS NEVER OVERWRITTEN -- it may be the only copy of a month already uploaded.
+    ⛔ EVERY REFUSAL HAS A CARRIER (Langston, P9 Step 4 BLOCKER): an existing cold file or a copy that did not
+       read back identical is FAILED (nothing clears either without a person) and `run` counts it into
+       `refused`, which `__main__` exits 1 on (OnFailure pages). A short journal is a WAITING state: quiet while
+       younger than JOURNAL_SHORT_STALE_AFTER since first seen short, then FAILED too -- a torn last line leaves
+       `_drain_month` stopped short for good, and a closed month gets no completing write.
+    ⚠️ THE SAFETY AGAINST A CONCURRENT APPEND RESTS ON THE TIMER, NOT THE LOCK (Langston): the receiver appends
+       lock-free to the CURRENT month's journal only, so a closed month is written only by a receiver whose clock
+       sampled the old month at the boundary; tier fires at 04:30 UTC, far from it. An append during compression
+       makes the read-back differ (refused, hot kept); the residual is an append between `os.replace` and the
+       unlink. A cadence change that moves tier to a month boundary reopens this.
     """
     import hashlib
     now = now or datetime.now(UTC)
     cursors = load_state("journal_cursors", {})
-    moved, refused, freed = [], [], 0
+    short_since = load_state(JOURNAL_SHORT_STATE, {})
+    moved, refused, failed, freed = [], [], [], 0
     os.makedirs(COLD_DIR, exist_ok=True)
     for key in closed_journal_months(now):
         lock_beat()
@@ -347,13 +358,23 @@ def tier_closed_journals(now: datetime | None = None) -> dict:
         src = os.path.join(STATE_DIR, name)
         size = os.path.getsize(src)
         if cursors.get(key, 0) < size:
-            LOG.warning("closed journal %s NOT tiered: folded to %d of %d bytes", name, cursors.get(key, 0), size)
+            first = short_since.setdefault(key, now.isoformat())
+            age = now - datetime.fromisoformat(first)
+            if age > JOURNAL_SHORT_STALE_AFTER:
+                LOG.error("closed journal %s NOT tiered: still folded to only %d of %d bytes after %s (first seen "
+                          "short %s) - a torn last line, or the drain is not running", name, cursors.get(key, 0),
+                          size, age, first)
+                failed.append(key)
+            else:
+                LOG.warning("closed journal %s NOT tiered yet: folded to %d of %d bytes (short since %s)", name,
+                            cursors.get(key, 0), size, first)
             refused.append(key)
             continue
         dst = os.path.join(COLD_DIR, name + ".gz")
         if os.path.exists(dst):
             LOG.error("closed journal %s NOT tiered: %s already exists, never overwritten", name, dst)
             refused.append(key)
+            failed.append(key)
             continue
         h_src = hashlib.sha256()
         with open(src, "rb") as fin, gzip.open(dst + ".tmp", "wb") as fout:
@@ -369,12 +390,24 @@ def tier_closed_journals(now: datetime | None = None) -> dict:
             LOG.error("closed journal %s: cold copy does not match (%d of %d bytes) - HOT COPY KEPT", name, n_cold, size)
             os.unlink(dst + ".tmp")
             refused.append(key)
+            failed.append(key)
             continue
         os.replace(dst + ".tmp", dst)
         os.unlink(src)
         moved.append(key)
         freed += size
-    return {"journals_moved": moved, "journals_refused": refused, "journals_freed_bytes": freed}
+    for key in list(short_since):                 # a month no longer on disk short (moved, or gone) is forgotten
+        if key not in refused:
+            short_since.pop(key)
+    save_state(JOURNAL_SHORT_STATE, short_since)
+    return {"journals_moved": moved, "journals_refused": refused, "journals_failed": failed,
+            "journals_freed_bytes": freed}
+
+
+# A closed journal folded short of its size is a WAITING state for this long after it is first seen short, then a
+# failure (Langston, P9 Step 4): the follow-up drains every hour, so a healthy month completes within hours of its end.
+JOURNAL_SHORT_STALE_AFTER = timedelta(days=3)
+JOURNAL_SHORT_STATE = "journal_short_since"
 
 
 # A skipped tier run pages (exit 75) only when tier has not COMPLETED for longer than this (Langston, P6 Step 4
@@ -406,7 +439,10 @@ def run(now: datetime | None = None) -> dict:
             LOG.warning("another periodic job holds the lock — tiering SKIPPED (held by: %s)", last_refusal())
             return {"skipped": True}
         out = tier_payloads(now)
-        out.update(tier_closed_journals(now))
+        j = tier_closed_journals(now)
+        out.update(j)
+        # a FAILED journal move reaches the same carrier as a refused payload: `refused` is what __main__ exits 1 on
+        out["refused"] = out.get("refused", 0) + len(j["journals_failed"])
         out.update(prune_due_buckets(now))
         save_state(TIER_STATE, {"completed_at": now.isoformat()})
     LOG.info("tier %s", out)

@@ -164,7 +164,9 @@ def journal_path(now: datetime | None = None) -> str:
       bounds the file's growth, which the single-file version never did.
     """
     now = now or datetime.now(UTC)
-    return f"{STATE_DIR}/spend-journal-{_month_key(now)}.jsonl"
+    # the writer and the finder (store.closed_journal_months) share ONE name: if they ever diverged the finder
+    # would return [] and nothing would be drained or tiered -- a clean false zero (Langston, P9 Step 4)
+    return f"{STATE_DIR}/{JOURNAL_PREFIX}{_month_key(now)}{JOURNAL_SUFFIX}"
 
 
 def record_pending(kind: str, n: int, now: datetime | None = None, **extra) -> None:
@@ -186,11 +188,6 @@ def record_pending(kind: str, n: int, now: datetime | None = None, **extra) -> N
         fh.write(json.dumps(rec, sort_keys=True) + "\n")
         fh.flush()
         os.fsync(fh.fileno())
-
-
-def _previous_month(now: datetime) -> datetime:
-    first = now.astimezone(UTC).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    return first - timedelta(days=1)
 
 
 def _drain_closed_months(now: datetime) -> dict:
