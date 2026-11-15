@@ -9,12 +9,22 @@
  *   - a leaf wholly inside the window counts by its planner estimate (`pg_class.reltuples`);
  *   - a DAILY leaf the window cuts (the boundary) or still being written (the open leaf) is counted EXACTLY — one day,
  *     measured 0.2-4.6 s;
- *   - a NON-daily leaf the window cuts is EXCLUDED and named: the figure becomes a lower bound. NO PRORATION
- *     (Langston D): spreading a month's estimate by time fraction assumes a uniform write rate nobody measured;
+ *   - a NON-daily leaf the window cuts has its in-window slice counted EXACTLY under the same short bound
+ *     (Langston's Step-4 fold, 2026-11-15); if that count does not complete, the leaf is EXCLUDED and named and the
+ *     figure becomes a lower bound. NO PRORATION (Langston D): spreading a month's estimate by time fraction assumes a
+ *     uniform write rate nobody measured;
  *   - a leaf holding data that has never been analysed (`reltuples < 0`) is never coerced to 0 and never summed as -1
  *     (Langston E1): it is excluded and named, and the figure becomes a lower bound;
  *   - a window that falls wholly inside excluded leaves is UNAVAILABLE, not 0.
  * A leaf with no heap pages holds no rows, so an unanalysed EMPTY leaf (the pre-created future days) contributes 0.
+ *
+ * THE PREMISE THE ESTIMATES REST ON (Langston, Step-4 record): rows leave these two tables only when a whole partition
+ * is dropped (`DROP TABLE`, b75-retention-sweep.ts `dropPartition`), never by a row DELETE or UPDATE — no literal one
+ * exists in server/ or scripts/ (searched 2026-11-15; a statement built with a table-name variable is not ruled out by
+ * that search). So a leaf only grows after its last analyse, and `reltuples` reads LOW, never high: on 2026-11-15 all
+ * 15 closed signal_eval_archive leaves had been analysed before their day ended, about 3.8% low in total. "≈" is
+ * therefore a slight under-count. If row deletes or updates are ever added to these tables, this premise breaks and the
+ * labels must be revisited.
  *
  * The planner is pure; the caller runs the exact counts it asks for and passes the results back (`assembleEstimate`).
  */
@@ -51,6 +61,8 @@ export interface EstimatePlan {
   totalNotes: string[];
   /** window-intersecting leaves counted by their estimate (exact asks are counted when their results arrive) */
   windowEstimateLeaves: number;
+  /** leaves counted into the total by their estimate (the open daily leaf's whole count arrives as an ask) */
+  totalEstimateLeaves: number;
 }
 
 const DAY_MS = 86_400_000;
@@ -75,7 +87,9 @@ export function planEstimate(leaves: LeafInfo[], windowStartMs: number, nowMs: n
   const windowNotes: string[] = [];
   const totalNotes: string[] = [];
   let windowEstimateLeaves = 0;
+  let totalEstimateLeaves = 0;
   let windowAsks = 0;
+  let dataBeforeWindow = false;
   const sinceIso = new Date(windowStartMs).toISOString();
 
   for (const l of leaves) {
@@ -91,6 +105,7 @@ export function planEstimate(leaves: LeafInfo[], windowStartMs: number, nowMs: n
     } else if (analysed) {
       totalEstimateSum += l.reltuples;
       totalKind = worse(totalKind, 'estimate');
+      totalEstimateLeaves += 1;
       if (open) totalNotes.push(`${l.qname} is still being written; its estimate is as of its last analyse (${l.analyzedAt ?? 'unknown'})`);
     } else {
       totalKind = worse(totalKind, 'lower_bound');
@@ -103,6 +118,7 @@ export function planEstimate(leaves: LeafInfo[], windowStartMs: number, nowMs: n
       windowNotes.push(`excludes ${l.qname} (no date range)`);
       continue;
     }
+    if (l.fromMs! < windowStartMs) dataBeforeWindow = true; // some of this leaf's data predates the window
     if (l.toMs! <= windowStartMs) continue; // wholly before the window
     const boundary = l.fromMs! < windowStartMs;
     if (daily && (boundary || open)) {
@@ -112,8 +128,10 @@ export function planEstimate(leaves: LeafInfo[], windowStartMs: number, nowMs: n
       continue;
     }
     if (boundary) {
-      windowKind = worse(windowKind, 'lower_bound');
-      windowNotes.push(`excludes part of ${l.qname} (the window starts inside it)`);
+      // a NON-daily boundary leaf: its in-window slice counted exactly under the short bound (Langston's Step-4 fold).
+      // If that count does not complete, assembleEstimate excludes the leaf and names it — a lower bound, never 0.
+      asks.push({ qname: l.qname, sinceIso });
+      windowAsks += 1;
       continue;
     }
     if (!analysed) {
@@ -127,7 +145,12 @@ export function planEstimate(leaves: LeafInfo[], windowStartMs: number, nowMs: n
     if (open) windowNotes.push(`${l.qname} is still being written; its estimate is as of its last analyse (${l.analyzedAt ?? 'unknown'})`);
   }
   if (windowEstimateLeaves === 0 && windowAsks === 0) windowKind = 'unavailable';
-  return { asks, windowEstimateSum, totalEstimateSum, windowKind, totalKind, windowNotes, totalNotes, windowEstimateLeaves };
+  // Langston (Step-4 record, total-arm symmetry): when every partition holding data lies inside the window, the window
+  // estimate IS the total — say so, or two identical "≈" figures read as the window arm having collapsed into the total.
+  if (!dataBeforeWindow && windowKind === 'estimate') {
+    windowNotes.push('every partition holding data lies inside this window, so it equals the total');
+  }
+  return { asks, windowEstimateSum, totalEstimateSum, windowKind, totalKind, windowNotes, totalNotes, windowEstimateLeaves, totalEstimateLeaves };
 }
 
 export interface EstimateResult {
@@ -150,6 +173,7 @@ export function assembleEstimate(plan: EstimatePlan, exact: Map<string, number |
   const windowNotes = [...plan.windowNotes];
   const totalNotes = [...plan.totalNotes];
   let windowContributed = plan.windowEstimateLeaves > 0;
+  let totalContributed = plan.totalEstimateLeaves > 0; // the same rule as the window arm (Langston: total-arm symmetry)
   const boundaryLeaves = new Set(plan.asks.filter((a) => a.sinceIso !== null).map((a) => a.qname));
 
   for (const a of plan.asks) {
@@ -167,6 +191,7 @@ export function assembleEstimate(plan: EstimatePlan, exact: Map<string, number |
         continue;
       }
       totalRows += v!;
+      totalContributed = true;
       if (!boundaryLeaves.has(a.qname)) { rowsInWindow += v!; windowContributed = true; }
     } else {
       if (failed) {
@@ -179,6 +204,7 @@ export function assembleEstimate(plan: EstimatePlan, exact: Map<string, number |
     }
   }
   if (!windowContributed) windowKind = 'unavailable';
+  if (!totalContributed) totalKind = 'unavailable'; // no leaf counted: never a confident 0 for the total either
   const notes = [
     ...windowNotes.map((n) => `rows in window: ${n}`),
     ...totalNotes.map((n) => `total: ${n}`),
@@ -186,7 +212,7 @@ export function assembleEstimate(plan: EstimatePlan, exact: Map<string, number |
   return {
     rowsInWindow: windowKind === 'unavailable' ? 0 : Math.round(rowsInWindow),
     rowsInWindowKind: windowKind,
-    totalRows: Math.round(totalRows),
+    totalRows: totalKind === 'unavailable' ? 0 : Math.round(totalRows),
     totalRowsKind: totalKind,
     countNote: notes.length > 0 ? notes.join('; ') : null,
   };

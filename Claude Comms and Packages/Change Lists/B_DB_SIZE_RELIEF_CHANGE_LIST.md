@@ -204,3 +204,42 @@ Langston re-read `price-liveness.ts:129-175` at `0463c8649`. Within the function
 - **Carrier:** row 119, not an alert. A one-shot keyed to another batch's step drops the self-rescheduling clause (`workflow-10-governance` `:65`), `triggers_at` has no event trigger, and it would be a ninth nag with no clearing edge. **The am.5 check at `rolling_24h` becomes a named required deliverable of row 119's acceptance**, with the reopen condition verbatim in the row and in the completion report. The report states the leg OPEN at the top and points at row 119. An optional self-rescheduling alert is allowed only if worded as a question.
 - **Two more folds:** (i) when both arms print the same estimate (`rolling_30d` `signal_eval_archive`, `rowsInWindow == totalRows`), the note must say why. That is the total-arm symmetry fold, made concrete. (ii) A Step-10 line saying `rowsInWindow: 0` with `kind: 'unavailable'` is safe only because of the kind, so the kind is load-bearing (#546).
 - **Build check (his precondition), done 05:2xZ:** the deploy record `sha=` and `dist/BUILD_SHA` both read `3e2504129d2d03983354e9a75a355cf31ef4e77d`. `git diff 3e2504129 origin/migration/aws-supabase` over `analytics.tsx`, `drift-dashboard-aggregator.ts`, `archive-count-estimate.ts` and `db.ts` is empty. So the drift alert `cdfbb99e` reflects commits that do not touch the panel code, and the live build is the panel code under review.
+
+## Step 7 — the am.5 browser check, attempt 2 under Langston's amendment: PASS (2026-11-15, CC-A)
+**Method:** am.5 as amended 05:19Z: 0.5 s sampling; in-use = `state <> 'idle'` per name on both pools; capture at main ≥ 5; pre-roll 60 s, post-roll 120 s; no restart since 04:22:48 (count 705; well over 30 min). Live build `3e2504129`, which is the panel code under review. **Marker log (staging clock):**
+- SAMPLER-START 05:47:25.044
+- NAVIGATE `/analytics` 05:48:42.646
+- CLICK Drift Dashboard tab 05:48:49.959
+- TAB-CLOSED 05:49:28.038
+- sampler end ≈ 05:52:55, so the post-roll is ≥ 120 s
+
+**Population:** 660 samples. **Pre-roll (05:47:25-05:48:42): main in-use max 1, clean.** **Tab open (05:48:49-05:49:28): main in-use max 3, no trip.** Diag in-use rose 05:48:52.8-05:49:07.3, which is the panel's reads (with the Passive Archive section on the same tab). **Post-roll:** five samples at main ≥ 5 (5, 6, 6, 8, 8 at 05:50:42-05:52:44). All are after the tab closed, and every one names only the xStock price-liveness read (`price-liveness.ts:141-154`) ⇒ attributed, non-panel, recorded under amendment item 1. Main in-use distribution: 0×583, 1×54, 2×15, 3×3, 5×1, 6×2, 8×2.
+**Render at `rolling_24h` (screenshot saved):**
+
+| table | rows in window | total |
+|---|---|---|
+| `pair_scan_archive` | 82,657 | 9,298,685 |
+| `signal_eval_archive` | 1,954,376 | ≈ 32,410,495 |
+| `exit_decision_archive` | 27 | 11,026 |
+| `macro_feed_archive` | 1,442 | 65,155 |
+| `signal_eval_provenance` | "estimate unavailable" | ≈ 27,204,452 |
+
+No QUERY TIMEOUT, no bare 0, and Drops 0 on every row. **Harm leg:** 0 `slot timeout|rows dropped` lines across 05:47-05:53Z, with 1,471 lines in that window (instrument reach). Same controls as before.
+**Recorded, not carried:** diag in-use read **5** in 7 samples against that pool's max of 4. Langston's cheaper reading (a replaced connection not yet reaped) and a second process are both HYPOTHESES.
+⇒ **Under am.5 as amended, OBJ-2's browser leg at `rolling_24h` PASSES, subject to Langston's Step-8 confirmation.** If he confirms, the row-119 carrier he ruled for an unrun check is no longer needed for this leg. The 30 s-refetch sustained-load question he named stays row 119's own subject.
+
+## Step 9 fold r2 — Langston's four folds plus his two re-derivation folds (2026-11-15, CC-A)
+`server/services/data-archive/archive-count-estimate.ts`:
+1. **Non-daily boundary slice, counted exactly under the 6 s bound.** `planEstimate` now asks for the in-window slice of a non-daily boundary leaf instead of excluding it. If the count does not complete, `assembleEstimate`'s existing branch excludes the leaf and names it. **Measured on staging 05:5xZ (psql, statement bound 20 s; the leaf's primary key leads with `captured_at`):** provenance `_2026_11` 24h slice 0.153 s (95,150 rows); 7d slice 1.291 s (4,093,107); `_2026_10` 30d slice **10.307 s** (9,738,998). ⇒ 24h and 7d become EXACT; 30d exceeds the bound and stays "≥" with the leaf named, which is the designed fallback.
+2. **The DROP-only premise is written into the module header.** Rows leave only by `DROP TABLE` (`b75-retention-sweep.ts` `dropPartition`, `:589`). No literal UPDATE/DELETE on either table exists in `server/` or `scripts/`; the search's reach excludes statements built with a table-name variable. So `reltuples` reads low, and "≈" is a slight under-count.
+3. **Total-arm symmetry:** `totalEstimateLeaves` joins the plan, and a total with no contribution is UNAVAILABLE with 0, never a confident 0. The same rule as the window arm. Residual: a wholly empty table would read "unavailable" on both arms rather than an exact 0. Neither table is ever empty.
+4. **The equal-arms note:** when no data leaf starts before the window, the note says "every partition holding data lies inside this window, so it equals the total". This is the `rolling_30d` `signal_eval_archive` case Langston re-derived.
+5. **Correction to the r1 change-list text above:** the size and `max(captured_at)` reads were said to be "each under 0.1 s". Measured `max(captured_at)` on `signal_eval_archive` was 0.23 s (05:2xZ, warm). So "about 0.2 s" is correct.
+6. **For Step 10 (Langston #546 fold):** the API returns `rowsInWindow: 0` with `kind: 'unavailable'`. Only the kind makes that 0 safe, so the kind is load-bearing for any consumer. To be written into the System Impact Map entry at the governance turn.
+
+**Tests:** 6 new in `b-db-size-relief-archive-count-estimate.test.ts` (21 in the file), plus P5 12/12: the slice asked and exact at 24h, the 30d estimate with both slices answered, the slice-failure fallback, total unavailable, the equal-arms note present at 30d and absent at 7d, and the premise in the header. **Mutants:**
+- slice removed: 3 RED
+- total symmetry removed: 1 RED
+- equal-arms note removed: 1 RED
+
+My first slice mutant did not apply (string mismatch) and read as 21/21. It was caught by the count and re-run. tsc 324 = 324.

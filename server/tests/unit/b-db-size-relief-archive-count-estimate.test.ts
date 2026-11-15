@@ -131,6 +131,54 @@ describe('B-DB-SIZE-RELIEF Step-9 — Langston E: an unanalysed leaf WITH DATA, 
   });
 });
 
+describe('B-DB-SIZE-RELIEF Step-9 — Langston Step-4 folds (2026-11-15)', () => {
+  it('a NON-daily boundary leaf asks for its in-window slice exactly; with the count, provenance 24h is EXACT, not unavailable', () => {
+    const W = NOW - DAY;
+    const plan = planEstimate(sepLeaves(), W, NOW);
+    expect(plan.asks).toEqual([{ qname: 'signal_eval_provenance_2026_11', sinceIso: new Date(W).toISOString() }]);
+    const r = assembleEstimate(plan, new Map([[key('signal_eval_provenance_2026_11', new Date(W).toISOString()), 1_234_567]]));
+    expect(r.rowsInWindowKind).toBe('exact');
+    expect(r.rowsInWindow).toBe(1_234_567);
+  });
+  it('provenance 30d with both slices answered: the 2026_11 leaf by estimate plus the 2026_10 slice exactly — an estimate, no exclusion', () => {
+    const W = NOW - 30 * DAY;
+    const plan = planEstimate(sepLeaves(), W, NOW);
+    expect(plan.asks).toEqual([{ qname: 'signal_eval_provenance_2026_10', sinceIso: new Date(W).toISOString() }]);
+    const r = assembleEstimate(plan, new Map([[key('signal_eval_provenance_2026_10', new Date(W).toISOString()), 3_000_000]]));
+    expect(r.rowsInWindowKind).toBe('estimate');
+    expect(r.rowsInWindow).toBe(8_252_792 + 3_000_000);
+    expect(r.countNote ?? '').not.toMatch(/excludes/);
+  });
+  it('the slice count failing (the 6 s bound) falls back to the exclusion: a lower bound with the leaf named, never 0', () => {
+    const W = NOW - 30 * DAY;
+    const r = assembleEstimate(planEstimate(sepLeaves(), W, NOW), new Map([[key('signal_eval_provenance_2026_10', new Date(W).toISOString()), null]]));
+    expect(r.rowsInWindowKind).toBe('lower_bound');
+    expect(r.rowsInWindow).toBe(8_252_792);
+    expect(r.countNote).toMatch(/excludes part of signal_eval_provenance_2026_10 \(its exact count did not complete\)/);
+  });
+  it('total-arm symmetry: when no leaf contributes to the total, the total is UNAVAILABLE, never a confident 0', () => {
+    const open: LeafInfo = { qname: 'signal_eval_archive_2026_11_14', reltuples: -1, heapBytes: 1e9, fromMs: T('2026-11-14T00:00:00Z'), toMs: T('2026-11-15T00:00:00Z'), analyzedAt: null };
+    const r = assembleEstimate(planEstimate([open], NOW - DAY, NOW), new Map([[key(open.qname, null), null]]));
+    expect(r.totalRowsKind).toBe('unavailable');
+    expect(r.totalRows).toBe(0);
+    expect(r.rowsInWindowKind).toBe('unavailable');
+  });
+  it('when every partition holding data lies inside the window, the note says the window equals the total; when it does not, no such note', () => {
+    const at30 = assembleEstimate(planEstimate(seaLeaves(), NOW - 30 * DAY, NOW), new Map([[key('signal_eval_archive_2026_11_14', null), 1]]));
+    expect(at30.rowsInWindow).toBe(at30.totalRows);
+    expect(at30.countNote).toMatch(/every partition holding data lies inside this window, so it equals the total/);
+    const W7 = NOW - 7 * DAY;
+    const plan7 = planEstimate(seaLeaves(), W7, NOW);
+    const at7 = assembleEstimate(plan7, new Map(plan7.asks.map((a) => [key(a.qname, a.sinceIso), 1] as [string, number])));
+    expect(at7.countNote ?? '').not.toMatch(/equals the total/);
+  });
+  it('the DROP-only premise is written into the module header (Langston B)', () => {
+    const src = read('server/services/data-archive/archive-count-estimate.ts');
+    expect(src).toMatch(/THE PREMISE THE ESTIMATES REST ON/);
+    expect(src).toMatch(/never by a row DELETE or UPDATE/);
+  });
+});
+
 describe('B-DB-SIZE-RELIEF Step-9 — wiring fences', () => {
   it('only the two measured tables take the estimate path; the other three keep exact counts', () => {
     expect([...ESTIMATED_COUNT_TABLES].sort()).toEqual(['signal_eval_archive', 'signal_eval_provenance']);
