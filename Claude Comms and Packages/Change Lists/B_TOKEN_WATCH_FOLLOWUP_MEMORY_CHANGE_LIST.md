@@ -659,3 +659,8 @@ Each item points at the P2b-1 finding it falls out of (Step 7 — P2b-1 ran, abo
 - **Minor folded:** `job.state`'s type includes `nothing_due`.
 - **§13 item, disposition (2) — on this batch's P10/P15 follow-up set, owner CC-INFRA, no new slot:** under `unknown/feed_silent` the "Launches recorded" tile is bare and `births_through` (the newest launch recorded) is never surfaced — the same shape on the census instrument. To be folded at P10/P15 (surface `births_through` and qualify the census tile when the feed is silent).
 - tsc: the file is in the compile set; repo total 324 errors, unchanged; none in the file.
+
+### P7 page re-roll — PROCEED (Langston, Discord `1571436917541838982`, re-read at `84eeb168e`, CI 4/4 checked by him); board Review = Approved. OLD Claude's B-DB-SIZE-RELIEF deploy released (told 08:1xZ). Two riders, placed on the P10/P15 set
+- **RIDER-1:** the alive column subtracts deaths by BIRTH DAY (`summary.py` `alive_by_age`), so one unchecked checkpoint inflates EVERY alive row; in the alive table both cells should gate on `notLooking`, not the row's own state (also covers a future `DISPLAY_AGES` subset). Pre-existing; the death table is per-age and correctly row-gated.
+- **RIDER-2:** the banner's "those figures are shown as bounds below" is unconditional; make it conditional on `notLooking` (the window between `systemctl disable` and the first missed check has the banner up and no bounds), and consider naming shedding when the job is both switched off and shedding.
+- **Process note:** the three dispatches queued at 06:47-06:55Z were dropped when an automatic libc update restarted the bridge at 06:55:15Z; re-sent 08:03Z. Recorded on the `B-AGENT-INVOKE-FAILURE-NOTICE` item in `RUNNING_ISSUES` (commit `03562ecb8`).
