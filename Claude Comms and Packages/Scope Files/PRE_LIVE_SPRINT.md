@@ -229,7 +229,7 @@ The sprint order is `1-system-manual/SPRINT_TO_LIVE_PLAN.md` §4, and the observ
 - B-CATALOG-2 (CC-A) — its FIRST catalogue is the diagnostic-coverage map (Kyle: 'where we have diagnostics and where we don't') — how Kyle sees what live is and is not watched. The r
 - B-CREW-BOARD-REMOVAL (CC-A) — retired board code — gated on Kyle
 - System Manual row conflict (CC-B) — 
-- B-DAILY-CUTOVER-SWEEP (CC-C) — four tables idle 29 nights then sweep everything at once
+- ~~B-DAILY-CUTOVER-SWEEP (CC-C) — four tables idle 29 nights then sweep everything at once~~ **ABSORBED into `B-DB-SIZE-RELIEF` OBJ-4 (CC-A, KD-60; CC-C told): the four B70 tables plus two B74 ticker snaps cut over to daily partitions at 2026-12-01; `#688` closed into it.**
 - B-DEPLOY-REF-DECLARATION (CC-C) — deploy-tool declaration
 - B-DISPATCH-STAGING-VERIFY (CC-C) — its own row says it blocks nothing
 - B-EOL-NORMALISE (CC-A) — line-ending normalisation
