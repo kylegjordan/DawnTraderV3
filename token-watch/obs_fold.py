@@ -25,6 +25,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import subprocess
 from datetime import datetime, timedelta, timezone
 
 from config import GRID, GRID_LABELS, OBSERVATIONS_DIR
@@ -371,13 +372,23 @@ def label_states(obs: dict, born_by_hour: dict, births_first_at: str | None, bir
     else:
         job_state = "shedding" if any_rows > 0 else "not_running"
     out["job"] = {"state": job_state, "window_s": win_job, "follow_up_rows_in_window": any_rows,
-                  "observations_in_window": covered_any, "due_in_window": any_due}
+                  "observations_in_window": covered_any, "due_in_window": any_due,
+                  # Langston condition 1 (P7 design ruling): the bound is stated. A job fault becomes this state
+                  # only after a WHOLE window with no observation, and the summary unit then exits
+                  # JOB_FAULT_EXIT on its next hourly run, which pages through OnFailure.
+                  "pages_after_s": win_job}
     week = _hours_back(now, int(HOURLY_KEEP.total_seconds()))
     for L in GRID_LABELS:
         w = labels_w.get(L) or {}
         k = int(w.get("k_cycles") or K_FLOOR)
         window_s = windows[L]
-        rec = {"k_cycles": k, "window_s": window_s, "last_observed_at": obs["last_observed_at"].get(L)}
+        rec = {"k_cycles": k, "window_s": window_s, "last_observed_at": obs["last_observed_at"].get(L),
+               # Langston condition 2: K's basis travels WITH K, where the page reads it. A floor-bound K is the
+               # 3-cycle minimum, not a calibrated value, and must never be cited as one.
+               "k_basis": {"derived": bool(w), "floor_bound": w.get("floor_bound", True),
+                           "observed_longest_run": w.get("observed_longest_run"),
+                           "cycles_counted": w.get("beating_due_cycles"),
+                           "counted": "cycles in which the job observed something and this checkpoint was due"}}
         if first is None or first + OFFSET[L] > now:
             rec["state"] = "not_yet_due"
             rec["first_due_at"] = (first + OFFSET[L]).isoformat() if first is not None else None
@@ -421,6 +432,36 @@ def label_states(obs: dict, born_by_hour: dict, births_first_at: str | None, bir
             rec["rate_drift_secondary"] = bool(med > 2 * derived or med < derived / 2)
         out["labels"][L] = rec
     return out
+
+
+TIMER_UNIT = "token-watch-followup.timer"
+JOB_FAULT_EXIT = 4
+
+
+def timer_switch() -> str:
+    """'enabled' | 'disabled' | 'unknown' -- the follow-up timer's systemd switch, the ONE authoritative record of
+    whether the job is meant to run. Unknown is treated as on (a fault pages), never as off."""
+    try:
+        p = subprocess.run(["systemctl", "is-enabled", TIMER_UNIT], capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return "unknown"
+    out = (p.stdout or "").strip()
+    return out if out in ("enabled", "disabled") else "unknown"
+
+
+def job_fault_exit_code(job: dict | None, switch: str) -> int:
+    """JOB_FAULT_EXIT when the follow-up is meant to run (switch not 'disabled') and has gone a whole window
+    without observing anything -- `not_running` or `shedding` (Langston condition 1: a visible state WITH a bound,
+    on its own carrier, never a quiet reason). A switched-off job is a decision, not a fault: it is published
+    as such and does not page."""
+    if not job or job.get("state") not in ("not_running", "shedding"):
+        return 0
+    if switch == "disabled":
+        LOG.warning("the follow-up timer is switched off: job state %s is published, not paged", job["state"])
+        return 0
+    LOG.error("the follow-up has observed nothing for a whole window (%s s): job %s, timer %s", job.get("window_s"),
+              job["state"], switch)
+    return JOB_FAULT_EXIT
 
 
 # ─────────────────────────────────────────────────────────────────────────────

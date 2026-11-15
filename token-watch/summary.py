@@ -485,6 +485,8 @@ def build(now: datetime = None) -> dict:
     window = load_state(obs_fold.WINDOW_STATE, {}) or None
     states = obs_fold.label_states(obs, st.get("born_by_hour", {}), st.get("births_first_at"),
                                    st.get("births_through"), window, cadence, now)
+    if states.get("job"):
+        states["job"]["switch"] = obs_fold.timer_switch()
 
     born = st["born_by_day"]
     followed = st["followed_by_day"]
@@ -719,4 +721,8 @@ if __name__ == "__main__":
         sys.exit(code)
     print(json.dumps({k: v for k, v in p.items() if k != "oldest_survivors"},
                      indent=2, sort_keys=True))
-    sys.exit(memory_exit_code(*memory_headroom()))
+    mem = memory_exit_code(*memory_headroom())
+    job = (p.get("observation_states") or {}).get("job")
+    # P7, Langston condition 1: a follow-up meant to run that has observed nothing for a whole window pages here,
+    # on the summary unit's own hourly run -- a carrier that does not depend on the follow-up running at all.
+    sys.exit(mem or obs_fold.job_fault_exit_code(job, (job or {}).get("switch", "unknown")))

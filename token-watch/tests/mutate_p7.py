@@ -43,6 +43,12 @@ MUTANTS = [
     ("D2: no never_instrumented", TS, [("obs_fold.py", "        if not obs[\"last_observed_at\"].get(L):" + NL + "            rec[\"state\"] = \"never_instrumented\"",
                                         "        if False:" + NL + "            rec[\"state\"] = \"never_instrumented\"")]),
     ("D2: the cadence ignores the randomized delay", TS, [("obs_fold.py", "\"cycle_s\": 3600 + delay}", "\"cycle_s\": 3600}")]),
+    ("C1: a job fault never pages", TS, [("obs_fold.py", "    return JOB_FAULT_EXIT" + NL, "    return 0" + NL)]),
+    ("C1: a switched-off job pages", TS, [("obs_fold.py", "    if switch == \"disabled\":", "    if False:")]),
+    ("C1: the bound is not published", TS, [("obs_fold.py", "                  \"pages_after_s\": win_job}", "                  }")]),
+    ("C2: an underived K reads as measured", TS, [("obs_fold.py", "\"floor_bound\": w.get(\"floor_bound\", True),",
+                                                  "\"floor_bound\": w.get(\"floor_bound\", False),")]),
+    ("C1: the switch is not published", TS, [("summary.py", "        states[\"job\"][\"switch\"] = obs_fold.timer_switch()" + NL, "        pass" + NL)]),
     # D4
     ("D4: the settle window is ignored", TS, [("obs_fold.py", "t + OFFSET[L] + timedelta(seconds=settle_s.get(L, 0)) <= now",
                                                "t + OFFSET[L] <= now")]),

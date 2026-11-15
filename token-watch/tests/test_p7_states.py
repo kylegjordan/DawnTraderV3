@@ -125,6 +125,29 @@ check("S2 nothing due in the window (no launches in the birth hours) -> instrume
 st = of.label_states(obs_with(cov), born, first.isoformat(), NOW.isoformat(), None, None, NOW)
 check("S2 an unreadable cadence -> every checkpoint unknown", {v["state"] for v in st["labels"].values()} == {"unknown"})
 
+print(NL + "=== S2c. LANGSTON CONDITIONS 1 AND 2: a job fault pages after a stated bound; K's basis travels with K")
+check("C1 not_running while the timer is enabled -> exit JOB_FAULT_EXIT (4)",
+      of.job_fault_exit_code({"state": "not_running", "window_s": 11700}, "enabled") == of.JOB_FAULT_EXIT == 4)
+check("C1 shedding with the switch unreadable -> pages (unknown is treated as on, never off)",
+      of.job_fault_exit_code({"state": "shedding", "window_s": 11700}, "unknown") == 4)
+check("C1 a job switched OFF is a decision, published, not paged", of.job_fault_exit_code({"state": "not_running"},
+                                                                                         "disabled") == 0)
+check("C1 observing / no verdict -> 0", of.job_fault_exit_code({"state": "observing"}, "enabled") == 0
+      and of.job_fault_exit_code(None, "enabled") == 0)
+st = of.label_states(obs_with({}, {}), born, first.isoformat(), NOW.isoformat(), None, CAD, NOW)
+check("C1 the bound is published on the verdict: pages_after_s = the job window (3 cycles, 11,700 s)",
+      st["job"].get("pages_after_s") == 11700, st["job"])
+check("C2 with no derived window, every checkpoint's K says it is the floor and not derived",
+      all(v.get("k_basis", {}).get("derived") is False and v["k_basis"].get("floor_bound") is True
+          for v in st["labels"].values()), st["labels"]["1h"].get("k_basis"))
+win = {"cadence": CAD, "labels": {"6h": {"k_cycles": 3, "window_s": 11700, "floor_bound": True,
+                                         "observed_longest_run": 1, "beating_due_cycles": 643}}}
+st = of.label_states(obs_with(cov, {H(t): 400 for t in recent}), born, first.isoformat(), NOW.isoformat(), win, CAD, NOW)
+check("C2 with a derived window, its run, floor flag and cycles counted ride on the checkpoint",
+      st["labels"]["6h"]["k_basis"] == {"derived": True, "floor_bound": True, "observed_longest_run": 1,
+                                        "cycles_counted": 643, "counted": st["labels"]["6h"]["k_basis"]["counted"]},
+      st["labels"]["6h"].get("k_basis"))
+
 print(NL + "=== S2b. CHANGE-1: THE RE-DERIVATION TRIGGER IS A DUE-BUT-EMPTY RUN OF K - 1, while the job observed")
 week = [NOW.replace(minute=0) - timedelta(hours=i) for i in range(1, 7 * 24)]
 cov4 = {L: {H(t): 50 for t in week + recent} for L in of.GRID_LABELS}
@@ -222,6 +245,14 @@ check("S5 a second build keeps the set (seeded_at unchanged, no rebuild) and doe
       and st2["obs"]["rebuilt_at"] == NOW.isoformat(), (p2["oldest_survivors_status"], st2["obs"]["rebuilt_at"]))
 check("S5 the per-checkpoint block is published", "labels" in p2["observation_states"]
       and "job" in p2["observation_states"], sorted(p2["observation_states"]))
+_sw = of.timer_switch
+of.timer_switch = lambda: "disabled"
+try:
+    p2b = summary.build(NOW + timedelta(hours=1, minutes=30))
+finally:
+    of.timer_switch = _sw
+check("S5 the timer's switch is published on the job verdict (the page says 'switched off', nothing pages)",
+      p2b["observation_states"]["job"].get("switch") == "disabled", p2b["observation_states"]["job"])
 st2.pop("watch")
 store.save_state("summary", st2)
 T3 = NOW + timedelta(hours=2)

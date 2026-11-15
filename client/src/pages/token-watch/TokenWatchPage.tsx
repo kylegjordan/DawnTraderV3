@@ -66,8 +66,19 @@ type Summary = {
     follow_up_lag_s: number | null;
   };
   observation_states?: {
-    job: { state: 'observing' | 'shedding' | 'not_running' | 'unknown' } | null;
-    labels: Record<string, { state: LabelState; last_observed_at?: string | null; first_due_at?: string | null }>;
+    job: {
+      state: 'observing' | 'shedding' | 'not_running' | 'unknown';
+      switch?: 'enabled' | 'disabled' | 'unknown';
+    } | null;
+    labels: Record<
+      string,
+      {
+        state: LabelState;
+        last_observed_at?: string | null;
+        first_due_at?: string | null;
+        k_basis?: { derived: boolean; floor_bound: boolean };
+      }
+    >;
   };
   oldest_survivors_status?: {
     counts: Record<string, number>;
@@ -283,6 +294,8 @@ export default function TokenWatchPage() {
   const job = s.observation_states?.job?.state;
   const cov = s.coverage;
   const notLooking = !!states && Object.values(states).some((v) => v.state !== 'instrumented' && v.state !== 'not_yet_due');
+  const switchedOff = s.observation_states?.job?.switch === 'disabled';
+  const floorWindows = !!states && Object.values(states).some((v) => v.k_basis && (!v.k_basis.derived || v.k_basis.floor_bound));
 
   return (
     <div className="space-y-6 p-6">
@@ -311,7 +324,9 @@ export default function TokenWatchPage() {
           <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-rose-500" />
           <div className="text-sm">
             <h2 className="font-medium">
-              {job === 'not_running'
+              {switchedOff && (job === 'not_running' || job === 'shedding')
+                ? 'The follow-up checks are switched off'
+                : job === 'not_running'
                 ? 'The follow-up checks are not running'
                 : job === 'shedding'
                   ? 'The follow-up is running but skipping every check'
@@ -328,6 +343,12 @@ export default function TokenWatchPage() {
                 : ''}
               Deaths at an unchecked age cannot be recorded, so those figures are shown as bounds below.
             </p>
+            {floorWindows && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                An age counts as unchecked after three hourly cycles with no check — a minimum, not a measured
+                value.
+              </p>
+            )}
           </div>
         </div>
       )}
