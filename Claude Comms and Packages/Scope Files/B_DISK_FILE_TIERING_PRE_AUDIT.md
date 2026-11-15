@@ -793,3 +793,29 @@ Three more things:
 **The Infra post gains one line:** after step 5, no DawnTrader key on staging holds `writeBucketLifecycleRules` either, so a future `token-watch/` lifecycle rule needs Kyle's account, as a new key would.
 
 **Withdrawn, no work:** `deleteColdVersion` is unbounded (`storage-client.ts:1009-1020`), but it is deleted at close.
+
+### Amendment 4 — 3d plan r4: Kyle DECLINED the narrow key (2026-11-15, CC-A; for Langston's ruling)
+**Kyle, verbatim (Desktop, 2026-11-15, relayed by PM Claude ~23:4xZ; KD row being minted by PM):** *"I don't think we need to create a new backblaze key just because we have the ability to delete doesn't mean we actually are going to delete. So no, I don't want to do that."*
+⇒ **KD-54 is partly reversed.** Steps 1 and 2 stand and are done (`hideColdFile` live; the `_liveness/` + `_proof/` rules set and read back EQUAL at bucket revision 4, `1d4b30699`). **Steps 3 (mint), 4's swap and rights proofs (three capabilities, delete refused, hide allowed, rotator dry run) and 5 (delete the wide key) are STRUCK.** The residue gate is already discharged (KD-79, `93770b1d3`).
+
+**What 3d still has to prove — the lifecycle rules, which never depended on the key:**
+1. **The hidden arm = the scheduled Monday canary, 2026-11-16 04:00Z** (its first hiding run). Its log names the object; the 04:10Z audit should count 1 `_liveness/` upload version. **FAIL only if the id is still present at the day-3 re-list (11-19).** r3 had step 4 make a throwaway for this; the canary is the same object class, made by the real code path, so a hand-made one adds nothing.
+2. **The unhidden arm = one throwaway `_liveness/` object uploaded and NOT hidden**, with the existing key, by a one-off instrument run as `deploy` (the step-2 instrument's pattern; prints file id, never a secret). **FAIL only if present at the day-4 re-list.** It and the canary make 2 upload versions, which is AT the ceiling of 2, not over it, so the meter does not page on a working rule.
+3. **The `DEPLOY_WINDOWS` row is filed and pushed BEFORE that upload** (r3's ruling, unchanged): `until_event` the day-3/day-4 re-lists; `expected_by` upload + 4 days; `review_by` upload + 5 days; `disturbs` "nothing a deploy does; only a change to the bucket's lifecycle rules".
+4. **`#431` closes at Step 10 on those re-lists**, as r3 planned.
+
+**What changes because the wide key STAYS (restated, not hidden):**
+- **(d) `B2_BUCKET_ID` is now permanently the ONLY guard keeping `list_buckets` off the path** (`allowed.bucketId` stays empty on an unrestricted key). "Neither may be dropped" becomes "this one may never be dropped"; its fence stays.
+- **The staging env keeps a key with 29 capabilities**, including `deleteFiles`, `deleteBuckets`, `writeKeys`, `deleteKeys` and `writeBucketLifecycleRules` (re-read 11-14 16:1xZ). Step 10 describes it as that, never as "no-delete".
+- **Infra post: none owed.** `mint_cold_key.py` keeps working from that env.
+- **Detection without prevention:** a bound cold version that vanishes is caught by the 04:10Z audit's `missing` count within a day, and cannot be recovered from cold.
+
+**Rule 18 — `deleteColdVersion` and `--delete-residue`, the question for Langston.** r1/r2 removed them because "after step 5 the code cannot work". **That reason is gone: with the wide key, they work.**
+- **My recommendation: remove both at close anyway, as your (b) ruled (no flag, archived `.removed`, `DELETED_COMPONENTS_LOG`).**
+  - Their only job, the KD-79 residue, is done. Nothing scheduled calls them.
+  - With a delete-capable key in the env, this is the one path in our code that permanently destroys a cold version. Removing it makes "our code never deletes cold data, it only hides `_liveness/` and `_proof/` objects" true, which is the property the key would have enforced.
+  - `deleteColdVersion` is unbounded (`storage-client.ts:1009-1020`); r3 withdrew that finding only because the function was going away.
+- **The DR procedure gets simpler:** restore the archived code and run it with the existing key. No temporary key to mint and delete.
+- **The cost, stated:** C-2's crash window can make residue again (2 instances so far). Kyle's options for a future one would then be keeping it (the `cold_residue_kept_file_ids` allowlist, which exists) or the DR restore.
+
+**Close plan, r4:** (i) the `DEPLOY_WINDOWS` row, then the unhidden upload, then the day-3/day-4 re-lists; (ii) the rule-18 removal commit (Step 4 review, CI 4/4, a normal deploy outside 14:30-21:00Z and 05:25-05:45Z); (iii) Step 10: `STORAGE_POLICY` (the wide key as it is, the two rules, the restore cap line, the DR procedure), SIM, `DELETED_COMPONENTS_LOG`, `RUNNING_ISSUES` `#431`; (iv) Step 11. Steps 3-5's alert and plan text is corrected in the same Step-10 turn.
