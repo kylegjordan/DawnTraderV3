@@ -80,6 +80,32 @@ The carrier is `gateDecision.levelRebase`, not `gateDecision.chosenMode`: a mark
 - Formal Step 7: **still open** through the registered five complete US sessions; alert `ac78c006` owns that read.
 - Alert `0c5f81ac`: resolved by `codex-c` at `2026-11-10T11:26:56.421Z` with evidence commit `57c6077675052b279cf240ac4d3195475a8cd6fe`; CI run `42807070563` passed all four jobs. This resolution closes the first-look reminder, not Step 7.
 
+## Step 7 five-session read — 2026-11-15 (CC-C, alert `ac78c006`)
+
+**Window:** deploy `1d4be9cf7` at `2026-11-07T19:06:27Z` → close of the fifth US session, Fri 2026-11-13 8pm ET = `2026-11-14T01:00Z` (sessions Mon 11-09 … Fri 11-13). **Queries, verbatim and re-runnable:** `scripts/analysis/b1250_step7_five_session.sql`. ⚠️ Archive paper rows carry `mode='paper_sim'`; `closed_trades` paper rows carry `mode='paper'` (a first pass on `'paper'` in the archive returned zero everywhere, crypto included — caught by a mode census, not reported).
+
+**Populations.** Active: 82 xStock paper opens (`closed_trades`), split by the admitted row's realised `entryArm` — **45 taker / 37 maker**, 40 and 30 distinct symbols; the archive's admitted rows match the durable rows one-for-one (45/45 joined; 44/45 byte-equal, the 45th is SPG's float-vs-`numeric(…,8)` rendering of the same value). VTS: 1,949 xStock admitted rows, of which **1,003 carry `levelRebase`**; 986 VTS trades with `levelRebase` in `vts_open_trades`.
+
+| §3 clause (as amended §7.5, §8.2, §8.3, §9) | result | verdict |
+|---|---|---|
+| (a) every taker open carries the stamps | 45/45 `levelBasis`, 45/45 `levelSpecStamped` | PASS |
+| (a) each leg equals its stamped form (active: one tick) | **stops** 45/45, max error 3e-14 (18 distance, 24 anchor, 3 mixed `max`). **targets** 44/45: 18+5+3 distance exact; the 13 r_multiple / mixed-`max` targets re-derived by hand from the carried risk (`e + 2·(e − s)`, the `max` taking the anchor term where it is higher) — all 13 exact to the grid; 1 anchor | PASS on 44 — SBET below |
+| `LEVEL_SPEC_INCONSISTENT` = 0 over r_multiple / mixed legs (§9 narrowing) | **1 of 18** target legs (11 `max` + 7 r_multiple): SBET | ⛔ **FAIL — the pre-registered non-zero** |
+| (a2) zero opens with a fill-relative stop < 0.3 %; refusals archived | 0/45 active, 0/986 VTS. `STOP_DISTANCE_AT_FILL` archived: active **1**, VTS **43** | PASS |
+| (a2) rate ≤ ~10 % of window-admitted taker opens; FAIL = zero over ≥ 50 | active **1/47** (45 opens + 1 floor + 1 `fill_economics`, all after the window) = 2.1 %, under the 50 floor for the zero-test and non-zero anyway; VTS **43/1,046** = 4.1 % | PASS |
+| (a3) VTS taker legs at 1e-9 | **stops:** 169 pure-distance exact; the 13 that are not are all `pivot_shift`, whose stop is `max(3-candle low, entry − k·ATR)` (`pivot-shift.ts:223`) — after a below-plan fill the anchor term wins, which is BLOCKER-6 working; `originalStopPrice` = booked stop on all six sampled, so nothing moved after open. **targets:** all 986 match their strategy's form — 497 distance exact, 456 r2 within the 8-dp column, 70 plan, and 6 `vwap_pullback` above r2 = its `max(anchor, r2)` taking the anchor. `levelSpecInconsistent` empty on all 1,003 admitted rows | PASS |
+| (b) maker and crypto opens carry no `levelBasis` | xStock maker 0/37, crypto 0/5,482 admitted | PASS |
+| (c) `entryObservedAgeMs` on every xStock maker FILL | **31/31** filled; the 6 maker rows without it all carry `neverFilledReason` (rested, never filled) | PASS |
+| (d) epoch +1 | read at deploy, §12 of the pre-audit (7→8, 10→11) | PASS (not re-read) |
+| (e) zero `LEVEL_REBASE_INVALID` | active 0, VTS 0 `level_rebase_*` | PASS |
+| flips (P2b), both directions | admitted 45: carried geometry refused 0 the plan geometry admitted; admitted **1** the plan geometry would have refused (a loosening); net EV lower under the carried geometry on 28, higher on 9. Refused 3: 1 refused only under the carried geometry, 1 only under the plan's | reported, as registered |
+| UI — Open Trades in Claude-in-Chrome | not checked | **waiting on Kyle** |
+
+### The one FAIL — SBET/USD, `sma_trend_ride`, target r_multiple (r = 2) over an anchor stop
+Plan as it arrived: entry `6.1322`, stop `5.9793`, target `6.4382`; fill `6.12`. The self-consistency check re-derives the target at the plan: `6.1322 + 2 × (6.1322 − 5.9793) = 6.4380` — **0.0002 off the arriving `6.4382`**, against a tolerance of one tick (`level-rebase.ts:131`) + 1e-9 relative. So the leg was kept on the plan (`6.4382`; re-based it would have been `6.12 + 2 × 0.1407 = 6.4014`) and counted — the fail-safe direction the design chose, today's behaviour on that leg.
+**Hypothesis — `NOT RE-READ`, a mechanism claim not yet routed to a reader:** the orchestrator rounds each leg once, independently, after construction (§8.2), so re-deriving an r_multiple target from the ROUNDED entry and stop carries `(1+r)·εe − r·εs − εt` of rounding error — up to **(1 + r) ticks = 3 ticks at r = 2** — against a one-tick tolerance. SBET's 2-tick miss sits inside that bound, and the other 17 r_multiple / mixed legs sitting within one tick is what the same bound predicts most of the time. The tick (`0.0001`) is inferred from the 4-dp plan prices, not read from the grid.
+**DISPOSITION: folded into this batch — Step 9 iterate**, design for Langston to rule: size the r_multiple / mixed-leg tolerance from the propagation bound, or check against the pre-rounding plan. No other leg is affected (§9: the check is structurally `|x − x|` on single-form legs).
+
 ## Row 2 increment (4a) — INIT/USD self-clearing alert inspection, 2026-11-10
 
 Alert `2d0884e4-9d30-4fe2-9aec-130bc10bb482` remains **active and unacknowledged**. Its one durable row was created at `2026-11-10T10:41:58.726Z` and fired at `10:49:32.090Z`; the exact VTS trade `vts_INIT_USD_vwap_pullback_1794304799204` remains open (`opened_at 09:59:59.206Z`, entry `0.15569714`, stop `0.06381143`, target `0.43135429`).
