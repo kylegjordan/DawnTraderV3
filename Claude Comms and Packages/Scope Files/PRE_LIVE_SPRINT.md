@@ -93,6 +93,7 @@ The sprint order is `1-system-manual/SPRINT_TO_LIVE_PLAN.md` §4, and the observ
 - B-LANGSTON-RECONCILE-VERB (Infra Claude) — #1057: a reviewed one-command recovery for Langston's memory tool after a hand edit, plus a daily drift check (Kyle 2026-11-06, KD-51: after live)
 - B-CHAPLET-DELETE (Infra Claude) — #1101: delete the old /chaplet code; the route is already blocked at the gateway since 2026-09-29 (Kyle 2026-11-06, KD-51: after live)
 - B-TOKEN-WATCH-BIRTH-GAP (Infra Claude) — #1247: find why the new-token feed stopped 2026-10-18 to 10-27 unnoticed; the feed's dead-man alarm now pages, so a repeat is caught (Kyle 2026-11-06, KD-52: after live, with the token study)
+- B-TOKEN-WATCH-PROMOTE-CURSOR (Infra Claude) — #1257: the token-watch socials sweep's cursor strands a retry, so a token whose lookup failed is never looked up again once a later row in the same file is consumed (16 of 630,552 checked before the follow-up switch-on, persisted for re-lookup); the feed itself runs. Placed after B-TOKEN-WATCH-BIRTH-GAP, with the token study (Kyle 2026-11-15, KD-81: after live)
 - #1043 (CC-INFRA) — a pinned GitHub read served the wrong file — reviewer tooling
 - #169 (Infra Claude) — the context-bridge-log retention job: a latent out-of-memory and (per Langston's archive) never installed
 - #219 (CC-A) — dormant flip-rate governance input
