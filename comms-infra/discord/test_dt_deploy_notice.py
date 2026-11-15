@@ -37,6 +37,23 @@ def load():
     return m
 
 
+import re  # noqa: E402
+
+# every resolve evidence string the suite sends, checked at the end against staging's acceptance rule
+ALL_EVIDENCE = []
+
+
+def staging_accepts(ev):
+    """A PORT of isValidResolutionEvidence (server/services/system-alerts.ts:193-203) - two copies of one rule, so
+    if that function changes this must follow it. staging refuses a resolve whose evidence fails it."""
+    t = ev.strip()
+    if t in ("NO-EVIDENCE-GIVEN", "provenance-unknown-pre-F3b"):
+        return True
+    return bool(re.search(r"[\w./-]*[./][\w./-]*:\d+", t) or re.search(r"[0-9a-f]{7,40}", t, re.I)
+                or re.search(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", t, re.I)
+                or re.search(r"[§#]\s*[\w.\-]+", t))
+
+
 SHA = "1" * 40
 OTHER = "2" * 40
 T0 = 1_800_000_000          # a fixed clock
@@ -59,6 +76,7 @@ def wire(m, w, clock):
         if not w.ssh_ok:
             return None, "unreachable"
         if req["op"] == "resolve":
+            ALL_EVIDENCE.append(req["evidence"])
             (w.hb if req["key"] == m.HEARTBEAT_KEY else w.resolves).append(req)
             return ('{"dedupe_key": "%s", "resolved": ["r1"]}' % req["key"], None) if w.resolve_ok else (None, "exit 1")
         if req["op"] == "heartbeat":
@@ -253,6 +271,17 @@ def suite():
         rc, crashed = None, e
     check("B-6: a malformed deployed_at does not crash the run and is not read as completion",
           not crashed and rc == 0 and len(w9.posts) == 1 and "STARTED" in w9.posts[0], (crashed, w9.posts))
+    # alert add8e5e1 (2026-11-15): staging refused the heartbeat's evidence, so it never re-armed. Every evidence
+    # string the suite produced must pass staging's rule, and a deploy that never landed (no sha) must too.
+    mz = load()
+    wz = World()
+    wire(mz, wz, T0)
+    mz.resolve_key("deploy-in-window:B-Z:none:x", "did not complete in 30 min; record sha=none deployed_at=none; posts 1,2")
+    check("every resolve evidence passes staging's reference-token rule (heartbeat and window, incl. sha=none)",
+          ALL_EVIDENCE and all(staging_accepts(e) for e in ALL_EVIDENCE),
+          [e for e in ALL_EVIDENCE if not staging_accepts(e)][:2])
+    check("POSITIVE CONTROL: the rule port refuses the old heartbeat text",
+          not staging_accepts("dt-deploy-notice ran at 2026-11-15T01:22:25Z and re-armed"))
     print("dt-deploy-notice suite: %d passed, %d failed" % (PASS, FAIL))
     return 1 if FAIL else 0
 
@@ -267,6 +296,7 @@ MUTATIONS = [
     ("C-2: the reassurance is unconditional", 'reach = "the alert reaches every session" if alerted else', 'reach = "the alert reaches every session" if True else'),
     ("outcome re-posted on retry", '        if "outcome_post" not in p:', "        if True:"),
     ("first run posts", '        log("INIT %d existing notice line(s), silent" % len(lines))', '        st["seen"] = 0'),
+    ("add8e5e1: the evidence carries no reference token", '"evidence": ("%s %s" % (EVIDENCE_REF, evidence))[:400]', '"evidence": evidence[:400]'),
     ("heartbeat every run", '    if st.get("heartbeat_day") == day:\n        return', '    if False:\n        return'),
 ]
 

@@ -49,6 +49,14 @@ ACTOR = "deploy-notice-watcher"
 OUTCOME_WAIT_S = 30 * 60
 HEARTBEAT_HOURS = 26
 HEARTBEAT_KEY = "deploy-notice-watcher-heartbeat"
+# ⛔ EVERY resolve carries this reference token (alert add8e5e1, 2026-11-15). staging's resolve REFUSES evidence
+#    that holds no reference token (path:line | sha | uuid | §/#ref; isValidResolutionEvidence,
+#    server/services/system-alerts.ts:193). The heartbeat's "ran at <time> and re-armed" holds none, so from the
+#    first day a heartbeat row existed to be resolved (2026-11-14) every resolve was refused, nothing re-armed, and
+#    the armed heartbeat fired at 26 h - the watcher itself ran every 2 min throughout. A window resolve for a
+#    deploy that never landed ("record sha=none") had the same gap. The first day passed only because a resolve
+#    that matches NO row exits before the evidence check.
+EVIDENCE_REF = "#1249"
 # Owner (canonical actor) -> the Discord display name that wakes that session. A reviewer in the opening list would
 # invoke the reviewer, and the Codex crew does not wake on this channel's opening list, so those are named in the
 # tail. PM Claude's canonical actor is pm-claude (Langston gate B: PM must be able to own a window).
@@ -109,7 +117,7 @@ def post(text, notify=False):
 def resolve_key(key, evidence):
     """True when the call succeeded. resolve-key exits 0 on ZERO matching rows (scripts/system-alerts.ts cmdResolveKey),
     so success is not proof anything was resolved: the count is read from its JSON and LOGGED (Langston B-1)."""
-    out, err = request({"op": "resolve", "key": key, "evidence": evidence[:400]})
+    out, err = request({"op": "resolve", "key": key, "evidence": ("%s %s" % (EVIDENCE_REF, evidence))[:400]})
     if out is None:
         log("RESOLVE FAILED %s: %s" % (key, err))
         return False
