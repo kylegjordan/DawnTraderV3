@@ -36,21 +36,37 @@ Database headroom without a money decision, and a Data Archive panel that tells 
 - **Step 9:** three folds, each Step-4 PROCEED: the estimates; the 6 s per-count bound (the worst case was 21.7 s, over his 20 s line); and fold r2 (the non-daily boundary slice counted exactly, the DROP-only premise written into the code, total-arm symmetry, the equal-arms note).
 - **OBJ-4 so far (catalog read 2026-11-15, positive-controlled):** each of the six tables holds daily children `…_2026_12_01` to `…_2026_12_16` and **no** monthly child at or after `2026_12`. The control: the same filter at `>= 2026_11` returns `signal_eval_provenance_2026_11`.
 
-## 3. ⛔ PRE-REGISTERED CLOSE CRITERION — written 2026-11-15, before any of this data exists. Do not data-mine.
+## 3. ⛔ PRE-REGISTERED CLOSE CRITERION — written 2026-11-15, amended the same day on Langston's Step-10 ruling (Discord, 11:32Z), before any of this data exists. Do not data-mine. No change after 2026-11-29.
 
-**Window (a set period):** 2026-12-01 through **2027-02-02**. Legs (a)-(c) read by 2027-01-04; leg (d) read on 2027-02-01/02.
+**Window (a set period):** 2026-11-29 through **2027-02-03**. Read dates, each carried by its own self-rescheduling-style timer alert (per-fire dedupe key `b-db-size-relief-observation:<date>`): **11-29 · 12-02 · 12-30 · 01-04 · 01-30 · 02-02.** Minted 2026-11-15, each at 06:00Z, `verification`/`info`, owner CC-A, never ack (resolve with the read's commit): `6f8a0705` (11-29) · `d2fd4dce` (12-02) · `365e6ef5` (12-30) · `ede55d8b` (01-04) · `08425f0c` (01-30) · `64255b7f` (02-02). Each body carries the three reads (per-table roll-up, the no-monthly-after-December check with its control, the manifest drops) and points here for the criterion.
+**Per-table instrument:** `database_size_logs` is whole-database only and is the only size history in `public`, so it cannot attribute. Every read therefore records a `pg_total_relation_size` roll-up for each of the six parents (the timer body carries the SQL). Each leg is a per-table claim measured per table.
 
-**PASS requires all four:**
-- **(a) Writes land in dailies.** On 2026-12-02, for each of the six tables, rows with `captured_at >= 2026-12-01` exist only in `…_YYYY_MM_DD` children, and no monthly child `>= 2026_12` exists (the §2 catalog query).
-- **(b) The last monthly leaves whole, and verified.** Each table's `…_2026_11` monthly is exported, proven (`completeness_basis = source-count-matched`), verified in warm and dropped by the sweep once it ages past 30 days (expected on or about 2026-12-31/2027-01-01, over however many nights the run-lock allows).
-- **(c) The daily trap is gone.** From 2027-01-01 (when `…_2026_12_01` passes 30 days), the nightly sweep drops daily slices of each table, each with a verified, proven manifest row. Read over at least 3 consecutive nights by 2027-01-04.
-- **(d) The month-end step shrinks.** At the 2027-01-31 month-end, the database-size log shows no month-end step from these six tables: the day-over-day change across 01-31 → 02-01 is within the range of the preceding 7 ordinary days.
+**(b0) PRE-REGISTERED PREDICTION — the October control (Langston measured 2026-11-15).** The six `_2026_10` monthlies are closed, hot and cannot grow:
+
+| table | `_2026_10` size |
+|---|---|
+| `signal_eval_provenance` | 6,346.3 MB |
+| `pair_scan_archive` | 6,231.3 MB |
+| `crypto_spot_ticker_snap` | 3,000.8 MB |
+| `xstock_perp_ticker_snap` | 1,882.8 MB |
+| `macro_feed_archive` | 20.2 MB |
+| `exit_decision_archive` | 12.8 MB |
+| **total** | **17,494 MB** |
+
+They go eligible at 30 days on 2026-11-30. **Prediction:** at the 11-30/12-01 sweep each table's roll-up falls by its `_2026_10` size, within the size of the dailies it gained in the same interval. Each drop has a verified, proven manifest row. Read on 11-29 (baseline) and 12-02.
+
+**PASS requires (b0) and all four of:**
+- **(a) Writes land in dailies.** On 2026-12-02, for each of the six tables, rows with `captured_at >= 2026-12-01` exist only in `…_YYYY_MM_DD` children, and no monthly child `>= 2026_12` exists.
+- **(b) The last monthly leaves whole, and verified.** Each table's `…_2026_11` monthly is exported, proven (`completeness_basis = source-count-matched`), verified in warm and dropped once past 30 days (expected about 2026-12-31/2027-01-01, over however many nights the run-lock allows). Its roll-up falls by that monthly's size (read 12-30 baseline, 01-04).
+- **(c) The daily trap is gone.** From 2027-01-01 the nightly sweep drops daily slices of each table, each with a verified, proven manifest row, on at least 3 consecutive nights by 2027-01-04.
+- **(d) No month-end step from these six.** Read the **maximum absolute day-over-day excursion of each table's roll-up over 2027-01-29 → 02-03**, not one delta (the step lands a day either side of the boundary: 08-31, then 10-01, then 10-31 in the instrument's own history). PASS if, for every table, it is within the range of that table's **ordinary** days in the preceding 7. **Ordinary is pre-registered now:** a day with no staging deploy (the deploy record) and no other batch's drop or move on these tables (the sweep and tiering logs). If fewer than 5 ordinary days survive, reach back to 14 days rather than widen the range. The whole-database series is read beside it, as context only.
 
 **FAIL is any of:**
+- (b0) a table's roll-up does not fall by its October monthly, or a drop has no verified, proven row;
 - a monthly child `>= 2026_12` is created for any of the six;
 - a daily slice older than 30 days is still hot on 2027-01-04 while the sweep ran;
-- a hot partition is dropped without a verified, proven manifest row;
-- the 2027-01-31 step is outside that range and attributable to these tables.
+- any hot partition is dropped without a verified, proven manifest row;
+- (d) any table's excursion over 01-29 → 02-03 is outside its ordinary range.
 
 **Who decides:** CC-A with Langston at conversion. A FAIL is a result: it converts with the failure and a named follow-up, or the batch reopens at Step 9.
 
@@ -65,4 +81,4 @@ Database headroom without a money decision, and a Data Archive panel that tells 
 
 ## 5. Governance files changed so far (Step 10, 2026-11-15)
 
-`STORAGE_POLICY.md` · `SYSTEM_IMPACT_MAP.md` · `SYSTEM_MANUAL.md` · `RUNNING_ISSUES.md` (`#688` closed into this batch; `#1037` amendment 7) · `PRE_LIVE_SPRINT.md` (`B-DAILY-CUTOVER-SWEEP` struck as absorbed) · `BATCH_CATALOG.md` · `PHASE_HISTORY.md` · `CHANGES_AND_FIXES.md` · `SPRINT_TO_LIVE_PLAN.md` (row 5c) · `CC_A_SESSION_TASK_LIST.md` · this report. The full tier ledger is in the Step-10 governance commit message, and is transcribed into the completion report at conversion.
+`STORAGE_POLICY.md` · `SYSTEM_IMPACT_MAP.md` · `SYSTEM_MANUAL.md` · `RUNNING_ISSUES.md` (`#688` closed into this batch; `#1037` amendment 7) · `PRE_LIVE_SPRINT.md` (`B-DAILY-CUTOVER-SWEEP` struck as absorbed) · `BATCH_CATALOG.md` · `PHASE_HISTORY.md` · `CHANGES_AND_FIXES.md` · `SPRINT_TO_LIVE_PLAN.md` (row 5c) · `CC_A_SESSION_TASK_LIST.md` · this report. The full tier ledger is in the Step-10 governance commit message (`e25e75dcb`), and is transcribed into the completion report at conversion. **Correction to that ledger (Langston, Step-10 ruling):** its `GOVERNANCE_EXCEPTIONS.md` row said `N/A`. It was REQUIRED this turn: the line-36 `open` row's body was stale (it still read Step 7 of 11). It is amended in the next commit; the verdict is ✅, "row 36 body re-stated to the observation state, window end 2027-02-03". Also amended there: plan row 5c's item cell, whose carried figure was stale (the two named tables measure 12,577 MB today and the six 17,494 MB).
