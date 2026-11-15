@@ -67,7 +67,7 @@ type Summary = {
   };
   observation_states?: {
     job: {
-      state: 'observing' | 'shedding' | 'not_running' | 'unknown';
+      state: 'observing' | 'nothing_due' | 'shedding' | 'not_running' | 'unknown';
       switch?: 'enabled' | 'disabled' | 'unknown';
     } | null;
     labels: Record<
@@ -192,6 +192,10 @@ function AgeTable({
   bound: 'at most' | 'at least';
   unchecked?: Record<string, { uncovered_days: number }>;
 }) {
+  // any age that is due and not being checked makes the column's total a bound; not_yet_due does not (no token is
+  // old enough to be counted there, so it cannot move the total -- the same rule as `notLooking`)
+  const anyUnchecked =
+    !!states && ages.some((age) => !!states[age] && !['instrumented', 'not_yet_due'].includes(states[age].state));
   return (
     <div className="rounded-lg border border-border bg-card">
       <div className="flex items-center gap-2 border-b border-border px-4 py-3">
@@ -233,7 +237,8 @@ function AgeTable({
                     )}
                   </td>
                   <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">
-                    {denominator > 0 ? `${((n / denominator) * 100).toFixed(2)}%` : '—'}
+                    {/* a share of an unchecked count would be a precise number for an unknown one */}
+                    {why === null && denominator > 0 ? `${((n / denominator) * 100).toFixed(2)}%` : '—'}
                   </td>
                 </tr>
               );
@@ -247,9 +252,13 @@ function AgeTable({
                 columns, two different meanings, so the label says which. */}
             <tr className="border-t-2 border-border bg-muted/30 font-medium">
               <td className="px-4 py-2">{totalLabel}</td>
-              <td className="px-4 py-2 text-right tabular-nums">{total.toLocaleString()}</td>
+              <td className="px-4 py-2 text-right tabular-nums">
+                {/* ⛔ THE TOTAL IS BOUNDED TOO when any age is unchecked (Langston, part 3): a bounded row above a
+                    bare total would publish the floor/ceiling as complete one line down. */}
+                {anyUnchecked ? `${bound} ${total.toLocaleString()}` : total.toLocaleString()}
+              </td>
               <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">
-                {denominator > 0 ? `${((total / denominator) * 100).toFixed(2)}%` : '—'}
+                {!anyUnchecked && denominator > 0 ? `${((total / denominator) * 100).toFixed(2)}%` : '—'}
               </td>
             </tr>
           </tbody>
@@ -331,12 +340,12 @@ export default function TokenWatchPage() {
       {/* ⭐ P7 (OBJ-5): IS ANYONE LOOKING. Every figure below is derived from births and recorded deaths, and a
           death is recorded only when the follow-up looks -- so a stopped follow-up reads as "nobody died". This
           banner says so before any number is read. */}
-      {(job === 'not_running' || job === 'shedding' || (cov && cov.blind_days > 0)) && (
+      {(job === 'not_running' || job === 'shedding' || switchedOff || (cov && cov.blind_days > 0)) && (
         <div className="flex items-start gap-3 rounded-lg border border-rose-500/40 bg-rose-500/5 p-4">
           <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-rose-500" />
           <div className="text-sm">
             <h2 className="font-medium">
-              {switchedOff && (job === 'not_running' || job === 'shedding')
+              {switchedOff
                 ? 'The follow-up checks are switched off'
                 : job === 'not_running'
                 ? 'The follow-up checks are not running'
@@ -391,10 +400,14 @@ export default function TokenWatchPage() {
         />
         <Stat
           label="Died"
-          value={s.died.total.toLocaleString()}
-          sub={Object.entries(s.died.by_class)
-            .map(([k, v]) => `${k.replace('_', ' ')} ${v}`)
-            .join(' · ')}
+          value={notLooking ? `at least ${s.died.total.toLocaleString()}` : s.died.total.toLocaleString()}
+          sub={
+            notLooking
+              ? 'Observed dead — a lower bound while some ages go unchecked'
+              : Object.entries(s.died.by_class)
+                  .map(([k, v]) => `${k.replace('_', ' ')} ${v}`)
+                  .join(' · ')
+          }
         />
       </section>
 
@@ -485,9 +498,11 @@ export default function TokenWatchPage() {
             {Object.entries(s.died.by_class).map(([cls, n]) => (
               <tr key={cls} className="border-b border-border/50">
                 <td className="px-4 py-2">{DEATH_LABEL[cls] ?? cls}</td>
-                <td className="px-4 py-2 text-right tabular-nums">{n.toLocaleString()}</td>
+                <td className="px-4 py-2 text-right tabular-nums">
+                  {notLooking ? `at least ${n.toLocaleString()}` : n.toLocaleString()}
+                </td>
                 <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">
-                  {s.died.total > 0 ? `${((n / s.died.total) * 100).toFixed(2)}%` : '—'}
+                  {!notLooking && s.died.total > 0 ? `${((n / s.died.total) * 100).toFixed(2)}%` : '—'}
                 </td>
               </tr>
             ))}
@@ -495,9 +510,11 @@ export default function TokenWatchPage() {
             <tr className="border-t-2 border-border bg-muted/30 font-medium">
               <td className="px-4 py-2">Died in total</td>
               <td className="px-4 py-2 text-right tabular-nums">
-                {s.died.total.toLocaleString()}
+                {notLooking ? `at least ${s.died.total.toLocaleString()}` : s.died.total.toLocaleString()}
               </td>
-              <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">100.00%</td>
+              <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">
+                {notLooking ? '—' : '100.00%'}
+              </td>
             </tr>
           </tbody>
         </table>
