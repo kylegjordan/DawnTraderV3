@@ -156,25 +156,43 @@ class LockHolder:
        `tools/locked_copy.py` documents), so it returns False and touches nothing.
     """
 
-    def __init__(self, holder: str, token: str):
-        self.holder, self.token = holder, token
+    def __init__(self, holder: str, token: str, fd: int | None = None):
+        self.holder, self.token, self.fd = holder, token, fd
+        self.last_beat = time.monotonic()
+        self.read_error = None          # the last OSError other than absence, for the release log
 
     def __bool__(self) -> bool:
         return True
 
     def ours(self) -> bool:
+        self.read_error = None
         try:
             with open(LOCK_PATH, encoding="utf-8") as fh:
                 return self.token in fh.read().split()
-        except OSError:
+        except FileNotFoundError:
+            return False
+        except OSError as exc:
+            # a FAULT, not an absence: still False (never risk deleting or
+            # extending a lock we cannot read), but named so the log can say so
+            self.read_error = exc
             return False
 
     def beat(self) -> bool:
         if not self.ours():
-            LOG.error("lock beat REFUSED: the periodic lock is gone or no longer %s's (token %s)",
+            LOG.error("lock beat REFUSED: the periodic lock %s (holder %s, token %s)",
+                      "could not be read (%s)" % self.read_error if self.read_error else "is gone or no longer ours",
                       self.holder, self.token)
             return False
-        os.utime(LOCK_PATH)
+        # ⛔ BY FILE DESCRIPTOR WHERE THE PLATFORM ALLOWS IT (Langston, P4 Step 4 non-blocking):
+        #    `ours()` then a utime BY PATH is check-then-act -- a steal in between would extend the
+        #    thief's lock. The fd names the inode WE created, so after a steal it touches the
+        #    unlinked file and nothing anyone else holds. Off-Linux (no fd support) it falls back
+        #    to the path, with the window that implies.
+        if self.fd is not None and os.utime in os.supports_fd:
+            os.utime(self.fd)
+        else:
+            os.utime(LOCK_PATH)
+        self.last_beat = time.monotonic()
         return True
 
 
@@ -184,10 +202,27 @@ class LockHolder:
 _HELD = {"holder": None}
 
 
+# ⛔ THE BEAT IS GATED ON ELAPSED TIME, NOT ON A COUNT (Langston, P4 Step 4 CHANGES-1). What a
+#    beat defends is LOCK_STALE_AFTER, a wall-clock quantity; a "beat every 500 entries" holds
+#    only while entries are fast (240/min = 125 s per 500), and ~90 timed-out 20 s calls in one
+#    window put 30 minutes between beats. So callers call `lock_beat()` as often as they like
+#    (per entry, per row, per source) and it touches the lock at most once per BEAT_EVERY_S,
+#    derived from the threshold it defends -- the cadence lives here, where the threshold is.
+BEAT_EVERY_S = LOCK_STALE_AFTER.total_seconds() / 10
+
+
 def lock_beat() -> bool:
-    """Beat the periodic lock if this process holds it; False otherwise."""
+    """Keep this process's periodic lock fresh; cheap enough to call per entry.
+
+    True if the lock is ours and was beaten within the last BEAT_EVERY_S (beating it now if
+    that interval has passed); False if this process holds no lock or the beat was refused.
+    """
     h = _HELD["holder"]
-    return h.beat() if h is not None else False
+    if h is None:
+        return False
+    if time.monotonic() - h.last_beat < BEAT_EVERY_S:
+        return True
+    return h.beat()
 
 
 @contextmanager
@@ -217,8 +252,7 @@ def periodic_lock(holder: str, wait: bool = False):
         try:
             fd = os.open(LOCK_PATH, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
             os.write(fd, f"{holder} {os.getpid()} {token} {_now().isoformat()}\n".encode())
-            os.close(fd)
-            break
+            break                       # the fd stays open for the holder's fd-based beat
         except FileExistsError:
             try:
                 age = _now() - datetime.fromtimestamp(os.path.getmtime(LOCK_PATH), UTC)
@@ -231,6 +265,10 @@ def periodic_lock(holder: str, wait: bool = False):
                 # beating. Steal it, and say so — a silently stolen lock hides a
                 # crashing job. Re-read first: if the line changed, someone else
                 # took it in between, and that lock is not ours to remove.
+                # ⚠️ NARROWS THE RACE, DOES NOT CLOSE IT: between this re-read and
+                #    the unlink a third job can still create a fresh lock that we
+                #    then remove. That window is irreducible with a path-based lock
+                #    (Langston, P4 Step 4); it existed before P4 too.
                 try:
                     with open(LOCK_PATH, encoding="utf-8") as fh:
                         if fh.read() != stale_line:
@@ -245,20 +283,26 @@ def periodic_lock(holder: str, wait: bool = False):
                 yield False
                 return
             time.sleep(2)
-    held = LockHolder(holder, token)
+    held = LockHolder(holder, token, fd)
     _HELD["holder"] = held
     try:
         yield held
     finally:
         _HELD["holder"] = None
-        if held.ours():
+        mine = held.ours()
+        try:
+            os.close(fd)                # before the unlink: Windows refuses to unlink an open file
+        except OSError:
+            pass
+        if mine:
             try:
                 os.unlink(LOCK_PATH)
             except FileNotFoundError:
                 pass
         else:
-            LOG.error("periodic lock NOT released by %s: it is gone or no longer ours (token %s) — "
-                      "left in place", holder, token)
+            LOG.error("periodic lock NOT released by %s: it %s (token %s) — left in place", holder,
+                      "could not be read (%s)" % held.read_error if held.read_error else "is gone or no longer ours",
+                      token)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

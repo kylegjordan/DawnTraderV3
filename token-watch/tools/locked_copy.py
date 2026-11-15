@@ -12,11 +12,12 @@ lists and opens it. Each path is copied with `cp -a` under nice 19 / ionice idle
    births alone is ~1.5 GB, copied at idle IO priority; a beat only between paths could leave the lock unbeaten for
    longer than `LOCK_STALE_AFTER` (30 min), another job would steal it, our next beat would then extend THE THIEF'S
    lock, and `periodic_lock`'s unconditional unlink on exit would delete it while the thief still runs.
-⛔ SO EACH BEAT FIRST ASSERTS THE LOCK STILL CARRIES OUR HOLDER STRING AND PID. If it is gone or foreign, the copy is
-   killed and the process exits 8 at once with os._exit — skipping `periodic_lock`'s finally, which would otherwise
-   unlink a lock that is no longer ours. An OSError in the beat is a lost lock too, and ownership is asserted AGAIN
-   at the release edge (after the beat thread is joined), so a beat thread that died for any reason cannot let the
-   unconditional unlink run on a foreign lock. (Release-by-token in `store.periodic_lock` itself is P4.)
+⛔ SO EACH BEAT GOES THROUGH THE HOLDER `periodic_lock` YIELDED (`held.beat()`), which touches the lock only while it
+   still carries OUR TOKEN. If it is gone or foreign, the copy is killed and the process exits 8 at once. Ownership is
+   asserted AGAIN at the release edge (after the beat thread is joined) with `held.ours()`.
+   (P4, B-TOKEN-WATCH-FOLLOWUP-MEMORY: `periodic_lock` now releases BY TOKEN, so the unconditional unlink this header
+   used to guard against is gone, and the ownership test is the holder's token rather than a holder+pid prefix. The
+   os._exit(8) stays: it kills the copy at once and skips the rest of the with-block.)
 Exit: 0 copied · 2 refused · 8 the lock was lost or taken mid-copy · 9 the lock was not free within 300 s.
 """
 
@@ -38,14 +39,6 @@ BEAT_S = float(os.environ.get("LOCKED_COPY_BEAT_S", "60"))      # tests shorten 
 NICE = ["nice", "-n", "19", "ionice", "-c3"] if os.environ.get("LOCKED_COPY_NO_NICE") != "1" else []
 # TEST ONLY: a JSON argv used instead of `cp -a` (a slow copier lets a test change the lock mid-copy)
 TEST_CMD = os.environ.get("LOCKED_COPY_TEST_CMD")
-
-
-def _ours() -> bool:
-    try:
-        with open(store.LOCK_PATH, encoding="utf-8") as fh:
-            return fh.read().startswith("%s %d " % (HOLDER, os.getpid()))
-    except OSError:
-        return False
 
 
 def main(argv: list[str], copy_cmd=None) -> int:
@@ -74,9 +67,8 @@ def main(argv: list[str], copy_cmd=None) -> int:
         def beat():
             while not stop.wait(BEAT_S):
                 try:
-                    if not _ours():
+                    if not held.beat():             # touches the lock only while it carries our token (P4)
                         lose("the periodic lock is gone or not ours")
-                    os.utime(store.LOCK_PATH)
                 except OSError as exc:              # an unbeatable lock is a lost lock (Langston r2 fold)
                     lose("the beat failed (%s)" % exc)
         t = threading.Thread(target=beat, daemon=True)
@@ -88,7 +80,7 @@ def main(argv: list[str], copy_cmd=None) -> int:
                 rc = state["child"].wait()
                 if rc != 0:
                     print("FAILED: cp -a %s exited %d" % (rel, rc), file=sys.stderr)
-                    if not _ours():
+                    if not held.ours():
                         lose("the periodic lock is gone or not ours at release")
                     return 1
         finally:
@@ -96,7 +88,7 @@ def main(argv: list[str], copy_cmd=None) -> int:
         t.join()
         # ⛔ OWNERSHIP IS CHECKED AT THE RELEASE EDGE TOO (Langston r2 fold): whatever ended the beat thread, the
         #    lock is ours here or periodic_lock's finally must not run.
-        if not _ours():
+        if not held.ours():
             lose("the periodic lock is gone or not ours at release")
     print("copied under the lock: %d paths" % len(rels))
     return 0

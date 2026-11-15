@@ -48,8 +48,8 @@ from datetime import datetime, timedelta, timezone
 
 from config import (BIRTHS_DIR, DISPLAY_AGES, GRID, GRID_LABELS,
                     OBSERVATIONS_DIR, ROOT)
-from store import (iter_census as store_iter_census, identity_for as _identity_for, load_state, periodic_lock,
-                   save_state,
+from store import (iter_census as store_iter_census, identity_for as _identity_for, load_state, lock_beat,
+                   periodic_lock, save_state,
                    tombstone_path, _correction_index, dead_set, dead_set_status,
                    latest_observations_uncorrected)
 
@@ -298,6 +298,9 @@ def _oldest_in_file(name: str, corrections, dead, need: int, unresolved_keys: li
     """
     def candidates():
         for pos, r in enumerate(store_iter_census(name, corrections)):
+            # P4 (Langston CHANGES-1): summary.build runs inside the follow-up's lock AFTER the sweep,
+            # when the lock is oldest; the day-file walk is its long loop. Time-gated in store.
+            lock_beat()
             key = (r.get("created_at") or "", pos)
             if r.get("mint_unresolved"):
                 unresolved_keys.append(key)

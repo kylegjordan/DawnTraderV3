@@ -310,11 +310,8 @@ def run(now: datetime = None) -> dict:
         # only when the cursor is saved
         new = _read_new(path, cursors.get(name, 0))
         consumed = 0
-        seen_rows = 0
         for birth, nbytes in new:
-            seen_rows += 1
-            if seen_rows % 500 == 0:
-                lock_beat()             # P4: promote runs inside the follow-up's lock (OBJ-4b(a))
+            lock_beat()                 # P4: per row; store gates it on elapsed time (OBJ-4b(a))
             if budget <= 0:
                 stats["bounded_out"] += 1
                 continue

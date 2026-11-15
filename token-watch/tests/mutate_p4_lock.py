@@ -7,20 +7,21 @@ import subprocess, sys
 NL = chr(10)
 T = "tests/test_p4_lock.py"
 MUTANTS = [
-    ("release is unconditional again", [("store.py", "        if held.ours():" + NL + "            try:" + NL + "                os.unlink(LOCK_PATH)",
-                                         "        if True:" + NL + "            try:" + NL + "                os.unlink(LOCK_PATH)")]),
+    ("release is unconditional again", [("store.py", "        mine = held.ours()", "        mine = True")]),
     ("beat ignores the token", [("store.py", "    def beat(self) -> bool:" + NL + "        if not self.ours():",
                                  "    def beat(self) -> bool:" + NL + "        if False:")]),
     ("a fresh lock is stolen", [("store.py", "            if age > LOCK_STALE_AFTER:" + NL + "                # Abandoned",
                                  "            if True:" + NL + "                # Abandoned")]),
     ("the steal is silent", [("store.py", "                LOG.error(\"STOLE a stale periodic lock", "                LOG.debug(\"STOLE a stale periodic lock")]),
-    ("lock_beat does not reach the holder", [("store.py", "    return h.beat() if h is not None else False", "    return False")]),
-    ("no beat per bucket", [("follow_up.py", "        lock_beat()                     # P4: a beat per bucket", "        pass                     # P4: a beat per bucket")]),
-    ("no beat every 500 entries", [("follow_up.py", "            if stats[\"due\"] % 500 == 0:" + NL + "                lock_beat()",
-                                    "            if stats[\"due\"] % 500 == 0:" + NL + "                pass")]),
-    ("promote does not beat", [("promote.py", "            if seen_rows % 500 == 0:" + NL + "                lock_beat()",
-                                "            if seen_rows % 500 == 0:" + NL + "                pass")]),
+    ("lock_beat does not reach the holder", [("store.py", "    h = _HELD[\"holder\"]" + NL + "    if h is None:", "    h = None" + NL + "    if h is None:")]),
+    ("the time gate never lets a beat through", [("store.py", "    if time.monotonic() - h.last_beat < BEAT_EVERY_S:", "    if True:")]),
+    ("beat() does not reset the gate (hammers the lock)", [("store.py", "        self.last_beat = time.monotonic()" + NL + "        return True",
+                                                             "        return True")]),
+    ("run_hour does not beat per entry", [("follow_up.py", "            lock_beat()                 # P4: per entry", "            pass                 # P4: per entry")]),
+    ("promote does not beat", [("promote.py", "            lock_beat()                 # P4: per row", "            pass                 # P4: per row")]),
     ("tier does not beat", [("tier.py", "      lock_beat()                       # P4: a beat per source", "      pass                       # P4: a beat per source")]),
+    ("the summary walk does not beat", [("summary.py", "            lock_beat()" + NL + "            key = (r.get", "            pass" + NL + "            key = (r.get")]),
+    ("the steal does not re-check the line", [("store.py", "                        if fh.read() != stale_line:", "                        if False:")]),
 ]
 files = sorted({f for _n, edits in MUTANTS for f, _a, _b in edits})
 orig = {f: open(f, encoding="utf-8").read() for f in files}
