@@ -99,7 +99,7 @@ The carrier is `gateDecision.levelRebase`, not `gateDecision.chosenMode`: a mark
 | (d) epoch +1 | read at deploy, §12 of the pre-audit (7→8, 10→11) | PASS (not re-read) |
 | (e) zero `LEVEL_REBASE_INVALID` | active 0, VTS 0 `level_rebase_*` | PASS |
 | flips (P2b), both directions | admitted 45: carried geometry refused 0 the plan geometry admitted; admitted **1** the plan geometry would have refused (a loosening); net EV lower under the carried geometry on 28, higher on 9. Refused 3: 1 refused only under the carried geometry, 1 only under the plan's | reported, as registered |
-| UI — Open Trades in Claude-in-Chrome | not checked | **waiting on Kyle** |
+| UI — Open Trades in Claude-in-Chrome | checked 2026-11-15T22:34Z by CC-C (Kyle: a session does this, not him) — see the UI leg below | **PASS** |
 
 ### The one FAIL — SBET/USD, `sma_trend_ride`, target r_multiple (r = 2) over an anchor stop
 Plan as it arrived: entry `6.1322`, stop `5.9793`, target `6.4382`; fill `6.12`. The self-consistency check re-derives the target at the plan: `6.1322 + 2 × (6.1322 − 5.9793) = 6.4380` — **0.0002 off the arriving `6.4382`**, against a tolerance of one tick (`level-rebase.ts:131`) + 1e-9 relative. So the leg was kept on the plan (`6.4382`; re-based it would have been `6.12 + 2 × 0.1407 = 6.4014`) and counted — the fail-safe direction the design chose, today's behaviour on that leg.
@@ -145,3 +145,10 @@ Disposition: the active refusal `no_transactable_side (implausible_spread)` is c
 - **The process runs the new code:** `dist/BUILD_SHA` = the sha; `dist/index.js` carries `planStorageQuantum` 4, `resolveTargetIsCap` 3, `LEVEL_SPEC_MALFORMED` 1, `builtEntry` 6, `levelSpecMalformed` 2; negative-control string 0.
 - **C-4, measured:** resting xStock RTB rows (`status` queued/reconfirmed) at 04:16:12Z and again after the deploy: **0** — xStock is closed for the weekend. Control: the same table shows its one crypto `reconfirmed` row, `n_tup_ins` 158,698. So the transitional old-shape population is zero at the boundary; any `levelSpecMalformed` on a post-deploy xStock birth is a stamping defect, not transition.
 - **NOT YET VERIFIED — needs live xStock taker opens (first session Monday 2026-11-16 ~01:00Z):** the positive cell (active ≥ 3, VTS ≥ 50 re-based `r_multiple` legs), zero inconsistent, zero malformed, `planTick ≠ fillTick`, booked R vs stamped r. The window closes at the fifth complete US session, expected by 2026-11-21T01:00Z.
+
+### UI leg — Open Trades in Claude-in-Chrome, 2026-11-15T22:34Z (CC-C)
+Kyle asked (via PM Claude) why a session was not doing this; his Chrome session carries the staging login, so it is a session's check (`CLAUDE.md` §7, `workflow-07-verify-cc`). Object: `/paper-trading` → Open Trades, the "Target/Stop" column, against the open `closed_trades` rows (`closed_at IS NULL`) for the same symbols, read the same minute. Population: the 8 open xStock paper positions; **one** is re-based (`levelBasis = fill_rebased`), so the positive cell is n = 1.
+- **GS/USD** (`morning_star`, taker): plan entry 909.7689, fill 907.52 (2.2489 cheaper); `levelSpec` stop `anchor`, target `distance`. Row: stop 902.4943 (= plan), target **918.8834** (= 921.1323 − 2.2489). **Screen: $918.8834 / $902.4943** — the moved target, not the plan's 921.1323.
+- **MDB/USD** (`vwap_pullback`, taker, control): fill 328.30 vs plan 328.5157; stop `anchor`, target `max(anchor 342.8481, r2 341.6934)` → anchor won, so `levelBasis = plan` and nothing moves. **Screen: $342.8482 / $321.9269** = the plan levels.
+- The other six carry no `levelBasis` (maker or pre-deploy); not graded here.
+**Verdict: PASS** — the screen shows the carried levels, including the re-based one. **Limit:** n = 1 re-based row on screen; it shows the column reads the row, not the population (the population is the Step-7 re-read above).
