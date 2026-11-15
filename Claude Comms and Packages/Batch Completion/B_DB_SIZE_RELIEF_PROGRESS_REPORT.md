@@ -77,6 +77,7 @@ They go eligible at 30 days on 2026-11-30. **Prediction:** at the 11-30/12-01 sw
 - **30d after fold r2** was not re-timed. It now carries a deterministic ~6 s burn; the 25 s is a per-statement bound, so this is latency, not failure.
 - The estimates rest on the DROP-only premise. If row deletes are ever added to these tables, the labels must be revisited.
 - **Placed on this batch, not built** (Langston, fold-r2 attack (a)): an elapsed-ms record on both arms of the non-daily slice ask, with the partition's `reltuples` beside it, so a skip gate could later be sized from at least 3 points. Not a new row.
+- **Input recorded, criterion unchanged (NEW Claude, Discord `1571674926539345951`, KD-84 r7 `c2362762e`):** the RTB pool fix (row 9j, after B-ENTRY-GATE closes) brings back the `rtb_shadow_pool_members` write rate inside this window, at one row per member per cycle. That table is not one of the six, and every PASS/FAIL leg is per table. It affects only the whole-database series, which §3 reads as context only.
 - The post-12-01 re-time of the endpoint, when provenance turns daily (worst case 18 s → ceiling 24 s): due in window leg (a)'s read.
 
 ## 5. Governance files changed so far (Step 10, 2026-11-15)
