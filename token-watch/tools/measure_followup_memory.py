@@ -697,7 +697,10 @@ class Sampler:
                 os.close(self.fd)
 
     def mark(self, stage: str, **extra) -> None:
-        probes = {"allocated_blocks": sys.getallocatedblocks()}
+        # ru_maxrss on EVERY mark (Langston, P2b-2 result ruling, §13 disposition 1): the kernel keeps this high-water
+        # whatever the sampler thread was doing, so a mark localises a GIL-blind transient to the stage it fell in -
+        # the sampler cannot run while a C-level allocation holds the GIL (P2b-2: gaps up to 1.31 s at 0.5 s nominal)
+        probes = {"allocated_blocks": sys.getallocatedblocks(), "ru_maxrss_kib": _maxrss_kib()}
         for name, fn in self.probes.items():
             try:
                 probes[name] = fn()

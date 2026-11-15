@@ -441,6 +441,9 @@ check("S1 P2b-2: memory.pressure some/full totals are parsed onto every line",
       m0.get("pressure") == {"some": 4242, "full": 17}
       and all(x.get("pressure") == {"some": 4242, "full": 17} for x in lines if x.get("kind") in ("sample", "mark")),
       str(m0.get("pressure")))
+check("S1 P2b-2 result fold: every mark carries the kernel high-water ru_maxrss_kib",
+      all(isinstance(x.get("ru_maxrss_kib"), int) and x["ru_maxrss_kib"] > 0 for x in lines if x.get("kind") == "mark"),
+      str([x.get("ru_maxrss_kib") for x in lines if x.get("kind") == "mark"][:3]))
 check("S1 a marker carries the Python counters (A-3)", isinstance(m0.get("allocated_blocks"), int)
       and isinstance(m0.get("len_prev"), int) and isinstance(m0.get("len_dead_cache"), int),
       str({k: m0.get(k) for k in ("allocated_blocks", "len_prev", "len_dead_cache")}))

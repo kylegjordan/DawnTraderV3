@@ -14,8 +14,10 @@ B=/var/lib/token-watch-p1-runs/bodies.sqlite
 NOW=2026-10-02T13:00:00Z
 # P2b-1 (Langston's run condition): RESULTS and LOG are overridable so a later run never writes into P2a's evidence;
 # SAMPLE_INTERVAL (default 5 s) reaches the harness through the runner
-RES=${RES:-/var/lib/token-watch-p1-runs/results/p2a}
-LOG=${LOG:-/var/lib/token-watch-p1-runs/p2a-driver.log}
+# PHASE labels the log lines and run roots (Langston nit at the P2b-2 result: that run was logged as "p2a")
+PHASE=${PHASE:-p2a}
+RES=${RES:-/var/lib/token-watch-p1-runs/results/$PHASE}
+LOG=${LOG:-/var/lib/token-watch-p1-runs/$PHASE-driver.log}
 ALLOW_S=$((40*60))         # untraced arms ran 5-19 min at Step 7 (his A-1 reading); 40 min allowed + the margin below
 MARGIN_S=$((15*60))
 [[ $EUID -eq 0 ]] || { echo "REFUSED: run as root" >&2; exit 2; }
@@ -36,7 +38,7 @@ for arm in all_shed live; do
   if [ -e "$RES/$arm-unit.txt" ] && grep -q '^Result=' "$RES/$arm-unit.txt"; then
     echo "$(date -u +%FT%TZ) SKIP $arm: a result already exists in $RES (move it aside to re-run)" >> "$LOG"; continue
   fi
-  RUN=/var/lib/token-watch-p1-runs/run-$arm-p2a   # set before updater_ok: it is read there under set -u (FOLD-1)
+  RUN=/var/lib/token-watch-p1-runs/run-$arm-$PHASE   # set before updater_ok: it is read there under set -u (FOLD-1)
   updater_ok() {   # (Langston nit) checked again right before the arm: prepare runs inside the margin and eats it
     NEXT=$(systemctl show apt-daily-upgrade.timer -p NextElapseUSecRealtime --value)
     # an EMPTY elapse (a masked or absent timer returns "" with rc 0) parses as today's midnight: unreadable, not "near"
@@ -54,7 +56,7 @@ for arm in all_shed live; do
     mv "$RES/$arm-samples.jsonl" "$RES/$arm-samples.jsonl.void-$(date -u +%Y%m%dT%H%M%SZ)"
     echo "$(date -u +%FT%TZ) moved a previous $arm-samples.jsonl aside (a re-run is a new population)" >> "$LOG"
   fi
-  echo "$(date -u +%FT%TZ) START p2a $arm (updater next $NEXT) free=$(df -B1 --output=avail / | tail -1)" >> "$LOG"
+  echo "$(date -u +%FT%TZ) START $PHASE $arm (updater next $NEXT) free=$(df -B1 --output=avail / | tail -1)" >> "$LOG"
   sudo -u tokenwatch env TOKEN_WATCH_ROOT=/var/lib/token-watch-scratch PYTHONDONTWRITEBYTECODE=1 \
     /usr/bin/python3 "$H" prepare --pristine /var/lib/token-watch-scratch --run-root "$RUN" --now "$NOW" >> "$LOG" 2>&1
   prc=$?; echo "$(date -u +%FT%TZ) prepare rc=$prc" >> "$LOG"
@@ -62,9 +64,9 @@ for arm in all_shed live; do
   updater_ok "after prepare"
   SAMPLE_INTERVAL="${SAMPLE_INTERVAL:-5}" bash "$R" "$arm" "$RUN" "$B" "$NOW" "$RES" --sample >> "$LOG" 2>&1
   rc=$?
-  echo "$(date -u +%FT%TZ) END p2a $arm rc=$rc samples=$(wc -l < "$RES/$arm-samples.jsonl" 2>/dev/null || echo none) free=$(df -B1 --output=avail / | tail -1)" >> "$LOG"
+  echo "$(date -u +%FT%TZ) END $PHASE $arm rc=$rc samples=$(wc -l < "$RES/$arm-samples.jsonl" 2>/dev/null || echo none) free=$(df -B1 --output=avail / | tail -1)" >> "$LOG"
   cp "$RUN/PREPARE.json" "$RES/$arm-PREPARE.json" 2>>"$LOG"
   cleanup
-  case $rc in 0|137) ;; *) echo "$(date -u +%FT%TZ) STOP: p2a $arm rc=$rc" >> "$LOG"; exit 1;; esac
+  case $rc in 0|137) ;; *) echo "$(date -u +%FT%TZ) STOP: $PHASE $arm rc=$rc" >> "$LOG"; exit 1;; esac
 done
 echo "$(date -u +%FT%TZ) ALL DONE" >> "$LOG"
