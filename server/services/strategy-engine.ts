@@ -249,7 +249,7 @@ export class StrategyEngine {
         stopPrice = entryPrice - atr * override.stopAtrMultiplier;
         const riskDistance = entryPrice - stopPrice;
         finalTarget = entryPrice + riskDistance * override.targetAsRMultiple;
-        _levelSpec = { stop: { form: 'distance' }, target: { form: 'r_multiple', r: override.targetAsRMultiple } };
+        _levelSpec = { stop: { form: 'distance' }, target: { form: 'r_multiple', r: override.targetAsRMultiple, builtEntry: entryPrice, builtStop: stopPrice } }; // #1250 Step 9 D1: the operands multiplied
         console.log(`[VWAP Strategy] [B63 Item 12] Using strong-trend geometry override: stop=${override.stopAtrMultiplier}×ATR, target=${override.targetAsRMultiple}R`);
       } else {
         // Default (pre-B63-Item-12) geometry for low-DBS pullback context
@@ -546,7 +546,7 @@ export class StrategyEngine {
         // Break below SMA exit - use fixed NR target
         const riskDistance = entryPrice - stopPrice;
         targetPrice = entryPrice + (riskDistance * c['break_target_r_multiple']);
-        _targetSpec = { form: 'r_multiple', r: c['break_target_r_multiple'] };
+        _targetSpec = { form: 'r_multiple', r: c['break_target_r_multiple'], builtEntry: entryPrice, builtStop: stopPrice }; // #1250 Step 9 D1
         
         console.log(`[SMA Strategy] Using BREAK exit: 2R target`);
       }
@@ -991,7 +991,7 @@ export class StrategyEngine {
         targetPrice,
         confidence: c['base_confidence'],
         metadata: {
-          levelSpec: { stop: { form: 'anchor' }, target: { form: 'r_multiple', r: c['target_r_multiple'] } } satisfies LevelSpec, // #1250 P0
+          levelSpec: { stop: { form: 'anchor' }, target: { form: 'r_multiple', r: c['target_r_multiple'], builtEntry: entryPrice, builtStop: stopPrice } } satisfies LevelSpec, // #1250 P0; Step 9 D1: the operands multiplied
           vwap,
           vwapSlope: vwapSlope * 100,
           distanceFromVWAP: distanceFromVWAP * 100,

@@ -53,7 +53,7 @@ describe('#1250 — the gate is the blast radius', () => {
     const rb = at('const _rb = rebaseLevels(');
     const gate = E.lastIndexOf("if (_openClass === 'xstock_spot') {", rb);
     expect(gate).toBeGreaterThan(-1);
-    expect(rb - gate).toBeLessThan(400);
+    expect(rb - gate).toBeLessThan(1000); // Step 9 added the birth-grid read (`_gab`/`_rbPlanTick`) between the gate and the call
     // and it sits inside the taker branch: after the maker branch opens, after the taker fill is known
     expect(rb).toBeGreaterThan(at('actualEntryPrice = _openFill.fillPrice;'));
     // the MAKER branch head (two `if (_b72cPendingMaker) {` exist; this one sets the limit fill — unique with its first line)
@@ -128,6 +128,17 @@ describe('#1250 P0 — the stamp survives every hop, strategy → eval cycle →
   });
   it('the orchestrator rounds a cap by the STAMPED bit, the name only for an unstamped signal (C-2)', () => {
     const orch = src('server/services/signal-orchestrator.ts');
-    expect(orch).toContain("const _isCap = _stampSpec !== undefined ? _stampSpec.targetIsCap === true : strategyId === ('volatility_edge' as StrategyType);");
+    // #1250 Step 9 §13.1 C-1: birth now calls THE shared derivation (the stamp's bit; the name only when no stamp).
+    expect(orch).toContain('const _isCap = resolveTargetIsCap((rawSignal.metadata as { levelSpec?: unknown } | undefined)?.levelSpec, strategyId);');
+    expect(orch).not.toContain('_stampSpec.targetIsCap');
+  });
+  it('Step 9 §13 D3: the active re-base grades on the BIRTH grid from gridAtBirth, and passes the strategy for the cap fallback', () => {
+    expect(E).toContain("const _rbPlanTick = _gab?.resolved === true && typeof _gab.tick === 'number' && Number.isFinite(_gab.tick) && _gab.tick > 0");
+    expect(E).toContain('fill: actualEntryPrice, spec: _rbSpec, tick: _rbTick, planTick: _rbPlanTick, strategyId: signal.strategy });');
+    expect(E).toContain('levelSpecMalformed: _rb.ok ? _rb.malformed : null,'); // §13.1 C-5
+    expect(E).toContain('planTick: _rbPlanTick, fillTick: _rbTick,');
+    const vts = src('server/asset_classes/xstock_spot/eval-cycle.ts');
+    expect(vts).toContain('tick: null, planTick: null, strategyId: strategyKey });');
+    expect(vts).toContain('levelSpecMalformed: _xRb.malformed,');
   });
 });

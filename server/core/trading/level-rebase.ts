@@ -17,7 +17,14 @@ import { roundPriceForRole } from '../calculations/venue-price-grid.js';
 export type LevelForm =
   | { form: 'anchor' }
   | { form: 'distance' }
-  | { form: 'r_multiple'; r: number }
+  /**
+   * Step 9 (pre-audit §13 D1, Langston 2026-11-15): a SINGLE-FORM `r_multiple` leg also carries the exact entry and stop the
+   * strategy multiplied (`builtEntry`, `builtStop`), so the check rebuilds the target the strategy built — not one re-derived
+   * from the ROUNDED plan, whose per-leg directional rounding leaves a residual of up to [−2.5, +3.5] ticks at r = 2 (SBET,
+   * the five-session read). Required on a single-form leg (`isWellFormedLegSpec`); a term inside a mixed leg carries its
+   * `value` instead and needs neither.
+   */
+  | { form: 'r_multiple'; r: number; builtEntry?: number; builtStop?: number }
   | { form: 'proportional' };
 
 /** One term of a mixed construction, with the value it had when the strategy built it. */
@@ -41,8 +48,13 @@ export interface RebaseResult {
   targetPrice: number;
   stopBasis: LegBasis;
   targetBasis: LegBasis;
-  /** Legs whose stamp did not reproduce the arriving plan within one tick — kept on the plan (§8.2). */
+  /** Legs whose stamp did not reproduce the arriving plan (exactly, on the birth grid — §13 D3) — kept on the plan. */
   inconsistent: Array<'stop' | 'target'>;
+  /**
+   * §13.1 C-5: legs PRESENT in the stamp but not well-formed. They fall through to anchor (nothing moves — the fail-safe), and
+   * without this field they were invisible: `inconsistent` stays empty, so a total stamping failure read as a clean run.
+   */
+  malformed: Array<'stop' | 'target'>;
 }
 export type RebaseOutcome = RebaseResult | { ok: false; reason: string };
 
@@ -61,14 +73,34 @@ function deriveForm(spec: LevelForm, value: number, plan: number, fill: number, 
   }
 }
 
-/** The value the spec gives at the PLAN entry — what the strategy built, before any fill. */
-function atPlan(spec: LegSpec, level: number, plan: number, planStop: number | null): number {
+/**
+ * The value the strategy BUILT for this leg, before any rounding or fill. §13 D2: a single-form `r_multiple` rebuilds it from
+ * its stamped operands — the same expression the three sites evaluate (`entry + (entry − stop) * r`), so it is the same double.
+ * A mixed leg returns its stamped term values; anchor / distance / proportional reproduce themselves.
+ */
+function atPlan(spec: LegSpec, level: number): number {
   if (!isMixed(spec)) {
-    if (spec.form === 'r_multiple') return planStop === null ? NaN : plan + spec.r * (plan - planStop);
-    return level; // anchor / distance / proportional reproduce themselves at the plan
+    if (spec.form === 'r_multiple') {
+      const { builtEntry, builtStop } = spec;
+      return finitePos(builtEntry) && finitePos(builtStop) ? builtEntry + (builtEntry - builtStop) * spec.r : NaN;
+    }
+    return level;
   }
   const [a, b] = spec.terms;
   return spec.op === 'max' ? Math.max(a.value, b.value) : Math.min(a.value, b.value);
+}
+
+/** §13.1 C-2: only these legs REBUILD a value at the plan, so only these are compared on the birth grid. */
+const isReconstruction = (s: LegSpec): boolean => isMixed(s) || s.form === 'r_multiple';
+
+/**
+ * §13.1 C-1 — THE ONE cap derivation, used at birth (`signal-orchestrator.ts`, the grid rounding) AND at the re-base (the
+ * check and the output rounding). A stamp present decides by its own bit; no stamp falls back to the one strategy whose
+ * target is a ceiling. Two copies of this differed by exactly one tick — the window the old tolerance swallowed.
+ */
+export function resolveTargetIsCap(levelSpec: unknown, strategyId: string | null | undefined): boolean {
+  if (levelSpec !== undefined) return (levelSpec as { targetIsCap?: unknown } | null)?.targetIsCap === true;
+  return strategyId === 'volatility_edge';
 }
 
 function deriveLeg(spec: LegSpec, level: number, plan: number, fill: number, stop: number | null, entryBasis: number = fill): number {
@@ -85,19 +117,22 @@ const isAnchorOnly = (s: LegSpec | undefined): boolean => s === undefined || (!i
 export function isWellFormedLegSpec(s: unknown): s is LegSpec {
   if (!s || typeof s !== 'object') return false;
   const o = s as Record<string, unknown>;
-  const okForm = (f: unknown): boolean => {
+  // §13 D1 (Langston Q2: "required, no fallback"): a SINGLE-FORM r_multiple must carry its construction operands; a mixed
+  // term carries its `value` instead. An old-shape single-form stamp is therefore malformed — absent ⇒ nothing moves.
+  const okForm = (f: unknown, single: boolean): boolean => {
     if (!f || typeof f !== 'object') return false;
     const ff = f as Record<string, unknown>;
     if (ff.form === 'anchor' || ff.form === 'distance' || ff.form === 'proportional') return true;
-    return ff.form === 'r_multiple' && finitePos(ff.r);
+    if (ff.form !== 'r_multiple' || !finitePos(ff.r)) return false;
+    return !single || (finitePos(ff.builtEntry) && finitePos(ff.builtStop) && ff.builtStop < ff.builtEntry);
   };
   if ('op' in o) {
     if (o.op !== 'max' && o.op !== 'min') return false;
     const t = o.terms;
     return Array.isArray(t) && t.length === 2 && t.every((x) => x && typeof x === 'object'
-      && okForm((x as LevelTerm).spec) && finitePos((x as LevelTerm).value));
+      && okForm((x as LevelTerm).spec, false) && finitePos((x as LevelTerm).value));
   }
-  return okForm(o);
+  return okForm(o, true);
 }
 
 /**
@@ -117,26 +152,48 @@ export function rebaseLevels(i: {
    */
   entryBasis?: number;
   spec: LevelSpec | null | undefined;
+  /** The grid the re-based OUTPUT is rounded on (the fill-time grid), or null to leave it unrounded. */
   tick: number | null;
+  /**
+   * §13 D3: the grid the PLAN was rounded on at birth (`metadata.gridAtBirth.tick` when resolved), or null when the plan
+   * arrives unrounded (VTS books unrounded; crypto birth runs before rounding; the xStock passthrough is born unrounded).
+   * Kept separate from `tick` because the xStock grid is re-derived every 6 h — the check grades the plan on the grid it
+   * was rounded with, never on whatever the map says at the fill (Langston finding 4).
+   */
+  planTick: number | null;
+  /** §13.1 C-1: for `resolveTargetIsCap`'s fallback, exactly as at birth. */
+  strategyId: string | null | undefined;
 }): RebaseOutcome {
-  const { planEntry, planStop, planTarget, fill, tick } = i;
+  const { planEntry, planStop, planTarget, fill, tick, planTick } = i;
   const entryBasis = i.entryBasis ?? fill;
   if (![planEntry, planStop, planTarget, fill, entryBasis].every(finitePos)) return { ok: false, reason: 'invalid_inputs' };
   if (!(planStop < planEntry && planTarget > planEntry)) return { ok: false, reason: 'plan_not_long' };
 
   const spec = i.spec ?? {};
+  const isCap = resolveTargetIsCap(i.spec, i.strategyId); // null stays null: "present, not a cap" — exactly as at birth
   const stopSpec = spec.stop !== undefined && isWellFormedLegSpec(spec.stop) ? spec.stop : undefined;
   const targetSpec = spec.target !== undefined && isWellFormedLegSpec(spec.target) ? spec.target : undefined;
-  // One tick, plus double-rounding slack (104.01 − 104 is 0.010000000000005 in binary), or 1e-9 relative off-grid.
-  const tol = (tick !== null && finitePos(tick) ? tick : 0) + Math.max(planEntry, fill) * 1e-9;
+  const malformed: Array<'stop' | 'target'> = [];
+  if (spec.stop !== undefined && stopSpec === undefined) malformed.push('stop');
+  if (spec.target !== undefined && targetSpec === undefined) malformed.push('target');
+  // Double-rounding slack only (104.01 − 104 is 0.010000000000005 in binary) — §13 D3 retired the one-tick tolerance.
+  const eps = Math.max(planEntry, fill) * 1e-9;
   const inconsistent: Array<'stop' | 'target'> = [];
 
-  // §8.2 self-consistency, AT THE RE-BASE SITE, against the plan values that ARRIVE (post-rounding on the active arm).
-  const stopUsable = stopSpec !== undefined && !isAnchorOnly(stopSpec)
-    && Math.abs(atPlan(stopSpec, planStop, planEntry, null) - planStop) <= tol;
+  // §13 D3 + §13.1 C-2: self-consistency AT THE RE-BASE SITE, against the plan values that ARRIVE. A leg that REBUILDS its
+  // value (single-form r_multiple, mixed) must land EXACTLY on the arriving level once rounded on the birth grid with its
+  // role's direction; a leg defined as itself is compared structurally and never re-rounded.
+  const reproduces = (s: LegSpec, arriving: number, role: 'stop' | 'target'): boolean => {
+    const built = atPlan(s, arriving);
+    if (!Number.isFinite(built)) return false;
+    const expect = isReconstruction(s) && planTick !== null && finitePos(planTick)
+      ? roundPriceForRole(built, planTick, role, true, role === 'target' && isCap)
+      : built;
+    return Math.abs(expect - arriving) <= eps;
+  };
+  const stopUsable = stopSpec !== undefined && !isAnchorOnly(stopSpec) && reproduces(stopSpec, planStop, 'stop');
   if (stopSpec !== undefined && !isAnchorOnly(stopSpec) && !stopUsable) inconsistent.push('stop');
-  const targetUsable = targetSpec !== undefined && !isAnchorOnly(targetSpec)
-    && Math.abs(atPlan(targetSpec, planTarget, planEntry, planStop) - planTarget) <= tol;
+  const targetUsable = targetSpec !== undefined && !isAnchorOnly(targetSpec) && reproduces(targetSpec, planTarget, 'target');
   if (targetSpec !== undefined && !isAnchorOnly(targetSpec) && !targetUsable) inconsistent.push('target');
 
   let stop = stopUsable ? deriveLeg(stopSpec as LegSpec, planStop, planEntry, fill, null, entryBasis) : planStop;
@@ -146,7 +203,7 @@ export function rebaseLevels(i: {
   // F-G-1: every price we emit is venue-representable. Boundaries round AWAY from entry; a cap target TOWARD it.
   if (tick !== null && finitePos(tick)) {
     if (stopUsable) stop = roundPriceForRole(stop, tick, 'stop', true);
-    if (targetUsable) target = roundPriceForRole(target, tick, 'target', true, spec.targetIsCap === true);
+    if (targetUsable) target = roundPriceForRole(target, tick, 'target', true, isCap);
   }
   if (!finitePos(stop) || !finitePos(target)) return { ok: false, reason: 'non_finite_rebase' };
   if (!(stop < entryBasis && target > entryBasis)) return { ok: false, reason: 'rebased_not_long' };
@@ -160,5 +217,6 @@ export function rebaseLevels(i: {
     stopBasis: stopUsable && moved(stop, planStop) ? 'fill_rebased' : 'plan',
     targetBasis: targetUsable && moved(target, planTarget) ? 'fill_rebased' : 'plan',
     inconsistent,
+    malformed,
   };
 }

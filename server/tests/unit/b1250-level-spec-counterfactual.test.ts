@@ -32,6 +32,8 @@ interface Case {
   stamp: string;          // the stamp literal as it appears in the source (a substring)
   /** Step-4 dup-pin item (Langston): for a strategy-engine case, the detector whose BODY must hold the stamp + levels. */
   fn?: string;
+  /** #1250 Step 9 D5(vi): a single-form r_multiple target — the stamped `r` expression, for the bit-equality fence. */
+  rExpr?: string;
 }
 
 const CASES: Case[] = [
@@ -39,7 +41,8 @@ const CASES: Case[] = [
     entry: "currentPrice + atr * c['entry_atr_premium']",
     stop: { expr: 'entryPrice - atr * override.stopAtrMultiplier', form: 'distance' },
     target: { expr: 'entryPrice + riskDistance * override.targetAsRMultiple', form: 'r_multiple' },
-    stamp: "_levelSpec = { stop: { form: 'distance' }, target: { form: 'r_multiple', r: override.targetAsRMultiple } };" },
+    stamp: "_levelSpec = { stop: { form: 'distance' }, target: { form: 'r_multiple', r: override.targetAsRMultiple, builtEntry: entryPrice, builtStop: stopPrice } };",
+    rExpr: 'override.targetAsRMultiple' },
   { key: 'vwap_pullback', fn: 'detectVWAPPullback', branch: 'default', file: ENGINE, decision: 'currentPrice',
     entry: "currentPrice + atr * c['entry_atr_premium']",
     stop: { expr: "Math.min(vwap - atr * c['stop_atr_mult_vwap'], low24h + atr * c['stop_atr_mult_low24h'])", form: 'anchor' },
@@ -68,7 +71,8 @@ const CASES: Case[] = [
     entry: "currentPrice * c['entry_premium_mult']",
     stop: { expr: "Math.min(priorSwingLow * c['swing_low_stop_mult'], sma * c['sma_stop_mult'])", form: 'anchor' },
     target: { expr: "entryPrice + (riskDistance * c['break_target_r_multiple'])", form: 'r_multiple' },
-    stamp: "_targetSpec = { form: 'r_multiple', r: c['break_target_r_multiple'] };" },
+    stamp: "_targetSpec = { form: 'r_multiple', r: c['break_target_r_multiple'], builtEntry: entryPrice, builtStop: stopPrice };",
+    rExpr: "c['break_target_r_multiple']" },
   { key: 'breakout', fn: 'detectBreakout', branch: 'only', file: ENGINE, decision: 'breakoutLevel',
     entry: "breakoutLevel * c['entry_premium_mult']",
     stop: { expr: "rangeResult.rangeLow * c['stop_below_low_mult']", form: 'anchor' },
@@ -88,7 +92,8 @@ const CASES: Case[] = [
     entry: "currentPrice * c['entry_premium_mult']",
     stop: { expr: "vwap * c['stop_below_vwap_mult']", form: 'anchor' },
     target: { expr: "entryPrice + (riskDistance * c['target_r_multiple'])", form: 'r_multiple' },
-    stamp: "levelSpec: { stop: { form: 'anchor' }, target: { form: 'r_multiple', r: c['target_r_multiple'] } } satisfies LevelSpec" },
+    stamp: "levelSpec: { stop: { form: 'anchor' }, target: { form: 'r_multiple', r: c['target_r_multiple'], builtEntry: entryPrice, builtStop: stopPrice } } satisfies LevelSpec",
+    rExpr: "c['target_r_multiple']" },
   { key: 'liquidity_trap', fn: 'detectLiquidityTrap', branch: 'only (disabled; bearish geometry)', file: ENGINE, decision: 'currentBarPrice',
     entry: "currentBarPrice * c['entry_on_return_mult']",
     stop: { expr: "breakoutHigh * c['stop_above_trap_mult']", form: 'anchor' },
@@ -220,7 +225,7 @@ function run(cs: Case, seed: number, d: number) {
     if (k === cs.decision || ['Math', 'Math.min', 'Math.max', 'parseFloat', 'entryPrice', 'riskDistance', 'stopPrice'].includes(k)) continue;
     if (!(k in fixed)) fixed[k] = evalIn(m[0], env0);
   } };
-  [cs.entry, ...legExprs(cs.stop).map((t) => t.expr), ...legExprs(cs.target).map((t) => t.expr)].forEach(freeze);
+  [cs.entry, ...legExprs(cs.stop).map((t) => t.expr), ...legExprs(cs.target).map((t) => t.expr), ...(cs.rExpr ? [cs.rExpr] : [])].forEach(freeze);
   const at = (decision: number) => {
     const env = pass(decision);
     const entry = evalIn(cs.entry, env);
@@ -233,7 +238,8 @@ function run(cs: Case, seed: number, d: number) {
       : withEntry(l.expr, stop));
     const stop = legVal(cs.stop, NaN);
     const terms = (l: Leg, s: number) => legExprs(l).map((t) => withEntry(t.expr, s));
-    return { entry, stop, stopTerms: terms(cs.stop, NaN), targetTerms: terms(cs.target, stop), target: legVal(cs.target, stop) };
+    return { entry, stop, stopTerms: terms(cs.stop, NaN), targetTerms: terms(cs.target, stop), target: legVal(cs.target, stop),
+      r: cs.rExpr !== undefined ? evalIn(cs.rExpr, env) : NaN };
   };
   void entry0;
   return { a: at(100), b: at(100 + d) };
@@ -275,6 +281,17 @@ describe('#1250 FENCE 1 — each leg responds to the decision price exactly as i
         }
         expect(file).toContain(cs.stamp);
       });
+      if (cs.rExpr !== undefined) {
+        // #1250 Step 9 D5(vi) (Langston): the stamped operands must rebuild the site's own target BIT-EXACTLY — the check
+        // compares on the birth grid with no tolerance, so a site whose target is computed any other way must fail here.
+        it('Step 9: builtEntry + (builtEntry − builtStop)·r is bit-identical to the target the site computes', () => {
+          expect(file).toContain('const riskDistance = entryPrice - stopPrice;');
+          for (const [seed, d] of [[1, 0.4], [2, -0.4], [3, 1.3], [4, 0]] as const) {
+            const { a, b } = run(cs, seed, d);
+            for (const v of [a, b]) expect(Object.is(v.entry + (v.entry - v.stop) * v.r, v.target), `seed ${seed}`).toBe(true);
+          }
+        });
+      }
       it.each([[1, 0.4], [2, -0.4], [3, 1.3]])('seed %s, decision moved by %s: every term moves as stamped', (seed, d) => {
         const { a, b } = run(cs, seed, d);
         legExprs(cs.stop).forEach((t, i) => {
@@ -286,6 +303,14 @@ describe('#1250 FENCE 1 — each leg responds to the decision price exactly as i
       });
     });
   }
+  it('Step 9 mutation control: a target built as entry·(1 + r·risk/entry) is NOT bit-identical to the stamped rebuild somewhere', () => {
+    let differs = 0;
+    for (let i = 1; i <= 200; i++) {
+      const e = 80 + (i * 0.37) % 40, st = e - (0.3 + (i * 0.11) % 3), r = 2;
+      if (!Object.is(e * (1 + (r * (e - st)) / e), e + (e - st) * r)) differs++;
+    }
+    expect(differs).toBeGreaterThan(0); // the fence above can tell an algebraically equal, differently computed target apart
+  });
   it('mutation control: a distance construction stamped anchor is caught', () => {
     const cs = CASES.find((c) => c.key === 'strong_bull_trend')!;
     const { a, b } = run(cs, 1, 0.4);

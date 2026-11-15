@@ -180,6 +180,9 @@ export function baseCryptoLevelsAtBirth(i: {
   const r = rebaseLevels({
     planEntry: i.planEntry, planStop: i.planStop, planTarget: i.planTarget,
     fill: levelSide, entryBasis: takerEntry, spec: s, tick: null,
+    // #1250 Step 9 §13 D3: this runs BEFORE the grid rounding, so the plan is unrounded ⇒ planTick null (exact at 1e-9).
+    // The stamp is required present above, so the cap bit comes from it and the strategy fallback is never read.
+    planTick: null, strategyId: null,
   });
   if (!r.ok) return { ok: false, reason: `rebase_${r.reason}` };
   if (r.inconsistent.length > 0) return { ok: false, reason: 'level_spec_inconsistent' };

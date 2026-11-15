@@ -89,6 +89,7 @@ import { getPerClassTargetGate } from '../core/calculations/expectancy.js';
 // F-G-1 (OBJ-7): the venue price grid and its rounding rules. Rounding happens at the ONE
 // orchestrator seam so no strategy can be born bypassing it.
 import { roundTripleToGrid } from '../core/calculations/venue-price-grid.js';
+import { resolveTargetIsCap } from '../core/trading/level-rebase.js'; // #1250 Step 9 §13.1 C-1 — the one cap derivation
 import { resolveVenueGrid, decideGridAction } from '../markets/venue-grid-resolver.js';
 
 /**
@@ -718,8 +719,9 @@ export class SignalOrchestrator {
       // rebuild drops the strategy's metadata". It did until 8c — the HYBRID literal now carries the quant source's
       // `levelSpec` via `pickLevelStamps` — so at this ref NO known constructor reaches here unstamped (every crypto
       // constructor stamps; census in the 8c change list). The fallback stays as the defence for a future unstamped one.
-      const _stampSpec = (rawSignal.metadata as { levelSpec?: { targetIsCap?: boolean } } | undefined)?.levelSpec;
-      const _isCap = _stampSpec !== undefined ? _stampSpec.targetIsCap === true : strategyId === ('volatility_edge' as StrategyType);
+      // #1250 Step 9 §13.1 C-1: THE ONE derivation, shared with the re-base's check and output rounding — two copies of
+      // this differed by exactly one tick, the window the retired tolerance used to swallow.
+      const _isCap = resolveTargetIsCap((rawSignal.metadata as { levelSpec?: unknown } | undefined)?.levelSpec, strategyId);
       const _r = roundTripleToGrid(
         rawSignal.entryPrice, rawSignal.stopPrice, rawSignal.targetPrice,
         _grid.tick, { targetIsCap: _isCap, symbol: rawSignal.symbol },

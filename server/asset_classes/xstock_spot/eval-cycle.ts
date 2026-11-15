@@ -1157,7 +1157,9 @@ export async function evaluateXstockPairForVTS(
           }
           // #1250 P5: after the window (it wins a doubly-refusable row), the same order as the active open.
           const _xRbSpec = (strategySignal.metadata as { levelSpec?: LevelSpec } | undefined)?.levelSpec;
-          const _xRb = rebaseLevels({ planEntry: entryPrice, planStop: stopLoss, planTarget: takeProfit, fill: _xBookedEntry, spec: _xRbSpec, tick: null });
+          // Step 9 §13 D3: this lane's plan is UNROUNDED (`roundTripleToGrid` has one caller, the orchestrator) ⇒ planTick null,
+          // so a rebuilt leg must equal the arriving plan within 1e-9.
+          const _xRb = rebaseLevels({ planEntry: entryPrice, planStop: stopLoss, planTarget: takeProfit, fill: _xBookedEntry, spec: _xRbSpec, tick: null, planTick: null, strategyId: strategyKey });
           if (!_xRb.ok) {
             _xRefuseBooking(`level_rebase_${_xRb.reason}`, `taker ask ${_xBookedEntry} vs plan ${entryPrice}/${stopLoss}/${takeProfit}`);
             continue;
@@ -1173,6 +1175,7 @@ export async function evaluateXstockPairForVTS(
             stopBasis: _xRb.stopBasis, targetBasis: _xRb.targetBasis,
             levelBasis: _xRb.stopBasis === 'fill_rebased' || _xRb.targetBasis === 'fill_rebased' ? 'fill_rebased' : 'plan',
             levelSpecStamped: _xRbSpec !== undefined, levelSpecInconsistent: _xRb.inconsistent,
+            levelSpecMalformed: _xRb.malformed, // §13.1 C-5
           };
           if (_xRb.inconsistent.length > 0) {
             console.warn(`[#1250][VTS][LEVEL_SPEC_INCONSISTENT] ${symbol} strategy=${strategyKey} legs=${_xRb.inconsistent.join(',')} — kept on the plan`);

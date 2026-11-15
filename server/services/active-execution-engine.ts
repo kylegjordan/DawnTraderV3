@@ -6550,13 +6550,21 @@ export class ActiveExecutionEngine {
     if (_openClass === 'xstock_spot') {
       const _rbTick = resolveVenueGrid(normalizeToInternalSymbol(signal.symbol) || signal.symbol, _openClass).tick ?? null;
       const _rbSpec = (signal.metadata as { levelSpec?: LevelSpec } | undefined)?.levelSpec;
+      // #1250 Step 9 (§13 D3): the grid the plan was rounded on AT BIRTH, read from the stamp the orchestrator wrote — never
+      // re-resolved here (the xStock grid is re-derived every 6 h). Unresolved at birth ⇒ the plan arrived unrounded ⇒ null.
+      const _gab = (signal.metadata as { gridAtBirth?: { resolved?: unknown; tick?: unknown } } | undefined)?.gridAtBirth;
+      const _rbPlanTick = _gab?.resolved === true && typeof _gab.tick === 'number' && Number.isFinite(_gab.tick) && _gab.tick > 0
+        ? _gab.tick : null;
       const _rb = rebaseLevels({ planEntry: signal.entryPrice, planStop: signal.stopPrice, planTarget: signal.targetPrice,
-        fill: actualEntryPrice, spec: _rbSpec, tick: _rbTick });
+        fill: actualEntryPrice, spec: _rbSpec, tick: _rbTick, planTick: _rbPlanTick, strategyId: signal.strategy });
       if (_rb.ok) {
         _carriedStop = _rb.stopPrice;
         _carriedTarget = _rb.targetPrice;
         if (_rb.inconsistent.length > 0) {
-          console.warn(`[#1250][LEVEL_SPEC_INCONSISTENT] ${signal.symbol} strategy=${signal.strategy} legs=${_rb.inconsistent.join(',')} plan=${signal.entryPrice}/${signal.stopPrice}/${signal.targetPrice} — kept on the plan`);
+          console.warn(`[#1250][LEVEL_SPEC_INCONSISTENT] ${signal.symbol} strategy=${signal.strategy} legs=${_rb.inconsistent.join(',')} plan=${signal.entryPrice}/${signal.stopPrice}/${signal.targetPrice} planTick=${_rbPlanTick ?? 'none'} — kept on the plan`);
+        }
+        if (_rb.malformed.length > 0) {
+          console.warn(`[#1250][LEVEL_SPEC_MALFORMED] ${signal.symbol} strategy=${signal.strategy} legs=${_rb.malformed.join(',')} — treated as anchor (nothing moves)`);
         }
       } else {
         _levelRefusal = { stage: 'LEVEL_REBASE_INVALID', reason: `level_rebase_${_rb.reason}` };
@@ -6566,6 +6574,10 @@ export class ActiveExecutionEngine {
         stopBasis: _rb.ok ? _rb.stopBasis : null, targetBasis: _rb.ok ? _rb.targetBasis : null,
         levelBasis: _rb.ok && (_rb.stopBasis === 'fill_rebased' || _rb.targetBasis === 'fill_rebased') ? 'fill_rebased' : 'plan',
         levelSpecStamped: _rbSpec !== undefined, levelSpecInconsistent: _rb.ok ? _rb.inconsistent : null,
+        // §13.1 C-5: presence is not well-formedness — a malformed leg is otherwise indistinguishable from a clean anchor.
+        levelSpecMalformed: _rb.ok ? _rb.malformed : null,
+        // §13 D3: both grids, so a birth-to-fill tick change is countable rather than inferred.
+        planTick: _rbPlanTick, fillTick: _rbTick,
       };
     }
     // B-ENTRY-GATE (#1224) P4: the economic test at the price this taker actually paid (its walked average fill).

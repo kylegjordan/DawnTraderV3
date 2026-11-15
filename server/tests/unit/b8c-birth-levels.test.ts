@@ -40,7 +40,7 @@ describe('8c birth re-base — the forms', () => {
   });
   it('§10 prediction (b): an r_multiple target keeps its R EXACTLY against the ASK (ruling item 2)', () => {
     // plan: entry 100, stop 98, r = 2 ⇒ target 104. Distance stop moves to 97.9; target = ask + 2·(ask − 97.9).
-    const r = run({ stop: { form: 'distance' }, target: { form: 'r_multiple', r: 2 } });
+    const r = run({ stop: { form: 'distance' }, target: { form: 'r_multiple', r: 2, builtEntry: 100, builtStop: 98 } });
     if (!r.ok) throw new Error(r.reason);
     expect(r.targetPrice).toBeCloseTo(100.1 + 2 * (100.1 - 97.9), 12);
     expect((r.targetPrice - r.entryPrice) / (r.entryPrice - r.stopPrice)).toBeCloseTo(2, 12);
@@ -86,7 +86,7 @@ describe('8c birth re-base — condition 1: every no-side arm REFUSES, none fall
   });
   it('a stamp that does not reproduce the plan is REFUSED, not left on the mid', () => {
     // r = 3 claimed, but the plan target 104 is r = 2
-    expect(run({ stop: { form: 'distance' }, target: { form: 'r_multiple', r: 3 } }))
+    expect(run({ stop: { form: 'distance' }, target: { form: 'r_multiple', r: 3, builtEntry: 100, builtStop: 98 } }))
       .toEqual({ ok: false, reason: 'level_spec_inconsistent' });
   });
   it('a target that lands inside the spread is not a long trade (long-ness reads the ASK)', () => {

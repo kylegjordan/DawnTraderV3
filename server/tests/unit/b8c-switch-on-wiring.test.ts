@@ -207,7 +207,8 @@ describe('8c Step-4 r1 (Langston) — the hop fence, one hop further: hybrid reb
     expect(at).toBeGreaterThan(-1);
   });
   it('the hybrid cap bit stays consistent with the name fallback: the carried stamp IS the quant strategy\'s (C-2 rounding)', () => {
-    expect(O).toContain("const _isCap = _stampSpec !== undefined ? _stampSpec.targetIsCap === true : strategyId === ('volatility_edge' as StrategyType);");
+    // #1250 Step 9 §13.1 C-1: the derivation moved into the ONE shared helper (stamp's bit, the name only with no stamp).
+    expect(O).toContain('const _isCap = resolveTargetIsCap((rawSignal.metadata as { levelSpec?: unknown } | undefined)?.levelSpec, strategyId);');
     // only volatility_edge stamps the cap bit, so stamp and name agree for every carried hybrid
     const caps = ['server/strategies/volatility-edge.ts'].map(src).filter((s) => s.includes('targetIsCap: true'));
     expect(caps).toHaveLength(1);
