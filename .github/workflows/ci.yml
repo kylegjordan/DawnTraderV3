@@ -152,6 +152,9 @@ jobs:
           python3 token-watch/tests/test_p5_error_requeue.py
           python3 token-watch/tests/test_p6_fence_and_writer.py
           python3 token-watch/tests/test_p9_journals.py
+          # P10 fold (B-TOKEN-WATCH-FOLLOWUP-MEMORY, Langston Step 4): tier carried by the follow-up's tail + its mutants
+          python3 token-watch/tests/test_p10_tier_tail.py
+          python3 token-watch/tests/mutate_p10_tier_tail.py
           python3 token-watch/tests/test_p11_cold_census.py
           python3 token-watch/tests/test_p8_census.py
           python3 token-watch/tests/test_p7_obs_fold.py

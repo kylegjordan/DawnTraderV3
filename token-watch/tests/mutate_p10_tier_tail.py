@@ -1,8 +1,14 @@
 #!/usr/bin/env python3
 """P10 tier-tail fold mutants (B-TOKEN-WATCH-FOLLOWUP-MEMORY, Langston 2026-11-15 `1571573900708679733`).
-Run from token-watch/ on a scratch COPY of the tree:  python3 tests/mutate_p10_tier_tail.py
+Run from anywhere (CI runs it from the repo root):  python3 token-watch/tests/mutate_p10_tier_tail.py
+It mutates a SCRATCH COPY of token-watch/ in a temp directory, never the checkout.
 exit 0 = every mutant killed (its test file exits non-zero WITH a FAIL line). NOT-APPLIED counts as a failure."""
-import os, subprocess, sys
+import os, shutil, subprocess, sys, tempfile
+
+PKG = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+WORK = os.path.join(tempfile.mkdtemp(prefix="tw-mut-p10-"), "token-watch")
+shutil.copytree(PKG, WORK, ignore=shutil.ignore_patterns("__pycache__"))
+os.chdir(WORK)
 
 NL = chr(10)
 T = "tests/test_p10_tier_tail.py"
