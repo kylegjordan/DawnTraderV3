@@ -175,7 +175,10 @@ describe('B-DB-SIZE-RELIEF Step-9 — Langston Step-4 folds (2026-11-15)', () =>
   it('the DROP-only premise is written into the module header (Langston B)', () => {
     const src = read('server/services/data-archive/archive-count-estimate.ts');
     expect(src).toMatch(/THE PREMISE THE ESTIMATES REST ON/);
-    expect(src).toMatch(/never by a row DELETE or UPDATE/);
+    expect(src).toMatch(/never by a row DELETE\./);
+    // fold-r2 C-1/C-2: the UPDATE that does exist is named and ruled immaterial; the variable-table DELETE is enumerated
+    expect(src).toMatch(/An UPDATE does exist/);
+    expect(src).toMatch(/PLAIN_RETENTION_TABLES \(xstock_qd_probe_history, vts_open_trades,\s*\n?\s*\*?\s*closed_trades\)/);
   });
 });
 

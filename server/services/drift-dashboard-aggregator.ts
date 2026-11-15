@@ -861,9 +861,12 @@ export const ESTIMATED_COUNT_TABLES: ReadonlySet<string> = new Set(['signal_eval
  * call after the deploy), so each daily-leaf exact count runs under its own bound. 6 s sits above every count measured
  * (a whole open leaf 0.16-4.6 s, a boundary leaf from the window start 0.56-3.06 s), so a normal count completes; a slow
  * one stops at 6 s and its leaf is EXCLUDED and named (a lower bound), never 0. The two asks PER TABLE add at most 12 s,
- * and the table loop is sequential, so the endpoint's budget is 2 tables x 2 asks x 6 s = 24 s. Today it is 12 s only
- * because signal_eval_provenance is still monthly and yields no daily-leaf asks; it turns daily at the 2026-12-01
- * cutover, so the endpoint is re-timed after that (Langston, Step-4 record item 1). It does NOT bound `pair_scan_archive`'s exact count (8.56 s warm, measured the same morning), which is held only
+ * and the table loop is sequential, so the endpoint's ceiling is 2 tables x 2 asks x 6 s = 24 s. Since fold r2 the
+ * monthly signal_eval_provenance yields ONE ask at every window (its boundary leaf's in-window slice), so today's worst
+ * case is 3 asks x 6 s = 18 s; a monthly table can only ever have one boundary leaf, so the 24 s ceiling is unchanged
+ * when it turns daily at the 2026-12-01 cutover, and the endpoint is re-timed after that (Langston, Step-4 record item
+ * 1 and fold-r2 C-3). The 30d provenance slice measured 10.3 s, so at 30d it burns the full 6 s and falls back to the
+ * named exclusion on every refetch. It does NOT bound `pair_scan_archive`'s exact count (8.56 s warm, measured the same morning), which is held only
  * by the diagnostic pool's 25 s statement bound — that is recorded in the change list as Langston's question.
  */
 export const ARCHIVE_EXACT_COUNT_TIMEOUT_MS = 6000;

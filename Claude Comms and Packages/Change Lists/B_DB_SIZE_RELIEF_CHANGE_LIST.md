@@ -243,3 +243,18 @@ No QUERY TIMEOUT, no bare 0, and Drops 0 on every row. **Harm leg:** 0 `slot tim
 - equal-arms note removed: 1 RED
 
 My first slice mutant did not apply (string mismatch) and read as 21/21. It was caught by the count and re-run. tsc 324 = 324.
+**Step 4 on fold r2 (Langston, 06:18:40Z): PROCEED on the diff**, re-read at `93037f05f`. No double count in the total; each ask is isolated in its own transaction; the equal-arms note is conservative in both directions. He records the real win: provenance 24h went from UNAVAILABLE to EXACT (0.153 s). **Three text corrections, applied in the carry commit:**
+- **C-1:** the header said no literal DELETE **or UPDATE** exists. That was false: `scripts/b79-0f-collision-backfill.sql:25` holds `UPDATE signal_eval_archive SET asset_class = 'crypto_spot'`. The header now narrows the claim to DELETE and says why the UPDATE is immaterial: the live-row count is unchanged and `captured_at` is untouched, so no row moves between partitions.
+- **C-2:** the variable-table caveat is now closed by enumeration rather than hedged. The one variable DELETE (`b75-retention-sweep.ts:1776`, `DELETE FROM ${spec.table}`) ranges only over `PLAIN_RETENTION_TABLES` (`:238-249`: `xstock_qd_probe_history`, `vts_open_trades`, `closed_trades`); both estimate tables are in the partitioned list (`:195`, `:199`).
+- **C-3:** the aggregator comment said today's budget is 12 s. Since fold r2 provenance yields one ask at every window, so **today's worst case is 3 × 6 = 18 s**. The 24 s ceiling is unchanged (a monthly table has only one boundary leaf). At 30d the provenance slice (10.3 s measured) burns the full 6 s on every refetch.
+
+The premise test is updated to the new wording (33/33).
+
+**His answers to the attacks:**
+- (a) **No skip gate.** Days is not the deciding variable; rows is. The deciding quantity (elapsed time on the refusal arm) is not logged, and one point does not size a gate. Ship as-is. If the waste is to be removed later: an elapsed-ms record on BOTH arms of the slice ask with the leaf's `reltuples` beside it, and a gate sized from at least 3 points. That is an item on this batch, not a new row.
+- (b) **Recorded in his sharper form.** "`:96` already derives an exact 0 by construction ('no pages, no rows') and then discards it, so the single case holding a proof renders as unknown. Inert today: `ESTIMATED_COUNT_TABLES` admits only tables measured past the bound, which are by definition large. The fix, if it ever matters, is one flag (leaves seen, all provably empty ⇒ exact 0)."
+- 30d, the window that now carries a ~6 s burn, has not been re-timed since fold r2. That is latency and record, not failure (the 25 s is per statement).
+
+**Step 10 carries:**
+- (1) the System Impact Map entry gets the #546 kind-is-load-bearing line AND the non-daily slice behaviour;
+- (2) close order: flip `GOVERNANCE_EXCEPTIONS` line 36 (`open`) to `open-retired` in the close commit BEFORE hand-resolving `97e17da3` / `7e9eeb2a`.

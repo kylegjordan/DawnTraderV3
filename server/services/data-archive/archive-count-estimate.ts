@@ -19,9 +19,13 @@
  * A leaf with no heap pages holds no rows, so an unanalysed EMPTY leaf (the pre-created future days) contributes 0.
  *
  * THE PREMISE THE ESTIMATES REST ON (Langston, Step-4 record): rows leave these two tables only when a whole partition
- * is dropped (`DROP TABLE`, b75-retention-sweep.ts `dropPartition`), never by a row DELETE or UPDATE — no literal one
- * exists in server/ or scripts/ (searched 2026-11-15; a statement built with a table-name variable is not ruled out by
- * that search). So a leaf only grows after its last analyse, and `reltuples` reads LOW, never high: on 2026-11-15 all
+ * is dropped (`DROP TABLE`, b75-retention-sweep.ts `dropPartition`), never by a row DELETE. No literal DELETE on either
+ * table exists in server/ or scripts/, and the one table-name-variable DELETE that could reach them (b75-retention-sweep
+ * `DELETE FROM ${spec.table}`) ranges only over PLAIN_RETENTION_TABLES (xstock_qd_probe_history, vts_open_trades,
+ * closed_trades); both tables here are in its PARTITIONED list, the drop lane. An UPDATE does exist
+ * (scripts/b79-0f-collision-backfill.sql, `UPDATE signal_eval_archive SET asset_class = ...`) and is immaterial: it
+ * leaves the live-row count unchanged and does not touch `captured_at`, so no row moves between partitions.
+ * So a leaf only grows after its last analyse, and `reltuples` reads LOW, never high: on 2026-11-15 all
  * 15 closed signal_eval_archive leaves had been analysed before their day ended, about 3.8% low in total. "≈" is
  * therefore a slight under-count. If row deletes or updates are ever added to these tables, this premise breaks and the
  * labels must be revisited.
