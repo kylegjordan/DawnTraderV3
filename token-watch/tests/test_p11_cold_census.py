@@ -168,5 +168,45 @@ rc, rep = run([A, B], ROWS)
 Fake.caps = ["listFiles", "readFiles", "writeFiles"]
 check("C7 exit 2 with no report", rc == 2 and rep == {}, (rc, rep))
 
+print(NL + "=== C8. HIDDEN IS DECIDED BY uploadTimestamp, NEVER BY LIST ORDER (Langston, P11 Step 4 C-3)")
+HIDE_LATE = up("cold/b.jsonl.gz", "fBh", 0, None, 1_700_000_500_000, action="hide")
+rc, rep = run([A, B, HIDE_LATE, MAN], ROWS)            # the hide is listed AFTER the upload but is NEWER
+check("C8 a newer hide listed after the upload still hides it", rc == 1 and [h["file_id"] for h in
+      rep["hidden_under_manifest"]] == ["fB"], rep.get("hidden_under_manifest"))
+REUP = up("cold/b.jsonl.gz", "fB", 20, "s2", 1_700_000_900_000)          # the manifest's upload, re-done later
+OLD_HIDE = up("cold/b.jsonl.gz", "fBh", 0, None, 1_700_000_500_000, action="hide")
+rc, rep = run([A, OLD_HIDE, REUP, MAN], ROWS)          # the hide is listed FIRST but is OLDER than the upload
+check("C8 recovery: an upload newer than a hide marker is NOT hidden", rep.get("hidden_under_manifest") == [], rep)
+
+print(NL + "=== C9. AN EMPTY MANIFEST BESIDE REAL COLD UPLOADS REFUSES (C-2): it would call every verified upload an orphan")
+rc, rep = run([A, B, MAN], [])
+check("C9 exit 2, no report", rc == 2 and rep == {}, (rc, rep))
+rc, rep = run([MAN], [])
+check("C9 POSITIVE CONTROL: an empty manifest with no cold uploads is clean", rc == 0 and rep.get("clean") is True, rep)
+
+print(NL + "=== C10. unverified MATCHES ARE COUNTED; elsewhere IS SUMMARISED; AN UNEXPECTED SHAPE REFUSES (exit 2)")
+rc, rep = run([up("cold/a.jsonl.gz", "fA", 10, "unverified:s1", 1_700_000_000_000), B, MAN], ROWS)
+check("C10 the unverified match is clean AND named", rc == 0 and rep.get("matched_unverified_sha1") == ["fA"], rep)
+many = [up("manifest/cold-offbox-manifest.jsonl", "fM%d" % i, 5, "sm", 1_700_000_000_000 + i * 1000) for i in range(40)]
+rc, rep = run([A, B] + many, ROWS)
+man = rep.get("elsewhere", {}).get("manifest", {})
+check("C10 40 manifest versions summarise to one name with a count and its newest time", rc == 0 and man.get("count") == 40
+      and list(man.get("names", {})) == ["token-watch/manifest/cold-offbox-manifest.jsonl"]
+      and man["names"]["token-watch/manifest/cold-offbox-manifest.jsonl"]["versions"] == 40, man)
+bad = dict(B, contentLength=None)
+rc, rep = run([A, bad, MAN], ROWS)
+check("C10 a version with no contentLength refuses (exit 2), never 'findings' (exit 1)", rc == 2, rc)
+
+import summary  # noqa: E402
+print(NL + "=== G1. THE SUMMARY'S OWN MEMORY GAUGE (Langston, P3 Step 4)")
+check("G1 under 70% of the cap -> 0", summary.memory_exit_code(200 * 1048576, 384 * 1048576) == 0)
+check("G1 past 70% of the cap -> 3 (the page)", summary.memory_exit_code(280 * 1048576, 384 * 1048576) == 3)
+check("G1 no cap (memory.max 'max') -> 0", summary.memory_exit_code(280 * 1048576, None) == 0)
+peak, cap = summary.memory_headroom()
+if sys.platform.startswith("linux"):
+    check("G1 memory_headroom reads a positive peak (Linux)", peak > 0, (peak, cap))
+else:
+    print("  skip G1 memory_headroom peak: no `resource` module off Linux (CI and the box are Linux)")
+
 print(NL + "%d passed, %d failed" % (PASS, FAIL))
 sys.exit(1 if FAIL else 0)

@@ -516,8 +516,12 @@ check("★ the installer compiles EVERY list, PINNED included (C-1)",
       'for f in $ALL; do python3 -m py_compile' in inst and "for f in $OPS $CORE $TOOLS; do python3" not in inst)
 check("★ the record names the actor as declared AND as observed (C-2)",
       "actor_declared" in inst and "actor_transport" in inst and '\\"actor\\":' not in inst)
-check("the installer carries CORE and TOOLS", 'CORE="follow_up.py"' in inst
-      and 'TOOLS="tools/backfill_consumed_from.py tools/due_census.py"' in inst)
+import re as _re  # noqa: E402
+_tools = (_re.search(r'^TOOLS="([^"]*)"', inst, _re.M) or [None, ""])[1].split()
+check("the installer carries CORE and TOOLS (TOOLS: the storage batch's two + B-TOKEN-WATCH-FOLLOWUP-MEMORY's four)",
+      'CORE="follow_up.py"' in inst and set(_tools) == {
+          "tools/backfill_consumed_from.py", "tools/due_census.py", "tools/census_cold_versions.py",
+          "tools/drain_closed_journals.py", "tools/backlog_census.py", "tools/move_followup_cursor.py"}, _tools)
 
 shutil.rmtree(ROOT, ignore_errors=True)
 print("%d passed, %d failed" % (PASS, FAIL))

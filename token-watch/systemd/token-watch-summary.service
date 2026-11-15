@@ -27,7 +27,12 @@ ExecStart=/usr/bin/python3 /opt/token-watch/summary.py
 #    were measured, as Langston ordered: capping the unfixed build could have killed the page's only publisher).
 #    Measured 2026-11-15 on staging: summary.build with the P2b-2 code (/opt/token-watch-p1 = 9aebff599) over a copy
 #    of the scratch store (its dead.jsonl byte-identical to the live one, 258,564,193 B) under MemoryMax=512M:
-#    ru_maxrss 175,228 KiB (171 MiB), 6.8 s. (systemd's own "Memory peak" reads 1.6M for these units; ru_maxrss is the
+#    ru_maxrss 175,228 KiB (171 MiB), 6.8 s. RE-RUN AT THE SHIPPED CAP (Langston, P3 Step 4 C-4: a cap nothing ran
+#    under is unmeasured), a fresh copy, 2026-11-15 ~03:05Z: MemoryMax=384M -> 7.1 s, ru_maxrss 175,336 KiB, success;
+#    the same copy then again under 512M -> 6.9 s, 175,080 KiB.
+#    ⚠️ HEADROOM IS SPENT IN MONTHS (Langston): the dead-set build dominates (+158 MiB for 766,794 deaths), so 384M
+#    binds near ~1.8M dead records, ~3 months at the observed death rate. summary.py logs its peak every run and exits
+#    3 (OnFailure pages) past 70% of this cap; raising or removing it is a P10/P15 item of the batch. (systemd's own "Memory peak" reads 1.6M for these units; ru_maxrss is the
 #    kernel's high-water.) 384M is ~2.2x that, and under 15% of the box's available memory (2,648 of 3,814 MB, same
 #    read). It never runs beside the follow-up's 512M: both take the periodic lock and this unit skips when it is held.
 MemoryMax=384M

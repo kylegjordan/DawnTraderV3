@@ -44,7 +44,10 @@ g merge-base --is-ancestor "$SHA" origin/migration/aws-supabase || fail "$SHA is
 OPS="ops/alert_mint.py ops/cold_offbox.py ops/feed_watch.py ops/store_watch.py ops/unit_failed.py"
 PINNED="config.py liveness.py provenance.py store.py tier.py"
 CORE="follow_up.py"
-TOOLS="tools/backfill_consumed_from.py tools/due_census.py"
+# B-TOKEN-WATCH-FOLLOWUP-MEMORY: the four tools its docstrings tell the operator to run from /opt/token-watch/tools
+# (Langston, P11 Step 4 C-1: a documented tool the installer never placed cannot be run as documented)
+TOOLS="tools/backfill_consumed_from.py tools/due_census.py tools/census_cold_versions.py tools/drain_closed_journals.py
+tools/backlog_census.py tools/move_followup_cursor.py"
 UNIT_FILES="token-watch-cold-offbox.service token-watch-cold-offbox.timer token-watch-store-watch.service
 token-watch-store-watch.timer token-watch-failed@.service token-watch-tier.service token-watch-receiver.service
 token-watch-followup.service token-watch-summary.service token-watch-feed-watch.service token-watch-feed-watch.timer"

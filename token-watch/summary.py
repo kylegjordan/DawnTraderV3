@@ -551,6 +551,41 @@ def main(now: datetime | None = None) -> dict | None:
         return build(now)
 
 
+# A run whose own peak RSS passes this share of its cgroup's memory.max exits 3 after publishing, so OnFailure pages
+# BEFORE the cap binds (Langston, P3 Step 4: systemd's MemoryPeak is unusable here, so without this the first signal
+# of the cap binding is the kill). The cap itself is read from the cgroup, never restated here.
+MEM_WARN_SHARE = 0.7
+
+
+def memory_headroom() -> tuple:
+    """(peak RSS bytes, the cgroup's memory.max bytes or None when unlimited/unreadable)."""
+    try:
+        import resource                     # Linux only; the unit runs on the staging box
+    except ImportError:
+        return 0, None
+    peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * 1024
+    cap = None
+    try:
+        with open("/proc/self/cgroup", encoding="utf-8") as fh:
+            rel = next(line.split("::", 1)[1].strip() for line in fh if line.startswith("0::"))
+        with open("/sys/fs/cgroup%s/memory.max" % rel, encoding="utf-8") as fh:
+            v = fh.read().strip()
+        cap = int(v) if v.isdigit() else None
+    except (OSError, StopIteration, ValueError):
+        cap = None
+    return peak, cap
+
+
+def memory_exit_code(peak: int, cap: int | None) -> int:
+    """Log this run's peak against its cap; 3 when past MEM_WARN_SHARE of it (the page), else 0."""
+    LOG.info("summary peak RSS %d B (%.1f MiB); cgroup memory.max %s", peak, peak / 1048576.0, cap)
+    if cap and peak > MEM_WARN_SHARE * cap:
+        LOG.error("summary peak RSS %.1f MiB is past %d%% of its %.1f MiB cap - raise or remove the cap before it binds",
+                  peak / 1048576.0, int(MEM_WARN_SHARE * 100), cap / 1048576.0)
+        return 3
+    return 0
+
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -563,3 +598,4 @@ if __name__ == "__main__":
         sys.exit(code)
     print(json.dumps({k: v for k, v in p.items() if k != "oldest_survivors"},
                      indent=2, sort_keys=True))
+    sys.exit(memory_exit_code(*memory_headroom()))

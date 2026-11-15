@@ -86,15 +86,26 @@ def _iso(ms) -> str | None:
 
 def reconcile(versions: list, rows: list) -> dict:
     cold = [v for v in versions if str(v.get("fileName", "")).startswith(co.COLD_PREFIX)]
+    # SUMMARISED, not dumped (Langston, P11 Step 4): each off-box run re-uploads the manifest under ONE name on a
+    # keep-all-versions bucket, so a full listing grows by a version a day. Per area: the version count and, per
+    # name, how many versions and the newest one's time.
     elsewhere = {}
     for v in versions:
         name = str(v.get("fileName", ""))
         if name.startswith(co.COLD_PREFIX):
             continue
         area = name[len(co.KEY_PREFIX):].split("/", 1)[0] if name.startswith(co.KEY_PREFIX) else "(outside prefix)"
-        elsewhere.setdefault(area, []).append({"name": name, "file_id": v.get("fileId"), "action": v.get("action"),
-                                               "uploaded": _iso(v.get("uploadTimestamp"))})
-    newest = {}                                   # name -> the newest version of that name (any action)
+        a = elsewhere.setdefault(area, {"count": 0, "names": {}})
+        a["count"] += 1
+        n = a["names"].setdefault(name, {"versions": 0, "newest": None})
+        n["versions"] += 1
+        up = _iso(v.get("uploadTimestamp"))
+        if up and (n["newest"] is None or up > n["newest"]):
+            n["newest"] = up
+    # name -> the newest version of that name (any action), by uploadTimestamp, NEVER by list order (Langston, P11
+    # Step 4 C-3: B2 lists versions newest-first per name today, and a reading that leant on that would be correct
+    # only until it is not)
+    newest = {}
     for v in cold:
         n = v.get("fileName")
         if n not in newest or int(v.get("uploadTimestamp") or 0) > int(newest[n].get("uploadTimestamp") or 0):
@@ -103,7 +114,7 @@ def reconcile(versions: list, rows: list) -> dict:
     for v in cold:
         if v.get("action") == "upload":
             uploads_by_id.setdefault(v.get("fileId"), []).append(v)
-    seen_ids, missing, mismatched, duplicate, hidden_under = set(), [], [], [], []
+    seen_ids, missing, mismatched, duplicate, hidden_under, unverified = set(), [], [], [], [], []
     for row in rows:
         fid = row.get("file_id")
         if fid in seen_ids:
@@ -116,6 +127,10 @@ def reconcile(versions: list, rows: list) -> dict:
             continue
         v = matches[0]
         sha_ok = v.get("contentSha1") in (row.get("sha1"), "unverified:%s" % row.get("sha1"))
+        if sha_ok and v.get("contentSha1") != row.get("sha1"):
+            # accepted (the manifest row was earned by cold_offbox's sha256 READ-BACK), but COUNTED: B2 itself did
+            # not confirm this body's sha1, and a later reader should not think it did (Langston, P11 Step 4)
+            unverified.append(fid)
         if v.get("fileName") != row.get("b2_name") or int(v.get("contentLength", -1)) != row.get("bytes") or not sha_ok:
             mismatched.append({"file_id": fid, "b2_name": row.get("b2_name"), "b2_file_name": v.get("fileName"),
                                "b2_bytes": v.get("contentLength"), "manifest_bytes": row.get("bytes"),
@@ -133,8 +148,9 @@ def reconcile(versions: list, rows: list) -> dict:
     report = {
         "versions_listed": len(versions), "cold_versions": len(cold), "manifest_rows": len(rows),
         "missing": missing, "mismatched": mismatched, "duplicate_manifest_rows": duplicate,
+        "matched_unverified_sha1": unverified,
         "hidden_under_manifest": hidden_under, "orphans": orphans, "hide_markers": hides,
-        "elsewhere": {k: {"count": len(v), "versions": v} for k, v in sorted(elsewhere.items())},
+        "elsewhere": dict(sorted(elsewhere.items())),
     }
     report["clean"] = not (missing or mismatched or duplicate or hidden_under or orphans or hides)
     return report
@@ -161,7 +177,20 @@ def main(argv: list[str], key=None, auth_url: str | None = None) -> int:
     except co.Abort as exc:
         print("REFUSED: %s" % exc, file=sys.stderr)
         return 2
-    report = reconcile(versions, rows)
+    # ⛔ AN EMPTY MANIFEST BESIDE REAL COLD UPLOADS REFUSES (Langston, P11 Step 4 C-2): it is the most complete
+    #    partial manifest there is, and it would name every verified upload an orphan -- an invitation to delete
+    #    archives that were checked byte-for-byte.
+    if not rows and any(str(v.get("fileName", "")).startswith(co.COLD_PREFIX) and v.get("action") == "upload"
+                        for v in versions):
+        print("REFUSED: the manifest has no rows while cold uploads exist; every one would read as an orphan",
+              file=sys.stderr)
+        return 2
+    try:
+        report = reconcile(versions, rows)
+    except Exception as exc:
+        # exit 2, never 1: an unexpected shape is a refusal, not a finding (Langston, P11 Step 4)
+        print("REFUSED: the listing could not be reconciled (%s: %s)" % (type(exc).__name__, exc), file=sys.stderr)
+        return 2
     report["generated_at"] = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     text = json.dumps(report, indent=2, sort_keys=True)
     if a.out:
