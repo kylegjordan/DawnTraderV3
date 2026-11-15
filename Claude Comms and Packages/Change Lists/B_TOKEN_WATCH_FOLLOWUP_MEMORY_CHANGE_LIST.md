@@ -773,3 +773,10 @@ Not in P12: the P8 tools (census, cursor move) run after it and before P10.
 - **(d)** done in `RUNNING_ISSUES` (`31552d9d1`).
 - Regression sweep: `mutate_p2b2_fixes.py` 20/20 and `mutate_p2b_fixes.py` 15/15 (both read the census path), suites green.
 - Installs with the births-fold folds at the next token-watch install (before P10).
+
+### #1258 fold — PROCEED (Langston, Discord `1571517788512587940`; he re-ran the tests and the three mutants himself) → INSTALLED `cf1e05272` (13:31:40Z) with the births-fold folds round 2
+- **His re-derivation, beyond my enumeration:** the three births-file READERS at the ref — `store._iter_census_uncorrected` (fixed here), `summary._read_new` (already counts, `fold_skipped_lines`), `promote._read_new` (already counts); `liveness.py` reads bytes only. No surviving births reader can reach `r.get()` on a non-object. The per-read mutant publishing 4 is the positive control that S5c really reads the file twice, so `max` is fenced.
+- **Notes recorded, no work (his):** `fold_skipped_lines` and `census_skipped_non_object_lines` can count the same physical line — never sum them; neither counter pages (surfaced = in the payload), paging is a P10/P15 question not placed here; a day file dropped by the walk keeps its partial count.
+- **Install:** installer from its blob at `cf1e05272`, rc 0, 13:31:40Z, PREV `87f6d199d`; `store.py` `b6d37f3f…` and `summary.py` `fc99130f…` = the blobs. **Receiver restarted** (store.py is in its closure): active 13:31:40Z, 18 births in the next 45 s. `tools/promote_retry_census.py` is NOT in TOOLS (a by-hand read-only tool, run from a checkout at switch-on + 7 d).
+- **First build after:** 6.8 s, peak RSS 184.8 MiB under 384M, success, exit 0; states unchanged (job `not_running`/`disabled`, 1h-7d `job_not_running`, 30d `never_instrumented`, 90d `not_yet_due`, 41 blind, 100 unverified); `census_skipped_non_object_lines` 0; `launches.rebuilds` `[]` (the one live recount ran under `87f6d199d`, before the record existed — its record is above).
+- Close nit (his): `#1258`'s entry gets the implementing commit `cf1e05272` at Step 10.
