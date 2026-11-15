@@ -6,7 +6,8 @@ exit 0 = every mutant killed (its test file exits non-zero WITH a FAIL line). NO
 import os, shutil, subprocess, sys, tempfile
 
 PKG = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-WORK = os.path.join(tempfile.mkdtemp(prefix="tw-mut-p10-"), "token-watch")
+SCRATCH = tempfile.mkdtemp(prefix="tw-mut-p10-", dir=os.path.expanduser("~"))   # beside the test's own scratch
+WORK = os.path.join(SCRATCH, "token-watch")
 shutil.copytree(PKG, WORK, ignore=shutil.ignore_patterns("__pycache__"))
 os.chdir(WORK)
 
@@ -80,4 +81,6 @@ try:
 finally:
     for f, t in orig.items():
         open(f, "w", encoding="utf-8", newline="").write(t)
+    os.chdir(os.path.expanduser("~"))
+    shutil.rmtree(SCRATCH, ignore_errors=True)        # the copy is removed, never left behind (Langston nit)
 sys.exit(1 if bad else 0)
