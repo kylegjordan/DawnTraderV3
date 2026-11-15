@@ -44,7 +44,8 @@ g merge-base --is-ancestor "$SHA" origin/migration/aws-supabase || fail "$SHA is
 OPS="ops/alert_mint.py ops/cold_offbox.py ops/feed_watch.py ops/store_watch.py ops/unit_failed.py"
 PINNED="config.py liveness.py provenance.py store.py tier.py"
 CORE="follow_up.py"
-# B-TOKEN-WATCH-FOLLOWUP-MEMORY: the four tools its docstrings tell the operator to run from /opt/token-watch/tools
+# B-TOKEN-WATCH-FOLLOWUP-MEMORY added four of these six tools (its docstrings tell the operator to run them from
+# /opt/token-watch/tools)
 # (Langston, P11 Step 4 C-1: a documented tool the installer never placed cannot be run as documented)
 TOOLS="tools/backfill_consumed_from.py tools/due_census.py tools/census_cold_versions.py tools/drain_closed_journals.py
 tools/backlog_census.py tools/move_followup_cursor.py"
@@ -73,6 +74,22 @@ PREV=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["sha"])' 
   || fail "cannot read the previous sha from $DEST/INSTALLED"
 echo "$PREV" | grep -Eq '^[0-9a-f]{40}$' || fail "the previous sha in $DEST/INSTALLED is not a full sha: $PREV"
 g merge-base --is-ancestor "$PREV" origin/migration/aws-supabase || fail "previous sha $PREV is not on the branch"
+# ⛔ A RESOURCE CAP MAY NOT BE INSTALLED AHEAD OF THE CODE IT WAS MEASURED ON (Langston, B-TOKEN-WATCH-FOLLOWUP-MEMORY
+#    P3 Step 4 C-4): a unit whose MemoryMax= line is NEW or CHANGED against the previous install must run a script
+#    this install also places, or the cap lands on whatever old file is on the box (the 2026-09-02 summary.py,
+#    measured nowhere). An unchanged cap on a script this installer never places (the receiver's) is not touched.
+for u in $UNIT_FILES; do
+  new_cap=$(grep '^MemoryMax=' "$stage/units/$u" || true)
+  [ -n "$new_cap" ] || continue
+  old_cap=""                                          # a unit new at this sha had no cap before
+  if g cat-file -e "$PREV:token-watch/systemd/$u"; then
+    old_cap=$(g cat-file blob "$PREV:token-watch/systemd/$u" | grep '^MemoryMax=' || true)
+  fi
+  [ "$new_cap" = "$old_cap" ] && continue
+  script=$(sed -n 's#^ExecStart=.*/opt/token-watch/\([^ ]*\.py\).*#\1#p' "$stage/units/$u" | head -1)
+  [ -n "$script" ] || fail "$u gains or changes MemoryMax= but its ExecStart names no /opt/token-watch script"
+  printf '%s\n' $ALL | grep -qx "$script" || fail "$u gains or changes MemoryMax= (\"$new_cap\") but $script is not installed by this run (not in OPS/PINNED/CORE/TOOLS): a cap may not land ahead of the code it was measured on"
+done
 for f in $PINNED; do [ -f "$DEST/$f" ] || fail "$DEST/$f is missing: this is not the install it expects"; done
 for f in $ALL; do
   [ -f "$DEST/$f" ] || continue                       # new in this install (e.g. ops/feed_watch.py): nothing to guard

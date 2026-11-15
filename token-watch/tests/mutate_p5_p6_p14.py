@@ -11,6 +11,7 @@ TC = "tests/test_collector.py"
 T9 = "tests/test_p9_journals.py"
 T11 = "tests/test_p11_cold_census.py"
 T8 = "tests/test_p8_census.py"
+TG = "tests/test_install_cap_guard.py"   # Linux-only (bash + git): judge this set on Linux
 MUTANTS = [
     ("P5 the failed entry is dropped again (no requeue)", T5,
      [("follow_up.py", "                    _append_next_bucket(dict(entry, attempts=attempts), now)" + NL,
@@ -85,6 +86,10 @@ MUTANTS = [
      [("tools/move_followup_cursor.py", "        if where is None:", "        if False:")]),
     ("P8 the cursor move does not check it is after the cursor", T8,
      [("tools/move_followup_cursor.py", "        if a.census_hour <= last:", "        if False:")]),
+    ("cap guard: an unchanged cap is re-checked (breaks the receiver)", TG,
+     [("deploy/install_storage.sh", "  [ \"$new_cap\" = \"$old_cap\" ] && continue" + NL, "")]),
+    ("cap guard: a new cap is never checked", TG,
+     [("deploy/install_storage.sh", "  [ -n \"$new_cap\" ] || continue" + NL, "  continue" + NL)]),
     ("P11 pagination stops after the first page", T11,
      [("tools/census_cold_versions.py", "        if not start_name:" + NL + "            return out", "        if True:" + NL + "            return out")]),
     ("P11 orphans are not looked for", T11,
