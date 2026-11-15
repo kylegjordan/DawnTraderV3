@@ -92,7 +92,9 @@ def main(argv: list[str]) -> int:
         if not a.apply:
             print("DRY RUN: nothing written (pass --apply)")
             return 0
-        save_state(CURSOR, new)
+        # APPENDED FIRST (Langston, P8 re-roll N3): if the append fails nothing has moved; if the save fails after
+        # it, the record over-claims a move that did not happen - the safe direction, since tier reads the CURSOR,
+        # and a cursor that did not move arms no prune. The reverse order could move the cursor with no record.
         rec = {"moved_at": datetime.now(UTC).isoformat(), "skipped_after": last, "skipped_through": a.census_hour,
                "census_artifact": name, "census_sha256": a.census_sha256, "confirmed_in": where,
                "consumed_from": cur.get("consumed_from")}
@@ -101,6 +103,7 @@ def main(argv: list[str]) -> int:
             fh.write(json.dumps(rec, sort_keys=True) + "\n")
             fh.flush()
             os.fsync(fh.fileno())
+        save_state(CURSOR, new)
         print("WRITTEN at %s: %s" % (datetime.now(UTC).isoformat(), json.dumps(load_state(CURSOR, {}), sort_keys=True)))
     return 0
 

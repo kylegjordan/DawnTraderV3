@@ -88,6 +88,8 @@ s = json.load(open(summ, encoding="utf-8")) if os.path.exists(summ) else {}
 art = os.path.join(COLD_DIR, bc.artifact_name("2026-09-30T13", "2026-09-30T16"))
 rows = [json.loads(x) for x in gzip.open(art, "rt", encoding="utf-8")] if os.path.exists(art) else []
 check("C1 exit 0 and the artifact is in cold/ under the (cursor, census hour) name", rc == 0 and os.path.exists(art), rc)
+check("C1 and cold/ holds EXACTLY that artifact - no temp left behind (Langston N1)",
+      sorted(os.listdir(COLD_DIR)) == [os.path.basename(art)], os.listdir(COLD_DIR))
 check("C1 exactly the 3 readable entries of T14 and T15 - not the cursor's own bucket, not T17",
       sorted(r["mint"] for r in rows) == ["A", "B", "C"], [r["mint"] for r in rows])
 expect = sorted([
@@ -152,6 +154,18 @@ os.remove(os.path.join(COLD_DIR, name))                                    # as 
 rc = mc.main(["--census-hour", "2026-09-30T16", "--census-sha256", s["artifact_sha256"], "--apply"])
 check("M2 confirmed from the manifest, cursor moved", rc == 0
       and store.load_state("follow_up_cursor", {})["last_bucket"] == "2026-09-30T16", rc)
+seed()
+bc.main(["--census-hour", "2026-09-30T16", "--summary", summ], now=NOW)
+s2 = json.load(open(summ, encoding="utf-8"))
+os.makedirs(os.path.dirname(mc.MANIFEST_PATH), exist_ok=True)
+with open(mc.MANIFEST_PATH, "w", encoding="utf-8") as fh:
+    fh.write(json.dumps({"name": name, "sha256": "f" * 64, "b2_name": "token-watch/cold/" + name}) + NL)
+    fh.write(json.dumps({"name": "some-other-artifact.jsonl.gz", "sha256": s2["artifact_sha256"]}) + NL)
+os.remove(os.path.join(COLD_DIR, name))
+rc_bad = mc.main(["--census-hour", "2026-09-30T16", "--census-sha256", s2["artifact_sha256"], "--apply"])
+check("M2 a manifest whose line for this name carries a DIFFERENT sha256 (and whose matching sha names another file) "
+      "refuses, cursor unmoved (Langston R1: once off-boxed, the manifest is the sole authoriser)",
+      rc_bad == 2 and store.load_state("follow_up_cursor", {})["last_bucket"] == "2026-09-30T13", rc_bad)
 
 print(NL + "=== M3. A CENSUS TAKEN AT AN OLDER CURSOR DOES NOT AUTHORISE A MOVE FROM A NEWER ONE")
 seed()
@@ -215,8 +229,35 @@ moves = [json.loads(x) for x in open(mc.MOVES_PATH, encoding="utf-8")] if os.pat
 check("M5 one line: the range skipped and the census that covers it", len(moves) == 1
       and moves[0]["skipped_after"] == "2026-09-30T13" and moves[0]["skipped_through"] == "2026-09-30T16"
       and moves[0]["census_sha256"] == s5["artifact_sha256"] and moves[0]["consumed_from"] == "2026-08-31T11", moves)
-check("M5 a dry run appends nothing", mc.main(["--census-hour", "2026-09-30T17", "--census-sha256", "0" * 64]) == 2
+check("M5 a REFUSED run appends nothing", mc.main(["--census-hour", "2026-09-30T17", "--census-sha256", "0" * 64]) == 2
       and len([1 for _ in open(mc.MOVES_PATH, encoding="utf-8")]) == 1)
+seed()                                                     # reset() clears state/, the moves record with it
+bc.main(["--census-hour", "2026-09-30T16", "--summary", summ5], now=NOW)
+s5b = json.load(open(summ5, encoding="utf-8"))
+rc_dry = mc.main(["--census-hour", "2026-09-30T16", "--census-sha256", s5b["artifact_sha256"]])
+check("M5 a real DRY RUN (right sha, no --apply) appends nothing and moves nothing (Langston N2)", rc_dry == 0
+      and not os.path.exists(mc.MOVES_PATH) and store.load_state("follow_up_cursor", {})["last_bucket"] == "2026-09-30T13",
+      rc_dry)
+
+print(NL + "=== M6. THE SKIP RECORD IS WRITTEN BEFORE THE CURSOR MOVES: a failing append leaves the cursor where it was")
+seed()
+bc.main(["--census-hour", "2026-09-30T16", "--summary", summ5], now=NOW)
+s6 = json.load(open(summ5, encoding="utf-8"))
+_moves = mc.MOVES_PATH
+mc.MOVES_PATH = os.path.join(ROOT, "no-such-dir", "x", "followup-cursor-moves.jsonl")
+os.makedirs(os.path.dirname(os.path.dirname(mc.MOVES_PATH)), exist_ok=True)
+open(os.path.dirname(mc.MOVES_PATH), "w").close()        # a FILE where the directory should be: the append fails
+try:
+    try:
+        mc.main(["--census-hour", "2026-09-30T16", "--census-sha256", s6["artifact_sha256"], "--apply"])
+        raised = False
+    except Exception:
+        raised = True
+finally:
+    mc.MOVES_PATH = _moves
+check("M6 the failed append raised and the cursor did NOT move", raised
+      and store.load_state("follow_up_cursor", {})["last_bucket"] == "2026-09-30T13",
+      (raised, store.load_state("follow_up_cursor", {})))
 
 print(NL + "=== M4. THE CURSOR NEVER MOVES BACKWARD, EVEN WITH A MATCHING ARTIFACT FOR AN EARLIER HOUR")
 reset()
