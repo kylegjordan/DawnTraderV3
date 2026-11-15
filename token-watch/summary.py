@@ -507,8 +507,9 @@ def build(now: datetime = None) -> dict:
     return payload
 
 
-# A skipped summary run pages (exit 75) only when the PUBLISHED file is older than this: two missed hourly
-# publishes. The follow-up publishes inside its own lock every run, so a skip while it holds the lock leaves a fresh
+# A skipped summary run pages (exit 75) only when the PUBLISHED file is older than this: 2 h of staleness (the
+# follow-up publishes at ~:45-:50 and the summary timer skips at :12, so a normal skip sees a ~25-min-old file and
+# the first page lands on the third missed publish). The follow-up publishes inside its own lock every run, so a skip while it holds the lock leaves a fresh
 # file and exits 0; a skip behind any other holder (tier, a one-time tool) with no recent publish is a lost hour and
 # must not read as a publish at the supervisor (Langston, P6 Step 4 CHANGES-1). Unconditional 75 would page every
 # hour the sweep runs past :12.
@@ -522,9 +523,9 @@ def skip_exit_code(now: datetime | None = None) -> tuple:
     try:
         with open(SUMMARY_PATH, encoding="utf-8") as fh:
             published = datetime.fromisoformat(json.load(fh)["generated_at"])
+        age = now - published           # inside the try: a naive stamp raises TypeError here (Langston nit)
     except (OSError, ValueError, KeyError, TypeError) as exc:
         return 75, "skipped and the published summary could not be read (%s)" % type(exc).__name__
-    age = now - published
     if age > SKIP_STALE_AFTER:
         return 75, "skipped and the published summary is %s old (past %s)" % (age, SKIP_STALE_AFTER)
     return 0, "skipped; the published summary is %s old" % age

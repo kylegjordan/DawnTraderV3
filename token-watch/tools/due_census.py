@@ -49,11 +49,20 @@ def lineage(now: datetime | None = None, floor: float = 0.5) -> dict:
        B-TOKEN-WATCH-FOLLOWUP-MEMORY P5 — an observation ERROR do (`store.record_observation`, keyed mint+age; an
        error row is genuine evidence the bucket was read, so crediting it is the right direction), but a REQUEUE of
        a not-yet-due entry (copied to a later bucket; its row is written only when that copy is read) writes none
-       for this bucket. So a fully read bucket can score below 1.0. (Before P5 an error wrote no row either; the
-       error retry's own copy carries the same (mint, age) key, and `seen` spans the bucket's day + 2 days.) FLOOR = 0.5: a bucket in which at least half the entries left a row was read; a
-       never-read bucket scores ~0, because nothing reads it to write any row (a requeue copy carries no row until
-       read, and the next-age entry has a different age - Langston tried to build an aliasing path and could not).
-       The residual is conservative: a read bucket with heavy requeues can be flagged as a gap, never the reverse.
+       for this bucket. So a fully read bucket can score below 1.0. (Before P5 an error wrote no row either.)
+       FLOOR = 0.5: a bucket in which at least half the entries left a row was read; a never-read bucket scores ~0,
+       because nothing reads it to write any row (a not-yet-due requeue copy carries no row until read, and the
+       next-age entry has a different age).
+    ⛔ ONE ALIAS SINCE P5, AND IT CUTS THE UNSAFE WAY (Langston, P5/P6/P14 re-roll): an observation error writes a
+       row keyed (mint, age) on day D and copies the entry, SAME (mint, age), into the next hour's bucket — usually
+       the same day. `record_observation` carries no bucket field (store.py), and `seen` takes every row of D..D+2
+       unfiltered, so a retry bucket that was NEVER read scores a hit for every error-requeued entry it holds. Pre-P5
+       no such path existed (Langston tried to build one and could not).
+       ⇒ The conservatism claim holds for NON-ERROR entries only: a read bucket with heavy requeues can be flagged
+         as a gap, never the reverse. For error-requeued entries the reverse is possible.
+       ⇒ BEFORE ANY PRUNE, the positive control: count `reason == "error"` rows (and "abandoned") in the observation
+         files for the removable buckets' days; if it is zero for that corpus the alias is inert and the claim above
+         stands for it.
        Exactly 0.5 is NOT a gap (`<` below) - pinned by test_due_storage.py section 6b."""
     import json as _json
     from collections import defaultdict
