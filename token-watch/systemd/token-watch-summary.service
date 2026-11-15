@@ -23,6 +23,14 @@ Type=oneshot
 User=tokenwatch
 Group=tokenwatch
 ExecStart=/usr/bin/python3 /opt/token-watch/summary.py
+# ⛔ A MEMORY CAP, SET FROM ITS OWN MEASURED PEAK (B-TOKEN-WATCH-FOLLOWUP-MEMORY P3, landed only after P2's fixes
+#    were measured, as Langston ordered: capping the unfixed build could have killed the page's only publisher).
+#    Measured 2026-11-15 on staging: summary.build with the P2b-2 code (/opt/token-watch-p1 = 9aebff599) over a copy
+#    of the scratch store (its dead.jsonl byte-identical to the live one, 258,564,193 B) under MemoryMax=512M:
+#    ru_maxrss 175,228 KiB (171 MiB), 6.8 s. (systemd's own "Memory peak" reads 1.6M for these units; ru_maxrss is the
+#    kernel's high-water.) 384M is ~2.2x that, and under 15% of the box's available memory (2,648 of 3,814 MB, same
+#    read). It never runs beside the follow-up's 512M: both take the periodic lock and this unit skips when it is held.
+MemoryMax=384M
 # ⚠️ Nothing here touches the trading app. It reads the study's own store and writes ONE
 #    derived file into the published directory — the isolation summary.py's own docstring
 #    describes ("the study publishes one derived file and the app reads that").
