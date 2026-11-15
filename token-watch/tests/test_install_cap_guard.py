@@ -67,8 +67,8 @@ git("commit", "-qm", "prev")
 PREV = git("rev-parse", "HEAD")
 
 
-def run_guard(units, all_files):
-    """Stage `units` {name: (script, cap)} as the new commit's unit files and run the guard."""
+def run_guard(units, all_files, raw=None):
+    """Stage `units` {name: (script, cap)} as the new commit's unit files (or `raw` {name: text}) and run the guard."""
     stage = os.path.join(work, "stage")
     shutil.rmtree(stage, ignore_errors=True)
     os.makedirs(os.path.join(stage, "units"))
@@ -76,6 +76,10 @@ def run_guard(units, all_files):
         with open(os.path.join(stage, "units", n), "w", encoding="utf-8", newline="") as fh:
             fh.write("[Service]" + NL + "ExecStart=/usr/bin/python3 /opt/token-watch/%s" % script + NL +
                      ("MemoryMax=%s" % cap + NL if cap else ""))
+    for n, text in (raw or {}).items():
+        with open(os.path.join(stage, "units", n), "w", encoding="utf-8", newline="") as fh:
+            fh.write(text)
+        units = dict(units, **{n: None})
     script = (
         "set -eu" + NL +
         "fail() { echo \"FAIL: $*\" >&2; exit 1; }" + NL +
@@ -103,11 +107,31 @@ r = run_guard({"a.service": ("summary.py", None), "r.service": ("receiver.py", "
 check("C5 a unit NEW at this sha (no blob at PREV) with a cap on an unplaced script refuses", r.returncode != 0
       and "new_job.py" in r.stderr, (r.returncode, r.stderr[-300:]))
 
+print(NL + "=== LANGSTON'S THREE HOLES (P12 rider, folded early): an argument shadowing the executable, a second ExecStart,"
+      " an indented cap")
+base = {"r.service": ("receiver.py", "512M")}
+r = run_guard(base, ["follow_up.py", "summary.py"], raw={"x.service": "[Service]" + NL +
+              "ExecStart=/usr/bin/python3 /opt/token-watch/tools/evil.py /opt/token-watch/summary.py" + NL + "MemoryMax=64M" + NL})
+check("H1 an argument naming a placed script does not cover an unplaced executable", r.returncode != 0
+      and "tools/evil.py" in r.stderr, (r.returncode, r.stderr[-300:]))
+r = run_guard(base, ["follow_up.py", "summary.py"], raw={"x.service": "[Service]" + NL +
+              "ExecStart=/usr/bin/python3 /opt/token-watch/summary.py" + NL +
+              "ExecStart=/usr/bin/python3 /opt/token-watch/tools/evil.py" + NL + "MemoryMax=64M" + NL})
+check("H2 a second ExecStart naming an unplaced script refuses", r.returncode != 0 and "tools/evil.py" in r.stderr,
+      (r.returncode, r.stderr[-300:]))
+r = run_guard(base, ["follow_up.py"], raw={"x.service": "[Service]" + NL +
+              "ExecStart=/usr/bin/python3 /opt/token-watch/summary.py" + NL + "   MemoryMax=64M" + NL})
+check("H3 an INDENTED cap is seen (systemd honours it) and refuses on an unplaced script", r.returncode != 0
+      and "summary.py" in r.stderr, (r.returncode, r.stderr[-300:]))
+r = run_guard(base, ["follow_up.py", "ops/unit_failed.py"], raw={"t@.service": "[Service]" + NL +
+              "ExecStart=/usr/bin/python3 /opt/token-watch/ops/unit_failed.py %i" + NL + "MemoryMax=64M" + NL})
+check("H4 POSITIVE CONTROL: a template unit whose script is placed passes", r.returncode == 0, (r.returncode, r.stderr[-300:]))
+
 print(NL + "=== THE SHIPPED UNIT FILES PASS THE GUARD AS THEY STAND")
 units_dir = os.path.join(PKG, "systemd")
 summary_unit = open(os.path.join(units_dir, "token-watch-summary.service"), encoding="utf-8").read()
-check("S1 the summary unit carries NO active MemoryMax until P12 places summary.py",
-      not any(line.startswith("MemoryMax=") for line in summary_unit.splitlines()))
+check("S1 the summary unit carries NO active MemoryMax (indented or not) until P12 places summary.py",
+      not any(line.strip().startswith("MemoryMax=") for line in summary_unit.splitlines()))
 
 shutil.rmtree(work, ignore_errors=True)
 print(NL + "%d passed, %d failed" % (PASS, FAIL))
