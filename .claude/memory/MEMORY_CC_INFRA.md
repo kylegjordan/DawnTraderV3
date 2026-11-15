@@ -80,7 +80,7 @@ I previously ran on my **own** rules file at `G:\My Drive\CLAUDE.md` and loaded 
 - ⛔ **A TEST THAT WRITES THE STATE IT ASSERTS ON PROVES ONLY THAT THE FUNCTION WORKS.** Langston: *"your tests test the function; nothing tests the connection."* 57 checks passed while nothing in production ever charged a birth. ★ **And the suite I wrote to fix that then tested the fold by CALLING IT — the same shape one function further down.** The test must drive a PRODUCTION entry point and assert on state that entry point had to reach.
 - ✅ **Memory folder JUNCTIONED to `DT-SHARED-MEMORY` 11-06 (B-PM-CLAUDE P2 infra half; old copy kept `memory.pre-junction-20261106T015442Z`).** My topic files live there: `infra-claude-session-identity.md`, `discord-posting-protocol.md`, `langston-personal-assistant-project.md` (no pointers in shared MEMORY.md — it is at cap).
 - **NEVER `--amend` A PUSHED COMMIT** (did it 11-05 on a memory commit, force-with-lease): trim → NEW commit.
-- **Re-read issue numbers IMMEDIATELY BEFORE writing one.** Three sessions share one counter with no atomic allocation; I pushed a duplicate `#665` once (→ `#670`).
+- **Re-read issue numbers IMMEDIATELY BEFORE writing one** (shared counter; dup `#665`→`#670` once).
 
 ## ✅ DISCORD WAKE — ONBOARDED 2026-08-26 (Kyle lifted his own deferral)
 
