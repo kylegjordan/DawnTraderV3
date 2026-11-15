@@ -53,9 +53,10 @@ HEARTBEAT_KEY = "deploy-notice-watcher-heartbeat"
 #    that holds no reference token (path:line | sha | uuid | §/#ref; isValidResolutionEvidence,
 #    server/services/system-alerts.ts:193). The heartbeat's "ran at <time> and re-armed" holds none, so from the
 #    first day a heartbeat row existed to be resolved (2026-11-14) every resolve was refused, nothing re-armed, and
-#    the armed heartbeat fired at 26 h - the watcher itself ran every 2 min throughout. A window resolve for a
-#    deploy that never landed ("record sha=none") had the same gap. The first day passed only because a resolve
-#    that matches NO row exits before the evidence check.
+#    the armed heartbeat fired at 26 h - the watcher itself ran every 2 min throughout. The window resolve has
+#    passed only INCIDENTALLY: its two Discord post ids are digit runs the permissive sha rule accepts, so a line
+#    with short ids would be refused - which is why a fixed reference beats citing the record. The first day
+#    passed only because a resolve that matches NO row exits before the evidence check.
 EVIDENCE_REF = "#1249"
 # Owner (canonical actor) -> the Discord display name that wakes that session. A reviewer in the opening list would
 # invoke the reviewer, and the Codex crew does not wake on this channel's opening list, so those are named in the
@@ -192,7 +193,7 @@ def heartbeat(st):
     if ok and out is not None:
         st["heartbeat_day"] = day
     else:
-        log("HEARTBEAT NOT RE-ARMED (resolve %s, add %s)" % (ok, err))
+        log("HEARTBEAT NOT RE-ARMED (resolve ok=%s, add error=%s)" % (ok, err))   # err None = the add succeeded
 
 
 def run():

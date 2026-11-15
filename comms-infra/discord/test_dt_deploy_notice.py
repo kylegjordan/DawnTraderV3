@@ -49,8 +49,8 @@ def staging_accepts(ev):
     t = ev.strip()
     if t in ("NO-EVIDENCE-GIVEN", "provenance-unknown-pre-F3b"):
         return True
-    return bool(re.search(r"[\w./-]*[./][\w./-]*:\d+", t) or re.search(r"[0-9a-f]{7,40}", t, re.I)
-                or re.search(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", t, re.I)
+    return bool(re.search(r"[\w./-]*[./][\w./-]*:\d+", t) or re.search(r"\b[0-9a-f]{7,40}\b", t, re.I)
+                or re.search(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b", t, re.I)
                 or re.search(r"[§#]\s*[\w.\-]+", t))
 
 
