@@ -47,9 +47,71 @@ type Summary = {
     sol_usd: number | null;
     observed_at: string | null;
     socials: { telegram?: boolean; twitter?: boolean; website?: boolean } | null;
+    // P7 D4: what we actually know about this token (absent on summaries published before P7)
+    status?: 'verified_alive' | 'unverified' | 'never_observed' | 'not_yet_due' | 'unknown';
+    last_verified_age?: string;
+    last_verified_at?: string;
+    latest_due_age?: string;
   }>;
   display_ages: string[];
   grid_ages: string[];
+  // P7 (OBJ-5): is anyone looking. Optional so a pre-P7 summary still renders.
+  coverage?: {
+    uncovered_days: number;
+    blind_days: number;
+    blind_first: string | null;
+    blind_last: string | null;
+    by_label: Record<string, { uncovered_days: number; first: string | null; last: string | null }>;
+    observed_through: string | null;
+    follow_up_lag_s: number | null;
+  };
+  observation_states?: {
+    job: { state: 'observing' | 'shedding' | 'not_running' | 'unknown' } | null;
+    labels: Record<string, { state: LabelState; last_observed_at?: string | null; first_due_at?: string | null }>;
+  };
+  oldest_survivors_status?: {
+    counts: Record<string, number>;
+    oldest_unverified_age_days: number | null;
+  };
+};
+
+type LabelState =
+  | 'instrumented'
+  | 'stale'
+  | 'job_not_running'
+  | 'job_shedding'
+  | 'never_instrumented'
+  | 'not_yet_due'
+  | 'unknown';
+
+// What a checkpoint's figure means when nobody is looking at it. ⛔ The figure is never shown bare in that case:
+// a recorded death count is only a FLOOR, and an alive count is only a CEILING.
+function stateText(st: { state: LabelState; last_observed_at?: string | null; first_due_at?: string | null }) {
+  const since = st.last_observed_at ? new Date(st.last_observed_at).toLocaleDateString() : null;
+  switch (st.state) {
+    case 'stale':
+      return `not checked since ${since ?? 'unknown'}`;
+    case 'job_not_running':
+      return `the follow-up is not running — last checked ${since ?? 'never'}`;
+    case 'job_shedding':
+      return `the follow-up is skipping every check — last checked ${since ?? 'never'}`;
+    case 'never_instrumented':
+      return 'never checked';
+    case 'not_yet_due':
+      return st.first_due_at ? `not due until ${new Date(st.first_due_at).toLocaleDateString()}` : 'not yet due';
+    case 'unknown':
+      return 'cannot tell whether it is being checked';
+    default:
+      return null;
+  }
+}
+
+const STATUS_LABEL: Record<string, string> = {
+  verified_alive: 'seen alive at its latest check',
+  unverified: 'not seen at its latest check',
+  never_observed: 'never checked',
+  not_yet_due: 'too young to check',
+  unknown: 'unknown',
 };
 
 type Response =
@@ -91,6 +153,9 @@ function AgeTable({
   denominator,
   total,
   totalLabel,
+  states,
+  bound,
+  unchecked,
 }: {
   title: string;
   icon: React.ReactNode;
@@ -100,6 +165,9 @@ function AgeTable({
   denominator: number;
   total: number;
   totalLabel: string;
+  states?: Record<string, { state: LabelState; last_observed_at?: string | null; first_due_at?: string | null }>;
+  bound: 'at most' | 'at least';
+  unchecked?: Record<string, { uncovered_days: number }>;
 }) {
   return (
     <div className="rounded-lg border border-border bg-card">
@@ -119,10 +187,28 @@ function AgeTable({
           <tbody>
             {ages.map((age) => {
               const n = counts[age] ?? 0;
+              const st = states?.[age];
+              const why = st ? stateText(st) : null;
+              const days = unchecked?.[age]?.uncovered_days ?? 0;
               return (
                 <tr key={age} className="border-b border-border/50 last:border-0">
                   <td className="px-4 py-2">{AGE_LABEL[age] ?? age}</td>
-                  <td className="px-4 py-2 text-right tabular-nums">{n.toLocaleString()}</td>
+                  <td className="px-4 py-2 text-right tabular-nums">
+                    {/* ⛔ NOBODY LOOKING => THE FIGURE IS A BOUND, NEVER A BARE NUMBER (P7 D5). */}
+                    {why === null ? (
+                      n.toLocaleString()
+                    ) : st?.state === 'never_instrumented' || st?.state === 'not_yet_due' ? (
+                      <span className="text-xs text-muted-foreground">{why}</span>
+                    ) : (
+                      <span>
+                        {bound} {n.toLocaleString()}
+                        <span className="block text-xs text-amber-600">
+                          {why}
+                          {days > 0 ? ` · ${days} day${days === 1 ? '' : 's'} of launches unchecked` : ''}
+                        </span>
+                      </span>
+                    )}
+                  </td>
                   <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">
                     {denominator > 0 ? `${((n / denominator) * 100).toFixed(2)}%` : '—'}
                   </td>
@@ -193,6 +279,10 @@ export default function TokenWatchPage() {
   //    24 hours and 3 days. Seen on the live page. The order is carried
   //    explicitly by the study, which is the only thing that knows it.
   const deathAges = s.grid_ages ?? Object.keys(s.died.by_age_at_death);
+  const states = s.observation_states?.labels;
+  const job = s.observation_states?.job?.state;
+  const cov = s.coverage;
+  const notLooking = !!states && Object.values(states).some((v) => v.state !== 'instrumented' && v.state !== 'not_yet_due');
 
   return (
     <div className="space-y-6 p-6">
@@ -213,6 +303,35 @@ export default function TokenWatchPage() {
         </p>
       </header>
 
+      {/* ⭐ P7 (OBJ-5): IS ANYONE LOOKING. Every figure below is derived from births and recorded deaths, and a
+          death is recorded only when the follow-up looks -- so a stopped follow-up reads as "nobody died". This
+          banner says so before any number is read. */}
+      {(job === 'not_running' || job === 'shedding' || (cov && cov.blind_days > 0)) && (
+        <div className="flex items-start gap-3 rounded-lg border border-rose-500/40 bg-rose-500/5 p-4">
+          <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-rose-500" />
+          <div className="text-sm">
+            <h2 className="font-medium">
+              {job === 'not_running'
+                ? 'The follow-up checks are not running'
+                : job === 'shedding'
+                  ? 'The follow-up is running but skipping every check'
+                  : 'Some launch days have never been checked'}
+            </h2>
+            <p className="mt-1 text-muted-foreground">
+              {cov?.observed_through
+                ? `The last check landed ${new Date(cov.observed_through).toLocaleString()}. `
+                : 'No check has ever landed. '}
+              {cov && cov.blind_days > 0
+                ? `${cov.blind_days} day${cov.blind_days === 1 ? '' : 's'} of launches${
+                    cov.blind_first ? ` (${cov.blind_first} to ${cov.blind_last})` : ''
+                  } have had no check at any age that was due. `
+                : ''}
+              Deaths at an unchecked age cannot be recorded, so those figures are shown as bounds below.
+            </p>
+          </div>
+        </div>
+      )}
+
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat
           label="Launches recorded"
@@ -230,8 +349,12 @@ export default function TokenWatchPage() {
         />
         <Stat
           label="Still alive"
-          value={s.alive.total.toLocaleString()}
-          sub="Of tracked tokens, not observed dead"
+          value={notLooking ? `at most ${s.alive.total.toLocaleString()}` : s.alive.total.toLocaleString()}
+          sub={
+            notLooking
+              ? 'Not observed dead — an upper bound while some ages go unchecked'
+              : 'Of tracked tokens, not observed dead'
+          }
         />
         <Stat
           label="Died"
@@ -263,6 +386,9 @@ export default function TokenWatchPage() {
           denominator={tracked}
           total={s.alive.total}
           totalLabel="Alive now (distinct tokens)"
+          states={states}
+          bound="at most"
+          unchecked={cov?.by_label}
           caption="Cumulative: a token counted at 30 days is also counted at 3 and 7 — so the total is the number of DISTINCT tokens not observed dead, not the sum of the column above."
         />
         <AgeTable
@@ -274,6 +400,8 @@ export default function TokenWatchPage() {
           total={s.died.total}
           totalLabel="Died in total"
           caption={s.died.note}
+          states={states}
+          bound="at least"
         />
       </section>
 
@@ -349,6 +477,15 @@ export default function TokenWatchPage() {
             The {s.oldest_survivors.length} longest-lived tracked tokens with no
             recorded death, oldest first.
           </p>
+          {s.oldest_survivors_status && (
+            <p className="mt-1 text-xs text-amber-600">
+              {Object.entries(s.oldest_survivors_status.counts)
+                .map(([k, v]) => `${v} ${STATUS_LABEL[k] ?? k}`)
+                .join(' · ')}
+              {' — '}"no recorded death" is not "alive": a token not checked at its latest due age may have died
+              unseen.
+            </p>
+          )}
           <p className="mt-1 text-xs text-muted-foreground">
             <strong>*Size at launch is INFERRED</strong> — the largest transfer by
             the launcher in the creation transaction, not a figure anyone
@@ -366,6 +503,7 @@ export default function TokenWatchPage() {
                 <th className="px-4 py-2 font-medium">Name</th>
                 <th className="px-4 py-2 font-medium">Symbol</th>
                 <th className="px-4 py-2 text-right font-medium">Age (days)</th>
+                <th className="px-4 py-2 font-medium">Checked</th>
                 {/* The label says INFERRED because it is: the largest transfer
                     by the fee payer, not a figure anyone reported to us. The
                     ground-truth check is still outstanding, so it must not sit
@@ -382,7 +520,7 @@ export default function TokenWatchPage() {
             <tbody>
               {s.oldest_survivors.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="px-4 py-6 text-center text-muted-foreground">
+                  <td colSpan={11} className="px-4 py-6 text-center text-muted-foreground">
                     No tracked token has survived long enough to appear here yet.
                   </td>
                 </tr>
@@ -399,6 +537,18 @@ export default function TokenWatchPage() {
                   <td className="px-4 py-2 text-xs text-muted-foreground">{t.symbol || '—'}</td>
                   <td className="px-4 py-2 text-right tabular-nums">
                     {t.age_days !== null ? t.age_days.toFixed(1) : '—'}
+                  </td>
+                  <td className="px-4 py-2 text-xs">
+                    {t.status ? (
+                      <span className={t.status === 'verified_alive' ? 'text-emerald-600' : 'text-amber-600'}>
+                        {STATUS_LABEL[t.status] ?? t.status}
+                        {t.status === 'unverified' && t.last_verified_age
+                          ? ` (last seen at ${AGE_LABEL[t.last_verified_age] ?? t.last_verified_age})`
+                          : ''}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
                   </td>
                   <td className="px-4 py-2 text-right tabular-nums">
                     {/* ⛔ An unresolved size is shown as unresolved, never as 0.

@@ -480,6 +480,9 @@ def schedule_grid(mint: str, created_at: datetime) -> None:
                 "reason": "scheduled_in_the_past",
                 "due_at": due.isoformat(),
                 "first_seen_at": now.isoformat(),
+                # P7 C-1 (Langston: the FIFTH writer -- this function's own, outside follow_up.py): the birth it was
+                # handed rides the row, so the coverage fold never needs due_at - grid for it.
+                "created_at": created_at.astimezone(UTC).isoformat(),
             })
             continue
 

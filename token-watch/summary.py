@@ -53,6 +53,7 @@ from store import (iter_census as store_iter_census, identity_for as _identity_f
                    lock_beat, periodic_lock, save_state,
                    tombstone_path, _correction_index, dead_set, dead_set_status,
                    latest_observations_uncorrected)
+import obs_fold
 
 UTC = timezone.utc
 LOG = logging.getLogger("token-watch.summary")
@@ -140,6 +141,10 @@ def _fold(st: dict, now: datetime) -> dict:
        exists to prevent. A byte cursor makes each pass O(new rows).
     """
     born = st.setdefault("born_by_day", {})
+    # P7 D2: births per hour, kept for 90 d + 7 d so "was anything due at this checkpoint in this cycle?" can be
+    # answered for the 90d point too; plus the first and newest birth folded (the births fold's own progress).
+    born_h = st.setdefault("born_by_hour", {})
+    keep_from = (now - obs_fold.BIRTHS_HOURLY_KEEP).strftime("%Y-%m-%dT%H")
     followed = st.setdefault("followed_by_day", {})
     d_age = st.setdefault("deaths_by_age", {})
     d_class = st.setdefault("deaths_by_class", {})
@@ -154,6 +159,15 @@ def _fold(st: dict, now: datetime) -> dict:
             if not day:
                 continue
             born[day] = born.get(day, 0) + 1
+            stamp = r.get("created_at") or r.get("first_seen_at") or ""
+            hour = stamp[:13]
+            if len(hour) == 13 and hour >= keep_from:
+                born_h[hour] = born_h.get(hour, 0) + 1
+            if stamp:
+                if not st.get("births_first_at") or stamp < st["births_first_at"]:
+                    st["births_first_at"] = stamp
+                if not st.get("births_through") or stamp > st["births_through"]:
+                    st["births_through"] = stamp
             # EVERY RECORDED LAUNCH IS FOLLOWED (Amendment 8). This used to
             #    read `if r.get("followed")`, and that flag is STALE on every
             #    row written before the amendment -- those launches were
@@ -184,6 +198,8 @@ def _fold(st: dict, now: datetime) -> dict:
                 day = None
         if day:
             d_birth[day] = d_birth.get(day, 0) + 1
+    for h in [h for h in born_h if h < keep_from]:
+        del born_h[h]
     return st
 
 
@@ -362,6 +378,39 @@ def _enrich(rows: list) -> list:
     return rows
 
 
+def _seed_watch(dead) -> dict:
+    """mint -> {created_at, obs: {}} for the oldest obs_fold.WATCH_N not-dead launches, by the SAME key and the
+    same corrected read as the survivor table, so the table's oldest 100 are the set's first 100."""
+    corrections = _correction_index()
+    members = {}
+    for name in _birth_files():
+        need = obs_fold.WATCH_N - len(members)
+        if need <= 0:
+            break
+        try:
+            best = _oldest_in_file(name, corrections, dead, need, [])
+        except (OSError, ValueError):
+            continue
+        for _key, r in best:
+            if r.get("mint"):
+                members[r["mint"]] = {"created_at": r.get("created_at"), "obs": {}}
+    return members
+
+
+def _follow_up_lag_s(now: datetime):
+    """Seconds from the end of the follow-up's last consumed hour to now (C-2), or None when unreadable.
+
+    ⚠️ A LAGGING CURSOR HIDES AN UNCOVERED DAY AS "NOT YET READ" -- which is why it is published beside the
+    coverage counts rather than inferred from them.
+    """
+    last = load_state("follow_up_cursor", {}).get("last_bucket")
+    try:
+        end = datetime.strptime(last, "%Y-%m-%dT%H").replace(tzinfo=UTC) + timedelta(hours=1)
+    except (TypeError, ValueError):
+        return None
+    return int((now - end).total_seconds())
+
+
 def _publish_dir() -> None:
     """Make exactly one directory reachable by the trading app, and no more.
 
@@ -396,6 +445,47 @@ def build(now: datetime = None) -> dict:
     _READ_NEW_SKIPPED["lines"] = 0
     st = _fold(load_state(STATE, {}), now)
 
+    # ⭐ ONE DEAD SET (P2b F-a). build used to re-read the whole tombstone file into its own set here, beside
+    #    store's cached one - a second full copy, +99..111 MiB measured (P2a), in the follow-up unit that runs it.
+    # ⛔ AN UNREADABLE TOMBSTONE FILE IS NOT "NOTHING IS DEAD" (Langston R3, absent-as-valid #546). The old loop caught
+    #    OSError and carried on with an empty set, which listed corpses as the oldest survivors. Now the table is
+    #    WITHHELD (empty) and the reason is published beside it.
+    try:
+        dead = dead_set()
+        dead_note = None
+        bad = dead_set_status()["bad_lines"]
+        if bad:
+            dead_note = ("%d tombstone line(s) could not be read; a token whose death is on one of them may be "
+                         "listed as a survivor" % bad)
+    except OSError as exc:
+        dead = None
+        dead_note = "survivor table withheld: the tombstone file could not be read (%s)" % type(exc).__name__
+
+    # ⭐ P7 D4: THE WATCH SET -- the oldest WATCH_N not-dead launches, each carrying what the follow-up has seen of
+    #    it, so a listed survivor's status is KNOWN without re-reading every observation file each hour. A (re)seed
+    #    discards the observation fold so the one streaming pass below re-reads from byte 0 and fills the members'
+    #    history (observation files are never tiered, so that re-read is exact). Without a readable dead set the
+    #    set is neither seeded nor pruned: the survivor table is withheld anyway.
+    watch = st.get("watch")
+    if dead is not None:
+        why = obs_fold.watch_needs_seed(watch, dead, OLDEST_N, st.get("births_through"))
+        if why:
+            seeded_at = now.isoformat() if why == "seeded" else watch.get("seeded_at")
+            members = _seed_watch(dead)
+            watch = {"version": obs_fold.WATCH_VERSION, "members": members,
+                     "capped": len(members) >= obs_fold.WATCH_N, "births_through_at_seed": st.get("births_through"),
+                     "seeded_at": seeded_at, "rebuilt_at": now.isoformat() if why == "rebuilt" else None}
+            st["obs"] = None
+            LOG.warning("watch set %s: %d members", why, len(watch["members"]))
+        else:
+            obs_fold.prune_dead(watch, dead)
+        st["watch"] = watch
+    obs = obs_fold.fold_observations(st, now, watch["members"] if isinstance(watch, dict) else None)
+    cadence = obs_fold.read_cadence()
+    window = load_state(obs_fold.WINDOW_STATE, {}) or None
+    states = obs_fold.label_states(obs, st.get("born_by_hour", {}), st.get("births_first_at"),
+                                   st.get("births_through"), window, cadence, now)
+
     born = st["born_by_day"]
     followed = st["followed_by_day"]
     d_birth = st["deaths_by_birth_day"]
@@ -420,25 +510,20 @@ def build(now: datetime = None) -> dict:
     # ── WHERE THEY DIED — straight off the record, no derivation ────────────
     died_by_age = {label: st["deaths_by_age"].get(label, 0) for label in GRID_LABELS}
 
-    # ⭐ ONE DEAD SET (P2b F-a). build used to re-read the whole tombstone file into its own set here, beside
-    #    store's cached one - a second full copy, +99..111 MiB measured (P2a), in the follow-up unit that runs it.
-    # ⛔ AN UNREADABLE TOMBSTONE FILE IS NOT "NOTHING IS DEAD" (Langston R3, absent-as-valid #546). The old loop caught
-    #    OSError and carried on with an empty set, which listed corpses as the oldest survivors. Now the table is
-    #    WITHHELD (empty) and the reason is published beside it.
-    try:
-        dead = dead_set()
-        dead_note = None
-        bad = dead_set_status()["bad_lines"]
-        if bad:
-            dead_note = ("%d tombstone line(s) could not be read; a token whose death is on one of them may be "
-                         "listed as a survivor" % bad)
-    except OSError as exc:
-        dead = None
-        dead_note = "survivor table withheld: the tombstone file could not be read (%s)" % type(exc).__name__
     if dead is None:
         survivors, unresolved = [], 0
     else:
         survivors, unresolved = _oldest_survivors(dead, OLDEST_N, now)
+    # P7 D4: every listed row says what we actually know; nothing is filtered or refilled on it
+    settle = {L: rec.get("window_s") or obs_fold.K_FLOOR * 3900 for L, rec in states["labels"].items()}
+    members = watch["members"] if isinstance(watch, dict) else {}
+    for r in survivors:
+        r.update(obs_fold.survivor_status(r.get("created_at"), members.get(r.get("mint")), settle, now))
+    status_counts = {}
+    for r in survivors:
+        status_counts[r["status"]] = status_counts.get(r["status"], 0) + 1
+    unverified_ages = [r["age_days"] for r in survivors
+                       if r["status"] == "unverified" and r.get("age_days") is not None]
 
     payload = {
         "generated_at": now.isoformat(),
@@ -480,10 +565,46 @@ def build(now: datetime = None) -> dict:
         # the table's own caveats: why it may be withheld or incomplete, and how many census rows were NOT listed
         # because they record a quote currency that could not be repaired (counted, never silently dropped - R4)
         "oldest_survivors_note": dead_note,
+        "oldest_survivors_status": {
+            "counts": dict(sorted(status_counts.items())),
+            "oldest_unverified_age_days": max(unverified_ages) if unverified_ages else None,
+            "watch_set_size": len(members),
+            "watch_set_seeded_at": watch.get("seeded_at") if isinstance(watch, dict) else None,
+            "watch_set_rebuilt_at": watch.get("rebuilt_at") if isinstance(watch, dict) else None,
+            "note": "verified_alive = seen alive at its most recent due checkpoint; unverified = seen at some "
+                    "checkpoint but not at its most recent due one; never_observed = never seen at all.",
+        },
+        # ⭐ P7 D2: per checkpoint, is anyone looking -- and the one job-level verdict
+        "observation_states": dict(
+            states,
+            cadence=cadence,
+            cadence_changed=bool(window and cadence and (window.get("cadence") or {}).get("cycle_s")
+                                 != cadence["cycle_s"]),
+            window_derived_at=(window or {}).get("derived_at"),
+            window_floor_bound={L: (v or {}).get("floor_bound")
+                                for L, v in ((window or {}).get("labels") or {}).items()},
+        ),
         "oldest_survivors_unresolved_excluded": unresolved,
         # census / tombstone lines this build's fold could not use (unparseable or not an object) - counted, never
         # raised, never silently dropped
         "fold_skipped_lines": _READ_NEW_SKIPPED["lines"],
+        # ⭐ WHAT THE FOLLOW-UP ACTUALLY LOOKED AT (P7, OBJ-5). Every figure above is derived from births and
+        #    tombstones, and a death is recorded only when the follow-up looks -- so a stopped follow-up reads as
+        #    "nobody died". This block is the evidence of looking, per checkpoint.
+        "coverage": dict(
+            obs_fold.coverage(obs, born, now),
+            observed_through=obs["observed_through"],
+            follow_up_lag_s=_follow_up_lag_s(now),
+            birth_day_split=dict(obs["split"]),
+            shapes_by_label=obs_fold.shape_totals(obs),
+            covering_by_day=obs_fold.covering_by_day(obs),
+            last_observed_at=dict(sorted(obs["last_observed_at"].items())),
+            skipped_lines=obs["skipped_lines"],
+            rebuilt_at=obs["rebuilt_at"],
+            note="A birth day is uncovered if any checkpoint already due for the whole day has no observation "
+                 "row. Covering rows are COUNTS: before 2026-11 the birth day is estimated from the observation "
+                 "time, which can spill a row across midnight, so a count can exceed that day's launches.",
+        ),
         "display_ages": list(DISPLAY_AGES),
         # ⛔ THE ORDER OF THE CHECKPOINTS, CARRIED EXPLICITLY. The payload is
         #    written with sort_keys=True, so `by_age_at_death` comes back

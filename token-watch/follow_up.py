@@ -179,6 +179,20 @@ def _buckets_too_old(now):
     return max(0, total - CATCHUP_MAX_BUCKETS)
 
 
+def _birth(entry: dict) -> dict:
+    """{'created_at': ...} from the due entry, or {} (P7 C-1, Langston: stamp the birth, don't infer it).
+
+    ⭐ Every observation row the follow-up writes -- observed, shed, error, abandoned -- carries the token's
+       creation time when its due entry does, so the summary's coverage fold reads the birth day EXACTLY
+       instead of estimating it as observed_at minus the grid offset (which is off by the observation's
+       lateness, and spills rows across midnight). Entries written before `schedule_grid` carried it give {}.
+    ⚠️ COST, measured before adoption: 41 bytes a row compact, ~+9.5% on a 432 B mean row (change list,
+       P7 design r2, C-1) -- named against P15 / #1246.
+    """
+    c = entry.get("created_at")
+    return {"created_at": c} if isinstance(c, str) and c else {}
+
+
 def _entries_across(buckets):
     for b in buckets:
         for e in due_now(b):
@@ -336,7 +350,7 @@ def run_hour(now: datetime | None = None) -> dict:
                 # observation that did not happen. A silent skip and a
                 # completed call must never look the same in the record.
                 stats["shed"] += 1
-                record_observation(mint, age, now, {"shed": str(s), "observed": False})
+                record_observation(mint, age, now, dict({"shed": str(s), "observed": False}, **_birth(entry)))
                 continue
             except Exception as exc:
                 # ⛔ RECORDED, AND RETRIED -- NEVER DROPPED (P5, OBJ-4b(b)). The
@@ -355,6 +369,7 @@ def run_hour(now: datetime | None = None) -> dict:
                     "reason": "abandoned" if giving_up else "error",
                     "error": type(exc).__name__,
                     "attempts": attempts,
+                    **_birth(entry),
                 })
                 if giving_up:
                     stats["error_abandoned"] += 1
@@ -370,6 +385,7 @@ def run_hour(now: datetime | None = None) -> dict:
             if state.get("name") or state.get("symbol"):
                 record_identity(mint, state.get("name"), state.get("symbol"))
             fields["observed"] = True
+            fields.update(_birth(entry))     # P7 C-1: the birth rides the row (both observation writes below)
 
             # ⛔⛔ THE REAL MONEY IN THE POOL, IN SOL -- the measurement this
             #    study always meant and never took. It replaces a call named
