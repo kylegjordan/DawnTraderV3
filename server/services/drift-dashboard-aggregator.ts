@@ -855,6 +855,17 @@ export interface DataArchiveStatusResponse {
  */
 export const ESTIMATED_COUNT_TABLES: ReadonlySet<string> = new Set(['signal_eval_archive', 'signal_eval_provenance']);
 
+/**
+ * B-DB-SIZE-RELIEF Step-9 fold (Langston's Step-4 condition: "if the worst case is over 20 s, ship a bounded SET LOCAL
+ * statement_timeout on the exact counts"). Step 7 measured a 21.7 s worst case (2026-11-15 03:16Z, the first 7-day
+ * call after the deploy), so each daily-leaf exact count runs under its own bound. 6 s sits above every count measured
+ * (a whole open leaf 0.16-4.6 s, a boundary leaf from the window start 0.56-3.06 s), so a normal count completes; a slow
+ * one stops at 6 s and its leaf is EXCLUDED and named (a lower bound), never 0. The two asks per table then add at most
+ * 12 s. It does NOT bound `pair_scan_archive`'s exact count (8.56 s warm, measured the same morning), which is held only
+ * by the diagnostic pool's 25 s statement bound — that is recorded in the change list as Langston's question.
+ */
+export const ARCHIVE_EXACT_COUNT_TIMEOUT_MS = 6000;
+
 export async function computeDataArchiveStatus(
   window: DashboardWindow,
 ): Promise<DataArchiveStatusResponse> {
@@ -925,7 +936,12 @@ export async function computeDataArchiveStatus(
         for (const a of plan.asks) {
           const key = `${a.qname}|${a.sinceIso ?? ''}`;
           try {
-            const er = await db.execute(sql.raw(exactCountSql(a)));
+            // bounded per count (ARCHIVE_EXACT_COUNT_TIMEOUT_MS): SET LOCAL lives and dies with this transaction, so the
+            // pool's own 25 s bound is untouched for every other statement. A timeout here is load (isDiagPoolLoad).
+            const er = await db.transaction(async (tx) => {
+              await tx.execute(sql.raw(`SET LOCAL statement_timeout = ${ARCHIVE_EXACT_COUNT_TIMEOUT_MS}`));
+              return tx.execute(sql.raw(exactCountSql(a)));
+            });
             const n = ((Array.isArray(er) ? er : (er as any).rows ?? []) as Array<{ n: number | string }>)[0]?.n;
             exact.set(key, n === undefined || n === null ? null : Number(n));
           } catch (err) {

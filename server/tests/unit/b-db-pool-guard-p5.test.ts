@@ -10,11 +10,19 @@ const ROOT = path.join(__dirname, '../../..');
 const read = (rel: string) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 
 const failWith = vi.hoisted(() => ({ msg: 'canceling statement due to statement timeout' }));
-vi.mock('../../db.js', () => ({
-  diagDb: { execute: vi.fn(async () => { throw new Error(failWith.msg); }) },
-  DIAG_POOL_MAX: 4,
-  db: { execute: vi.fn(async () => { throw new Error('the MAIN pool must not be used by this panel'); }) },
-}));
+vi.mock('../../db.js', () => {
+  // B-DB-SIZE-RELIEF Step-9 fold: the daily-leaf exact counts run inside a transaction (SET LOCAL statement_timeout), so
+  // the mock pool has one; its statements route through the same `execute` mock the tests program.
+  const diagDb: { execute: ReturnType<typeof vi.fn>; transaction: ReturnType<typeof vi.fn> } = {
+    execute: vi.fn(async () => { throw new Error(failWith.msg); }),
+    transaction: vi.fn(async (fn: (tx: { execute: (q: unknown) => unknown }) => unknown) => fn({ execute: (q: unknown) => diagDb.execute(q) })),
+  };
+  return {
+    diagDb,
+    DIAG_POOL_MAX: 4,
+    db: { execute: vi.fn(async () => { throw new Error('the MAIN pool must not be used by this panel'); }) },
+  };
+});
 vi.mock('../../services/data-archive/archive-batch-writer.js', () => ({ getArchiveStats: () => ({}) }));
 vi.mock('../../services/data-archive/archive-config.js', () => ({
   getArchiveConfig: () => ({ pairScanEnabled: true, signalEvalEnabled: true, signalEvalPreFilterEnabled: true, exitDecisionEnabled: true,
@@ -92,6 +100,48 @@ describe('P5 — the data-archive panel on the diagnostic pool (C-1, Langston bl
       expect(r24.tables.every((t) => t.windowPartial === null)).toBe(true); // that call's horizon read failed (the mock throws): unknown
     } finally {
       exec.mockImplementation(async () => { throw new Error(failWith.msg); });
+    }
+  });
+
+  it('Step-9 fold: each daily-leaf exact count runs under its own 6 s SET LOCAL bound, and a count that hits it EXCLUDES its leaf (≥), never 0 and never QUERY TIMEOUT', async () => {
+    const db = await import('../../db.js');
+    const { ARCHIVE_EXACT_COUNT_TIMEOUT_MS } = await import('../../services/drift-dashboard-aggregator.js');
+    expect(ARCHIVE_EXACT_COUNT_TIMEOUT_MS).toBe(6000);
+    const diag = (db as unknown as { diagDb: { execute: ReturnType<typeof vi.fn>; transaction: ReturnType<typeof vi.fn> } }).diagDb;
+    const DAYMS = 86_400_000;
+    const today = Math.floor(Date.now() / DAYMS) * DAYMS;
+    const sent: string[] = [];
+    diag.transaction.mockClear();
+    diag.execute.mockImplementation(async (q: unknown) => {
+      const text = JSON.stringify(q);
+      sent.push(text);
+      if (text.includes('module_constants')) return HORIZON_ROWS;
+      if (text.includes('pg_partition_tree') && text.includes('reltuples')) {
+        return { rows: [
+          { qname: 'leaf_closed', reltuples: 5000, heap_bytes: 8192, from_ms: today - DAYMS, to_ms: today, analyzed_at: '2026-11-08 03:00:00+00' },
+          { qname: 'leaf_open', reltuples: -1, heap_bytes: 8192, from_ms: today, to_ms: today + DAYMS, analyzed_at: null },
+        ] };
+      }
+      if (text.includes('count(*)::bigint AS n')) throw new Error(failWith.msg); // the bound fires
+      if (text.includes('rows_in_window')) return { rows: [{ rows_in_window: 1, total_rows: 2, last_write_at: null, disk_bytes: 0 }] };
+      return { rows: [{ last_write_at: null, disk_bytes: 0 }] };
+    });
+    try {
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const { computeDataArchiveStatus } = await import('../../services/drift-dashboard-aggregator.js');
+      const r = await computeDataArchiveStatus('rolling_30d' as never);
+      expect(spy).not.toHaveBeenCalled(); // a statement timeout is LOAD, not a fault line
+      spy.mockRestore();
+      // every exact count was sent inside a transaction, directly after its own SET LOCAL
+      const counts = sent.map((t, i) => [t, i] as const).filter(([t]) => t.includes('count(*)::bigint AS n'));
+      expect(counts.length).toBeGreaterThan(0);
+      for (const [, i] of counts) expect(sent[i - 1]).toContain('SET LOCAL statement_timeout = 6000');
+      expect(diag.transaction.mock.calls.length).toBe(counts.length);
+      const sea = r.tables.find((t) => t.name === 'signal_eval_archive')!;
+      expect(sea).toMatchObject({ timedOut: false, rowsInWindow: 5000, rowsInWindowKind: 'lower_bound', totalRowsKind: 'lower_bound' });
+      expect(sea.countNote).toMatch(/excludes leaf_open \(its exact count did not complete\)/);
+    } finally {
+      diag.execute.mockImplementation(async () => { throw new Error(failWith.msg); });
     }
   });
 
