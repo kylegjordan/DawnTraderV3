@@ -64,7 +64,7 @@ from datetime import datetime, timezone
 import providers
 from receiver import in_control_sample
 from config import EXPECTED_LAUNCHES_PER_DAY, GRID, BIRTHS_DIR, ROOT
-from store import _append, load_state, save_state
+from store import _append, load_state, lock_beat, save_state
 
 UTC = timezone.utc
 LOG = logging.getLogger("token-watch.promote")
@@ -310,7 +310,11 @@ def run(now: datetime = None) -> dict:
         # only when the cursor is saved
         new = _read_new(path, cursors.get(name, 0))
         consumed = 0
+        seen_rows = 0
         for birth, nbytes in new:
+            seen_rows += 1
+            if seen_rows % 500 == 0:
+                lock_beat()             # P4: promote runs inside the follow-up's lock (OBJ-4b(a))
             if budget <= 0:
                 stats["bounded_out"] += 1
                 continue

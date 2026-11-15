@@ -42,6 +42,7 @@ this process shares a 2-core box with the Discord bridges and the reviewer.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import uuid
 import time
@@ -63,6 +64,7 @@ from config import (
 )
 
 UTC = timezone.utc
+LOG = logging.getLogger("token-watch.store")
 
 # A lock older than this is treated as abandoned. Deliberately generous: the
 # cost of waiting is a skipped cycle, the cost of a false steal is two jobs
@@ -140,42 +142,123 @@ def _read(path: str):
 # it only ever appends, and blocking ingestion on an hourly job would trade a
 # recoverable delay for an unrecoverable census gap.
 # ─────────────────────────────────────────────────────────────────────────────
+class LockHolder:
+    """What `periodic_lock` yields when it holds the lock: TRUTHY, so every
+    `if not held:` caller is unchanged, plus `beat()` (B-TOKEN-WATCH-FOLLOWUP-
+    MEMORY P4, OBJ-4b(a)).
+
+    ★ WHY A HEARTBEAT: a re-enabled follow-up run exceeds `LOCK_STALE_AFTER`
+      (30 min) as the NORMAL case (pre-audit A4: due + promote alone are ~95 min
+      of pacer), so without one a live holder ages into "abandoned" and the next
+      job steals it mid-run.
+    ⛔ `beat()` TOUCHES THE LOCK ONLY WHILE IT STILL CARRIES OUR TOKEN — a beat on
+       a lock someone else now holds would extend THEIR lock (the hazard
+       `tools/locked_copy.py` documents), so it returns False and touches nothing.
+    """
+
+    def __init__(self, holder: str, token: str):
+        self.holder, self.token = holder, token
+
+    def __bool__(self) -> bool:
+        return True
+
+    def ours(self) -> bool:
+        try:
+            with open(LOCK_PATH, encoding="utf-8") as fh:
+                return self.token in fh.read().split()
+        except OSError:
+            return False
+
+    def beat(self) -> bool:
+        if not self.ours():
+            LOG.error("lock beat REFUSED: the periodic lock is gone or no longer %s's (token %s)",
+                      self.holder, self.token)
+            return False
+        os.utime(LOCK_PATH)
+        return True
+
+
+# the holder of the lock THIS process took, if any -- so code running inside a
+# locked job (promote.run, tier's sources) can beat without the object being
+# threaded through every call
+_HELD = {"holder": None}
+
+
+def lock_beat() -> bool:
+    """Beat the periodic lock if this process holds it; False otherwise."""
+    h = _HELD["holder"]
+    return h.beat() if h is not None else False
+
+
 @contextmanager
 def periodic_lock(holder: str, wait: bool = False):
     """Exclusive lock for the periodic jobs.
 
     O_EXCL rather than fcntl so it behaves identically when tested off-Linux.
-    Yields True if held, False if another job holds it — the caller must check
-    and skip rather than proceeding, because "I could not get the lock" and "I
-    did the work" must never be the same code path.
+    Yields a truthy `LockHolder` if held, False if another job holds it — the
+    caller must check and skip rather than proceeding, because "I could not get
+    the lock" and "I did the work" must never be the same code path.
+
+    ★ THREE CHANGES (B-TOKEN-WATCH-FOLLOWUP-MEMORY P4, OBJ-4b(a)):
+      (1) the line carries holder, pid AND a per-acquisition token, and the
+          holder beats it (`LockHolder.beat`, `lock_beat`);
+      (2) a lock is stolen only when its mtime is staler than
+          `LOCK_STALE_AFTER`, and the steal is LOGGED with the dead holder's
+          line — and only if that line is still the one read as stale;
+      (3) release is BY TOKEN: `finally` unlinks only a lock that still holds
+          our token. The old unconditional unlink deleted the lock of whoever had
+          stolen it, so two jobs ran at once (pre-audit A4b).
     """
     os.makedirs(os.path.dirname(LOCK_PATH), exist_ok=True)
     fd = None
     deadline = time.time() + (300 if wait else 0)
+    token = uuid.uuid4().hex
     while True:
         try:
             fd = os.open(LOCK_PATH, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-            os.write(fd, f"{holder} {os.getpid()} {_now().isoformat()}\n".encode())
+            os.write(fd, f"{holder} {os.getpid()} {token} {_now().isoformat()}\n".encode())
             os.close(fd)
             break
         except FileExistsError:
-            age = _now() - datetime.fromtimestamp(os.path.getmtime(LOCK_PATH), UTC)
+            try:
+                age = _now() - datetime.fromtimestamp(os.path.getmtime(LOCK_PATH), UTC)
+                with open(LOCK_PATH, encoding="utf-8") as fh:
+                    stale_line = fh.read()
+            except FileNotFoundError:
+                continue                # released between the two reads: try again
             if age > LOCK_STALE_AFTER:
-                # Abandoned: the holder died without releasing. Steal it, and
-                # say so — a silently stolen lock hides a crashing job.
-                os.unlink(LOCK_PATH)
+                # Abandoned: the holder died without releasing, or stopped
+                # beating. Steal it, and say so — a silently stolen lock hides a
+                # crashing job. Re-read first: if the line changed, someone else
+                # took it in between, and that lock is not ours to remove.
+                try:
+                    with open(LOCK_PATH, encoding="utf-8") as fh:
+                        if fh.read() != stale_line:
+                            continue
+                    os.unlink(LOCK_PATH)
+                except FileNotFoundError:
+                    continue
+                LOG.error("STOLE a stale periodic lock (age %s, past %s): %s",
+                          age, LOCK_STALE_AFTER, stale_line.strip())
                 continue
             if time.time() >= deadline:
                 yield False
                 return
             time.sleep(2)
+    held = LockHolder(holder, token)
+    _HELD["holder"] = held
     try:
-        yield True
+        yield held
     finally:
-        try:
-            os.unlink(LOCK_PATH)
-        except FileNotFoundError:
-            pass
+        _HELD["holder"] = None
+        if held.ours():
+            try:
+                os.unlink(LOCK_PATH)
+            except FileNotFoundError:
+                pass
+        else:
+            LOG.error("periodic lock NOT released by %s: it is gone or no longer ours (token %s) — "
+                      "left in place", holder, token)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

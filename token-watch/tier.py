@@ -44,7 +44,7 @@ from datetime import datetime, timedelta, timezone
 from config import BULKY_HOT_DAYS, COLD_DIR, DUE_SPENT_HOT_DAYS
 from provenance import FOLLOW_UP_DIR as PROVENANCE_FOLLOW_UP_DIR
 from provenance import RAW_DIR as PROVENANCE_RAW_DIR
-from store import DUE_DIR, ensure_dirs, load_state, periodic_lock
+from store import DUE_DIR, ensure_dirs, load_state, lock_beat, periodic_lock
 
 UTC = timezone.utc
 LOG = logging.getLogger("token-watch.tier")
@@ -149,6 +149,7 @@ def tier_payloads(now: datetime | None = None) -> dict:
     by_source = {}
 
     for src_dir, prefix in TIERED_SOURCES:
+      lock_beat()                       # P4: a beat per source (OBJ-4b(a))
       listing = sorted(os.listdir(src_dir)) if os.path.isdir(src_dir) else []
       by_source[prefix] = 0
       for name in listing:

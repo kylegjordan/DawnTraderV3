@@ -34,6 +34,7 @@ from store import (
     ensure_dirs,
     load_state,
     periodic_lock,
+    lock_beat,
     record_death,
     record_identity,
     record_observation,
@@ -172,6 +173,7 @@ def _buckets_too_old(now):
 
 def _entries_across(buckets):
     for b in buckets:
+        lock_beat()                     # P4: a beat per bucket (OBJ-4b(a))
         for e in due_now(b):
             yield e
 
@@ -298,6 +300,8 @@ def run_hour(now: datetime | None = None) -> dict:
             stats["errors"] += 1
         for entry in _entries_across(buckets):
             stats["due"] += 1
+            if stats["due"] % 500 == 0:
+                lock_beat()             # P4: and every 500 entries inside a bucket
             mint, age = entry["mint"], entry["age"]
 
             # ⛔ NEVER OBSERVE EARLY. The job reads a whole hour-bucket at the

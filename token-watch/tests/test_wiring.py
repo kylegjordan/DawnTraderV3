@@ -247,7 +247,8 @@ check("and it leaves a result for the mint step, stamped with this run",
 #   periodic lock at all. Hold the lock, run the check, confirm it checked.
 store.save_state("liveness", {})
 with store.periodic_lock("tiering") as _held:
-    check("POSITIVE CONTROL: the lock really is held", _held is True)
+    # P4: a held lock yields a truthy LockHolder (not the literal True); the lock file is the positive control
+    check("POSITIVE CONTROL: the lock really is held", bool(_held) and os.path.exists(store.LOCK_PATH))
     _fw.run_check(now=now + timedelta(hours=1))
 check("★ the switch STILL ran while the periodic lock was held",
       bool(store.load_state("liveness", {}).get("checked_at")))
