@@ -35,12 +35,8 @@
 - Archived 2026-11-09 · completed-pm-build-record → `1-system-manual/pm/archive/memory/2026-11.md`
 - Archived 2026-11-09 · codex-takeover-2026-11-09 → `1-system-manual/pm/archive/memory/2026-11.md`
 - Archived 2026-11-06 · stale-pm-planning-notes → `1-system-manual/pm/archive/memory/2026-11.md`
-<!-- PM-PRUNE-BEGIN id=small-items-bundle-1-STILL-PENDING-KYLE date=2026-11-16 -->
-- **FOR KYLE'S SMALL-ITEMS BUNDLE (added 11-14 15:1xZ, NEW, Discord 1571178725607866461; Langston msg 1571178494883405876 ruled both decisions, not batch work):** (a) alerts table lacks the database user foreign key the code declares; 12 old alerts point at deleted users, so adding the key needs a cleanup choice first; (b) alert action-button route allows only the alert owner; after B-ALERT-INSERT-CONTRACT every alert is owned by one admin (test admin, not Kyle), and 0 of 5,904 alerts have buttons today. NEW proposes drop the check or make Kyle the owner. PM rec: both after live (PRE_LIVE_SPRINT), no trading effect. Detail: Scope Files/B_ALERT_INSERT_CONTRACT_PRE_AUDIT.md section C.
-<!-- PM-PRUNE-END -->
-<!-- PM-PRUNE-BEGIN id=small-items-bundle-2-STILL-PENDING-KYLE date=2026-11-16 -->
-- **FOR KYLE'S SMALL-ITEMS BUNDLE (Infra orders 10-18, all 'waiting on Kyle'):** Langston find via NEW 01:3xZ (Discord 1568075945611624621): alert Discord posts put the alert id at the END and cut at 1,900 chars, so 162/3,529 posts lost their id (55 reached Langston as escalations); fix = id first, cut the body (scripts/system-alerts.ts:101/:103, frameResurface:179). Rec: fold into B-ALERT-LANE-LEDGER-OWNER (Infra order 15). Bring the bundle with a slot check.
-<!-- PM-PRUNE-END -->
+- Archived 2026-11-16 · small-items-bundle-1-pending-kyle → `1-system-manual/pm/archive/memory/2026-11.md`
+- Archived 2026-11-16 · small-items-bundle-2-pending-kyle → `1-system-manual/pm/archive/memory/2026-11.md`
 - Archived 2026-11-11 · staging-signin-cleared → `1-system-manual/pm/archive/memory/2026-11.md`
 - Archived 2026-11-16 · aprjul-archive-ask-superseded-kd83 → `1-system-manual/pm/archive/memory/2026-11.md`
 - Archived 2026-11-07 · completed-joint-deploy-and-restart-alert → `1-system-manual/pm/archive/memory/2026-11.md`
