@@ -108,6 +108,12 @@ export const RETRY_BUFFER_MAX = 50_000;
  *   • `ECONNRESET`, `ETIMEDOUT` were already transient by message; the code test carries them too.
  *     They can arrive MID-STATEMENT, after an earlier chunk committed — an exposure that already existed
  *     through their message arms, carried by `#1032` (the ticker writer re-inserts committed chunks).
+ *     `ECONNREFUSED` is a CONNECT-time failure, so its dominant shape fails before any chunk commits; the
+ *     mid-flush duplication belongs mostly to the pre-existing `connection terminated` / `econnreset` arms
+ *     (HYPOTHESIS — the chunk-boundary rate is not measured; Langston, Step 4). A re-inserted ticker chunk
+ *     lands as SILENT DUPLICATE rows, not a unique violation: the ticker tables' key is
+ *     `(captured_at, symbol, id)` with `id` a bigserial (`2026-04-22-initial-schema.sql:10771`), whereas the
+ *     bar tables carry `UNIQUE (symbol, interval_begin)` (`:10563`). Whether duplicates bias readers is `#1032`'s.
  *   • ⛔ `ENOTFOUND` STAYS PERMANENT (a wrong host after a config change fails forever). That is why no arm
  *     matches the `getaddrinfo` prefix: Node writes `getaddrinfo ENOTFOUND <host>` and
  *     `getaddrinfo EAI_AGAIN <host>`, so a prefix arm would flip the one code kept permanent.
