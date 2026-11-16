@@ -1,4 +1,4 @@
-# B-DB-POOL-GUARD — SCOPE r3 (2026-11-05) — Step 1 approved at r2; r3 withdraws OBJ-3b after the Step-2 measurement
+# B-DB-POOL-GUARD — SCOPE r4 (2026-11-16) — r4 adds §8, B-DB-APP-TLS (Kyle KD-100); r3 (2026-11-05) withdrew OBJ-3b after the Step-2 measurement
 
 change-class: architecture
 
@@ -83,3 +83,32 @@ For every caller on the main pool touched by OBJ-2, OBJ-3, OBJ-3b, OBJ-4 or OBJ-
 - (a) Readers move, not a writer reservation: a writer-reserved pool fills with the writers' own leaks.
 - (b) The idle-in-transaction page stands on its own key, with a forced test.
 - (c) 16a re-word: yes, after OBJ-2's Step-7 check, with the drop-rate risk above stated.
+
+
+## 8. AMENDMENT r4 (2026-11-16) — B-DB-APP-TLS folded in (Kyle KD-100)
+**Directive:** Kyle, KD-100 (`pm/DECISIONS.md`), *"The 3 database security fixes I'm fine with."* (Desktop, 2026-11-16T17:35:59Z, PM transcript, verified by CC-A under KD-98). Item (1): `B-DB-APP-TLS`, OLD Claude — encrypt the app's Supabase connections and verify Supabase's certificate, **folded into this batch (same connection file)**, before live. Infra Claude and Langston settled the three items' placement (11-16 ~14:25Z).
+**Change-class stays `architecture`** (the batch's declared class; this adds a cross-cutting connection property).
+
+### 8.1 The problem, measured (staging, 2026-11-16 ~17:4xZ, `dt-sql`, read-only)
+`pg_stat_activity ⋈ pg_stat_ssl` grouped by `application_name`: **`dawntrader_main` 10 connections `ssl = f`**, `dawntrader_pool_monitor` 1 `ssl = f`; `dt-sql` 1 `t TLSv1.3` (positive control: the server negotiates TLS 1.3 when asked); `postgrest` `t TLSv1.3`; `postgres_exporter` `f` (Supabase's own). ⇒ **the app's database traffic crosses the internet unencrypted.** Mechanism, read at the code: `server/db.ts:88`/`:158` build both pools from `connectionString: process.env.DATABASE_URL` with no `ssl` option; `DATABASE_URL` on staging carries no query string (host `db.<ref>.supabase.co`, port 5432, `query (none)`); a `git grep` of `server` and `scripts` finds no `ssl:` option on any connection.
+**Census of connection openers (excluding tests):** ~60 sites — the two app pools (`server/db.ts`), the pool monitor (`server/db-pool-alerts.ts:398`), `crew-coordination.ts`, `xstock-db-snapshot.ts`, and ~55 cron/one-off scripts (`server/scripts/*`, `scripts/*`, including `scripts/db-migrate.ts`, which `dt-deploy` runs). **All build from `DATABASE_URL`** (two take a `url` variable read from it) — the Step-2 audit re-derives this per site.
+
+### 8.2 Objectives
+| # | objective | verified by |
+|---|---|---|
+| **OBJ-T1** | Every connection built from `DATABASE_URL` uses TLS **and verifies Supabase's certificate and hostname**: `sslmode=verify-full&sslrootcert=<path to Supabase's root CA>` on `DATABASE_URL`. The installed `pg-connection-string` 2.7.0 turns these into `ssl = { ca }` (`node_modules/pg-connection-string/index.js:71-104`), so Node's TLS defaults reject an unknown CA and check the hostname. One setting covers the app, the monitor and every script; psql reads the same two parameters. | After deploy: `pg_stat_ssl` shows `ssl = t` for `dawntrader_main`, `dawntrader_diag` (when it has a connection) and `dawntrader_pool_monitor`; the cron scripts' next runs complete; Step 2 names any opener that does not read `DATABASE_URL`. |
+| **OBJ-T2** | **Fail closed, not silently downgraded:** at boot `server/db.ts` refuses to create the pools unless `DATABASE_URL` carries `sslmode=verify-full` and a readable `sslrootcert`. | Unit tests: missing `sslmode`, `sslmode=require`, missing / unreadable CA file → refusal; `verify-full` + readable CA → pools build. Mutation-proved. |
+| **OBJ-T3** | **A wrong certificate is refused** (the verification is real, not decorative). | Step 7: a one-off connection from staging with a deliberately wrong CA fails at the TLS handshake (`self-signed certificate in certificate chain` or similar), BEFORE any login, so it cannot count toward a Supabase ban (`#1259`). |
+| **OBJ-T4** | The pool monitor pages if an app connection is ever unencrypted again. | Step 2 decides the shape (a `pg_stat_ssl` read inside the existing monitor, or a boot-time assertion only); judgement call for Langston. |
+
+### 8.3 Kyle's part (the certificate) — passed through PM Claude
+Supabase's documentation says the root certificate is in the **SSL Configuration section of the project's Database Settings page** (Supabase dashboard → the DawnTrader project → Project Settings → Database → *SSL Configuration* → download the certificate). It is a public CA certificate, not a secret. Kyle saves it to his Downloads folder and tells PM the file name; CC-A copies it to staging (`/etc/dawntrader/supabase-ca.crt`, root-owned, readable by `deploy`).
+
+### 8.4 Rollout and risks
+- **No ban risk from a bad rollout:** a TLS failure happens before the password is sent, so a wrong CA or a typo makes connections fail at the handshake, not at login (`#1259`'s trigger was wrong passwords).
+- **Outage risk:** a wrong CA or path would stop every connection. ⇒ the CA is proved by a one-off `verify-full` connection from staging BEFORE `.env` changes, and the `.env` change is atomic (temp + rename, as 3d step 4 of `B-DISK-FILE-TIERING`).
+- **Deploy-window rules apply** (no deploy 14:30-21:00Z; avoid 05:25-05:45Z): the `.env` change takes effect at the next app restart, so it ships with a reviewed deploy, not on its own.
+- **Not in this amendment:** Supabase's "enforce SSL" switch (it reboots the database and refuses every non-TLS client, including tools not yet audited). Proposed to Kyle's list once every opener is shown on TLS.
+
+### 8.5 Provenance (step 1.b)
+`server/db.ts` pool config: B-DB-POOL-GUARD itself (this batch, `a22998e78` onward) and the migration era before it. **ALREADY KNOWN AND HOMED — this is not a new finding.** `RUNNING_ISSUES.md` `#353` (`B-SEC-HARDEN`), Infra Claude's amendment of 2026-09-30 (found in `B-CREDENTIALS-PRIVATE-REPO` OBJ-1 round 3): the same measurement (`dawntrader_main` 8 connections `ssl = f`), the same mechanism, the narrow exposure (SCRAM keeps the password out of the clear; the query traffic is not, and an on-path attacker could alter it), and the measured fact that **Supabase's chain ends in its own private root** (`openssl s_client -starttls postgres` → *self-signed certificate in certificate chain*), so `verify-full` needs that root pinned and `require` alone encrypts without proving the server. Its fix — pin the root CA, `sslmode=verify-full`, verify by the same `pg_stat_ssl` census — was proposed then and never shipped. **KD-100 moves the item here.** No decision to run without TLS was found (corpora searched: `RUNNING_ISSUES.md`, `BATCH_CATALOG.md`, for `ssl`, `sslmode`, `TLS`). Disposition (2): relevant, needs updating to today's intent; `#353`'s amendment is cross-referenced, not re-filed.
