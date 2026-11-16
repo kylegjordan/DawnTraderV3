@@ -1,6 +1,6 @@
 # B-XSTOCK-BID-TRIGGER-RELAND — PROGRESS REPORT
 
-## OPEN — waiting on: increment (4c)'s five-session Step 7 read (deployed `0abfd7102` 2026-11-05 09:17:49Z; criterion in `Scope Files/B_XSTOCK_BID_TRIGGER_RELAND_INC4C_PRE_AUDIT.md` §3 r3, cut at the deploy) · C-P5's four-week read (content to 11-16) · the three folded issues not yet shown delivered (`#961`, `#962`, `#1087`, §5)
+## OPEN — waiting on: increment (4c)'s five-session Step 7 read (deployed `0abfd7102` 2026-11-05 09:17:49Z; criterion in `Scope Files/B_XSTOCK_BID_TRIGGER_RELAND_INC4C_PRE_AUDIT.md` §3 r3, cut at the deploy) · C-P5's retirement commit to Langston (four-week read done 2026-11-16, §3g: 14 stop episodes ≥ 10, inside dip share 5/14 not above outside 127/280 ⇒ retire) · the three folded issues not yet shown delivered (`#961`, `#962`, `#1087`, §5)
 
 change-class: `architecture` (scope header) · owner CC-C (Analyst Claude) · sprint plan row 2 · `#1191` (increment 4a), `#1199` (placed follow-up)
 
@@ -197,6 +197,36 @@ CHANGE-CLASS: architecture
 | T2 | `CLAUDE_CODE_FEATURE_WATCH.md` | N/A | Not this batch's. |
 
   **(4c): STEP 10 of 11 COMPLETE · NEXT: the batch's own Step 11 waits on C-P5 (2026-11-16); (4c) needs no separate close.**
+
+## 3g. C-P5, the four-week pause-retirement read — read 2026-11-16 by CC-C (alert `f6131ab0`)
+
+**Criterion as written** (INC4B pre-audit P7, r5/r6, Langston conditions G-J): *"The four-week read (content 2026-10-19 00:00Z → 2026-11-16 00:00Z exclusive = 20 weekdays …): ≥ 10 runs the rate; 5-9 keeps the pause … ≤ 4 proposes RETIREMENT on mechanism."* The rate (INCC pre-audit C-P5): *"for each `wouldFire` event compare the bid at suppression with the bid 15-25 min later. Retire the pause if the share of would-be fills below both the pre-window bid and the +25-min bid is no higher inside the windows than outside them (the outside share read the same way from `XS_FRAME`). Retirement is a reviewed commit."*
+
+**Carrier and control.** `/home/deploy/harvest/cp5/error__2026-10-20 … error__2026-11-16` (file D holds UTC day D−1, checked: `error__2026-10-20` runs 10-19 00:00:45Z → 10-20 00:00:01Z). Ledger `cp5.log` has a line for every day; no anomalously low `file_lines` on a weekday. **Positive control, all 20 weekday files:** bracketed `][VENUE_PAUSE] ` lines 19-41 per weekday (never 0); 0 on every Saturday and Sunday file (venue shut). Method check: the same per-day count reproduces the two-week read exactly (10-20 → 11-02: 10 stop lines, 7 episodes).
+
+**Numerator, by arm (episode = position + window + day):**
+| arm | lines | episodes |
+|---|---|---|
+| **stop** (decides) | **19** | **14** |
+| target (beside it) | 6 | 6 |
+| all bracketed pause lines (the pause's own cost, condition J) | 548 | 514 |
+
+⇒ **14 ≥ 10: the rate runs and decides** (19 lines, also ≥ 10 — the unit does not change the band).
+
+**The rate.** Inside: each of the 14 episodes, bid at the first stop would-fire, against the bid at pause start (`bidAtStart` on the position's `[VENUE_PAUSE_RESUMED]` line; the bid snapshot at the same lead agrees on all 14) and the median bid 15-25 min later (`xstock_spot_ticker_snap`). Outside: the first `exitReason=stop_hit` `XS_FRAME` with `bidExit=y` per position, outside every pause window ±5 min (windows from resumes of ≤ 40 min; 17 excluded as near a window), 297 positions; "pre" = the snapshot bid 361 s earlier (the inside episodes' median lead from pause start, range 42-1,030 s).
+| | n (both bids present) | would-be fill below both | share |
+|---|---|---|---|
+| **inside** | 14 | **5** | **35.7%** |
+| **outside** | 280 | **127** | **45.4%** |
+Using the single +25-min snapshot instead of the 15-25 median: inside 5/14, outside 122/280 (43.6%).
+
+⇒ **The inside share is NOT higher than the outside share. By the pre-registered rule, C-P5 says RETIRE the pause** — proposed to Langston as a reviewed commit, never a silent default.
+**What the pause did to those 14 positions** (informational, not the criterion): the bid at resume against the bid at suppression moved **−0.58% on average**; 9 worse (CRWD −2.81%, SNAP −2.63%, ARM −1.74%), 4 better (best +0.41%), 1 flat. The pause delayed sales that then happened lower more often than it rescued them. **Its cost (condition J):** 514 episodes in 20 weekdays where a held position was denied any decision for ~21 min, and 6 target would-fires blocked — against 5 stop dips it plausibly protected.
+
+**Forward dependency (condition I), carried into the retirement commit:** with the pause gone, objective 6's absolute `spread_blown` hold is the only upstream protection against blown-handoff stops. The retirement commit records this at `RUNNING_ISSUES` `#943` and the System Manual §3.5.1, so a later loosening of `ri_abs_spread_ceiling_pct` or a change to the yield arm re-opens the pause question.
+
+**Records:** per-event rows `scripts/analysis/cp5_four_week_rows.csv` (311 rows, saved because the snapshot table keeps 30 days and 10-19 ages out ~11-18); query `scripts/analysis/cp5_four_week_read.sql`. `NOT RE-READ` — the rate and the outside population definition (lead 361 s, ±5 min exclusion) go to Langston as they stand.
+DISPOSITION: folded into this batch — the retirement is row 2's own C-P5 outcome; the reviewed retirement commit is the next work, then row 2's Step 11.
 
 ## 4. PRE-REGISTERED close criteria (written before the data)
 **(4a), objective 11 — WINDOW: the first three full weekday US regular sessions after the deploy (2026-10-19, 10-20, 10-21).** Quoted from the pre-audit (r5e, Langston's reading): *"crossings conserved against A3 · joins taking the too_wide/quiet share · pagesAttempted falling · `dedupeHits == 0` as a SEPARATE tripwire, never a term (non-zero = FAIL)."* Also PASS requires `markMissedRowMarks` near zero and zero `no-trigger-vts-*` rows resolved by `cli`. **FAIL:** any `no_usable_mark` or isolated-staleness crossing that joins instead of paging; minted down with `dedupeHits` up; or `alertFileBytes` growing faster than ~1 MB/day. Source: the `[VTS_RAIL][SWEEP]` lines (cumulative since start).
