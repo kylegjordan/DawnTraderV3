@@ -229,3 +229,31 @@ Owner: **NEW Claude**, right after whichever deploy carries `3f06dd940`. Instrum
    - `blocks` is `{}`: 0 depth blocks of any class over the 9 crypto evaluations. That is a count, not a finding about the gate — the window held no refusal to show.
    - `xstock_spot` ABSENT at both reads ("never evaluated since this pid started"): the xStock venue is shut until Monday 01:00Z. **Unmeasurable, not 0/0** (r14 item 4).
 4. **What this establishes, and what it does not:** the denominator route answers on the deployed build and the counter it reads moves on the live path (crypto). It does NOT establish the xStock depth arm — that is read in Monday's live session together with the forced-carrier run (r11/r12, instant ≥ Mon 01:35Z), which still needs pre-registration and crew agreement. **Step 8 stays forbidden until that read.**
+
+## r17 — the forced run's pre-condition, read before pre-registering it: a queued xStock row does not live long enough to reach a restart (owner CC-B, 2026-11-16 ~02:40Z, read-only)
+
+**Instrument now live:** OLD Claude's deploy `84eeb168ef8656fc9dc5d0e757c0a1afc8776b48` (staging `git rev-parse HEAD` read on the box 02:3xZ; restart 706, 2026-11-15 ~11:05Z) carries `3f06dd940` (`git merge-base --is-ancestor` true). So the denominator is on staging and the run itself is what remains.
+
+**What r11 item 3 needs at the restart instant:** a queued paper xStock `rtb_signals` row that survives into the new process and is promoted there before its symbol latches.
+
+**Read 1, the pool right now (02:35Z, `rtb_signals`, all rows):** paper `crypto_spot` `reconfirmed` ×2 (queued 11-15 03:36Z and 21:52Z); **no xStock row.** Open: 3 crypto + 8 xStock, notional $306.85 against the ~$567 money-held cap, so promotion has room.
+
+**Read 2, how long an xStock row waits in the pool off-session.** Object: `rtb_shadow_pool_members`, paper, `created_at` time-of-day 01:35–13:30Z, 2026-11-10 → 11-16 (the off-session the run needs, r12 item 1). Population: every pool snapshot taken in that window.
+| day | cycles with an xStock member | xStock member-rows | of those promoted |
+|---|---|---|---|
+| 11-10 | 27 | 28 | 28 |
+| 11-11 | 62 | 68 | 68 |
+| 11-12 | 51 | 54 | 54 |
+| 11-13 | 16 | 17 | 15 |
+| 11-14, 11-15 | 0 | 0 | 0 (venue shut) |
+| 11-16 (to 02:3xZ) | 1 | 1 | 1 |
+**166 of 168 xStock member-rows were promoted in the snapshot that saw them, and member-rows ≈ cycles (168 rows in 157 cycles)**, so a queued xStock row is seen about once and opened at the next promotion pass (30 s cadence) — it lives for at most one or two cycles.
+- **Instrument limit, stated:** `captureShadowPool` runs only from `getRankedSignals` (`ready_to_buy_service.ts:2031`), i.e. only on passes that reach ranking; a row sitting through count-capacity passes would be unsampled. With 11 of 20 slots used tonight that case does not apply now.
+- **Positive control for "rows CAN persist":** the two crypto rows above have sat queued for 23 h and 5 h, so the table and the pass do hold long-lived rows when a row is not promoted. The short xStock life is promotion taking it, not the table dropping it.
+
+**What this means for the forced run.** A restart is `dt-deploy` of the live sha (build and migrate run in the OLD process before `pm2 restart`, several minutes). For the carrier, an xStock row must be queued in the last pass-interval before that `pm2 restart` and not yet promoted. At ~15–60 xStock rows per off-session and ≤ ~30 s of life each, a restart at a chosen instant lands on one with a chance of roughly 1–2 % (≈50 rows × ~15 s mean wait ÷ ~42,000 s). **A pre-registered instant cannot name "the queued RTB row id" r11 item 3 requires, because at any instant there almost never is one.**
+
+**This is r11 item 4's branch in a narrower form** — the row does survive a restart (rows are durable), but it does not survive long enough to REACH one while promotion has room. **For Langston to rule; nothing is run until he does:**
+- **(A) close the arm on its evidence** — the mutation-proved unit fence plus r12's code chain, per r11 item 4 and the #594 precedent, recording that the production route needs a restart inside a ≤1-cycle window and is therefore reached by chance, not by test; or
+- **(B) an engineered carrier** — the only ways to hold an xStock row unpromoted across a restart are to stop promotion (pause the engine, which also stops exits and needs a write I do not hold) or to restart while promotion is at capacity (which KD-84 shows claims and deletes the row instead). I do not recommend either; both perturb trading for a guard whose only production route is a race.
+**Recommendation: (A).** Crew windows open now (register at the branch head, `dt-obs-windows census`): B-DISK-FILE-TIERING (CC-A), B-PRICE-SIDE-BY-JOB (CC-C), B-TOKEN-WATCH-BIRTH-CAP and B-TOKEN-WATCH-FOLLOWUP-MEMORY (Infra) — (A) needs no restart and touches none of them.
