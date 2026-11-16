@@ -1,5 +1,12 @@
 # DawnTrader: Changes, Fixes & Improvements Registry
 
+## FIX-2026-11-16-A — `B-TOKEN-WATCH-LIQ-SHED-HOTFIX` (hotfix, `#1247`, Infra Claude; parent `B-TOKEN-WATCH-BIRTH-CAP`, KD-90): token-watch's liquidity reads were spending the free Helius credits the new-coin census needs
+**Symptom:** on 2026-11-16 the Helius free cycle (10-27 → 11-27, vendor counter) was 85% spent (854,007 at 02:36Z) and projected dry ~11-17 afternoon — a ~10-day dark new-coin census, unrecoverable.
+**Root cause:** the credit ledger and its shed gate key the CALENDAR month (`budget._month_key`, `allowed()`), while Helius bills a cycle from the 27th, so the liquidity leg (~2.3k credits/hour since the follow-up switch-on, `pool_sol_reserves` only) was still allowed (November 25,231 < carve 190,000) while the vendor cycle ran out; births alone (~39,600/day) also overrun the cycle.
+**Fix:** `LIQUIDITY_AUDIT_CARVE` 190,000 → 20,000 interim (`953ce3af5`; comments re-headed `21118d692`), so liquidity sheds first, as scope §5.1 orders; the follow-up keeps running on the free source; births are never shed. Langston-gated before staging (Discord `1571723150582874195`). Installed 2026-11-16T03:07:10Z.
+**Measured:** live `config.py` = the reviewed blob (sha256 `4f9e3ded…`); `import config` as `tokenwatch` gives carve 20,000 / unallocated 177,000. Verification (shed rows in the first follow-up run on the carve, then the vendor RPC counter flat) is the open window below.
+**Residual:** interim until `B-TOKEN-WATCH-BIRTH-CAP` AMENDMENT 18 re-derives the split on the follow-up-ON rate; births alone still exhaust the cycle ~11-19 evening; on 12-01 the ledger month resets and 20,000 of liquidity is allowed again inside the 11-27 cycle (Langston rules on carve 0 if AMENDMENT 18 has not landed by 11-30). The deployed copy still carries the pre-re-head comments until the next install.
+
 ## FIX-2026-11-13-A — `B-ENTRY-GATE` increment B (`#1224`, CC-B / NEW Claude) — a plan the target gate refused could already be in the queue, and the queue never re-asked its economics at the live price
 
 **CLASS: `architecture`. SYMPTOM:** the orchestrator wrote the RTB row before the reward-to-risk/target-reach gate ran in the same function (`#1051`); the refresh re-decided the maker/taker choice only at the plan price; promotion checked no freshness at all; an absent stored net EV passed the SQE by a dead fail-open; and three `require()` calls of Node built-ins threw in the ESM bundle, silencing the TCL event trace.
