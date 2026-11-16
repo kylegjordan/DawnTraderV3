@@ -1,57 +1,65 @@
-# B-DB-READ-TOOL — PRE-IMPLEMENTATION AUDIT AND IMPLEMENTATION PLAN (r1)
+# B-DB-READ-TOOL — PRE-IMPLEMENTATION AUDIT AND IMPLEMENTATION PLAN (r2)
 
-change-class: non_architecture · **Owner:** Infra Claude (CC-INFRA) · **Scope:** r1 `aa4073101` · **Kyle:** KD-96
+change-class: non_architecture · **Owner:** Infra Claude (CC-INFRA) · **Scope:** r2 `1f815ebb9` (Step 1 PROCEED, Langston, Discord queue id `1571876416885104713`) · **Kyle:** KD-96
+**r1 → r2:** r1 (`8162ce7e3`) was written against scope r1; this is rewritten against r2 — A-1's intent-before-attempt lockout, OBJ-7, and Langston's Step-1 conditions C-1, C-2 and C-3.
 **Audit first, plan second; every plan item cites its finding; anything with no audit treatment is marked `UNAUDITED`.**
 
 ## 0. PREVIOUSLY STATED vs NOW
-- **PREVIOUSLY STATED (scope §0, a hypothesis):** each 11-16 `psql` call tried twice because of `sslmode=prefer`'s non-SSL retry or several resolved addresses. **NOW: MEASURED — it is the non-SSL retry.** **REASON:** A1.
+- **PREVIOUSLY STATED (scope r1 §0):** "Of the 18 helper scripts in `/home/deploy`, two reach the database." **NOW:** 18 was the `.py` count and two its `PGPASSWORD` subset; **~50 reach the database** (top-level `*.py *.sh *.mjs *.js *.ts`: 86-88 files, `psql` in 50-51, whole-`$DATABASE_URL` in 48, `PGPASSWORD` in 2, `sslmode` set in 0 — Langston's re-derivation; same-day churn between his and my counts). **REASON:** wrong population; corrected in the scope at Step 2.
+- **PREVIOUSLY STATED (scope r1 §0, a hypothesis):** two attempts per call came from the non-SSL retry or several addresses. **NOW: MEASURED — the non-SSL retry** (A1); one address only (A2). **REASON:** the listener.
+- **PREVIOUSLY STATED (pre-audit r1 P1d):** the LOCKED marker is written on a failure. **NOW:** an INTENT record is written BEFORE the attempt (A-1). **REASON:** a call killed between connect and record left no marker.
 
 ## 1. SOURCES READ
 | # | source | read |
 |---|---|---|
-| 1 | code | `comms-infra/staging/dt-api` (pattern), `token-watch/ops/alert_mint.py` (the alert argv), `scripts/system-alerts.ts` `cmdAdd` |
-| 2 | runtime | staging: `.env` mode and URL shape (secret never printed), `psql --version`, DNS of the DB host, the fake-server attempt count, `/home/deploy/*.py` census |
-| 3 | SIM | no entry for a staging database-read tool exists (the `dt-api` crew-login entry is the neighbour) — **a gap this batch fills at Step 10** |
-| 4 | System Manual | silent on how sessions read the database — **the same gap**; the app's own pool is documented, a human/agent read path is not |
-| 5 | ledger | `#1259` (the ban, trigger confirmed KD-93), `#1023` (dt-api); no earlier batch for a DB read tool (grep `RUNNING_ISSUES`, `BATCH_CATALOG` for `psql`, `dt-sql`, `read-only`: none) |
+| 1 | code | `comms-infra/staging/dt-api` (pattern), `token-watch/ops/alert_mint.py` (the alert argv), `scripts/system-alerts.ts` `cmdAdd`, `server/db.ts` `POOL_CONFIG`/`DIAG_POOL_CONFIG` (`:87-106`, `:157-172`), `node_modules/pg/lib/connection-parameters.js` (8.13.1, staging) |
+| 2 | runtime | staging: `.env` mode and URL shape (secret never printed), `psql` 17.10, DNS of the DB host, the fake-server attempt counts, PATH for root / deploy (login) / deploy (non-interactive ssh), `pg_stat_ssl` per application (A10) |
+| 3 | SIM | no entry for a staging database-read tool (the `dt-api` crew-login entry is the neighbour) — **a gap filled at Step 10** |
+| 4 | System Manual | silent on how sessions read the database, and on the app's database TLS — **two gaps**: the first filled at Step 10, the second is §4's finding |
+| 5 | ledger | `#1259`, `#1023`; no earlier batch for a DB read tool (`psql`, `dt-sql`, `read-only` in `RUNNING_ISSUES`, `BATCH_CATALOG`: none) |
 | 6 | `bridge/canonical/` | predates the staging box: no coverage, expected |
 
 ## 2. AUDIT
 
-**A1 — why one `psql` call sent two wrong passwords (MEASURED, staging, 2026-11-16).** A fake Postgres server on `127.0.0.1` (TLS on `SSLRequest`, then a cleartext-password request, then `FATAL 28P01`) counted TCP connections per `psql` call with `PGPASSWORD=wrong`:
-- `sslmode=prefer` (libpq's default) → **2 attempts** (`ssl`, then `plain`), the error printed twice — the 11-16 shape exactly;
-- `sslmode=require` → **1 attempt**, the error once.
-⇒ the second attempt is libpq retrying without SSL. Fixture: `/root/birthcap/fakepg.py` (to move into the batch's tests).
+**A1 — two attempts per call is libpq's non-SSL retry (MEASURED).** A fake Postgres server on `127.0.0.1` (`/root/birthcap/fakepg.py`: TLS on `SSLRequest`, a cleartext-password request, then `FATAL 28P01`) counts TCP connections per `psql` call, `PGPASSWORD=wrong`: `sslmode=prefer` (libpq's default) **2** (`ssl`, then `plain`), the error printed twice — the 11-16 shape; `sslmode=require` **1**. ⚠️ This is the CLIENT's attempt count, measured locally; Supabase's own counter is never observed (scope A-3).
 
-**A2 — the address.** `db.<ref>.supabase.co` resolves to ONE address (IPv6 `2a05:d018:135e:16c7:82b8:28a7:565c:6ebf`). One address today does not guarantee one tomorrow, so `hostaddr` is pinned to the first resolved address per call (libpq iterates every address of `host`).
+**A2 — one address.** The DB host resolves to exactly one address (IPv6, no A record); `hostaddr` is still pinned per call, because one address today does not guarantee one tomorrow.
 
-**A3 — the credential.** `/home/deploy/dawntrader/.env` is `deploy` 0600; `DATABASE_URL` is `postgresql://postgres:<pw>@db.<ref>.supabase.co:5432/postgres`; **the password contains `%`** (percent-encoded), 18 characters as stored. `sed` sends the encoded form; `urllib.parse.unquote` gives the real one. Read at run time, never copied, so a rotation reaches the tool at once.
+**A3 — the credential.** `.env` `deploy` 0600; one `DATABASE_URL`, direct endpoint `db.<ref>.supabase.co:5432`, **no `sslmode`**; the password carries one `%40` escape (18 bytes stored, 16 decoded). Read at run time with `urllib.parse.urlsplit` + `unquote`; never copied.
 
-**A4 — the client.** `psql` 17.10 on staging; no Python Postgres driver (`psycopg2` absent). ⇒ the tool wraps `psql`.
+**A4 — the client.** `psql` 17.10; no Python Postgres driver. ⇒ the tool wraps `psql`.
 
-**A5 — who calls it.** CC sessions reach staging as `root`; Langston and Coltrane as `deploy` (their staging keys). `.env` is readable by both. ⇒ runnable as `root` or `deploy`; as `root` it re-runs itself as `deploy` (`runuser -u deploy`), so the lock and state files have one owner.
+**A5 — who calls it.** CC sessions as `root`, Langston and Coltrane as `deploy`. ⇒ runnable as either; as `root` it re-runs as `deploy`.
 
-**A6 — the census of database connections from staging** (who CONNECTS, repo-wide and on the box): the app (pm2, its pool, correct credential), the cron scripts (`npx tsx server/scripts/*`, the app's db module), the two helpers (`w166b-pgq.py`, `pgq_pooler.py`, both `unquote` correctly but `psql` with the default `sslmode=prefer` — **each still doubles a failure**), and hand-built `psql` lines (the 11-16 trigger). `dt-api` and the governance checker do not connect. ⇒ the tool covers the hand-built path; the two helpers are named for their owners (and mine is retired).
+**A6 — the connecting population.** The app (node `pg`, its pool), cron scripts (the app's db module), and ~50 `psql` callers in `/home/deploy` (A0) — **every one on libpq's `prefer`**, so each doubles a wrong password. Hand-run `psql` (the 11-16 trigger) is the same client.
 
-**A7 — read-only.** `PGOPTIONS='-c default_transaction_read_only=on -c statement_timeout=60s'` is honoured on the DIRECT port (the session pooler drops startup options — `#1259`), and `DATABASE_URL` is the direct host. A statement can still `SET` it off, and the credential is the superuser's ⇒ an **accident guard, not a boundary** (stated in the tool and the docs, the `dt-api` C11 form).
+**A7 — read-only.** `PGOPTIONS='-c default_transaction_read_only=on -c statement_timeout=60s'` on the direct port (the session pooler drops startup options, `#1259`). Superuser credential, and `SET` can undo it ⇒ an accident guard, not a boundary; the SQL refusal list is described as incomplete, never complete.
 
-**A8 — the alert.** `npm run system-alerts -- add --triggers-at … --category health_check --severity critical --dedupe-key … --title … --body …` as `deploy` (the `alert_mint` form). The alert queue is a file (`/var/log/dawntrader/system-alerts.jsonl`), so it works while the database is unreachable.
+**A8 — the alert.** `npm run system-alerts -- add … --category health_check --severity critical --dedupe-key …` as `deploy`; the queue is a file, so it works while the database is unreachable.
 
-**A9 — what identifies a login failure.** `psql` prints `FATAL:  password authentication failed for user …` (28P01) or `no pg_hba.conf entry` (28000); a ban prints `Connection refused`. Matched on that text (A1's fixture prints the same line).
+**A9 — classifying the outcome.** Credential: `password authentication failed` (28P01), `no pg_hba.conf entry` (28000). Pre-auth refusal: `Connection refused`. Everything else that is not `rc 0` — a timeout, a signal, any other text — is AMBIGUOUS.
+
+**A10 — what a `PGSSLMODE` default would reach (MEASURED, OBJ-7(b) pricing).**
+- The app's pools set only `connectionString: DATABASE_URL` (`server/db.ts:88`, `:158`), no `ssl`. node `pg` 8.13.1 then takes `ssl` from `PGSSLMODE` (`connection-parameters.js:22-33`: `require` → `true`), and with nothing set uses the default `ssl: false`.
+- **Measured live (`pg_stat_ssl` joined to `pg_stat_activity`, one login, `sslmode=require`):** `dawntrader_main` 9 connections, `dawntrader_pool_monitor` 1 — **all `ssl = f`**. The app talks to Supabase WITHOUT TLS today.
+- ⇒ a `PGSSLMODE=require` in any environment the app inherits would switch it to TLS **with certificate verification** (node's `rejectUnauthorized` default), never tested against Supabase's chain — a possible app-wide database outage. **An environment default is REJECTED.**
+- **A `psql`-only wrapper reaches libpq and nothing else.** `/usr/local/bin` precedes `/usr/bin` for `root`, for `deploy` (login) and for `deploy` over non-interactive ssh (the reviewers' path); there is no `/usr/local/bin/psql` today. Measured against the fake server, a wrapper that defaults `PGSSLMODE=require` and `PGCONNECT_TIMEOUT=15` only when unset: a URL with no `sslmode` (the 48 callers' form) → **1 attempt** (raw `psql`: 2); a URL that sets `sslmode=prefer` → 2 (an explicit setting wins; 0 of the callers set one).
 
 ## 3. PLAN (each item → its finding)
 - **P1 — `comms-infra/staging/dt-sql`** (Python, stdlib only; A4):
-  - **P1a** credential: parse `DATABASE_URL` from `.env` with `urllib.parse.urlsplit`, `unquote` user and password (A3); password to `psql` only via `PGPASSWORD` in the child's environment (never argv).
-  - **P1b** one attempt: connection string `host=<host> hostaddr=<first resolved> port=… dbname=… user=… sslmode=require connect_timeout=15 application_name=dt-sql` (A1, A2).
-  - **P1c** read-only: `PGOPTIONS` as A7; refuse SQL matching `transaction_read_only|default_transaction_read_only` before connecting.
-  - **P1d** serialisation and lockout: an exclusive `flock` on `/var/lib/dt-sql/lock` around the whole call; the `LOCKED` marker checked INSIDE it (A6: two queued callers cannot fail in a row). On a login failure (A9): write `LOCKED` (time, caller, error line), mint a critical alert (A8), exit 4. `Connection refused`: exit 3, *"the address may be banned — do not retry"*, no marker (a ban is not a credential fault). `--unlock --by <actor>` clears it, logged.
-  - **P1e** interface: `dt-sql -c "<sql>"`, `dt-sql -f <file>`, or SQL on stdin; `--csv`; `--status`; `--unlock --by`. As `root` it re-runs as `deploy` (A5).
-- **P2 — install** to `/usr/local/bin/dt-sql` (root 0755) and `/var/lib/dt-sql` (`deploy` 0750), by a small installer from the blob at the reviewed sha (the dt-api install form).
-- **P3 — tests** `comms-infra/staging/tests/dt_sql_tests.py` (+ mutants), in CI: the parse; the connection string has `sslmode=require` and `hostaddr`; no password in argv; read-only refusal; lockout and the queued second caller; `Connection refused` → exit 3 with no marker. **The fake server (A1) proves "one attempt" on Linux where `psql` exists**; where it does not (the CI runner may lack `psql`), that check is skipped and stated, and it runs live on staging as Step 7 evidence. `UNAUDITED`: whether the CI runner has `psql` — checked at Step 3.
-- **P4 — governance:** `CLAUDE.md` §7 staging commands (beside `dt-api`); `workflow-07-verify-cc` line 92's *"psql to Supabase"*; Langston's and Coltrane's files (their write tools); SIM entry (A-gap from source 3); System Manual: a line in the staging-operations section (A-gap from source 4); `RUNNING_ISSUES #1259`.
+  - **P1a** credential (A3): parse and `unquote`; password only via `PGPASSWORD` in the child's environment.
+  - **P1b** one attempt (A1, A2): `host=… hostaddr=<first resolved> port=… dbname=… user=… sslmode=require connect_timeout=15 application_name=dt-sql`.
+  - **P1c** read-only (A7): `PGOPTIONS`; refuse SQL naming `transaction_read_only` before connecting; documented as an incomplete accident guard.
+  - **P1d** fail-closed lockout (scope A-1, A9; C-1, C-2): an exclusive `flock` on `/var/lib/dt-sql/lock` for the whole call. Inside it: (1) a `LOCKED` file → refuse, exit 4, print its arm; (2) a left-over `INTENT` file → write `LOCKED` with arm `ambiguous` ("a previous call ended without a result"), refuse, exit 4; (3) write `INTENT` (time, caller, pid); (4) run `psql`; (5) classify — **clean success → `INTENT` removed; `Connection refused` before any credential was judged → `INTENT` removed, exit 3** *"the address may be banned — do not retry"* (C-1's wording); **28P01/28000 → `LOCKED` arm `credential` + a critical alert, exit 4; anything else (timeout, signal, unparsed non-zero) → `LOCKED` arm `ambiguous`, exit 4** (the alert is raised for `credential` only; `ambiguous` prints its reason). `--status` prints the arm and the time (C-2). `--unlock --by <canonical actor>` clears it and logs who.
+  - **P1e** interface: `dt-sql -c "<sql>"` · `dt-sql -f <file>` · SQL on stdin · `--csv` · `--status` · `--unlock --by`; as `root` it re-runs as `deploy` (A5).
+- **P2 — `comms-infra/staging/psql-wrapper` → `/usr/local/bin/psql`** (OBJ-7(b), A10): POSIX sh, sets `PGSSLMODE=require` and `PGCONNECT_TIMEOUT=15` ONLY when unset, then `exec /usr/bin/psql "$@"`. It reaches `psql` alone, never the app.
+- **P3 — install** `dt-sql` (root 0755), the wrapper (root 0755) and `/var/lib/dt-sql` (`deploy` 0750) from the blobs at the reviewed sha (the dt-api installer form); the live checks are Step 7.
+- **P4 — tests** `comms-infra/staging/tests/dt_sql_tests.py` + `dt_sql_mutations.py`, in CI: the parse (`%40`, `%2F`, `%3A`); the connection string carries `sslmode=require` and `hostaddr`; no password in argv; read-only refusal; **every P1d outcome with a fake `psql`**, including a fake killed by SIGKILL mid-call leaving `INTENT` (the next call locks `ambiguous`), and two queued callers (the second refuses); the wrapper's defaults and that an explicit setting wins. The fake server proves 1-vs-2 attempts where `psql` exists; `UNAUDITED`: whether the CI runner has `psql` — checked at Step 3; if it does not, that check is skipped and stated, and runs live on staging at Step 7.
+- **P5 — governance (OBJ-5, C-3):** `CLAUDE.md` §7 staging commands (`dt-sql` beside `dt-api`, **with `--status` and `--unlock --by`**); `workflow-07-verify-cc:92`; Langston's file via `langston-memory-write`; Coltrane's via `coltrane-memory`; the SIM entry; a System Manual line in staging operations; `RUNNING_ISSUES #1259`; `DELETED_COMPONENTS_LOG` (`w166b-pgq.py`, deleted at Step 3).
 
 ## 4. OUT-OF-SCOPE FINDINGS (§9.4)
-- **The two helpers double a failure** (A6). DISPOSITION: folded into this batch as a Step-10 note to their owners pointing at `dt-sql`; my own (`w166b-pgq.py`) is retired by me.
-- **A read-only database role** (A7). DISPOSITION: decision required — proposed to PM for Kyle's list; not built here.
+- **The app connects to Supabase WITHOUT TLS** (A10: 10 of 10 app connections `ssl = f`; `server/db.ts:88`, `:158` set no `ssl`). DISPOSITION: decision required — no work here; proposed to PM for Kyle's list (turning it on needs the certificate chain tested first, or the app loses its database).
+- **The ~48 `psql` callers stay one-attempt-per-call clients after P2, not zero** — two consecutive runs after a password rotation still ban the address. DISPOSITION: retiring the helper set is OBJ-7(c), a proposal for Kyle via PM; **the completion report states that `#1259`'s ban risk is reduced, not discharged** (Langston's Step-1 note).
+- **A read-only database role** (A7). DISPOSITION: decision required — proposed to PM for Kyle's list.
 
-`REVIEWER:` none spawned. Load-bearing claim A1 is measured with a positive control (prefer → 2 is the control that the counter sees a retry); `NOT RE-READ` by a fresh reader.
+`REVIEWER:` none spawned. A1 and A10 are measured with positive controls (prefer → 2; the probe's own `ssl = t` row beside the app's `f` rows); `NOT RE-READ` by a fresh reader.
