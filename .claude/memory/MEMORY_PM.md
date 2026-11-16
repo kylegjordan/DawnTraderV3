@@ -61,6 +61,8 @@
 
 - **NUDGE 11-16 09:31Z:** OLD (idle since 06:49Z) - weekly plan census W47 alert 2424d68f due; independent of Kyle key + Langston #705.
 
+- **KD-93 CAUSE FOUND (OLD, Discord 1571824719739486239):** Langston probe from staging 04:20:11Z sent the URL-encoded DB password undecoded (sed off .env) -> 2 failed logins x2 -> Supabase Fail2ban bans staging IP ~30 min+. App/pool not at fault. Awaiting Infra/Langston fix (probe credential path + self-unban option). Told Kyle.
+
 # OPEN
 - Archived 2026-11-04 · stale-local-session-ids → `1-system-manual/pm/archive/memory/2026-11.md`
 - Hourly "Wake watcher heartbeat" sessions pile up unarchived in the sidebar — ask Kyle whether to archive.
