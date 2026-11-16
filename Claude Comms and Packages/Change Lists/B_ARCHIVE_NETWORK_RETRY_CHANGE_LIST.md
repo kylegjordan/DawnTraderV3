@@ -12,7 +12,7 @@
 |---|---|
 | `server/services/passive-archive/ohlc-batch-writer.ts` | the classifier (P1), the shed alert (P3), the two wire-ups, docblocks (P5) |
 | `server/services/passive-archive/ticker-batch-writer.ts` | imports + the two wire-ups |
-| `server/tests/unit/b-archive-network-retry.test.ts` | NEW — 19 tests (P2, P4) |
+| `server/tests/unit/b-archive-network-retry.test.ts` | NEW — 22 tests (P2, P4, and C-1's three) |
 | `1-system-manual/SYSTEM_IMPACT_MAP.md` | §2.6b: three bullets (network family, the shed-alert ROUTING RULE, cover and memory) |
 | `1-system-manual/RUNNING_ISSUES.md` | `#705`: the routing rule line (C-B) |
 | `1-system-manual/SPRINT_TO_LIVE_PLAN.md` | §0a CC-A item 3 → Step 4 |
@@ -88,6 +88,15 @@ export async function alertWriterShed(writer, assetClass, shed, bufferLen) {
 - **J-1** The shed alert's latch is a SEPARATE map from `_permanentAlerted`, so a class can carry one permanent row and one shed row at once. Proposed: right — two different faults, two keys.
 - **J-2** `refetchable` is a static map, not derived from the archiver set. A new shedding class therefore reads `false` (the safe side: "gone for good"), and the map test pins the seven. Proposed: fine.
 - **J-3** The ticker writer still splices-then-unshifts (`#1032`); with refused connections now retained, a ban that begins mid-flush re-inserts committed chunks. Stated in the scope and the docblock, carried by `#1032`. Not changed here.
+
+## C-1 — the shutdown residue page (Langston Step 4, Discord `1571896060148973739`; predicate re-gated `1571904974428831926`)
+- **Why:** refused connections are now RETAINED, and retained rows die with the process, so a deploy or restart inside an outage lost them with only a stderr line.
+- **Code:** `alertShutdownResidue(markMs, tickerResidue)` in `ohlc-batch-writer.ts`, AWAITED in `drainArchiveBuffersForShutdown` after both final flushes and BEFORE `recordXstockWriterHandoff`; key `archive-writer-shutdown-residue`, breakage/critical, resolve-only. `getTickerResidueBefore(markMs)` in the ticker writer.
+- **The predicate (re-gate):** count only rows received AT OR BEFORE a mark taken just before the final flushes (bars `arrivedAt`, ticker `capturedAt`), with a ≤ 1 ms spin so a late row cannot share the mark's millisecond. The crypto and futures feeds keep running through the ~2 s drain, so "any non-empty buffer" would page every clean deploy with a false cause and then hide real residue under the one key. The late arrivals are a separate loss, recorded on `#705`.
+- **Fence:** the outage drain with the xStock handoff mocked to throw pages `{ohlc:crypto_spot:2, ticker:crypto_perp:1}` the moment the drain settles; a slow (150 ms) fake alert store makes `await` vs `void` observable; a CONTROL pushes a bar and a ticker row from inside the final flush of a clean drain and asserts no page.
+- **Mutations M12-M17, all KILLED:** call removed · `total === 0` early return removed · `await` → `void` (SURVIVED until the store was made slow) · the mark ignored for bars · for tickers · the spin removed.
+- **Tests now:** this file 22, F-G-1 17 (its ticker mock gains `getTickerResidueBefore`); 39/39 over three runs; nine other writer files 143/143; tsc 324 = baseline.
+- **Honest bound (Langston):** the drain has no deadline (`#1034` leg 3), so under a slow drain inside PM2's 10 s `kill_timeout` the page can still be killed; it has never fired, so no silence from it is evidence yet. For `xstock_spot` the count is raw buffer rows, which can exceed distinct minutes lost.
 
 ## Not yet done (later steps)
 CI (Step 5) · deploy (Step 6, after 21:00Z or next window) · Step 7: deployed classifier over the A3 population; flushes on all eight pairs in a window where each normally flushes (#661 leg 2) · Step 10: the runtime-state registry entry for both latches, BATCH_CATALOG, PHASE_HISTORY, CHANGES_AND_FIXES, the J3 proposal to PM.
