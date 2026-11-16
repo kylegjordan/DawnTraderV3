@@ -52,6 +52,8 @@
 
 - **NUDGE 11-16 02:31Z:** NEW (idle 52 min) - forced-carrier run was waiting on NEW itself (instrument live since 84eeb168e); NEW now drafting pre-registration + crew restart agreement, run before ~14:30Z. Real stall, moving.
 
+- **LIVE 11-16 04:20Z:** staging DB refusing connections (Langston 1571743864329601085: direct port 9/9 refused, pooler OK; ~17.9k price/bar rows lost first 8 min, not retried; cause NOT established). Sent to Infra 04:29Z (owner); OLD if size. Kyle told. Langston closed NWL refusal alert (correct guard) -> NEW leg (a).
+
 # OPEN
 - Archived 2026-11-04 · stale-local-session-ids → `1-system-manual/pm/archive/memory/2026-11.md`
 - Hourly "Wake watcher heartbeat" sessions pile up unarchived in the sidebar — ask Kyle whether to archive.
