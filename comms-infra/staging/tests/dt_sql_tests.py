@@ -118,7 +118,13 @@ def intent():
     return os.path.exists(os.path.join(state, "INTENT"))
 
 
-tool = build()
+# The stand-in psql is launched through a shim this suite writes and marks executable itself: a checkout's file mode
+# is not to be trusted (CI's Linux checkout stores the .py 0644, and exec'ing it failed every call — 2026-11-16).
+FAKE_SHIM = os.path.join(work, "fakepsql")
+with open(FAKE_SHIM, "w") as fh:
+    fh.write('#!/bin/sh' + chr(10) + 'exec %s %s "$@"' % (sys.executable, FAKE) + chr(10))
+os.chmod(FAKE_SHIM, 0o755)
+tool = build(psql=FAKE_SHIM)
 print("== 1. the credential, the connection string, and what reaches psql")
 reset("ok")
 r = run(tool, "-c", "select 1")
@@ -199,7 +205,7 @@ p.wait()
 check("the first call still completes (exit 0)", p.returncode == 0, p.returncode)
 
 print("== 6. the timeout kills the whole process group, then locks 'ambiguous'")
-tool_t = build(timeout=1)
+tool_t = build(psql=FAKE_SHIM, timeout=1)
 reset("hang")
 marker = os.path.join(work, "grandchild")
 t0 = time.time()
@@ -210,7 +216,7 @@ lk = locked()
 check("a hung call is cut at CALL_TIMEOUT_S and locks 'ambiguous'", r.returncode == 4 and lk and lk["arm"] == "ambiguous"
       and took < 6, (r.returncode, lk, took))
 check("its grandchild is killed too (the whole group, not the child alone)", not os.path.exists(marker))
-tool = build()
+tool = build(psql=FAKE_SHIM)
 
 print("== 7. --unlock")
 reset("credential")
