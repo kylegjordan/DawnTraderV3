@@ -381,9 +381,10 @@ async function wideAfterYield(eng: Stub, wideFrames: number) {
 }
 
 beforeEach(() => {
-  // ⛔ row 2 increment C: the exit loop now pauses xStock decisions at the venue's transition minutes, so this file is
-  // CALENDAR-DEPENDENT. Pin the clock to an ordinary weekday morning (Wed 2026-10-14 11:00 ET) so a CI run that happens
-  // to fall inside a window cannot change what these tests see. Only `Date` is faked; timers and promises run real.
+  // ⛔ CALENDAR-DEPENDENT: xStock ENTRIES are refused at the venue's transition minutes (C-P3), and the market-hours
+  // reads key on the clock. (The exit pause that first made this file clock-sensitive was retired by C-P5, 2026-11-16;
+  // the in-window tests below set their own time.) Pin the clock to an ordinary weekday morning (Wed 2026-10-14 11:00 ET)
+  // so a CI run's wall-clock cannot change what these tests see. Only `Date` is faked; timers and promises run real.
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date('2026-10-14T15:00:00Z'));
   _resetBookStateComparatorsForTest();
@@ -518,6 +519,34 @@ describe('row 2 C-P5 retirement (2026-11-16) — the exit pause is gone: a tick 
     expectEvaluated(t, f, 'y');
     expect(t.closes).toHaveLength(1);
     expect(t.priceSkips).toEqual([]);
+  });
+
+  it('★ the forward dependency, driven: inside the 16:15 window a BLOWN book is still held — no close, no decision, the spread_blown yield logged, no page', async () => {
+    // The pause no longer protects these minutes; objective 6 alone does (Langston Step-4 condition). Same frames as the
+    // 3n.q7 NEGATIVE test, at 16:20 ET instead of 11:00 ET.
+    const eng = makeEngine();
+    await warm(eng);
+    vi.setSystemTime(new Date('2026-10-14T20:20:00Z')); // Wed 16:20 ET — inside the 16:15 window
+    await blowoutToYield(eng);
+    const before = warnSpy.mock.calls.length;
+    await wideAfterYield(eng, 20);
+    expect(eng.closePosition).not.toHaveBeenCalled();
+    expect(warnSpy.mock.calls.slice(before).map((c) => String(c[0])).filter((l) => XS_FRAME.test(l))).toEqual([]); // nothing decided
+    expect(warnSpy.mock.calls.map((c) => String(c[0])).some((l) => /YIELD after \d+ hollow ticks .*reasons=spread_blown /.test(l))).toBe(true);
+    expect(h.addAlert).toHaveBeenCalledTimes(0);
+    expect(mid(BLOWN)).toBeLessThan(STOP); // non-vacuous: an unguarded evaluator WOULD fire on this mark
+    expect(warnSpy.mock.calls.map((c) => String(c[0])).some((l) => PAUSE.test(l))).toBe(false);
+  });
+
+  it('MUTANT CONTROL: the same blown frame in the window with spread_blown OFF fires the stop on its mark — the false stop the pause once insured against', async () => {
+    h.spreadBlownEnabled = false;
+    const eng = makeEngine();
+    await warm(eng, 'mark');
+    vi.setSystemTime(new Date('2026-10-14T20:20:00Z'));
+    const t = await tick(eng, BLOWN);
+    expect(t.warns.find((l) => XS_FRAME.test(l))).toContain('markExit=y');
+    expect(t.closes).toHaveLength(1);
+    expect((t.closes[0] as [string, number])[1]).toBe(mid(BLOWN));
   });
 
   it('CONTROL: the same tick outside a window is decided the same way', async () => {
