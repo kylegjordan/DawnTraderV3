@@ -451,6 +451,7 @@ check("a plan that walks below the floor for the 900 s assert says so: below_flo
       below.get("windows", 9) < 4 and below.get("below_floor") is True and below.get("floor_binds") is False, below)
 
 print("== 12. a failed mint does not lose its pages (Langston §13 (i))")
+os.environ["INVOCATION_ID"] = "test-unit-run"                 # as systemd sets it; a hand run is tested below
 reset()
 tm = datetime(2026, 11, 28, 4, 0, 30, tzinfo=UTC)
 page = {"dedupe_key": "birthcap-divergence-2026-11-28T03", "severity": "warning", "title": "t", "body": "b"}
@@ -507,15 +508,30 @@ c = [p["dedupe_key"] for p in store.load_state(birthcap.CARRY, {}).get("pages", 
 check("past MINT_BUDGET_S no further call STARTS; the untried pages are carried, not dropped",
       tried == ["s0", "s1"] and c == ["s2", "s3", "s4"] and rc == 1, (tried, c, rc))
 import subprocess as _sp
-seen_kw = {}
-_orig = _sp.run
-_sp.run = lambda argv, **kw: seen_kw.update(kw) or _orig([sys.executable, "-c", "pass"])
-try:
-    birthcap._bounded_run(["x"], capture_output=True, text=True, timeout=120)
-finally:
-    _sp.run = _orig
-check("each mint call's timeout is cut to MINT_CALL_TIMEOUT_S (alert_mint asks for 120)",
-      seen_kw.get("timeout") == birthcap.MINT_CALL_TIMEOUT_S, seen_kw)
+import time as _time
+r = birthcap._bounded_run([sys.executable, "-c", "print('hi')"], capture_output=True, text=True, timeout=120)
+check("_bounded_run keeps subprocess.run's contract (rc, captured text)", r.returncode == 0 and r.stdout.strip() == "hi", r)
+if os.name == "posix":
+    marker = os.path.join(ROOT, "grandchild-marker")
+    child = ("import subprocess,sys,time; subprocess.Popen([sys.executable,'-c',"
+             "\"import time; time.sleep(2); open(%r,'w').write('alive')\"]); time.sleep(30)" % marker)
+    saved = birthcap.MINT_CALL_TIMEOUT_S
+    birthcap.MINT_CALL_TIMEOUT_S = 1                          # alert_mint asks for 120: the cut must win
+    t0 = _time.monotonic()
+    try:
+        birthcap._bounded_run([sys.executable, "-c", child], capture_output=True, text=True, timeout=120)
+        timed_out = False
+    except _sp.TimeoutExpired:
+        timed_out = True
+    finally:
+        birthcap.MINT_CALL_TIMEOUT_S = saved
+    took = _time.monotonic() - t0
+    _time.sleep(3)
+    check("a call is cut at MINT_CALL_TIMEOUT_S though alert_mint asks for 120", timed_out and took < 5, (timed_out, took))
+    check("the timeout kills the whole process GROUP: the grandchild never writes (rider 2)",
+          not os.path.exists(marker), "the grandchild survived")
+else:
+    print("  skip the process-group kill check (POSIX only; CI runs it)")
 unit_text = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "systemd", "token-watch-birthcap.service")).read()
 tss = int(re.search(r"^TimeoutStartSec=(\d+)", unit_text, re.M).group(1))
 check("UNIT_START_TIMEOUT_S equals the unit's own TimeoutStartSec (read from the file, not carried)",
@@ -535,7 +551,30 @@ store.save_state(birthcap.RESULT, {"checked_at": tm.isoformat(), "pages": [dict(
 tried = []
 rc = birthcap.mint(now=tm + timedelta(seconds=1), mint_fn=slow, clock=lambda: 0)
 check("a prompt tick (1 s) leaves the full budget: every page is tried", tried == ["E0", "E1", "E2"] and rc == 0, tried)
+import logging as _logging
+_seen = []
+class _H(_logging.Handler):
+    def emit(self, rec):
+        _seen.append((rec.levelno, rec.getMessage()))
+_h = _H()
+birthcap.LOG.addHandler(_h)
+reset()
+store.save_state(birthcap.RESULT, {"checked_at": tm.isoformat(), "pages": [dict(page, dedupe_key="D%d" % i) for i in range(2)]})
+tried = []
+birthcap.mint(now=late, mint_fn=slow, clock=lambda: 0)
+birthcap.LOG.removeHandler(_h)
+check("a deferral is LOGGED at error with the result age and the budget (unit_failed freezes the first body)",
+      any(l >= _logging.ERROR and "DEFERRED" in m and "85 s old" in m for l, m in _seen), _seen)
+reset()
+store.save_state(birthcap.RESULT, {"checked_at": tm.isoformat(), "pages": [dict(page, dedupe_key="H%d" % i) for i in range(2)]})
+tried = []
+del os.environ["INVOCATION_ID"]                                # a HAND run of --mint
+rc = birthcap.mint(now=late, mint_fn=slow, clock=lambda: 0)
+os.environ["INVOCATION_ID"] = "test-unit-run"
+check("a hand-run --mint is not inside the unit's start job: the same 85 s-old result is still minted",
+      tried == ["H0", "H1"] and rc == 0, tried)
 
+os.environ.pop("INVOCATION_ID", None)
 print()
 shutil.rmtree(ROOT, ignore_errors=True)
 print("%d passed, %d failed" % (PASS, FAIL))

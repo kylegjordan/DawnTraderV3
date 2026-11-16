@@ -544,10 +544,27 @@ def _page(key: str, severity: str, title: str, body: str) -> dict:
 
 
 def _bounded_run(argv, **kw):
-    """subprocess.run with the per-call timeout cut to MINT_CALL_TIMEOUT_S (see the constant)."""
+    """subprocess.run's contract with the per-call timeout cut to MINT_CALL_TIMEOUT_S — and on a timeout the WHOLE process
+    GROUP is killed, not just the direct child (Langston Step-9 rider 2). subprocess.run kills only the child: a node
+    grandchild survives (he measured one writing 6 s after its parent died), and TWO overlapping npm+node runs exceed the
+    unit's TasksMax=64 — measured 2026-11-16: both abort rc 134 at a peak of 64 tasks — so the next page would abort too."""
+    import signal
     import subprocess
-    kw["timeout"] = min(float(kw.get("timeout") or MINT_CALL_TIMEOUT_S), float(MINT_CALL_TIMEOUT_S))
-    return subprocess.run(argv, **kw)
+    timeout = min(float(kw.pop("timeout", None) or MINT_CALL_TIMEOUT_S), float(MINT_CALL_TIMEOUT_S))
+    capture = kw.pop("capture_output", False)
+    if capture:
+        kw["stdout"], kw["stderr"] = subprocess.PIPE, subprocess.PIPE
+    with subprocess.Popen(argv, start_new_session=True, **kw) as proc:
+        try:
+            out, err = proc.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except (ProcessLookupError, PermissionError):
+                proc.kill()
+            out, err = proc.communicate()
+            raise subprocess.TimeoutExpired(argv, timeout, output=out, stderr=err)
+    return subprocess.CompletedProcess(argv, proc.returncode, out, err)
 
 
 def mint(now: datetime | None = None, mint_fn=None, clock=None) -> int:
@@ -591,13 +608,24 @@ def mint(now: datetime | None = None, mint_fn=None, clock=None) -> int:
     # spend ~60 s on its own vendor calls (usage, GET, PUT at providers.TIMEOUT 20 s each) before the mint begins
     budget = min(float(MINT_BUDGET_S),
                  UNIT_START_TIMEOUT_S - (now - checked).total_seconds() - MINT_CALL_TIMEOUT_S - MINT_MARGIN_S)
+    if not os.environ.get("INVOCATION_ID"):
+        # a HAND-RUN `--mint` is not inside the unit's start job, so its timeout does not apply (rider 1b): full budget
+        budget = float(MINT_BUDGET_S)
     failed, start = [], clock()
     for p in pending:
         if clock() - start > budget:
-            failed.append(p)                              # not tried this run: carried, never dropped for want of time
+            failed.append(dict(p, _untried=True))         # not tried this run: carried, never dropped for want of time
             continue
         if not mint_fn(severity=p["severity"], dedupe_key=p["dedupe_key"], title=p["title"], body=p["body"]):
             failed.append(p)
+    untried = sum(1 for p in failed if p.get("_untried"))
+    if untried:
+        # ⛔ SAY WHY (rider 1): unit_failed freezes the FIRST failure's journal body, so a silent deferral would mint a
+        #    unit-failed row with no cause in it, and every later one would add nothing
+        LOG.error("birthcap mint: %d page(s) DEFERRED unsent — the tick result is %.0f s old, leaving a mint budget of "
+                  "%.0f s inside the unit's %d s start job; carried to the next mint",
+                  untried, (now - checked).total_seconds(), budget, UNIT_START_TIMEOUT_S)
+    failed = [{k: v for k, v in p.items() if k != "_untried"} for p in failed]
     # the count bound keeps the NEWEST (failed is newest-first): the current state of an incident outranks its history
     kept = [p for p in failed if now - _ts(p["carried_at"]) <= CARRY_MAX_AGE][:CARRY_MAX]
     if kept or carry:
