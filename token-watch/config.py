@@ -470,8 +470,10 @@ BIRTHCAP_PHASE_STEP = 0.618          # daily phase rotation, as a fraction of a 
 
 # ⛔ THE BREAKER (Langston blocker 4): a lost applied-state file plus a minute
 #    timer would PUT 1,440 times a day (144,000 credits). Hard ceiling per UTC
-#    day, independent of the schedule; at the ceiling the controller stops
-#    switching, leaves the feed ON, and pages.
+#    day, independent of the schedule; at the ceiling the controller refuses
+#    any switch OFF (the feed stays ON if it is ON) and pages. A switch back ON
+#    may use HARD_MARGIN (4) more calls; past that NO vendor call of any kind
+#    runs that day, even one that would restore ON (birthcap.py HARD_MARGIN).
 def birthcap_switch_ceiling(windows_per_day: int) -> int:
     return 2 * windows_per_day + 4
 

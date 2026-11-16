@@ -138,7 +138,13 @@ print("== 3. tick: disabled, first tick, a switch OFF and ON, the echo")
 reset()
 v = Vendor()
 r = tick(v, T0)
-check("disabled: no vendor call at all", r["action"] == "disabled" and not v.puts and v.gets == 0 and v.usage_calls == 0, r)
+check("disabled, fresh state: ONE ON-PUT confirms the feed (no GET, no usage read)",
+      r["action"] == "disabled-restored-on" and len(v.puts) == 1 and v.puts[0]["active"] is True and v.gets == 0
+      and v.usage_calls == 0, r)
+r = tick(v, T0 + timedelta(minutes=1))
+check("disabled with ON confirmed: no vendor call at all", r["action"] == "disabled" and len(v.puts) == 1 and v.gets == 0, r)
+reset()
+v = Vendor()
 enable()
 store.save_state(birthcap.STATE, dict(store.load_state(birthcap.STATE, {}), plan=full))
 off_time = next(T0 + timedelta(minutes=m) for m in range(1, 1440) if birthcap.desired(T0 + timedelta(minutes=m), full) == "off")
@@ -238,6 +244,27 @@ reset(); enable(False); v = Vendor(active=False)
 store.save_state(birthcap.STATE, {"applied": "off", "plan": full})
 r = tick(v, off_time)
 check("flag removed while OFF: the feed is switched back ON", v.puts and v.puts[-1]["active"] is True and r["action"] == "disabled-restored-on", r)
+reset(); enable(False); v = Vendor(active=False)
+store.save_state(birthcap.STATE, {"applied": None, "plan": full})      # what every failure leaves (gate A C-1)
+r = tick(v, off_time)
+check("flag removed with the applied state UNKNOWN: the feed is switched back ON",
+      len(v.puts) == 1 and v.active is True and r["action"] == "disabled-restored-on", r)
+reset(); enable(False); v = Vendor(active=False, echo_ok=False)
+store.save_state(birthcap.STATE, {"applied": "off", "plan": full})
+keys = set()
+for i in range(60):
+    r = tick(v, off_time + timedelta(minutes=i))
+    keys |= {p["dedupe_key"] for p in r["pages"]}
+hard_d = config.birthcap_switch_ceiling(12) + birthcap.HARD_MARGIN
+check("disabled and the restore keeps failing: it RETRIES each tick, up to the hard ceiling, then stops",
+      len(v.puts) == hard_d and r["action"] == "disabled-restore-capped", (len(v.puts), hard_d, r["action"]))
+check("one page key per UTC day while the restore fails", keys == {"birthcap-disabled-not-restored-%s" % off_time.strftime("%Y-%m-%d")}, keys)
+reset(); enable(False); v = Vendor(active=False, echo_ok=False)
+store.save_state(birthcap.STATE, {"applied": "off", "plan": full})
+open(config.BIRTHCAP_SWITCHES, "a").write("not json" + chr(10))  # log unparseable: only the state counter caps
+for i in range(60):
+    tick(v, off_time + timedelta(minutes=i))
+check("disabled, log unparseable: the state counter still caps the restore attempts", len(v.puts) == hard_d, len(v.puts))
 
 print("== 8. the backstop: a day that reaches its allowance stops and is recorded as truncated")
 reset(); enable(); v = Vendor()

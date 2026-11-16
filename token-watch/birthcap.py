@@ -263,16 +263,40 @@ def tick(now: datetime | None = None, usage_fn=providers.helius_usage, put=provi
 
     if not os.path.exists(ENABLE_FLAG):
         # ⛔ DISABLED MEANS ON, not "frozen where it was": removing the flag mid-off-window must restore the feed.
-        if st.get("applied") == "off":
-            rec = do_switch("on", now, put=put)
-            _append(BIRTHCAP_SWITCHES, rec)
-            if rec.get("credits"):
-                budget.record_pending("switch", 1, now)
-            st["applied"] = "on" if rec.get("ok") else None
-            if not rec.get("ok"):
-                pages.append(_page("birthcap-switch-failed-%s" % now.strftime("%Y%m%dT%H%M"), "critical",
-                                   "Birth cap could not restore the feed on disable", json.dumps(rec, sort_keys=True)))
-            result["action"] = "disabled-restored-on"
+        #    Gate on anything but a CONFIRMED ON: every failure leaves `applied` None, never "off" (Langston gate A C-1),
+        #    and a fresh state has no `applied` at all — one ON-PUT is the cheapest way to know. It retries each tick
+        #    while disabled, under the same hard daily ceiling as the enabled path, with ONE page key per UTC day.
+        if st.get("applied") != "on":
+            today = now.strftime("%Y-%m-%d")
+            plan = st.get("plan")
+            hard = birthcap_switch_ceiling(int(plan.get("windows", 0)) if plan else 0) + HARD_MARGIN
+            calls = st.setdefault("calls", {})
+            try:
+                logged = switches_on_day(read_switches(), today)
+            except RecordUnreadable:
+                logged = 0                                    # the state counter below is the floor
+            used = max(logged, int(calls.get(today, 0)))
+            if used >= hard:
+                pages.append(_page("birthcap-disabled-not-restored-%s" % today, "critical",
+                                   "Birth cap is disabled but could not restore the feed — hard daily ceiling reached",
+                                   "%d vendor calls today against a hard ceiling of %d; applied %s. Check the webhook "
+                                   "in the Helius dashboard." % (used, hard, st.get("applied"))))
+                result["action"] = "disabled-restore-capped"
+            else:
+                rec = do_switch("on", now, put=put)
+                calls[today] = int(calls.get(today, 0)) + 1      # C-2: every vendor call bumps the state counter
+                _append(BIRTHCAP_SWITCHES, rec)
+                if rec.get("credits"):
+                    budget.record_pending("switch", 1, now)
+                st["applied"] = "on" if rec.get("ok") else None
+                if rec.get("ok"):
+                    st["applied_at"] = now.isoformat()
+                    result["action"] = "disabled-restored-on"
+                else:
+                    pages.append(_page("birthcap-disabled-not-restored-%s" % today, "critical",
+                                       "Birth cap is disabled but could not restore the feed — retrying each minute",
+                                       json.dumps(rec, sort_keys=True)))
+                    result["action"] = "disabled-restore-failed"
         else:
             result["action"] = "disabled"
         save_state(STATE, st)
