@@ -192,6 +192,16 @@ async function flushTickerAssetClass(assetClass: ArchiveAssetClass): Promise<voi
   }
 }
 
+/** Rows still held per class — read by the shutdown drain's residue check (B-ARCHIVE-NETWORK-RETRY C-1). */
+export function getTickerBufferLengths(): Record<ArchiveAssetClass, number> {
+  return {
+    xstock_spot: tickerBuffers.xstock_spot.length,
+    xstock_perp: tickerBuffers.xstock_perp.length,
+    crypto_spot: tickerBuffers.crypto_spot.length,
+    crypto_perp: tickerBuffers.crypto_perp.length,
+  };
+}
+
 let flushTimer: NodeJS.Timeout | null = null;
 
 export function startTickerWriter(): void {

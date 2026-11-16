@@ -35,13 +35,28 @@ vi.mock('../../db.js', () => ({
 
 const _alerts: any[] = [];
 let _addAlertThrows = false;
+let _addAlertDelayMs = 0;
 vi.mock('../../services/system-alerts.js', () => ({
   addAlert: async (opts: any) => {
+    if (_addAlertDelayMs > 0) await new Promise((r) => setTimeout(r, _addAlertDelayMs));
     if (_addAlertThrows) throw new Error('alert store unavailable');
     _alerts.push(opts);
     return opts;
   },
 }));
+
+const _handoffs: any[] = [];
+let _handoffThrows = false;
+vi.mock('../../services/passive-archive/xstock-bar-availability.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../services/passive-archive/xstock-bar-availability.js')>();
+  return {
+    ...actual,
+    recordXstockWriterHandoff: async (state: unknown) => {
+      _handoffs.push(state);
+      if (_handoffThrows) throw new Error('xStock handoff refused');
+    },
+  };
+});
 
 import {
   isTransientWriteError,
@@ -51,6 +66,7 @@ import {
   SHED_REFETCHABLE,
   bufferOhlcBar,
   stopBatchWriter,
+  drainArchiveBuffersForShutdown,
   RETRY_BUFFER_MAX,
 } from '../../services/passive-archive/ohlc-batch-writer';
 import { bufferTickerSnap, stopTickerWriter } from '../../services/passive-archive/ticker-batch-writer';
@@ -87,6 +103,9 @@ beforeEach(() => {
   _dbState.inserted.length = 0;
   _alerts.length = 0;
   _addAlertThrows = false;
+  _addAlertDelayMs = 0;
+  _handoffs.length = 0;
+  _handoffThrows = false;
 });
 
 describe('OBJ-1 — the network family is TRANSIENT, ENOTFOUND stays PERMANENT', () => {
@@ -255,6 +274,40 @@ describe('OBJ-2 — a shed at the cap raises the writer\'s own alert', () => {
     _dbState.throwWith = null;
     await stopTickerWriter();
   }, 30_000);
+
+  // ⛔ C-1 (Langston, Step 4): rows retained for retry die with the process. MUTATION: remove the
+  // `await alertShutdownResidue(...)` call in the drain and this fails.
+  it('a shutdown INSIDE an outage pages the rows still held, per writer:class, before the xStock handoff', async () => {
+    _dbState.throwWith = new Error('connect ECONNREFUSED 2a05:d018:135e:16c7:82b8:28a7:565c:6ebf:5432');
+    bufferOhlcBar('crypto_spot', bar(77_001));
+    bufferOhlcBar('crypto_spot', bar(77_002));
+    bufferTickerSnap('crypto_perp', { ...snap(77_003), assetClass: 'crypto_perp' });
+    _handoffThrows = true;     // the xStock handoff refusing must not skip the page
+    // a SLOW alert store: if the drain fired the page without awaiting it, the alert would land AFTER the
+    // drain settles and the assertion below would see nothing (MUTATION: `await` -> `void` fails here).
+    _addAlertDelayMs = 150;
+    await expect(drainArchiveBuffersForShutdown()).rejects.toThrow(/handoff refused/);
+    const a = _alerts.find((x) => x.dedupe_key === 'archive-writer-shutdown-residue');
+    expect(a).toBeDefined();   // already written: the drain AWAITS it, no polling
+    expect(a.metadata.residue).toEqual({ 'ohlc:crypto_spot': 2, 'ticker:crypto_perp': 1 });
+    expect(a.metadata.total).toBe(3);
+    expect(a.category).toBe('breakage');
+    expect(a.severity).toBe('critical');
+    expect(String(a.body)).toMatch(/never\s+acknowledge/i);
+    // leave nothing behind for the next test
+    _dbState.throwWith = null;
+    _handoffThrows = false;
+    await stopBatchWriter();
+    await stopTickerWriter();
+  });
+
+  // CONTROL: a clean shutdown raises nothing. MUTATION: drop the `total === 0` early return and this fails.
+  it('CONTROL — a shutdown with every buffer empty raises no residue alert', async () => {
+    bufferOhlcBar('crypto_spot', bar(78_001));
+    await drainArchiveBuffersForShutdown();
+    expect(_alerts.filter((x) => x.dedupe_key === 'archive-writer-shutdown-residue')).toHaveLength(0);
+    expect(_handoffs).toHaveLength(1);   // the drain ran to the handoff
+  });
 
   // CONTROL: below the cap there is no shed and no alert.
   it('CONTROL — a transient failure below the cap raises no shed alert', async () => {

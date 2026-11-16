@@ -436,6 +436,45 @@ export async function alertWriterShed(writer: 'ohlc' | 'ticker', assetClass: Arc
   }
 }
 
+/**
+ * B-ARCHIVE-NETWORK-RETRY C-1 — the shutdown residue page. Called (and AWAITED) by the shutdown drain after
+ * both writers' final flushes settle. If any of the eight buffers still holds rows, they are lost when the
+ * process exits; one alert says how many per writer:class and which can be re-fetched. Same posture as the
+ * shed alert: RESOLVE-ONLY, NEVER ACK, owner CC-A. It never throws (a failed raise is logged), so it cannot
+ * block shutdown. `ohlc:xstock_spot` is also refused by the xStock handoff check; it is counted here so the
+ * page is complete.
+ */
+export async function alertShutdownResidue(tickerLengths: Record<ArchiveAssetClass, number>): Promise<void> {
+  const residue: Record<string, number> = {};
+  for (const c of ALL_ARCHIVE_CLASSES) {
+    if (buffers[c].length > 0) residue[`ohlc:${c}`] = buffers[c].length;
+    const t = tickerLengths[c] ?? 0;
+    if (t > 0) residue[`ticker:${c}`] = t;
+  }
+  const total = Object.values(residue).reduce((a, n) => a + n, 0);
+  if (total === 0) return;
+  const lost = Object.entries(residue).map(([k, n]) => `${k} ${n}${SHED_REFETCHABLE[k] === true ? ' (re-fetchable)' : ''}`).join(', ');
+  console.error(`[B74][shutdown] ${total} archive rows still RETAINED at exit and lost with the process: ${lost}`);
+  try {
+    const { addAlert } = await import('../system-alerts.js');
+    await addAlert({
+      triggers_at: new Date(),
+      category: 'breakage',
+      severity: 'critical',
+      title: `Archive writers exited holding ${total} unwritten rows`,
+      body: `The process shut down while the archive writers still held ${total} rows they had been retrying `
+        + `(the database was refusing or failing writes). Those rows are lost: ${lost}. Only the rows marked `
+        + `re-fetchable can be refilled, by the futures REST poller. RESOLVE this alert (never acknowledge it) once `
+        + `the cause is understood. Routing: the System Impact Map's archived-bar writer entry (B-ARCHIVE-NETWORK-RETRY). `
+        + `Owner CC-A until a writer owner is named.`,
+      metadata: { residue, total, source: 'archive-shutdown-drain', issue: '#705' },
+      dedupe_key: 'archive-writer-shutdown-residue',
+    });
+  } catch (e) {
+    console.error('[B74][shutdown] FAILED TO RAISE the residue alert:', e instanceof Error ? e.message : e);
+  }
+}
+
 // Buffers keyed by asset class so each archiver has independent flush behavior.
 const buffers: Record<ArchiveAssetClass, InsertEquitySpotOhlc1m[]> = {
   xstock_spot: [],
@@ -912,13 +951,20 @@ export async function drainArchiveBuffersForShutdown(): Promise<void> {
   stopEquitySpotArchiver();
 
   // Independent: one failing drain must not skip the other.
-  const { stopTickerWriter } = await import('./ticker-batch-writer.js');
+  const { stopTickerWriter, getTickerBufferLengths } = await import('./ticker-batch-writer.js');
   const results = await Promise.allSettled([stopBatchWriter(), stopTickerWriter()]);
   for (const r of results) {
     if (r.status === 'rejected') {
       console.error('[B74][shutdown] archive drain leg FAILED:', r.reason);
     }
   }
+  // B-ARCHIVE-NETWORK-RETRY C-1 (Langston, Step 4): rows RETAINED for retry die with the process. Before
+  // this batch, a refused connection on the final drain took the PERMANENT branch and at least attempted
+  // a page; now it is transient, so a deploy or restart INSIDE an outage would lose the retained rows with
+  // only a stderr line — the #704 shape. So after both drains settle, every one of the eight buffers is
+  // counted and ONE residue alert is AWAITED (a `void` raise races process.exit, #1034). It runs BEFORE
+  // the xStock handoff below, which throws on xStock residue and would otherwise skip it.
+  await alertShutdownResidue(getTickerBufferLengths());
   const handoffState = {
     ...getXstockAvailabilityWriterTelemetry(),
     remainingBufferRows: buffers.xstock_spot.length,
