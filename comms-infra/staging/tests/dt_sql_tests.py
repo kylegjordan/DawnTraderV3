@@ -168,6 +168,25 @@ r = run(tool, "-f", good)
 c = calls()
 check("D-1: a -f file's CHECKED BYTES go to psql on stdin (-f -), never the path", r.returncode == 0 and c
       and c[0]["argv"][-2:] == ["-f", "-"] and c[0]["stdin"] == "select 1;" and good not in c[0]["argv"], c)
+reset("ok")
+r = run(tool, "-c", "select 1", stdin="delete from x;")
+check("SQL piped in AND given with -c is refused (exit 2), never silently dropped", r.returncode == 2 and calls() == [],
+      (r.returncode, calls()))
+reset("ok")
+r = run(tool, "-c", "   ")
+check("an empty -c is refused (exit 2), not turned into ';'", r.returncode == 2 and calls() == [], (r.returncode, calls()))
+reset("ok")
+rd, wr = os.pipe()                                           # stdin OPEN and EMPTY, as over `ssh box 'dt-sql -c ...'`
+p = subprocess.Popen([sys.executable, tool, "-c", "select 1"], stdin=rd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                     env=dict(os.environ, FAKE_PSQL_MODE=mode_file, FAKE_PSQL_LOG=psql_log))
+os.close(rd)
+try:
+    rc = p.wait(timeout=20)
+except subprocess.TimeoutExpired:
+    p.kill()
+    rc = "HUNG"
+os.close(wr)
+check("-c with stdin left OPEN and EMPTY (ssh without -n) does not hang: it runs (exit 0)", rc == 0, rc)
 
 print("== 3. every outcome of the one attempt (fail closed)")
 reset("sql_error")
@@ -313,7 +332,7 @@ check("D-2: an unfinished attempt (INTENT, no LOCKED) also makes the wrapper ref
 print("== 9. ONE attempt, proved against a fake Postgres server (real psql + openssl)")
 real_psql, openssl = shutil.which("psql"), shutil.which("openssl")
 if not (real_psql and openssl and os.path.exists("/usr/bin/psql")):
-    print("  skip: no real psql/openssl on this host (runs on staging and Helsinki)")
+    print("  skip: no real psql/openssl on this host (runs on staging and in CI; Helsinki has neither)")
 else:
     subprocess.run([openssl, "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", os.path.join(work, "k.pem"),
                     "-out", os.path.join(work, "c.pem"), "-days", "1", "-subj", "/CN=localhost"], capture_output=True)
