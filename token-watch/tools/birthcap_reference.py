@@ -29,7 +29,8 @@ def gap_days(gaps: list) -> set:
     out = set()
     for g in gaps:
         a = dt.datetime.fromisoformat(g["started_at"]).date()
-        b = dt.datetime.fromisoformat(g["ended_at"]).date()
+        # an OPEN gap (no ended_at yet) runs to today (Langston gate D note 2)
+        b = dt.datetime.fromisoformat(g["ended_at"]).date() if g.get("ended_at") else dt.date.today()
         while a <= b:
             out.add(a.isoformat())
             a += dt.timedelta(days=1)
@@ -51,7 +52,7 @@ def main() -> None:
                     g = json.loads(line)
                 except ValueError:
                     continue
-                if str(g.get("ended_at", "")) >= "2026-09-01" and str(g.get("started_at", "")) <= "2026-11-16":
+                if str(g.get("ended_at") or "9999") >= "2026-09-01" and str(g.get("started_at", "")) <= "2026-11-16":
                     gaps.append({k: g.get(k) for k in ("kind", "detected", "started_at", "ended_at", "duration_s")})
     EXCLUDED.update(gap_days(gaps))
     cnt = collections.Counter()
