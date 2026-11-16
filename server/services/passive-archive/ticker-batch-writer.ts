@@ -25,7 +25,10 @@ import type { ArchiveAssetClass } from './ohlc-batch-writer.js';
 // second implementation of a decided rule is the defect B-EPOCH-KEYING-PARITY is held on.
 // (Moved up from mid-file, Langston: an import buried beside its first use reads as a
 // circular-dependency workaround. There is no cycle — ohlc imports nothing from ticker.)
-import { isTransientWriteError, alertPermanentWriteFailure, clearPermanentAlertLatch, RETRY_BUFFER_MAX } from './ohlc-batch-writer.js';
+import {
+  isTransientWriteError, alertPermanentWriteFailure, clearPermanentAlertLatch, RETRY_BUFFER_MAX,
+  alertWriterShed, clearShedAlertLatch,
+} from './ohlc-batch-writer.js';
 
 const BATCH_FLUSH_INTERVAL_MS = 5_000;
 const POOL_SLOT_TIMEOUT_MS = 5_000;
@@ -144,6 +147,7 @@ async function flushTickerAssetClass(assetClass: ArchiveAssetClass): Promise<voi
       // rather than fixing the site I was looking at — which is the whole point of
       // `fix-follows-pointer`, and this file is where that pattern's third instance lives.
       clearPermanentAlertLatch('ticker', assetClass);
+      clearShedAlertLatch('ticker', assetClass);
     } finally {
       releaseSlot();
     }
@@ -177,6 +181,8 @@ async function flushTickerAssetClass(assetClass: ArchiveAssetClass): Promise<voi
         `[B74][ticker-writer] ${assetClass} retry buffer at cap ${RETRY_BUFFER_MAX} — SHED ${shed} oldest rows. `
         + `⛔ THESE ARE UNRECOVERABLE: ticker snapshots have no re-fetch path. Reported, not hidden.`,
       );
+      // B-ARCHIVE-NETWORK-RETRY OBJ-2: and raised, not only logged (resolve-only, never ack).
+      void alertWriterShed('ticker', assetClass, shed, buf.length);
     }
     console.error(
       `[B74][ticker-writer] ${assetClass} TRANSIENT flush failure (${rows.length} rows RETAINED for retry, `

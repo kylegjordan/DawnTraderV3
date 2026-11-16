@@ -75,7 +75,10 @@ const ALL_ARCHIVE_CLASSES = Object.keys(tableForAssetClass) as ArchiveAssetClass
 // #704 residual (b) states the boundary exactly: "acceptable for replayable REST bars and NOT
 // for WS-only ones." The two WS legs (crypto_spot, xstock_spot) have NO re-fetch path at all.
 
-/** Max rows held per class awaiting retry. Beyond this we shed OLDEST and say so. */
+/** Max rows held per class awaiting retry. Beyond this we shed OLDEST, say so, and raise the shed alert
+ *  (B-ARCHIVE-NETWORK-RETRY). How many minutes of outage it covers per class, and what a full buffer costs
+ *  in memory, are MEASURED in the System Impact Map's archived-bar writer entry — read them there; a
+ *  figure written here would go stale. Shared by the ticker writer. */
 export const RETRY_BUFFER_MAX = 50_000;
 
 /**
@@ -93,7 +96,45 @@ export const RETRY_BUFFER_MAX = 50_000;
  * ⚠️ UNKNOWN ERRORS ARE TREATED AS PERMANENT, deliberately. The opposite default retries an
  * unrecognised permanent fault forever, which is the OOM #705 warns about. A wrongly-dropped
  * transient batch costs one flush window; a wrongly-retained permanent one costs the process.
+ *
+ * B-ARCHIVE-NETWORK-RETRY (#705, Kyle KD-97, Langston-ruled): THE NETWORK FAMILY IS TRANSIENT.
+ * In the 2026-11-16 outage (Supabase refused staging's address for ~60 min) every writer except the
+ * xStock spot bars classed `connect ECONNREFUSED …:5432` as unknown → PERMANENT and dropped up to
+ * 132,466 rows. A refused / unreachable / temporarily-unresolvable database cannot be specific to the
+ * rows, so retrying is the right answer, and the bound below (`RETRY_BUFFER_MAX`) plus the shed alert
+ * answer the OOM the permanent default guards against.
+ *   • `ECONNREFUSED`, `EHOSTUNREACH`, `ENETUNREACH`, `EAI_AGAIN` are PRE-CONNECT: nothing reached the
+ *     database, so the retry is clean.
+ *   • `ECONNRESET`, `ETIMEDOUT` were already transient by message; the code test carries them too.
+ *     They can arrive MID-STATEMENT, after an earlier chunk committed — an exposure that already existed
+ *     through their message arms, carried by `#1032` (the ticker writer re-inserts committed chunks).
+ *   • ⛔ `ENOTFOUND` STAYS PERMANENT (a wrong host after a config change fails forever). That is why no arm
+ *     matches the `getaddrinfo` prefix: Node writes `getaddrinfo ENOTFOUND <host>` and
+ *     `getaddrinfo EAI_AGAIN <host>`, so a prefix arm would flip the one code kept permanent.
+ *   • ⚠️ THE CODE IS READ, NOT ONLY THE MESSAGE. A connect to a host with more than one address arrives
+ *     as an `AggregateError` with `code` set and an EMPTY message (Node's default `autoSelectFamily`,
+ *     which pg inherits). Latent today — the database host resolves to one address — and live the
+ *     first hour it gains a second. The inner `errors[]` codes are read as well.
  */
+export const TRANSIENT_NETWORK_CODES: ReadonlySet<string> = new Set([
+  'ECONNREFUSED', 'EHOSTUNREACH', 'ENETUNREACH', 'EAI_AGAIN', 'ECONNRESET', 'ETIMEDOUT',
+]);
+
+function errorCodes(err: unknown): string[] {
+  if (err == null || typeof err !== 'object') return [];
+  const out: string[] = [];
+  const code = (err as { code?: unknown }).code;
+  if (typeof code === 'string') out.push(code);
+  const inner = (err as { errors?: unknown }).errors;
+  if (Array.isArray(inner)) {
+    for (const e of inner) {
+      const c = e != null && typeof e === 'object' ? (e as { code?: unknown }).code : undefined;
+      if (typeof c === 'string') out.push(c);
+    }
+  }
+  return out;
+}
+
 export function isTransientWriteError(err: unknown): boolean {
   const m = (err instanceof Error ? err.message : String(err)).toLowerCase();
   // ⛔ NOT a bare `timeout` substring. Postgres emits "canceling statement due to statement
@@ -102,6 +143,7 @@ export function isTransientWriteError(err: unknown): boolean {
   // forever on the branch that raises NO ALERT, which is #704's exact signature: loud on stderr,
   // silent everywhere anyone looks. Match the transient timeouts specifically instead.
   if (m.includes('statement timeout') || m.includes('canceling statement')) return false;
+  if (errorCodes(err).some((c) => TRANSIENT_NETWORK_CODES.has(c))) return true;
   return m.includes('deadlock')
     || m.includes('pool slot timeout')
     // B-DB-POOL-GUARD P3 C1 (Langston): pg-pool 3.7.0's own acquire-timeout text (index.js:205), now reachable
@@ -111,7 +153,13 @@ export function isTransientWriteError(err: unknown): boolean {
     || m.includes('connection reset')
     || m.includes('econnreset')
     || m.includes('etimedout')
-    || m.includes('too many clients');
+    || m.includes('too many clients')
+    // B-ARCHIVE-NETWORK-RETRY: the pre-connect network family, for errors that arrive as text.
+    // ⛔ Never `getaddrinfo` (see the docblock): `enotfound` must stay permanent.
+    || m.includes('econnrefused')
+    || m.includes('ehostunreach')
+    || m.includes('enetunreach')
+    || m.includes('eai_again');
 }
 
 /** How long a raised alert suppresses the next one for the same writer:class. */
@@ -319,6 +367,71 @@ export async function alertPermanentWriteFailure(writer: 'ohlc' | 'ticker', asse
     // protecting; claiming-then-releasing keeps it while also closing the two-flush race.
     delete _permanentAlerted[_latchKey];
     console.error(`[B74][batch-writer] ${assetClass} FAILED TO RAISE ALERT for permanent write failure:`,
+      e instanceof Error ? e.message : e);
+  }
+}
+
+// ══ B-ARCHIVE-NETWORK-RETRY OBJ-2 — A SHED AT THE CAP RAISES THE WRITER'S OWN ALERT ══════════════════
+// A shed was stderr-only ("counted and logged", F-G-1). Langston (2026-11-16, #705): not loud enough —
+// in the 11-16 outage the pool alerts fired inside 71 s and still did not say which class lost what, and
+// `crypto_spot` (WebSocket-only) shed silently where `xstock_spot` bars fail-stop with an alert. The shed
+// path is also reachable with no pool fault at all (`too many clients`, `deadlock`).
+// SAME SHAPE AS `alertPermanentWriteFailure`, deliberately: a writer:class latch claimed before the raise,
+// released if the raise throws, cleared by a successful flush, expiring at ALERT_RE_ARM_MS; and the
+// store's dedupe (`addAlert`) suppresses a repeat while the row is unresolved.
+// ⛔ POSTURE (C7): RESOLVE-ONLY, NEVER ACK, owner CC-A until a writer owner is named. While a shed row
+// is unresolved the next shed on that class mints nothing, so an ack silences a class still shedding.
+// The routing rule lives on `#705` and the System Impact Map's writer entry, where a triage reads it.
+
+/** Whether a writer:class's rows can be rebuilt after a shed. Only the two futures BAR legs are re-fetched
+ *  (the REST poller in `kraken-futures-archiver.ts`); every ticker class is a point-in-time snapshot and
+ *  both spot bar classes are WebSocket-only. `ohlc:xstock_spot` never sheds (it fail-stops) and is absent. */
+export const SHED_REFETCHABLE: Readonly<Record<string, boolean>> = {
+  'ohlc:crypto_perp': true,
+  'ohlc:xstock_perp': true,
+  'ohlc:crypto_spot': false,
+  'ticker:crypto_spot': false,
+  'ticker:crypto_perp': false,
+  'ticker:xstock_spot': false,
+  'ticker:xstock_perp': false,
+};
+
+/** One shed alert per WRITER:CLASS per window — independent of the permanent-failure latch. */
+const _shedAlerted: Record<string, number> = {};
+
+/** Clear the shed latch for one writer:class — called when a flush SUCCEEDS. */
+export function clearShedAlertLatch(writer: 'ohlc' | 'ticker', assetClass: ArchiveAssetClass): void {
+  delete _shedAlerted[`${writer}:${assetClass}`];
+}
+
+export async function alertWriterShed(writer: 'ohlc' | 'ticker', assetClass: ArchiveAssetClass, shed: number, bufferLen: number): Promise<void> {
+  const _latchKey = `${writer}:${assetClass}`;
+  const _last = _shedAlerted[_latchKey];
+  if (_last != null && Date.now() - _last < ALERT_RE_ARM_MS) return;
+  _shedAlerted[_latchKey] = Date.now();
+  const refetchable = SHED_REFETCHABLE[_latchKey] === true;
+  try {
+    const { addAlert } = await import('../system-alerts.js');
+    await addAlert({
+      triggers_at: new Date(),
+      category: 'breakage',
+      severity: 'critical',
+      title: `${writer.toUpperCase()} archive writer SHEDDING rows at its buffer cap — ${assetClass}`,
+      body: `The ${writer} writer's retry buffer for ${assetClass} reached its cap of ${RETRY_BUFFER_MAX} rows while `
+        + `its writes kept failing with an error classed transient, and dropped the oldest ${shed} rows `
+        + `(buffer now ${bufferLen}). ${refetchable
+          ? 'This class is re-fetched by the futures REST poller, so the dropped bars can be refilled.'
+          : 'This class has NO re-fetch path: the dropped rows are gone for good.'} `
+        + `Further sheds on this class do NOT raise this alert again while it is unresolved. RESOLVE it (never `
+        + `acknowledge it) once writes succeed; a later shed raises it again after that, or after the re-arm window. `
+        + `How long each buffer can ride out an outage is measured in the System Impact Map's archived-bar writer `
+        + `entry (B-ARCHIVE-NETWORK-RETRY). Owner CC-A until a writer owner is named.`,
+      metadata: { assetClass, writer, shed, bufferLen, cap: RETRY_BUFFER_MAX, refetchable, source: `${writer}-batch-writer`, issue: '#705' },
+      dedupe_key: `${writer}-writer-shed-${assetClass}`,
+    });
+  } catch (e) {
+    delete _shedAlerted[_latchKey];
+    console.error(`[B74][${writer === 'ohlc' ? 'batch-writer' : 'ticker-writer'}] ${assetClass} FAILED TO RAISE ALERT for a buffer shed:`,
       e instanceof Error ? e.message : e);
   }
 }
@@ -659,6 +772,7 @@ async function doFlushAssetClass(assetClass: ArchiveAssetClass): Promise<void> {
     // BLOCKER-11: the fault is over, so the NEXT permanent failure is genuinely new and must
     // not be swallowed by a latch set hours ago.
     clearPermanentAlertLatch('ohlc', assetClass);
+    clearShedAlertLatch('ohlc', assetClass);
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
     const admissionUnconfirmed = assetClass === 'xstock_spot' && isXstockAdmissionFailure(err);
@@ -715,6 +829,7 @@ async function doFlushAssetClass(assetClass: ArchiveAssetClass): Promise<void> {
         `[B74][batch-writer] ${assetClass} retry buffer at cap ${RETRY_BUFFER_MAX} — SHED ${shed} `
         + `oldest rows. The retry is not keeping up; this is data loss and it is being reported, not hidden.`,
       );
+      void alertWriterShed('ohlc', assetClass, shed, buf.length);
     }
     if (assetClass === 'xstock_spot') recordXstockFlushFailure(xstockFlushId, detail);
     const retainedKind = admissionUnconfirmed
