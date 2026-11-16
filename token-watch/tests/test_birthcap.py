@@ -516,8 +516,25 @@ finally:
     _sp.run = _orig
 check("each mint call's timeout is cut to MINT_CALL_TIMEOUT_S (alert_mint asks for 120)",
       seen_kw.get("timeout") == birthcap.MINT_CALL_TIMEOUT_S, seen_kw)
-check("the worst-case mint run fits the unit's TimeoutStartSec=120",
-      birthcap.MINT_BUDGET_S + birthcap.MINT_CALL_TIMEOUT_S < 120)
+unit_text = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "systemd", "token-watch-birthcap.service")).read()
+tss = int(re.search(r"^TimeoutStartSec=(\d+)", unit_text, re.M).group(1))
+check("UNIT_START_TIMEOUT_S equals the unit's own TimeoutStartSec (read from the file, not carried)",
+      birthcap.UNIT_START_TIMEOUT_S == tss, (birthcap.UNIT_START_TIMEOUT_S, tss))
+check("a mint that starts at once can use its full budget and still fit the start job",
+      birthcap.MINT_BUDGET_S + birthcap.MINT_CALL_TIMEOUT_S + birthcap.MINT_MARGIN_S <= tss)
+reset()
+late = tm + timedelta(seconds=85)                          # the tick took 85 s: 120 - 85 - 30 - 10 < 0
+store.save_state(birthcap.RESULT, {"checked_at": tm.isoformat(), "pages": [dict(page, dedupe_key="L%d" % i) for i in range(3)]})
+tried = []
+rc = birthcap.mint(now=late, mint_fn=slow, clock=lambda: 0)
+c = [p["dedupe_key"] for p in store.load_state(birthcap.CARRY, {}).get("pages", [])]
+check("a tick that already used 85 s of the 120 s start job leaves no mint budget: nothing starts, all carried",
+      tried == [] and c == ["L0", "L1", "L2"] and rc == 1, (tried, c))
+reset()
+store.save_state(birthcap.RESULT, {"checked_at": tm.isoformat(), "pages": [dict(page, dedupe_key="E%d" % i) for i in range(3)]})
+tried = []
+rc = birthcap.mint(now=tm + timedelta(seconds=1), mint_fn=slow, clock=lambda: 0)
+check("a prompt tick (1 s) leaves the full budget: every page is tried", tried == ["E0", "E1", "E2"] and rc == 0, tried)
 
 print()
 shutil.rmtree(ROOT, ignore_errors=True)

@@ -59,6 +59,13 @@ CARRY_MAX_AGE = timedelta(hours=24)
 #    MINT_BUDGET_S — worst case 60 + 30 = 90 s, inside 120 — and whatever was not tried is carried (Langston, finding 3).
 MINT_CALL_TIMEOUT_S = 30
 MINT_BUDGET_S = 60
+# The unit's start-job budget, shared by ExecStart (the tick) and ExecStartPost (the mint) — the clock the mint's budget is
+# anchored to (Langston, Step-9 carry finding). test_birthcap reads TimeoutStartSec= from the unit and asserts this equals it.
+UNIT_START_TIMEOUT_S = 120
+MINT_MARGIN_S = 10
+# ⛔ THIS RELIES ON ops/alert_mint.py catching EVERY exception from run() (its `except Exception`): the TimeoutExpired our
+#    30 s cut produces must come back as a failed mint (False -> carried), not escape the loop and lose the carry. If that
+#    except is ever narrowed, the timeout cut turns back into the defect it cures.
 ENABLE_FLAG = f"{STATE_DIR}/birthcap.enabled"
 RESULT_MAX_AGE = timedelta(minutes=5)
 TRAILING_DAYS = 7
@@ -575,14 +582,18 @@ def mint(now: datetime | None = None, mint_fn=None, clock=None) -> int:
         k = p["dedupe_key"]
         stamp = p.get("carried_at") or now.isoformat()
         if k in at:
-            at[k] = min(at[k], stamp)
+            at[k] = min(at[k], stamp, key=_ts)                # compared as times, not as strings
             continue
         at[k] = stamp
         pending.append(p)
     pending = [dict(p, carried_at=at[p["dedupe_key"]]) for p in pending]
+    # the budget is anchored to the TICK's start (`checked`), not the mint's: TimeoutStartSec covers both, and a tick can
+    # spend ~60 s on its own vendor calls (usage, GET, PUT at providers.TIMEOUT 20 s each) before the mint begins
+    budget = min(float(MINT_BUDGET_S),
+                 UNIT_START_TIMEOUT_S - (now - checked).total_seconds() - MINT_CALL_TIMEOUT_S - MINT_MARGIN_S)
     failed, start = [], clock()
     for p in pending:
-        if clock() - start > MINT_BUDGET_S:
+        if clock() - start > budget:
             failed.append(p)                              # not tried this run: carried, never dropped for want of time
             continue
         if not mint_fn(severity=p["severity"], dedupe_key=p["dedupe_key"], title=p["title"], body=p["body"]):
