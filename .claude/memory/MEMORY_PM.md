@@ -69,6 +69,8 @@
 
 - **11-16 ~14:40Z 3 DB security items PUT TO KYLE (Infra+Langston settled):** B-DB-APP-TLS (OLD; fold into open B-DB-POOL-GUARD, same file; Kyle downloads Supabase cert) slot 20261116T143415Z_CC-A_*; B-DB-READONLY-ROLE then B-DB-HELPER-RETIRE (Infra, after B-DB-READ-TOOL, ahead of conv index; birth-cap + memory reads stay ahead) slot 20261116T143418Z_CC-INFRA_* (both UNCOMMITTED). USAGE: KD-99 90% line (cron 6b575bdd).
 
+- **Small-items bundle +1 (ANALYST 11-16 ~16Z):** Settings "config snapshot" view 500s (route calls removed storage.getPortfolioBalance; repoint vs remove undecided). Not paper/VTS. Bundle ids in archive 2026-11: small-items-bundle-1/2-pending-kyle.
+
 # OPEN
 - Archived 2026-11-04 · stale-local-session-ids → `1-system-manual/pm/archive/memory/2026-11.md`
 - Hourly "Wake watcher heartbeat" sessions pile up unarchived in the sidebar — ask Kyle whether to archive.
