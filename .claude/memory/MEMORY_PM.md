@@ -65,7 +65,7 @@
 
 - **NUDGE 11-16 11:31Z:** NEW - CLEARED: started row 9j Step 1 (pool-fix scope), pausing for PFC readings 14:45Z/20:30Z.
 
-- **11-16 12:05Z #705 retry fix -> Kyle:** OLD ready (Langston rulings a84922e81), waits on Kyle slot: now standalone (OLD) vs wait for B-ARCHIVE-WRITER-LIFECYCLE (plan row 119 Wave A3, owner CC-B per plan, no date). Slot-check 20261116T120508Z_CC-A_705-* UNCOMMITTED. PM rec: now. Put to Kyle with Infra query tool (095431Z).
+- **11-16 ~12:35Z Kyle (b785d8714):** KD-96 DB query tool NOW, interrupts birth-cap (Infra told; flag if ~11-19 at risk); KD-97 #705 retry fix now by OLD (told; out of NEW row 119); KD-98 sessions may verify KD rows in PM transcript (rules 6a). Backblaze key still needs his yes in OLD chat.
 
 # OPEN
 - Archived 2026-11-04 · stale-local-session-ids → `1-system-manual/pm/archive/memory/2026-11.md`
