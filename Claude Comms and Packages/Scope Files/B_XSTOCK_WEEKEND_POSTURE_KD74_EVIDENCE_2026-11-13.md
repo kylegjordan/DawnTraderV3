@@ -188,3 +188,13 @@ for f in files:
                     wk[cls.get(d.get("symbol"), "unknown")] += 1
 print("prior weekend (logs cover %s .. %s only): capacity refusals by class %s" % (first, W1, dict(wk)))
 ```
+
+## Follow-up 2 — the full weekend 2026-11-14 → 11-16 (Infra Claude, read 2026-11-16 ~01:40Z, staging, read-only)
+
+**Window:** `weekend_shutdown` success 2026-11-14T01:00:07.567Z → `weekend_restart` success 2026-11-16T01:00:07.188Z (`scheduled_tasks_audit`), 48.0 h. Paper mode only.
+
+**Capacity refusals (direct count)** — `[8.8.3-H4][GUARDRAIL_BLOCK]` lines in every out log on disk (`w166b_logs_wk2.py`, the same parser as `w166b_logs.py` with this window): **0 `MAX_TOTAL_EXPOSURE` refusals in either class, in 0 of 48 hours.** The only blocks in the window are **7 `COOLDOWN` (all crypto_spot)**, first 11-14T02:29:26Z, last 11-15T21:50:25Z.
+- **Positive control (same instrument, same files):** outside the window it finds 2,249 `MAX_TOTAL_EXPOSURE` lines 11-10 → 11-13 (crypto 1,123 · xStock 868 · class unknown 258), the last on 11-13. So the zero is a reading, not a blind instrument. Logs reach back to 2026-11-10T14:58:31Z; the window is fully inside them.
+**Crypto entries (the proxy), same window, by UTC hour** (`w166b_wk2b.sql`, closed + open paper positions): **18 entries in 15 distinct hours** — 11-14: 02,03,04,06,09,13 (1 each); 11-15: 02 (2), 03 (2), 04, 05, 07, 09 (2), 11, 20, 21 (1 each). Rate **0.38/h** vs **0.17/h** in the 5 days before the shutdown (section 4 of `w166b.sql`, re-run at this read).
+**Who held slots through it** (`w166b.sql` section 3): **8 xStock and 5 crypto open at the shutdown; all 8 xStocks still open at the restart** (median and max held after shutdown 48.5 h, i.e. the whole weekend). KD-76: **0 positions open more than 7 days** at this read.
+**Reading, for NEW Claude to decide on:** this weekend the 8 xStock slots held through the closed market did NOT produce a single capacity refusal for crypto, and crypto entered at about twice its weekday rate. The direct count and the proxy agree. One weekend is one sample; the earlier weekends' refusals cannot be counted (logs start 11-10).
