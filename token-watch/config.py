@@ -162,13 +162,15 @@ BIRTHS_RESERVED = 803_000        # 31-day month at +25% variance. PROTECTED FLOO
 LIQUIDITY_AUDIT_CARVE = 20_000   # INTERIM (hotfix above); was 190_000, deliberately below the headroom
 UNALLOCATED = MONTHLY_CREDIT_CAP - BIRTHS_RESERVED - LIQUIDITY_AUDIT_CARVE  # 177,000 under the interim carve
 
-# ⛔ WHY THE CARVE IS 190,000 AND NOT THE FULL 197,000 THAT REMAINS: with the
+# ⏸ SUSPENDED 2026-11-16 by the interim carve above (B-TOKEN-WATCH-LIQ-SHED-HOTFIX); restored or replaced by
+#   B-TOKEN-WATCH-BIRTH-CAP AMENDMENT 18. Under 20,000 the separation is 177,000, so the order below still holds.
+# ⛔ (DESIGN, 2026-08) WHY THE CARVE WAS 190,000 AND NOT THE FULL 197,000 THAT REMAINS: with the
 #    carve set exactly equal to the headroom, BOTH discretionary legs refuse at
 #    the same instant and the SHED ORDER BECOMES UNOBSERVABLE — there is no
 #    state in which liquidity has shed and follow-up has not. The scope
 #    specifies an order, and an order that can never be seen firing in sequence
 #    is the same shape as the guard that was never tested.
-# ⇒ 7,000 credits of separation buys a window in which liquidity has stopped
+# ⇒ (design) 7,000 credits of separation bought a window in which liquidity has stopped
 #   and follow-up has not, which is what the injection test observes.
 
 assert UNALLOCATED == 177_000, "the §5.1 arithmetic changed — amend the scope (B-TOKEN-WATCH-BIRTH-CAP AMENDMENT 18), not this file"

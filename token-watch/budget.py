@@ -496,7 +496,7 @@ def allowed(kind: str, now: datetime | None = None) -> bool:
     #        reserve exists for, silently unprotected.
     # ⚠️ HONEST NOTE ON REACHABILITY, because a fresh reader caught me shipping
     #    the SAME cancellation defect one step over. Today
-    #    LIQUIDITY_AUDIT_CARVE (190,000) < headroom (197,000) and
+    #    LIQUIDITY_AUDIT_CARVE (20,000 interim, B-TOKEN-WATCH-LIQ-SHED-HOTFIX; 190,000 by design) < headroom (197,000) and
     #    CREDITS["follow_up"] == 0, so `non_birth` IS `spent_by("liquidity")`
     #    and the headroom clause on the liquidity leg CANNOT BIND FIRST — the
     #    carve always trips before it. It is not decorative: it becomes the
