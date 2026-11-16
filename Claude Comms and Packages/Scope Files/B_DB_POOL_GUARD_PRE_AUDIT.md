@@ -392,3 +392,56 @@ Post-P3 (144 minutes, a Saturday with xStocks shut) the 15-minute snapshot famil
   The worst probe minute (13:35:26, max wait 1,162 ms) names `sql:with:xstock_spot_ticker_snap` as its site — the same ticker-snapshot path the 2026-11-08 → 11-12 pool-wait recurrence (`bfc4d89c`, 35 of 36 rows) named, not the probe's own queries. **Bound, stated:** a minute line averages over 60 s while a fire lasts 4-7 s, so an effect confined to those seconds is diluted up to ~10×; the >1 s count (1 of 170 vs 4 of 677, 0.6 % both) shows no separation either way; the one difference the read carries is wait>100ms events per minute, +6.8 % in probe minutes (102.4 vs 95.9). Langston (2026-11-13): noted, not ruled — `RULED ON REPORTED FACT` until he re-derives that figure at Step 8, because it is load-bearing for the pool-guard proof. **Control:** the same script on Saturday 2026-11-07 (archive `error__2026-11-08_00-00-00.log`, which holds the 7th) read 287 fires and 1,433 lines and gave its own numbers, so it reads a second day and its archive correctly.
 - **The archival-scheduler weekly/monthly reads — WITHDRAWN, §9.4 disposition 5.** The leg came from Langston's Step-4 r1 residual that `archival-scheduler.ts:101`/`:131` "run on this pool". They do not run at all: Kyle deprecated the regime archiver on 2026-05-05 (`B70.2`, `5617ad723`) and `server/index.ts:1159-1164` comments out `initArchivalScheduler()`. Measured: the archive folder's newest file is `2026-05-03.json`, and no `[11.7E][Scheduler]` line appears in any retained log. **The structural reason, which outlives `#1254` (Langston, 2026-11-13, msg `1570806334281228482`, re-derived at `02830e875`):** the residual was wrong on its own terms, not merely unobservable. These jobs never touch the database pool, started or not: the full import closure of the three scheduled jobs (`archival-scheduler` → `archive-regime-metrics` / `verify-archive-integrity` / `compress-old-archives` → `regime-archiver` → `predictive-adjustments` → `utils/logging`, seven files, no dynamic `import(` at any hop) uses only `node-schedule`, `fs`, `path`, `crypto` and `zlib` — filesystem JSON end to end. So even if the row-78 census re-arms the scheduler, or the hand trigger (`POST /vts/regime-archive/trigger`, `regime-archive.ts:222-239`) runs it, it produces zero main-pool reads; this leg does not reopen on `#1254`'s outcome. The deprecated code and the three routes that can still run it by hand are filed as `#1254`, added to the row-78 dead-code census (Infra Claude).
 - **Still owed for Step 7:** only the UI leg (the Drift Dashboard tab-open that gives the diagnostic pool its first checkout, with the Passive Archive card), which waits on row 119 / `#1037` like `B-DB-SIZE-RELIEF`'s.
+
+
+## AMENDMENT r4 — B-DB-APP-TLS (Kyle KD-100): PRE-IMPLEMENTATION AUDIT AND IMPLEMENTATION PLAN (Step 2, 2026-11-16, CC-A)
+Scope `B_DB_POOL_GUARD_SCOPE.md` §8, approved by Langston at `0b5990e1a` (Discord `1571945365911904480`) with C-1..C-4 binding here. Change-class `architecture`.
+
+### PREVIOUSLY STATED → NOW
+- **PREVIOUSLY STATED (scope §8.2):** OBJ-T2 checks `sslmode=verify-full` and a readable CA. **NOW:** it checks the parsed EFFECT (`ssl` object, non-empty `ssl.ca`, `rejectUnauthorized !== false`, non-IP host) and refuses `PGSSLMODE`/`PGSSLROOTCERT` in the environment. **REASON:** C-1, `sslmode=verify-full` is a no-op in `pg-connection-string` 2.7.0.
+- **PREVIOUSLY STATED:** OBJ-T4 shape undecided. **NOW:** built in the pool monitor and deployed BEFORE the switch (C-2).
+
+### T-A1 — census of openers, per opener WHICH URL and WHICH HOST (C-4; repo-wide `git grep` for `new (pg.)?(Pool|Client)(`, tests excluded; ~60 sites)
+- **Every opener builds from `process.env.DATABASE_URL`.** The ones that read it into a variable first read the same variable: `scripts/db-migrate.ts:205`, `server/scripts/b70-b62-relabel-runner.ts:227`, `b70-create-monthly-partitions.ts:75`, `b70-table-export.ts:135`, `perpfeed-daily-probe.ts:44`, `perpfeed-gate-test.ts:62`. The ones with their own config objects also pass `connectionString: process.env.DATABASE_URL`: `server/db.ts:88`/`:158`, `server/db-pool-alerts.ts:399`, `server/services/crew-coordination.ts:85`, `server/services/passive-archive/xstock-db-snapshot.ts:35`, `server/scripts/b75-retention-sweep.ts:139`.
+- **One override path:** `scripts/b-new-34b-prewarm-snapshot.ts:299`/`:402` takes `options.connectionString ?? process.env.DATABASE_URL` (a one-off script; a caller passing its own string gets whatever TLS that string states).
+- **Hosts:** staging's `.env` carries exactly ONE database URL variable (`DATABASE_URL`; no `PG*` lines, no second URL); its host is `db.<ref>.supabase.co:5432`, the direct endpoint, never a Supavisor pooler host. So one setting covers every opener, and the pinned root meets one certificate name.
+
+### T-A2 — what is connected now (source 2; `dt-sql`, read-only, `pg_stat_activity ⋈ pg_stat_ssl`, client backends)
+| role | application_name | ssl | from | n |
+|---|---|---|---|---:|
+| postgres | dawntrader_main | **f** | staging (`2a01:4f8:c17:8f19::1`) | 5 |
+| postgres | dawntrader_pool_monitor | **f** | staging | 1 |
+| postgres | dt-sql | t | staging | 1 |
+| authenticator | postgrest | t | `::1` | 2 |
+| supabase_admin | (empty) | t | `::1` | 1 |
+| supabase_admin | postgres_exporter | f | `::1` | 1 |
+| supabase_storage_admin | Supabase Storage API | t | `::1` | 1 |
+| pgbouncer | (empty) | t | `127.0.0.1` | 1 |
+⇒ **the discriminator for "ours":** role = the app's own role (`current_user` on the monitor's connection) AND a non-loopback client address. That catches the app pools, the monitor and every script (scripts set no `application_name`, so they read as `(empty)`) and excludes every Supabase-internal backend by construction. `postgres_exporter` (unencrypted, Supabase's, from `::1`) is excluded by the loopback rule, and also named explicitly (C-2).
+
+### T-A3 — the library, read (source 1)
+`pg-connection-string` 2.7.0 `index.js:71-104`: any of `sslmode`/`sslrootcert` makes `ssl = {}`; `sslrootcert` → `ssl.ca = readFileSync(...)`; `verify-full` is a bare `break`. `pg` 8.13.1: `connection.js:64-65`, no SSLRequest when `ssl` is unset; `:95-96`, `servername = host` for a non-IP host; `stream.js` `tls.connect(options)` with Node's default `rejectUnauthorized: true`; `connection-parameters.js:81` falls back to `PGSSLMODE` when `config.ssl` is undefined.
+
+### T-A4 — the monitor (source 1)
+`productionIdleReader` (`server/db-pool-alerts.ts:395-420`) holds ONE dedicated client (`application_name 'dawntrader_pool_monitor'`) and reads `pg_stat_activity` every `IDLE_IN_TX_POLL_MS` (25 s). An unencrypted-connection read rides that client and cadence: no new connection, no new timer.
+
+### T-A5 — System Impact Map / System Manual (sources 3-4)
+The SIM has no entry for the database connection's transport; a property every opener inherits belongs in the Cross-Cutting Runtime State registry (Langston, §17) — Step 10 adds it. The System Manual is silent on database transport; judged N/A (no architecture of the trading system changes) — recorded.
+
+### T-A6 — ledger (source 5)
+`#353` amendment (Infra, 2026-09-30) is the origin record, now slotted here (2026-11-16 note). `B-DB-READ-TOOL`'s `dt-sql` uses `sslmode=require` (encrypts, does not verify) — Infra's tool, out of scope; noted.
+
+### T-A7 — deploy window
+The positive control (T-P1) and the switch (T-P3) are each read at their own deploy, not over a period. **No `DEPLOY_WINDOWS.jsonl` row.**
+
+## THE PLAN (each item → its finding)
+- **T-P1 (C-2, T-A2, T-A4) — the unencrypted-connection page, FIRST, in its own deploy.** In `db-pool-alerts.ts`: `UNENCRYPTED_SQL` = per `application_name` (empty → `(unnamed)`), the count of client backends with `usename = current_user`, a non-loopback `client_addr`, `application_name <> 'postgres_exporter'`, and `ssl = false`. Read on the monitor's client each poll, after the idle read. One alert per `application_name` with backends > 0: key `db-unencrypted-connection:<name>`, `breakage`/`warning`, body naming the name and count, RESOLVE-ONLY, never ack. **Judgement call T-J1:** machine-resolve after two consecutive zero reads (the idle-in-transaction shape), or hand-resolve only? Proposed: machine-resolve, so a class that becomes encrypted clears itself. **The positive control is free:** on deploy it fires for `dawntrader_main` and `dawntrader_pool_monitor`.
+- **T-P2 (C-1, T-A3) — the boot check**, `server/db.ts`, run before either pool is built: parse `DATABASE_URL` with `pg-connection-string`; require `ssl` an object, `ssl.ca` a non-empty string, `ssl.rejectUnauthorized !== false`, the host not an IP literal; refuse if `PGSSLMODE` or `PGSSLROOTCERT` is set in the environment. On failure: throw with a message naming the failed condition (no fallback). ⛔ **It ships in the SAME deploy as the switch (T-P3), never before:** today's URL would fail it and the app would not start.
+- **T-P3 (C-3) — the switch**, one window: (a) Kyle downloads Supabase's root CA (PM has the steps); CC-A records its subject and SHA-256 fingerprint and installs it at `/etc/dawntrader/supabase-ca.crt` (root-owned, readable by `deploy`); (b) PROVE it: one one-off `verify-full` connection from staging with that CA (one login with the correct password, as the app does every connect) — and the NEGATIVE control (OBJ-T3): one with a self-generated wrong CA, which must fail at the TLS handshake before any login, so it cannot count toward a ban; (c) atomic `.env` swap appending `?sslmode=verify-full&sslrootcert=/etc/dawntrader/supabase-ca.crt` to `DATABASE_URL` (old line kept in a root-only rollback file); (d) `dt-deploy` of T-P2 at once — `scripts/db-migrate.ts` connects first, so a wrong CA fails the deploy loudly before the app restarts. Rollback: the swap reversed + a deploy of the previous sha.
+- **T-P4 — fences:** unit tests for the boot check (each refusal + the pass; mutations: each condition removed); for T-P1, the pure row parse and the fire/clear rule (mutations: `postgres_exporter` exclusion removed, loopback exclusion removed, latch/clear removed).
+- **T-P5 — verification:** after T-P1's deploy, the page fires for the two named apps (the control); after T-P3, `pg_stat_ssl` shows `t` for `dawntrader_main`, `dawntrader_diag` (when connected) and the monitor, the pages clear, and the next cron runs complete.
+- **T-P6 — Step 10:** the SIM runtime-state registry entry (database transport: `verify-full`, pinned root, the boot check, the page); `#353` closed for its app-TLS leg; `STORAGE_POLICY` / the restore runbook note that a restore host needs the CA; plan row 3.
+- **UNAUDITED:** none.
+
+## Plain language
+Every part of the app reaches the database through one setting, so turning on encryption there covers everything. First, a watcher goes in that names any of our own connections still unencrypted. It will name today's ones straight away, which proves it works. Then, in one sitting: install Supabase's certificate, prove it with a single test connection (plus a deliberately wrong certificate that must be refused before any password is sent), switch the setting, and deploy the startup check that refuses to run unencrypted.
