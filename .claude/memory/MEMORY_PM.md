@@ -48,7 +48,7 @@
 
 - **NUDGE 11-16 01:31Z:** Infra (idle 41 min) - 166b read due. CLEARED: done d2a6ec06c, fe5b5abd resolved (0 capacity refusals all weekend, no crowd-out, one sample).
 
-- **NUDGE 11-16 02:01Z:** ANALYST (idle 1h40) - C-P5 read f6131ab0 due 02:00Z; OLD (idle 1h37) - CLEARED: key steps wait only on Kyle typing yes in OLD chat (access-key rule); told Kyle. Questions, not assumptions.
+- **NUDGE 11-16 02:01Z:** ANALYST (idle 1h40) - C-P5 read due; CLEARED: done 20a07a822, points to retiring the pause, with Langston; OLD (idle 1h37) - CLEARED: key steps wait only on Kyle typing yes in OLD chat (access-key rule); told Kyle. Questions, not assumptions.
 
 # OPEN
 - Archived 2026-11-04 · stale-local-session-ids → `1-system-manual/pm/archive/memory/2026-11.md`
