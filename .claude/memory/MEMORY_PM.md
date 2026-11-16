@@ -50,6 +50,8 @@
 
 - **NUDGE 11-16 02:01Z:** ANALYST (idle 1h40) - C-P5 read due; CLEARED: done 20a07a822, points to retiring the pause, with Langston; OLD (idle 1h37) - CLEARED: key steps wait only on Kyle typing yes in OLD chat (access-key rule); told Kyle. Questions, not assumptions.
 
+- **NUDGE 11-16 02:31Z:** NEW (idle 52 min) - asked whether PFC inc-0 forced-carrier run (>= Mon 01:35Z) is running or waiting.
+
 # OPEN
 - Archived 2026-11-04 · stale-local-session-ids → `1-system-manual/pm/archive/memory/2026-11.md`
 - Hourly "Wake watcher heartbeat" sessions pile up unarchived in the sidebar — ask Kyle whether to archive.
