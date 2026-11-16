@@ -192,13 +192,23 @@ async function flushTickerAssetClass(assetClass: ArchiveAssetClass): Promise<voi
   }
 }
 
-/** Rows still held per class — read by the shutdown drain's residue check (B-ARCHIVE-NETWORK-RETRY C-1). */
-export function getTickerBufferLengths(): Record<ArchiveAssetClass, number> {
+/**
+ * Rows still held per class that were captured AT OR BEFORE `markMs` — the shutdown drain's residue count
+ * (B-ARCHIVE-NETWORK-RETRY C-1, Langston's Step-4 re-gate). The mark is taken before the final flushes, so
+ * this counts rows RETAINED ACROSS them (retry residue), not snapshots that arrived after the final flush
+ * while the crypto and futures feeds were still running — those are a different loss (`#705`). Every
+ * producer stamps `capturedAt: new Date()`; a row without a Date stamp is counted (the loud side).
+ */
+export function getTickerResidueBefore(markMs: number): Record<ArchiveAssetClass, number> {
+  const count = (rows: InsertEquitySpotTickerSnap[]) => rows.filter((r) => {
+    const c = (r as { capturedAt?: unknown }).capturedAt;
+    return !(c instanceof Date) || c.getTime() <= markMs;
+  }).length;
   return {
-    xstock_spot: tickerBuffers.xstock_spot.length,
-    xstock_perp: tickerBuffers.xstock_perp.length,
-    crypto_spot: tickerBuffers.crypto_spot.length,
-    crypto_perp: tickerBuffers.crypto_perp.length,
+    xstock_spot: count(tickerBuffers.xstock_spot),
+    xstock_perp: count(tickerBuffers.xstock_perp),
+    crypto_spot: count(tickerBuffers.crypto_spot),
+    crypto_perp: count(tickerBuffers.crypto_perp),
   };
 }
 

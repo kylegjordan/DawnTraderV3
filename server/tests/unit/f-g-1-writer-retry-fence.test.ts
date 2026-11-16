@@ -62,7 +62,7 @@ vi.mock('../../services/passive-archive/ticker-batch-writer.js', () => ({
     if (_tickerStopRejects) throw new Error('ticker drain blew up');
   },
   // B-ARCHIVE-NETWORK-RETRY C-1: the drain now reads the ticker residue; this mock's ticker holds nothing.
-  getTickerBufferLengths: () => ({ xstock_spot: 0, xstock_perp: 0, crypto_spot: 0, crypto_perp: 0 }),
+  getTickerResidueBefore: () => ({ xstock_spot: 0, xstock_perp: 0, crypto_spot: 0, crypto_perp: 0 }),
 }));
 
 const _handoffs: unknown[] = [];

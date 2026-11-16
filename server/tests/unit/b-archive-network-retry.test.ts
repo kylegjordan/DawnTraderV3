@@ -9,7 +9,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const _dbState: { throwWith: Error | null; inserted: any[][] } = { throwWith: null, inserted: [] };
+const _dbState: { throwWith: Error | null; inserted: any[][]; onInsert: null | (() => void) } = { throwWith: null, inserted: [], onInsert: null };
 // One mock serves both writers: the OHLC writer awaits `.onConflictDoUpdate()`, the ticker writer
 // awaits the `.values()` result itself, so `values` returns a thenable that also carries the method.
 vi.mock('../../db.js', () => ({
@@ -20,6 +20,7 @@ vi.mock('../../db.js', () => ({
     insert: () => ({
       values: (rows: any) => {
         const run = async () => {
+          if (_dbState.onInsert) _dbState.onInsert();
           if (_dbState.throwWith) throw _dbState.throwWith;
           _dbState.inserted.push(rows);
         };
@@ -100,6 +101,7 @@ function aggregate(code: string): Error {
 
 beforeEach(() => {
   _dbState.throwWith = null;
+  _dbState.onInsert = null;
   _dbState.inserted.length = 0;
   _alerts.length = 0;
   _addAlertThrows = false;
@@ -297,6 +299,25 @@ describe('OBJ-2 — a shed at the cap raises the writer\'s own alert', () => {
     // leave nothing behind for the next test
     _dbState.throwWith = null;
     _handoffThrows = false;
+    await stopBatchWriter();
+    await stopTickerWriter();
+  });
+
+  // ⛔ C-1 RE-GATE (Langston, measured): on the live box the crypto and futures feeds keep running through the
+  // ~2 s drain, so rows ARRIVE DURING the final flushes and are still buffered when the drain counts. They are
+  // not retry residue and must not page. MUTATION: count every buffered row, ignoring the mark, and this fails.
+  it('CONTROL — a CLEAN shutdown with live intake during the final flushes raises no residue alert', async () => {
+    let pushed = 0;
+    _dbState.onInsert = () => {
+      if (pushed++ > 0) return;      // one burst of late arrivals, from inside the final flush
+      bufferOhlcBar('crypto_spot', bar(79_002));
+      bufferTickerSnap('crypto_perp', { ...snap(79_003), assetClass: 'crypto_perp' });
+    };
+    bufferOhlcBar('crypto_spot', bar(79_001));
+    await drainArchiveBuffersForShutdown();
+    expect(pushed).toBeGreaterThan(0);   // the control: rows really did arrive during the drain
+    expect(_alerts.filter((x) => x.dedupe_key === 'archive-writer-shutdown-residue')).toHaveLength(0);
+    _dbState.onInsert = null;
     await stopBatchWriter();
     await stopTickerWriter();
   });

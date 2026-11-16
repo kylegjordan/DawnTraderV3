@@ -444,17 +444,26 @@ export async function alertWriterShed(writer: 'ohlc' | 'ticker', assetClass: Arc
 
 /**
  * B-ARCHIVE-NETWORK-RETRY C-1 — the shutdown residue page. Called (and AWAITED) by the shutdown drain after
- * both writers' final flushes settle. If any of the eight buffers still holds rows, they are lost when the
- * process exits; one alert says how many per writer:class and which can be re-fetched. Same posture as the
- * shed alert: RESOLVE-ONLY, NEVER ACK, owner CC-A. It never throws (a failed raise is logged), so it cannot
- * block shutdown. `ohlc:xstock_spot` is also refused by the xStock handoff check; it is counted here so the
- * page is complete.
+ * both writers' final flushes settle. It counts only rows RECEIVED AT OR BEFORE `markMs` (taken just before
+ * the final flushes) that are still held: rows the final flush could not write, i.e. retry residue, which is
+ * lost when the process exits. ⛔ NOT every row still in a buffer (Langston's re-gate, measured): the crypto
+ * and futures feeds keep running through the ~2 s drain, so rows arriving after the mark are present on EVERY
+ * clean shutdown; counting them would fire this critical page on every deploy, with a false cause, and the one
+ * global key would then hide the real outage residue. Those late arrivals are a separate loss (`#705`).
+ * The stamps: bars `arrivedAt` (set at `bufferOhlcBar`), ticker `capturedAt` (every producer).
+ * Same posture as the shed alert: RESOLVE-ONLY, NEVER ACK, owner CC-A. It never throws, so it cannot block
+ * shutdown. `ohlc:xstock_spot` is also refused by the xStock handoff check; it is counted here so the page is
+ * complete.
  */
-export async function alertShutdownResidue(tickerLengths: Record<ArchiveAssetClass, number>): Promise<void> {
+export async function alertShutdownResidue(markMs: number, tickerResidue: Record<ArchiveAssetClass, number>): Promise<void> {
   const residue: Record<string, number> = {};
   for (const c of ALL_ARCHIVE_CLASSES) {
-    if (buffers[c].length > 0) residue[`ohlc:${c}`] = buffers[c].length;
-    const t = tickerLengths[c] ?? 0;
+    const held = buffers[c].filter((r) => {
+      const a = (r as { arrivedAt?: unknown }).arrivedAt;
+      return !(a instanceof Date) || a.getTime() <= markMs;
+    }).length;
+    if (held > 0) residue[`ohlc:${c}`] = held;
+    const t = tickerResidue[c] ?? 0;
     if (t > 0) residue[`ticker:${c}`] = t;
   }
   const total = Object.values(residue).reduce((a, n) => a + n, 0);
@@ -468,12 +477,13 @@ export async function alertShutdownResidue(tickerLengths: Record<ArchiveAssetCla
       category: 'breakage',
       severity: 'critical',
       title: `Archive writers exited holding ${total} unwritten rows`,
-      body: `The process shut down while the archive writers still held ${total} rows they had been retrying `
-        + `(the database was refusing or failing writes). Those rows are lost: ${lost}. Only the rows marked `
+      body: `The process shut down while the archive writers still held ${total} rows received before their final `
+        + `flush that the final flush could not write (their writes were failing with an error classed transient). `
+        + `Those rows are lost: ${lost}. Only the rows marked `
         + `re-fetchable can be refilled, by the futures REST poller. RESOLVE this alert (never acknowledge it) once `
         + `the cause is understood. Routing: the System Impact Map's archived-bar writer entry (B-ARCHIVE-NETWORK-RETRY). `
         + `Owner CC-A until a writer owner is named.`,
-      metadata: { residue, total, source: 'archive-shutdown-drain', issue: '#705' },
+      metadata: { residue, total, mark: new Date(markMs).toISOString(), source: 'archive-shutdown-drain', issue: '#705' },
       dedupe_key: 'archive-writer-shutdown-residue',
     });
   } catch (e) {
@@ -957,7 +967,13 @@ export async function drainArchiveBuffersForShutdown(): Promise<void> {
   stopEquitySpotArchiver();
 
   // Independent: one failing drain must not skip the other.
-  const { stopTickerWriter, getTickerBufferLengths } = await import('./ticker-batch-writer.js');
+  const { stopTickerWriter, getTickerResidueBefore } = await import('./ticker-batch-writer.js');
+  // C-1 re-gate (Langston): the crypto and futures feeds are NOT stopped here, so rows keep arriving
+  // through the ~2 s of the final flushes. The residue page must count only rows held from BEFORE them.
+  const residueMarkMs = Date.now();
+  // Hold the event loop until the millisecond turns (≤ 1 ms): any row stamped from here on carries a time
+  // strictly AFTER the mark, so `<= mark` cannot catch a late arrival that shared the mark's millisecond.
+  while (Date.now() === residueMarkMs) { /* spin */ }
   const results = await Promise.allSettled([stopBatchWriter(), stopTickerWriter()]);
   for (const r of results) {
     if (r.status === 'rejected') {
@@ -967,10 +983,11 @@ export async function drainArchiveBuffersForShutdown(): Promise<void> {
   // B-ARCHIVE-NETWORK-RETRY C-1 (Langston, Step 4): rows RETAINED for retry die with the process. Before
   // this batch, a refused connection on the final drain took the PERMANENT branch and at least attempted
   // a page; now it is transient, so a deploy or restart INSIDE an outage would lose the retained rows with
-  // only a stderr line — the #704 shape. So after both drains settle, every one of the eight buffers is
-  // counted and ONE residue alert is AWAITED (a `void` raise races process.exit, #1034). It runs BEFORE
+  // only a stderr line — the #704 shape. So after both drains settle, the rows each of the eight buffers
+  // has held since BEFORE `residueMarkMs` are counted and ONE residue alert is AWAITED (a `void` raise
+  // races process.exit, #1034). It runs BEFORE
   // the xStock handoff below, which throws on xStock residue and would otherwise skip it.
-  await alertShutdownResidue(getTickerBufferLengths());
+  await alertShutdownResidue(residueMarkMs, getTickerResidueBefore(residueMarkMs));
   const handoffState = {
     ...getXstockAvailabilityWriterTelemetry(),
     remainingBufferRows: buffers.xstock_spot.length,
