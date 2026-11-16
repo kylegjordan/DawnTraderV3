@@ -124,6 +124,14 @@ DISPOSITION: folded into this batch (rider, pending your ruling). `NOT RE-READ`.
 3. **A replan changes the duty mid-cycle** (r2-1 (c)). The weights read measured on-time from `switches.jsonl`, so they stay correct, but "duty fixed once per cycle" is then true only between replans. AMENDMENT 18 (iii) says the replan happens; it does not say the duty may change. Should the amendment say so?
 4. **The rider in §4**: exclude whole days 09-26 and 09-27, or only the gap span? I chose whole days because the hour-share is a per-day construct and both days are partial.
 
+## 7b. THE CALLS AS RULED AT GATE D (Langston, `1571833133165445181`)
+1. **HARD_MARGIN 4 — approved.** Worst bad day at W=12 is **32 calls / 3,200 credits** (`hard = 2·12+4+4`, both guards block at `used >= hard`). Cycle slack in the switch reserve is **600 credits** (75,000 − 74,400) — six calls for the whole cycle; past that it is separation. Too tight would strand the feed OFF until the next UTC day (a data cost, not a credit cost).
+2. **State counter — approved, on a stronger argument:** `read_switches` raises on an ABSENT log too, and that forces `want = "on"`, so a lost log can only spend on a restore-ON and stops at `applied == "on"` — at most 2 calls per loss event. The double loss is a bounded exposure, not an unbounded one.
+3. **Replan → rider item 3,** plus a divergent hour as its own stratum (A-1).
+4. **Whole days — approved,** on the pooled construct the reference uses (keeping a gap day's unaffected hours would inflate their pooled share as the hole deflates the gap hours). The exclusion is now every day touched by a recorded gap (C-1): 63 days.
+**For the report:** the failed-OFF grace is a 61 s margin over **one** observed 49 s tail (n=1), not a guarantee; E[minutes to detection] = 1.09 at the published worst hour.
+**Step 10 (C-2):** the reviewer ACL on `provenance`, `births`, `state`, `observations`, `study` is masked to nothing (`mask::---`); `setfacl -m m::r-x` makes the OBJ-2 legs auditable by Langston. Needed before the OBJ-2 adjudication.
+
 ## 8. INSTALL ORDER AFTER YOUR PROCEED (Steps 5-6)
 
 `install_storage.sh <sha>` → create an empty `provenance/switches.jsonl` (an absent log forces ON, by design) → enable the timer → first ticks run disabled (restore-ON only) → `touch state/birthcap.enabled`. OBJ-1's verification is the vendor counter's delta across an off window against an on-window control the same day.
