@@ -405,3 +405,36 @@ All line references are `active-execution-engine.ts` unless marked `ts:` (`trade
 - **At each refusal:** money held now = the latest `MONEY_HELD` line at or before it. Money held at each open time of the current book = the latest `MONEY_HELD` line at or before that position's open line.
 - **Positive control:** at each refusal, the latest `MONEY_HELD` value equals the cap's own `100% of $X` to the cent. A mismatch voids that refusal from the read, and more than 5 % voided voids the read.
 - **Object, day, prediction and FAIL are unchanged (§6).** It runs before Step 3, from logs only.
+
+---
+
+## 9. Langston's r2 ruling (Discord 1571872795065978991): **PROCEED to Step 3**, three conditions plus two window notes. He re-derived the cadence, stdout reach, anchor, schema lines and the A-11 counts himself.
+
+- **C-3 — the park filter goes in `getRankedSignals` ONLY, never in `getQueuedSignals`.**
+  - **Why:** `getQueuedSignals` is shared by six non-test callers, including the refresh (`ready_to_buy_service.ts:844`) and `reEvaluateQueue` (`:1762`), and those are the paths that keep pricing and retiring a parked row. A filter there would leave a parked row unpriced for 30 minutes and make `getQueueDepth`/`getQueueStats` under-report.
+  - **Fenced both ways in tests:** the ranker excludes parked rows; `getQueuedSignals` still returns them.
+- **C-4 — neither new column goes in `insertData` or the conflict SET.**
+  - **Why:** `b-rtb-admission-newest-wins.test.ts:98` asserts that insert keys ⊆ SET ∪ INSERT_ONLY. Writing the columns at insert turns that fence red, and the one-line way to green it is to add them to the SET, which would unpark every row on the 30 s re-issue.
+  - **Instead:** DB defaults only, neither list touched, and a new fence asserts that both columns are in **neither** list.
+- **C-5 — the claim-return census, corrected.** Function `promoteSignal`, `ready_to_buy_service.ts:1663`:
+
+  | return | lines |
+  |---|---|
+  | `missing` | `:1667`, `:1742` |
+  | `refreshing` | `:1674` |
+  | `plan_age_unresolved` | `:1686`, `:1698`, `:1714`, `:1726` |
+  | `stale_plan` | `:1704` |
+  | `unpriced` | `:1732` |
+  | `deleted` | `:1750` |
+  | `delete_failed` | `:1753` |
+
+  - No verdict changes.
+  - **The P3 fence keys on the exported `PromoteOutcome` union (`:488`) with a compile-time exhaustiveness check**, never a hand-listed set of sites.
+  - §8.6's citations were file-less and under-counted (2-of-4); this table supersedes them.
+- **Window note 1 — C1 can be UNEXERCISED.** PARK only exercises if the cap is reached, and small-pot MAX_POSITION refusals now DEFER uncharged. **Pre-registered: ≥ 1 real park inside the observation window. Zero parks ⇒ C1 reported UNEXERCISED, not passed** (#661 leg 3).
+- **Window note 2 — §8.4 arm (a) is a TRIPWIRE, not a regression test.**
+  - At `park_ms` = 30 min, a persistently refused setup parks about 36 times a day, so the arm trips on the first genuinely stuck setup.
+  - It has no pre-change control, because today's delete makes retries uncountable.
+  - **A day-one trip is read as "a stuck setup exists", never as "this batch caused it".**
+
+**Board:** Langston set `Review = Approved`. The card stays at Pre-Audit with Blocked on = Nothing until B-ENTRY-GATE closes (KD-87: code after that). **Before Step 3:** the R3 baseline (§6 + §8.10).
