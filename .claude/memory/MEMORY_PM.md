@@ -56,6 +56,8 @@
 
 - **NUDGE 11-16 08:01Z:** Infra - WITHDRAWN: credit hotfix installed 03:07Z, run-out back to ~11-19 eve (129,661 left); birth-cap Step 2 PROCEED, Step 3 building, target live before ~11-19. Not stalled (outage). MISTAKE: stall-misread.
 
+- **FOR KYLE LIST (Infra 11-16 ~08:35Z, Discord 1571809848444584037):** B-TOKEN-WATCH-PACED-LIQUIDITY proposed after live (Infra): token study suspended pool-liquidity reads (AMENDMENT 18, credits); paced daily budget would restore part; primary outcome unaffected. Kyle may want sooner or paid. Birth-cap at Step 4 with Langston.
+
 # OPEN
 - Archived 2026-11-04 · stale-local-session-ids → `1-system-manual/pm/archive/memory/2026-11.md`
 - Hourly "Wake watcher heartbeat" sessions pile up unarchived in the sidebar — ask Kyle whether to archive.
