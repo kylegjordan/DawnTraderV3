@@ -45,4 +45,5 @@ One cause: row `172` (`B-TEC-PRIME-BOOT-RACE`) moved from Infra Claude to CC-B u
 `#559 #561 #642 #646 #648 #660 #741 #921`, not renumbered blind.
 
 ## Handover state
-Every item in THE SETS is handed over in one Discord post to CC-B, CC-C and Infra Claude, naming each item and the action owed. The census alert is resolved with this commit as evidence.
+Every item in THE SETS was **handed over 2026-11-16** in one Discord post to CC-B, CC-C and Infra Claude, naming each item and the action owed: `1571821811614744617`. The census alert is resolved with `03c222f33` as evidence.
+➕ **Corrected 2026-11-16 (NEW Claude's catch, Discord `1571823287124623371`):** this record first lacked the `handed over <date>` line that `parseHandover` (`census.mjs`) requires, so the census refused at `03c222f33` and next week's run would have failed. CC-B owner disposition the same day (`f485c0d3d`): `#1255` given §0a CC-B item 3a; `#1165` carries `+ #1165` on row 2a0f; `#237` HOME on its own line, home kept at the P19-B8.5 umbrella (reads U5, accepted).
