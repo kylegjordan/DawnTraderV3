@@ -43,7 +43,8 @@ so raising a page can never itself spend a login attempt.
 
 ⛔ READ-ONLY IS AN ACCIDENT GUARD, NOT A BOUNDARY (stated, the dt-api C11 form): PGOPTIONS sets
 `default_transaction_read_only=on` and a statement timeout, and SQL naming `transaction_read_only` is refused before
-connecting. The credential is the superuser's and `deploy` can read `.env`; the refusal list is not complete.
+connecting. The credential is the app's own `postgres` login — on Supabase NOT a Postgres superuser (Langston measured
+`rolsuper = f`, `rolbypassrls = t`) but able to write — and `deploy` can read `.env`; the refusal list is not complete.
 A read-only database role is the boundary (proposed to Kyle, not built here).
 """
 
@@ -312,6 +313,7 @@ def main(args):
     if READONLY_SWITCH.search(sql):
         print("dt-sql: REFUSED — this SQL names the read-only setting; dt-sql only reads (an accident guard, not a "
               "boundary)", file=sys.stderr)
+        log("refused_readonly_sql", sql_head=sql.strip()[:160])     # the attempt is audited too (Langston Step 8 F-1)
         return 2
 
     with open(LOCK_FILE, "a") as lf:
@@ -347,11 +349,11 @@ def main(args):
         sys.stderr.buffer.write(err)
         if kind in ("ok", "sql_error"):
             os.remove(INTENT_FILE)
-            log(kind, rc=rc)
+            log(kind, psql_rc=rc)                              # psql's own code; the tool's exit is the "exit" line
             return 0 if kind == "ok" else 1
         if kind == "refused":
             os.remove(INTENT_FILE)
-            log("refused", rc=rc)
+            log("refused", psql_rc=rc)
             print("dt-sql: Connection refused — the address may be BANNED. Do not retry; check Supabase's network bans.",
                   file=sys.stderr)
             return 3
@@ -370,15 +372,22 @@ def entry(args):
     """Exit 1 means ONLY "logged in, the SQL failed". An unexpected error or SystemExit before an attempt is 2
     (Langston rider); an INTENT already written is left in place, so the next call still locks 'ambiguous'."""
     try:
-        return main(args)
+        code = main(args)
     except SystemExit as exc:
         if isinstance(exc.code, int) and exc.code != 1:      # 1 is published as "logged in, the SQL failed" only
-            return exc.code
-        print(str(exc.code), file=sys.stderr)
-        return 2
+            code = exc.code
+        else:
+            print(str(exc.code), file=sys.stderr)
+            code = 2
     except Exception as exc:                                       # noqa: BLE001
         print("dt-sql: unexpected error before or around the attempt: %s: %s" % (type(exc).__name__, exc), file=sys.stderr)
-        return 2
+        code = 2
+    # ⛔ ONE "exit" line for EVERY call — refusals, busy, locked, usage errors included — carrying the tool's real exit
+    #    code (Langston Step 8 F-1/F-2: the log showed what ran but not what was attempted and blocked, and its psql
+    #    rc 3 read as an exit code that is really 1). Reaches here only in the process that did the work (as root the
+    #    first process execv's into deploy and never returns).
+    log("exit", exit=code, mode=("status" if "--status" in args else "unlock" if "--unlock" in args else "query"))
+    return code
 
 
 if __name__ == "__main__":

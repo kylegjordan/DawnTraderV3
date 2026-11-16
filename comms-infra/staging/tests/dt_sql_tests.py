@@ -147,6 +147,17 @@ print("== 2. read-only SQL refusal (before connecting), and ONE input mode")
 reset("ok")
 r = run(tool, "-c", "set default_transaction_read_only = off; delete from x")
 check("SQL naming the read-only setting is refused, exit 2, psql never called", r.returncode == 2 and calls() == [], (r.returncode, calls()))
+
+
+def logrows():
+    p = os.path.join(state, "log.jsonl")
+    return [json.loads(l) for l in open(p)] if os.path.exists(p) else []
+
+
+lr = logrows()
+check("a refused attempt is AUDITED: a refused_readonly_sql row with the SQL's head, and an exit row with exit 2 (F-1)",
+      any(e["event"] == "refused_readonly_sql" and "default_transaction_read_only" in e.get("sql_head", "") for e in lr)
+      and any(e["event"] == "exit" and e.get("exit") == 2 for e in lr), lr)
 for stmt in ("BEGIN READ WRITE; delete from x", "START TRANSACTION READ WRITE", "BEGIN TRANSACTION READ WRITE"):
     reset("ok")
     r = run(tool, "-c", stmt)
@@ -193,6 +204,10 @@ reset("sql_error")
 r = run(tool, "-c", "select from")
 check("logged in, SQL failed: exit 1, NOT locked, intent cleared", r.returncode == 1 and locked() is None and not intent(),
       (r.returncode, locked(), intent()))
+lr = [json.loads(l) for l in open(os.path.join(state, "log.jsonl"))]
+check("the log keeps psql's code as psql_rc (3) and the tool's REAL exit as exit (1) — never one read as the other (F-2)",
+      any(e["event"] == "sql_error" and e.get("psql_rc") == 3 and "rc" not in e for e in lr)
+      and any(e["event"] == "exit" and e.get("exit") == 1 for e in lr), lr)
 reset("credential")
 r = run(tool, "-c", "select 1")
 lk = locked()
