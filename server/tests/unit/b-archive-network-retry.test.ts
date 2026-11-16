@@ -9,7 +9,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const _dbState: { throwWith: Error | null; inserted: any[][]; onInsert: null | (() => void) } = { throwWith: null, inserted: [], onInsert: null };
+const _dbState: { throwWith: Error | null; inserted: any[][]; onInsert: null | (() => void); delayMs: number } = { throwWith: null, inserted: [], onInsert: null, delayMs: 0 };
 // One mock serves both writers: the OHLC writer awaits `.onConflictDoUpdate()`, the ticker writer
 // awaits the `.values()` result itself, so `values` returns a thenable that also carries the method.
 vi.mock('../../db.js', () => ({
@@ -20,6 +20,7 @@ vi.mock('../../db.js', () => ({
     insert: () => ({
       values: (rows: any) => {
         const run = async () => {
+          if (_dbState.delayMs > 0) await new Promise((r) => setTimeout(r, _dbState.delayMs));
           if (_dbState.onInsert) _dbState.onInsert();
           if (_dbState.throwWith) throw _dbState.throwWith;
           _dbState.inserted.push(rows);
@@ -63,6 +64,7 @@ import {
   isTransientWriteError,
   TRANSIENT_NETWORK_CODES,
   alertWriterShed,
+  alertShutdownResidue,
   clearShedAlertLatch,
   SHED_REFETCHABLE,
   bufferOhlcBar,
@@ -70,7 +72,7 @@ import {
   drainArchiveBuffersForShutdown,
   RETRY_BUFFER_MAX,
 } from '../../services/passive-archive/ohlc-batch-writer';
-import { bufferTickerSnap, stopTickerWriter } from '../../services/passive-archive/ticker-batch-writer';
+import { bufferTickerSnap, stopTickerWriter, getTickerResidueBefore } from '../../services/passive-archive/ticker-batch-writer';
 
 async function waitFor(cond: () => boolean, ms = 1000): Promise<void> {
   const deadline = Date.now() + ms;
@@ -102,6 +104,7 @@ function aggregate(code: string): Error {
 beforeEach(() => {
   _dbState.throwWith = null;
   _dbState.onInsert = null;
+  _dbState.delayMs = 0;
   _dbState.inserted.length = 0;
   _alerts.length = 0;
   _addAlertThrows = false;
@@ -306,6 +309,8 @@ describe('OBJ-2 — a shed at the cap raises the writer\'s own alert', () => {
   // ⛔ C-1 RE-GATE (Langston, measured): on the live box the crypto and futures feeds keep running through the
   // ~2 s drain, so rows ARRIVE DURING the final flushes and are still buffered when the drain counts. They are
   // not retry residue and must not page. MUTATION: count every buffered row, ignoring the mark, and this fails.
+  // ⚠️ It kills 'spin removed' only PROBABILISTICALLY (when a late row shares the mark's millisecond); the
+  // deterministic fence on `<=` is the 'mark is inclusive' test below.
   it('CONTROL — a CLEAN shutdown with live intake during the final flushes raises no residue alert', async () => {
     let pushed = 0;
     _dbState.onInsert = () => {
@@ -318,6 +323,48 @@ describe('OBJ-2 — a shed at the cap raises the writer\'s own alert', () => {
     expect(pushed).toBeGreaterThan(0);   // the control: rows really did arrive during the drain
     expect(_alerts.filter((x) => x.dedupe_key === 'archive-writer-shutdown-residue')).toHaveLength(0);
     _dbState.onInsert = null;
+    await stopBatchWriter();
+    await stopTickerWriter();
+  });
+
+  // ⛔ C-1 re-gate FINDING (Langston): a ticker flush still awaiting the database when the drain counts holds its rows in
+  // NO buffer (spliced out before the insert). MUTATION: drop the in-flight wait in `stopTickerWriter` and this fails.
+  it('a ticker flush still RUNNING at shutdown is waited out, and its retained rows are paged', async () => {
+    _dbState.throwWith = new Error('connect ECONNREFUSED 2a05:d018:135e:16c7:82b8:28a7:565c:6ebf:5432');
+    _dbState.delayMs = 120;               // a slow, failing insert: the condition the page exists for
+    bufferTickerSnap('xstock_spot', { ...snap(81_001), assetClass: 'xstock_spot' });
+    const running = stopTickerWriter();   // stands in for a timer flush already in flight
+    await drainArchiveBuffersForShutdown();
+    await running;
+    const a = _alerts.find((x) => x.dedupe_key === 'archive-writer-shutdown-residue');
+    expect(a).toBeDefined();
+    expect(a.metadata.residue).toEqual({ 'ticker:xstock_spot': 1 });
+    _dbState.throwWith = null;
+    _dbState.delayMs = 0;
+    await stopTickerWriter();
+  });
+
+  // ⛔ THE DETERMINISTIC FENCE ON `<=` (Langston): the live-intake CONTROL kills 'spin removed' only when a late row lands
+  // inside the mark's millisecond, i.e. PROBABILISTICALLY (it failed only inside the full file). This pins the semantics
+  // directly: a row stamped exactly at the mark is residue, one stamped a millisecond later is not.
+  // MUTATION: `<=` -> `<` on either side and this fails.
+  it('the mark is inclusive: a row stamped AT the mark counts, one stamped 1 ms later does not', async () => {
+    const mark = 1_800_000_000_000;
+    bufferTickerSnap('crypto_spot', { ...snap(82_001), capturedAt: new Date(mark) });
+    bufferTickerSnap('crypto_spot', { ...snap(82_002), capturedAt: new Date(mark + 1) });
+    expect(getTickerResidueBefore(mark).crypto_spot).toBe(1);
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(mark);
+      bufferOhlcBar('crypto_spot', bar(82_003));      // arrivedAt = mark
+      vi.setSystemTime(mark + 1);
+      bufferOhlcBar('crypto_spot', bar(82_004));      // arrivedAt = mark + 1
+    } finally {
+      vi.useRealTimers();
+    }
+    await alertShutdownResidue(mark, { xstock_spot: 0, xstock_perp: 0, crypto_spot: 0, crypto_perp: 0 });
+    const a = _alerts.find((x) => x.dedupe_key === 'archive-writer-shutdown-residue');
+    expect(a.metadata.residue).toEqual({ 'ohlc:crypto_spot': 1 });
     await stopBatchWriter();
     await stopTickerWriter();
   });

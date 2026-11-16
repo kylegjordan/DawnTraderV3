@@ -214,14 +214,29 @@ export function getTickerResidueBefore(markMs: number): Record<ArchiveAssetClass
 
 let flushTimer: NodeJS.Timeout | null = null;
 
+// B-ARCHIVE-NETWORK-RETRY C-1 (Langston's re-gate finding): `flushTickerAssetClass` splices its rows OUT of the
+// buffer before the insert and only puts them back in the transient catch, and `clearInterval` does not cancel a
+// timer callback already running. So a flush still awaiting the database when the shutdown drain counts holds its
+// rows in NO buffer, and the residue page could not see them — worst exactly when inserts are slow, which is the
+// condition the page exists for. Every flush is tracked here and `stopTickerWriter` waits them out before its final
+// flush, as `stopBatchWriter` does for the bar writer. Concurrency is unchanged (no coalescing is added).
+const tickerInFlight = new Set<Promise<void>>();
+function trackedTickerFlush(assetClass: ArchiveAssetClass): Promise<void> {
+  const p = flushTickerAssetClass(assetClass);
+  tickerInFlight.add(p);
+  const done = () => { tickerInFlight.delete(p); };
+  p.then(done, done);
+  return p;
+}
+
 export function startTickerWriter(): void {
   if (flushTimer) return;
   flushTimer = setInterval(async () => {
     await Promise.all([
-      flushTickerAssetClass('xstock_spot'),
-      flushTickerAssetClass('xstock_perp'),
-      flushTickerAssetClass('crypto_spot'),
-      flushTickerAssetClass('crypto_perp'),
+      trackedTickerFlush('xstock_spot'),
+      trackedTickerFlush('xstock_perp'),
+      trackedTickerFlush('crypto_spot'),
+      trackedTickerFlush('crypto_perp'),
     ]);
   }, BATCH_FLUSH_INTERVAL_MS);
   console.log(`[B74][ticker-writer] started (flush every ${BATCH_FLUSH_INTERVAL_MS / 1000}s, throttle=${throttleMs}ms)`);
@@ -232,10 +247,12 @@ export async function stopTickerWriter(): Promise<void> {
     clearInterval(flushTimer);
     flushTimer = null;
   }
+  // Wait out any flush already running, so its rows are either written or back in the buffer.
+  await Promise.allSettled([...tickerInFlight]);
   await Promise.all([
-    flushTickerAssetClass('xstock_spot'),
-    flushTickerAssetClass('xstock_perp'),
-    flushTickerAssetClass('crypto_spot'),
-    flushTickerAssetClass('crypto_perp'),
+    trackedTickerFlush('xstock_spot'),
+    trackedTickerFlush('xstock_perp'),
+    trackedTickerFlush('crypto_spot'),
+    trackedTickerFlush('crypto_perp'),
   ]);
 }

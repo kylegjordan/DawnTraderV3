@@ -477,9 +477,9 @@ export async function alertShutdownResidue(markMs: number, tickerResidue: Record
       category: 'breakage',
       severity: 'critical',
       title: `Archive writers exited holding ${total} unwritten rows`,
-      body: `The process shut down while the archive writers still held ${total} rows received before their final `
-        + `flush that the final flush could not write (their writes were failing with an error classed transient). `
-        + `Those rows are lost: ${lost}. Only the rows marked `
+      body: `The process shut down while the archive writers' buffers still held ${total} rows received before their `
+        + `final flushes began, after those flushes (and any flush already running) finished — rows the writers were `
+        + `retrying and could not write. Those rows are lost: ${lost}. Only the rows marked `
         + `re-fetchable can be refilled, by the futures REST poller. RESOLVE this alert (never acknowledge it) once `
         + `the cause is understood. Routing: the System Impact Map's archived-bar writer entry (B-ARCHIVE-NETWORK-RETRY). `
         + `Owner CC-A until a writer owner is named.`,
