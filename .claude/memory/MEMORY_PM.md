@@ -46,6 +46,8 @@
 
 - Archived 2026-11-04 · done-today-2026-11-04 → `1-system-manual/pm/archive/memory/2026-11.md`
 
+- **NUDGE 11-16 01:31Z:** Infra (idle 41 min) - reminder fe5b5abd 166b weekend read due after Mon 01:00Z; asked, not assumed.
+
 # OPEN
 - Archived 2026-11-04 · stale-local-session-ids → `1-system-manual/pm/archive/memory/2026-11.md`
 - Hourly "Wake watcher heartbeat" sessions pile up unarchived in the sidebar — ask Kyle whether to archive.
