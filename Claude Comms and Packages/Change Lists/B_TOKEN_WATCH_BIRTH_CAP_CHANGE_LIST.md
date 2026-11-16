@@ -95,6 +95,8 @@ Tests: a failing ON-PUT stops at the hard ceiling; the same with the switch log 
 AMENDMENT 18's reference (09-01 → 10-17, 10-28 → 11-15) includes 09-26, which holds the 24,179 s gap above. Excluding 09-26 and 09-27 raises the reference share of hours 18–23 by 0.05–0.07 pp each; the result is 64 days, 2,454,978 rows, spread 0.49 pp. Separately, the amendment's parenthetical "2,636,112 rows over 71 days" is the C-7 coverage check over every file, not the reference (66 days, 2,521,575 rows). Both are written as an **AMENDMENT 18 rider** at `06df4bee5`, before the first capped birth, **for your ruling**.
 DISPOSITION: folded into this batch (rider, pending your ruling). `NOT RE-READ`.
 
+**Folded in from the hotfix review (Langston, `1571814422937075815`):** an observation row's `observed_at` is a per-RUN stamp (three distinct values in the 70,722-row 11-16 file), so observation rows can never time an event inside a run. This batch's timing reads use only per-row clocks: the census `first_seen_at` (failed-OFF detector, weights, OBJ-2), the switch log's requested and response times, and the vendor counter. No observation-row timestamp is read anywhere in `birthcap.py` or the planned-window logic.
+
 ## 5. DEVIATIONS FROM THE PRE-AUDIT PLAN (each with its reason)
 
 1. **The known-good body is a constant without `authHeader`** (`config.BIRTHCAP_WEBHOOK_BODY`), not `/etc/token-watch/webhook-body.json` [L-10]. Your answer 1 confirmed that omitted fields persist on a full-body PUT, so the secret never needs to sit in a second file. The echo check requires `authHeader` set and the URL unchanged, or the switch counts as failed and pages.
