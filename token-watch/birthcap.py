@@ -53,6 +53,12 @@ RESULT = "birthcap_result"
 CARRY = "birthcap_carry"
 CARRY_MAX = 50
 CARRY_MAX_AGE = timedelta(hours=24)
+# ⛔ THE UNIT'S TimeoutStartSec=120 COVERS THE ExecStartPost MINT (measured 2026-11-16: a oneshot with a 5 s start timeout
+#    killed its 10 s ExecStartPost). alert_mint's own 120 s per call can therefore never fire: systemd kills the run
+#    first and the carry is never saved. So each call is cut at MINT_CALL_TIMEOUT_S and no call STARTS after
+#    MINT_BUDGET_S — worst case 60 + 30 = 90 s, inside 120 — and whatever was not tried is carried (Langston, finding 3).
+MINT_CALL_TIMEOUT_S = 30
+MINT_BUDGET_S = 60
 ENABLE_FLAG = f"{STATE_DIR}/birthcap.enabled"
 RESULT_MAX_AGE = timedelta(minutes=5)
 TRAILING_DAYS = 7
@@ -530,13 +536,25 @@ def _page(key: str, severity: str, title: str, body: str) -> dict:
                            "(B-TOKEN-WATCH-BIRTH-CAP). Resolve with evidence, never ack."}
 
 
-def mint(now: datetime | None = None, mint_fn=None) -> int:
+def _bounded_run(argv, **kw):
+    """subprocess.run with the per-call timeout cut to MINT_CALL_TIMEOUT_S (see the constant)."""
+    import subprocess
+    kw["timeout"] = min(float(kw.get("timeout") or MINT_CALL_TIMEOUT_S), float(MINT_CALL_TIMEOUT_S))
+    return subprocess.run(argv, **kw)
+
+
+def mint(now: datetime | None = None, mint_fn=None, clock=None) -> int:
     """ExecStartPost, as root: mint what this tick left. Refuses a result older than RESULT_MAX_AGE."""
     now = now or _now()
+    if clock is None:
+        import time
+        clock = time.monotonic
     if mint_fn is None:
         sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "ops"))
         import alert_mint
-        mint_fn = alert_mint.mint
+
+        def mint_fn(**k):
+            return alert_mint.mint(run=_bounded_run, **k)
     res = load_state(RESULT, {})
     try:
         checked = _ts(res["checked_at"])
@@ -550,22 +568,35 @@ def mint(now: datetime | None = None, mint_fn=None) -> int:
     #    queue). The hourly cross-check pages are made ONCE per hour, so a lost one is lost for good. Undelivered pages
     #    are carried in state and offered again by every later mint until one lands, bounded by CARRY_MAX / CARRY_MAX_AGE.
     carry = load_state(CARRY, {}).get("pages", [])
-    pending, seen = [], set()
+    # NEWEST FIRST (this tick's pages, then the carry); a key in both keeps this tick's text and the EARLIEST
+    # carried_at, so the 24 h bound measures how long the page has been undeliverable (Langston, finding 2)
+    pending, at = [], {}
     for p in list(res.get("pages", [])) + carry:
-        if p["dedupe_key"] in seen:
+        k = p["dedupe_key"]
+        stamp = p.get("carried_at") or now.isoformat()
+        if k in at:
+            at[k] = min(at[k], stamp)
             continue
-        seen.add(p["dedupe_key"])
-        pending.append(dict(p, carried_at=p.get("carried_at") or now.isoformat()))
-    failed = []
+        at[k] = stamp
+        pending.append(p)
+    pending = [dict(p, carried_at=at[p["dedupe_key"]]) for p in pending]
+    failed, start = [], clock()
     for p in pending:
+        if clock() - start > MINT_BUDGET_S:
+            failed.append(p)                              # not tried this run: carried, never dropped for want of time
+            continue
         if not mint_fn(severity=p["severity"], dedupe_key=p["dedupe_key"], title=p["title"], body=p["body"]):
             failed.append(p)
-    kept = [p for p in failed if now - _ts(p["carried_at"]) <= CARRY_MAX_AGE][-CARRY_MAX:]
+    # the count bound keeps the NEWEST (failed is newest-first): the current state of an incident outranks its history
+    kept = [p for p in failed if now - _ts(p["carried_at"]) <= CARRY_MAX_AGE][:CARRY_MAX]
     if kept or carry:
         save_state(CARRY, {"pages": kept, "updated_at": now.isoformat()})
-        if getattr(os, "geteuid", lambda: -1)() == 0:                                 # the mint runs as root; the file stays the tick user's
+        if getattr(os, "geteuid", lambda: -1)() == 0:     # the mint runs as root; keep the file the store user's
             import shutil
-            shutil.chown(f"{STATE_DIR}/{CARRY}.json", "tokenwatch", "tokenwatch")
+            try:
+                shutil.chown(f"{STATE_DIR}/{CARRY}.json", "tokenwatch", "tokenwatch")
+            except (LookupError, OSError) as exc:         # best-effort: only the mint (root) reads the carry
+                LOG.warning("birthcap mint: could not hand the carry file to tokenwatch: %s", exc)
     if len(failed) > len(kept):
         LOG.error("birthcap mint: %d undelivered page(s) dropped past the carry bound", len(failed) - len(kept))
     return 1 if failed else 0

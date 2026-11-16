@@ -476,6 +476,48 @@ check("a page undeliverable for over 24 h is dropped from the carry (bounded), n
 store.save_state(birthcap.RESULT, {"checked_at": tm.isoformat(), "pages": [dict(page, dedupe_key="k%d" % i) for i in range(80)]})
 birthcap.mint(now=tm, mint_fn=lambda **k: False)
 check("the carry is bounded in count (CARRY_MAX)", len(store.load_state(birthcap.CARRY, {}).get("pages", [])) == birthcap.CARRY_MAX)
+reset()
+old = [dict(page, dedupe_key="old%d" % i, carried_at=(tm - timedelta(hours=6)).isoformat()) for i in range(birthcap.CARRY_MAX)]
+store.save_state(birthcap.CARRY, {"pages": old})
+store.save_state(birthcap.RESULT, {"checked_at": tm.isoformat(), "pages": [dict(page, dedupe_key="new%d" % i) for i in range(3)]})
+birthcap.mint(now=tm, mint_fn=lambda **k: False)
+keys = [p["dedupe_key"] for p in store.load_state(birthcap.CARRY, {}).get("pages", [])]
+check("the count bound keeps the NEWEST pages (all 3 new kept; the oldest carried ones go)",
+      all("new%d" % i in keys for i in range(3)) and len(keys) == birthcap.CARRY_MAX, keys[:5])
+reset()
+store.save_state(birthcap.CARRY, {"pages": [dict(page, carried_at=(tm - timedelta(hours=23)).isoformat())]})
+store.save_state(birthcap.RESULT, {"checked_at": tm.isoformat(), "pages": [page]})
+birthcap.mint(now=tm, mint_fn=lambda **k: False)
+c = store.load_state(birthcap.CARRY, {}).get("pages", [])
+check("a key carried and raised again keeps its EARLIEST carried_at (the 24 h bound can bind)",
+      len(c) == 1 and c[0]["carried_at"] == (tm - timedelta(hours=23)).isoformat(), c)
+reset()
+store.save_state(birthcap.RESULT, {"checked_at": tm.isoformat(), "pages": [dict(page, dedupe_key="s%d" % i) for i in range(5)]})
+ticks = iter([0, 0, 40, 80, 120, 160, 200, 240])
+tried = []
+
+
+def slow(**k):
+    tried.append(k["dedupe_key"])
+    return True
+
+
+rc = birthcap.mint(now=tm, mint_fn=slow, clock=lambda: next(ticks))
+c = [p["dedupe_key"] for p in store.load_state(birthcap.CARRY, {}).get("pages", [])]
+check("past MINT_BUDGET_S no further call STARTS; the untried pages are carried, not dropped",
+      tried == ["s0", "s1"] and c == ["s2", "s3", "s4"] and rc == 1, (tried, c, rc))
+import subprocess as _sp
+seen_kw = {}
+_orig = _sp.run
+_sp.run = lambda argv, **kw: seen_kw.update(kw) or _orig([sys.executable, "-c", "pass"])
+try:
+    birthcap._bounded_run(["x"], capture_output=True, text=True, timeout=120)
+finally:
+    _sp.run = _orig
+check("each mint call's timeout is cut to MINT_CALL_TIMEOUT_S (alert_mint asks for 120)",
+      seen_kw.get("timeout") == birthcap.MINT_CALL_TIMEOUT_S, seen_kw)
+check("the worst-case mint run fits the unit's TimeoutStartSec=120",
+      birthcap.MINT_BUDGET_S + birthcap.MINT_CALL_TIMEOUT_S < 120)
 
 print()
 shutil.rmtree(ROOT, ignore_errors=True)
