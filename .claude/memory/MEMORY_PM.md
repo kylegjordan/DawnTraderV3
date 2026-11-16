@@ -67,7 +67,7 @@
 
 - **11-16 ~12:35Z Kyle (b785d8714):** KD-96 DB query tool NOW, interrupts birth-cap (Infra told; flag if ~11-19 at risk); KD-97 #705 retry fix now by OLD (told; out of NEW row 119); KD-98 sessions may verify KD rows in PM transcript (rules 6a). Backblaze key still needs his yes in OLD chat.
 
-- **11-16 13:3xZ Infra 3 proposals (for Kyle once positions set with Langston):** (1) app->Supabase connections UNENCRYPTED (10/10), own small batch, cert check first; (2) ~50 helper scripts double-try passwords - retire/move to new tool; (3) read-only DB account for sessions/reviewers. B-DB-READ-TOOL scope approved, pre-audit r2 with Langston. USAGE: KD-99 stop line 90% (guard cron 6b575bdd updated; warn sessions at 87%); Kyle deciding wait/ChatGPT/upgrade.
+- **11-16 ~14:40Z 3 DB security items PUT TO KYLE (Infra+Langston settled):** B-DB-APP-TLS (OLD; fold into open B-DB-POOL-GUARD, same file; Kyle downloads Supabase cert) slot 20261116T143415Z_CC-A_*; B-DB-READONLY-ROLE then B-DB-HELPER-RETIRE (Infra, after B-DB-READ-TOOL, ahead of conv index; birth-cap + memory reads stay ahead) slot 20261116T143418Z_CC-INFRA_* (both UNCOMMITTED). USAGE: KD-99 90% line (cron 6b575bdd).
 
 # OPEN
 - Archived 2026-11-04 · stale-local-session-ids → `1-system-manual/pm/archive/memory/2026-11.md`
