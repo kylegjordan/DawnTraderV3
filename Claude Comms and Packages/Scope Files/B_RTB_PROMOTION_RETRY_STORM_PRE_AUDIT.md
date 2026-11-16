@@ -438,3 +438,33 @@ All line references are `active-execution-engine.ts` unless marked `ts:` (`trade
   - **A day-one trip is read as "a stuck setup exists", never as "this batch caused it".**
 
 **Board:** Langston set `Review = Approved`. The card stays at Pre-Audit with Blocked on = Nothing until B-ENTRY-GATE closes (KD-87: code after that). **Before Step 3:** the R3 baseline (§6 + §8.10).
+
+---
+
+## 10. R3 baseline — RUN 2026-11-16 ~13:20Z, before Step 3. **PASS 517 / 517.**
+
+**Instrument change, stated before the result:**
+- §8.10 named the `[MONEY_HELD]` log lines. Those reach back only to 2026-11-10 14:57:50Z, and the 11-13 book holds positions opened before that, so they cannot price every member's open time.
+- **Used instead:** money held at any instant = $820.00 (anchor v5, 2026-10-06T15:52:57.373Z) + Σ `netPnl` of paper trades closed after the anchor and at or before that instant. Straddlers are 0 per the `MONEY_HELD` line.
+- **Data:** the app's own trade list, `GET /api/active-engine/trades?paginated=true` via `dt-api` (read-only, the sanctioned path; no hand-built database login under the KD-93 interim rule). It returned 1,773 rows, all paper; `totalCount` = 1,773, unique ids = 1,773.
+- **Global control:** Σ `netPnl` since the anchor = **−$260.36**, which equals the live `MONEY_HELD` line's `realizedPnl=-260.36` (2026-11-16 12:37:47Z) to the cent.
+
+**Object:**
+- every `[8.8.3-B3][GUARDRAIL_BLOCK] code:MAX_TOTAL_EXPOSURE` line in `error__2026-11-14_00-00-00.log` (which holds 11-13) dated 2026-11-13 00:00-21:00Z: **517** of the file's 518 for 11-13;
+- each paired with the latest `[MULTI_PROMOTE] mode=paper, openSlots=…` line at or before it (`out__2026-11-13*`, `out__2026-11-14*`).
+
+The window has no deploy, and it is before the 8c flip.
+
+**Per-refusal control (pre-registered, §8.10):** the reconstructed money held equals the cap's own `100% of $X` to the cent on **517 / 517**, with 0 mismatches, so 0 % are voided.
+
+**Result:**
+- **PASS on 517 / 517** refusals with `openSlots > 0`: the average money held at the open times of the current book exceeds money held now at every refusal.
+- **Minimum margin $4.73.**
+- FAIL 0.
+- ⇒ The temporal mechanism (record §2(3)) is measured on this day without the circularity: the book was bought on a bigger pot than the one it is checked against.
+
+**Residual, named:**
+- On **7 of 517** refusals, the book count reconstructed from the trade list (open at t, `never_filled` excluded) differs from `maxTrades − openSlots`. The result is unchanged, because those 7 PASS as well.
+- Likely cause, labelled a **hypothesis:** an open or close between the `MULTI_PROMOTE` snapshot and the refusal inside the same pass.
+
+**Script:** staging `/tmp/r3_ccb.py`. Trade-list pull: `/tmp/ccb_trades_*.json`.
