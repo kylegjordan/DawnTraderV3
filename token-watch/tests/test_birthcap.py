@@ -207,6 +207,19 @@ for i in range(80):
 check("with the switch log unreadable, the state counter still holds the hard ceiling",
       len(v.puts) + v.gets <= hard, (len(v.puts), v.gets, hard))
 
+for name, pl in (("full", full), ("tail", tail)):            # r2-5: the breaker's headroom across the UTC-day phase jump
+    w = int(pl["windows"]); start = birthcap._ts(pl["cycle_start"]); worst = 0
+    prev = birthcap.desired(start - timedelta(minutes=1), pl)
+    for d in range(10):
+        n = 0
+        for m in range(1440):
+            cur = birthcap.desired(start + timedelta(days=d, minutes=m), pl)
+            n += cur != prev
+            prev = cur
+        worst = max(worst, n)
+    check("%s plan: scheduled switches per UTC day, phase jump at midnight included, stay under the breaker" % name,
+          worst <= 2 * w + 1 < config.birthcap_switch_ceiling(w), (worst, w, config.birthcap_switch_ceiling(w)))
+
 print("== 6. a switch-OFF that succeeded at the API but births keep arriving")
 reset(); enable(); v = Vendor(active=False)
 store.save_state(birthcap.STATE, {"applied": "off", "plan": full, "off_at": off_time.isoformat(), "off_rate_per_min": 24})
