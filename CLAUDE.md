@@ -362,6 +362,12 @@ ssh root@188.245.193.8 "su - deploy -c 'pm2 list'"
 
 # Authenticated API read (server-held crew login; writes are denied by default):
 ssh root@188.245.193.8 "su - deploy -c 'sudo -n -u dtapi /usr/local/bin/dt-api GET /api/vts/filter-diagnostics'"
+
+# Database read (B-DB-READ-TOOL, KD-96): the ONLY way to query the staging database by hand. One login attempt, read-only
+# guard, and it LOCKS after any refused or unclear login (a second wrong password from this address = a Supabase ban, #1259):
+ssh root@188.245.193.8 "dt-sql -c 'select count(*) from paper_trades'"    # or: --csv · -f <file> · SQL on stdin
+ssh root@188.245.193.8 "dt-sql --status"                                  # LOCKED? which arm: credential | ambiguous
+ssh root@188.245.193.8 "dt-sql --unlock --by cc-infra"                    # ONLY after finding WHY it locked
 ```
 
 ### 7.1 Storage & sync workflow — THE canonical flow (🔒 SET IN STONE — Kyle 2026-07-23, superseding the 2026-06-01 rule)
