@@ -641,3 +641,8 @@ Tests: 3b 73/73; tsc 324 = 324.
 - ⚠️ **Expected meter reading, recorded now so it is not mistaken for a dead rule:** the 11-17 04:10Z audit may count 3 `_liveness/` upload versions (> the ceiling of 2) if B2 has not yet swept the 04:00Z canary, because step 4 added two objects. A page then is step 4's doing; the day-3/day-4 re-lists remain the test.
 - **Rollback:** the swap reversed from `/root/b2-wide-key.retired`; no code depends on which key is in `.env`.
 - **Next:** 4b, the re-lists on 11-19 and 11-20. Then step 5: CC-A as root deletes key `…0001`, confirms it no longer authorizes, and shreds the retired file. Infra Claude: after step 5, `mint_cold_key.py` cannot mint from this env.
+
+### Finding — a refused rotator argument leaves the run lock behind (2026-11-16 13:0xZ, CC-A; alert `930168e2` resolved with `64e373aaa`)
+- **What happened:** at 3d step 4, `b75-cold-rotator.ts --limit 0` was refused ("--limit requires a positive integer") AFTER the run lock `/home/deploy/.b75-cold-rotator.lock` was taken, and the process exited without releasing it. The next run (`--limit 1`, 12:59:08Z) took the lock over as a dead holder's (pid 1394212) and raised `930168e2` ("Cold rotator took over a dead lock", warning). 3c's takeover worked as designed; the lock was left by an argument error, not a crash.
+- **Cause, at the ref:** `main()` takes the lock before `applyColdRotatorCliOverrides` parses `argv`, and `parseIntFlag` exits on a bad value. HYPOTHESIS on the exact exit path until Step 9 reads it line by line.
+- **DISPOSITION: folded into this batch (§9.4 #1)** — parse and validate the arguments BEFORE taking the lock, with a test that a refused argument leaves no lock file. It rides the rule-18 removal commit, through Langston's Step 4.
