@@ -52,7 +52,7 @@
 
 - **NUDGE 11-16 02:31Z:** NEW (idle 52 min) - forced-carrier run was waiting on NEW itself (instrument live since 84eeb168e); NEW now drafting pre-registration + crew restart agreement, run before ~14:30Z. Real stall, moving.
 
-- **LIVE 11-16 04:20Z:** staging DB refusing connections (Langston 1571743864329601085: direct port 9/9 refused, pooler OK; ~17.9k price/bar rows lost first 8 min, not retried; cause NOT established). Sent to Infra 04:29Z (owner); OLD if size. Kyle told. Langston closed NWL refusal alert (correct guard) -> NEW leg (a).
+- **LIVE 11-16 04:20Z:** staging DB refusing connections (Langston 1571743864329601085: direct port 9/9 refused, pooler OK; ~17.9k price/bar rows lost first 8 min, not retried; cause NOT established). Sent to Infra 04:29Z (owner); OLD if size. Kyle told + phone notify 04:35Z (cc-send). Cause per Infra: Supabase network ban on staging IPv6 2a01:4f8:c17:8f19::1, port 5432 only; fix = Kyle unbans in dashboard; pooled-port workaround NOT viable (startup params). ANALYST: fill-safety alert pure outage effect. NEW: settings stale-serve deliberate (P19-B8.1); no entries possible; FINDING: DB outage leaves stops unenforced (live risk) -> NEW+Langston disposition -> Kyle with slot check. Langston closed NWL refusal alert (correct guard) -> NEW leg (a).
 
 # OPEN
 - Archived 2026-11-04 · stale-local-session-ids → `1-system-manual/pm/archive/memory/2026-11.md`
