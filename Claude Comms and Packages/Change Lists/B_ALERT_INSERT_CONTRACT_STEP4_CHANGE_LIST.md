@@ -80,3 +80,24 @@ BEFORE: `where user_id = $1 and alert_type = 'feed_health' and acknowledged = fa
 - **UI:** no surface on a tab this batch may verify on. Alerts render only on the main Dashboard, which is off-limits (Kyle 2026-10-19) and was named out of scope (§4); the broadcast payload's only change is `action: 'created' | 'refreshed'`, read by nothing that renders. Judgement stated, not skipped.
 - **OBJ-1 leg 1 (the 03:00Z formula audit, 2026-11-15) — PASS.** The audit ran on `7c5b45c67` (`[FORMULA-AUDIT] completed in 6ms PASS=9 WARNING=1 FAIL=0`, out.log). Both rows of the pair refreshed instead of inserting: `[AlertsService] refreshed 7151827f-c2a7-4af4-8901-be95524e2329 mode=paper type=formula_audit acknowledged=true` and `... 5d665e33-34d5-418b-8b4e-637e55322879 mode=live ... acknowledged=false`; `system_alerts` reads paper `timestamp 03:00:00.341215` acknowledged t, live `03:00:00.4528` acknowledged f. Crash line `unique_global_alert`: 0 in today's `error.log` (47,170 lines since the 00:00Z rotation). Positive control: the rotated `error__2026-11-15_00-00-00.log` (holding 11-14) carries exactly the old line, `2026-11-14 03:00:00 [FORMULA-AUDIT] ❌ Alert creation error: duplicate key value violates unique constraint "unique_global_alert"`, and `error__2026-11-14_00-00-00.log` one more — the instrument sees the crash; it did not happen tonight. DEPLOY_WINDOWS row closed at 03:12Z.
 - **Next (after leg 1):** legs 2-5 (the OBJ-4 carrier within 7 days, or UNOBSERVED) and Step 8.
+
+## Step 7 interim leg reads — 2026-11-16 ~12:30Z (CC-B), window 2026-11-14T21:15Z → 11-21T21:15Z
+
+**Interim, not the Step-8 read:** the window is still open, so each leg below is re-read at its end.
+
+- **Leg 2 — feed health, natural. Three alerting cycles OBSERVED, each read individually:**
+  - **The cycles:** 2026-11-14 22:50:14Z and 23:10:06Z (`out__2026-11-14_12-23-22.log`), and 2026-11-15 00:50:14Z (`out__2026-11-15_16-10-54.log`).
+  - **What each logged, in order:** `[FeedIntegrity] Creating warning alert` → `AlertSync … Broadcasting alert creation` (×2, live and paper) → `✅ Check complete … Grade: C, Status: warning`.
+  - **The 23:10 cycle refreshed the 22:50 rows,** carrying the same ids `22f1ca44…` / `b7794840…` (OBJ-1's refresh). The 00:50 cycle carries new ids `1e61157e…` / `186a7bbf…`.
+  - **`Check failed` after the deploy: 0.** Positive control: the same grep over `error__2026-11-03…11-13` returns 2+1+8+4+5 = 20 lines in 5 files, which is Langston's pre-audit measurement exactly.
+  - **The cron verifier reports `feed_integrity_cron healthy` at every 15-minute check across the three cycles.** `mature_occurrence=2026-11-14T22:50:00Z` at 23:00:26Z, and `2026-11-15T00:50:00Z` at 01:00:26Z; for 23:10 the boundaries are 23:15 / 23:20 healthy.
+  - **Residual, named:** the per-occurrence `succeeded` row in the cron occurrence table was **not read**. The direct database read path is paused under the KD-93 interim rule (no hand-built staging login). The verifier's `healthy` status is the instrument used.
+  - **Cron alert rows for `feed_integrity_cron` after the deploy:** only 2026-11-16 04:25-05:53Z (`claim_unavailable`, `stale_fire_evidence` ×3). They fall inside the 04:20-05:20Z database outage (`#1259`), not on an alerting cycle. Read, not a leg-2 failure.
+- **Leg 4 — error-log sweep, interim:**
+  - `unique_global_alert` lines after the deploy instant: **0** (`error__2026-11-16_00-00-00.log`, which holds 11-15, and the live `error.log`, which holds 11-16 to ~12:30Z).
+  - Positive control: `error__2026-11-15_00-00-00.log` (holding 11-14) has 1 line, 2026-11-14 03:00:00Z `[FORMULA-AUDIT] ❌ … unique_global_alert`, which is before the deploy.
+  - This cannot see the second index (F-5).
+- **Leg 5 — every deploy in the window, interim:**
+  - Staging reflog HEAD movements from 7c5b45c67 (21:15:00Z, the deploy) onward: `f8fc53153` (11-15 03:09), `3e2504129` (04:22), `84eeb168e` (11:05), `8fac86e5e` (11-16 03:38, again 06:07). **All carry 7c5b45c67** (`git merge-base --is-ancestor`).
+  - Positive control: the four 11-14 movements before the deploy (`9591ba8c2`, `415b3051f`, `65132e2eb`, `cc1a1c2df`) read MISSING.
+- **Next:** the same three legs re-read at the window's end (2026-11-21T21:15Z), then Step 8.
