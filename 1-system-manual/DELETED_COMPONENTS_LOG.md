@@ -1686,3 +1686,13 @@ Archive: git history is authoritative (this is a field-retirement within live fi
 **RESTORE PATH:** git at `b1634120e`, or the archived copy below.
 **ARCHIVE:** `1-system-manual/_archive/deleted-code/active-execution-engine.venue-pause-exit-block.20261116-B-XSTOCK-BID-TRIGGER-RELAND.ts.removed`.
 **COMMIT:** the C-P5 retirement Step-3 commit.
+
+## 2026-11-16 — two ad-hoc database helpers on staging (`w166b-pgq.py`, `pgq_pooler.py`) — B-DB-READ-TOOL Step 7 (pre-audit §5 amendments 1-3), Infra Claude
+| what | why | blast radius |
+|---|---|---|
+| `/home/deploy/w166b-pgq.py` (19 lines, created 2026-11-13 by Infra Claude for the 166b weekend evidence) and `/home/deploy/pgq_pooler.py` (7 lines, created 2026-11-16 04:30:03Z during the `#1259` ban — the session-pooler test; author inferred from timing) | superseded by `/usr/local/bin/dt-sql` (KD-96). `w166b-pgq.py` was the prior art (decode, `PGPASSWORD`, `sslmode=require`, read-only); `pgq_pooler.py` connected through a pooler given on the command line. Both lived only on staging, never in the repo. | 0 callers: Langston's trace over the 86 top-level `/home/deploy` scripts and the readable units, plus root's crontab read as root (0 lines naming `pgq`/`psql`). Deleted only after `dt-sql` returned live rows (16:46Z, as root and as deploy), per Langston's amendment 2. |
+
+**RESTORE PATH:** the archived copies below are byte-identical to the deleted files (sha256 `dadd7476…` and `0535d18a…`, measured both sides before deletion). Neither holds a credential: both read `/home/deploy/dawntrader/.env` at run time (a search for a credential-bearing URL found none in either; the same search finds the one in `.env`).
+**ARCHIVE:** `1-system-manual/_archive/deleted-code/w166b-pgq.py.removed`, `1-system-manual/_archive/deleted-code/pgq_pooler.py.removed`.
+**WHAT STAYS:** the ~48 other `psql` helpers in `/home/deploy` (mostly Langston's `lang_*.sh`) — not this batch's; proposed as `B-DB-HELPER-RETIRE` for Kyle's list.
+**COMMIT:** the B-DB-READ-TOOL Step-7 commit.

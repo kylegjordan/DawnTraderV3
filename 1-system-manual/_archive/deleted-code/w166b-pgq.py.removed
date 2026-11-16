@@ -1,0 +1,19 @@
+#!/usr/bin/env python3
+"""Read-only psql against staging's DATABASE_URL, the URL passed by ENVIRONMENT, never argv (no password in ps).
+Usage on staging as deploy: python3 pgq.py < query.sql"""
+import os
+import subprocess
+import sys
+from urllib.parse import urlparse, unquote
+
+url = None
+for ln in open("/home/deploy/dawntrader/.env"):
+    if ln.startswith("DATABASE_URL="):
+        url = ln.split("=", 1)[1].strip().strip('"').strip("'")
+if not url:
+    sys.exit("no DATABASE_URL")
+u = urlparse(url)
+env = dict(os.environ, PGHOST=u.hostname or "", PGPORT=str(u.port or 5432), PGUSER=unquote(u.username or ""),
+           PGPASSWORD=unquote(u.password or ""), PGDATABASE=(u.path or "/").lstrip("/").split("?")[0],
+           PGSSLMODE="require", PGOPTIONS="-c default_transaction_read_only=on -c statement_timeout=60000")
+sys.exit(subprocess.run(["psql", "-X", "-q", "-v", "ON_ERROR_STOP=1", "-P", "pager=off"], env=env, stdin=sys.stdin).returncode)

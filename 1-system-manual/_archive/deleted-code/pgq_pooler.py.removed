@@ -1,0 +1,7 @@
+import os,subprocess,sys
+from urllib.parse import urlparse, unquote
+url=[l.split("=",1)[1].strip().strip(chr(34)).strip(chr(39)) for l in open("/home/deploy/dawntrader/.env") if l.startswith("DATABASE_URL=")][0]
+u=urlparse(url); ref=u.hostname.split(".")[1]
+host=sys.argv[1]; port=sys.argv[2]
+env=dict(os.environ,PGHOST=host,PGPORT=port,PGUSER=(sys.argv[3] if len(sys.argv)>3 else "postgres."+ref),PGPASSWORD=unquote(u.password or ""),PGDATABASE="postgres",PGSSLMODE="require",PGCONNECT_TIMEOUT="10")
+sys.exit(subprocess.run(["psql","-X","-q","-c","select now(), pg_is_in_recovery(), pg_postmaster_start_time()"],env=env).returncode)
