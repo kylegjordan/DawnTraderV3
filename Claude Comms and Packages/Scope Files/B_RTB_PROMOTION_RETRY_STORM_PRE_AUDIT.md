@@ -468,3 +468,65 @@ The window has no deploy, and it is before the 8c flip.
 - Likely cause, labelled a **hypothesis:** an open or close between the `MULTI_PROMOTE` snapshot and the refusal inside the same pass.
 
 **Script:** staging `/tmp/r3_ccb.py`. Trade-list pull: `/tmp/ccb_trades_*.json`.
+
+---
+
+## 11. R3 baseline r2 — Langston's review (Discord 1571880128420520027): F1-F7 answered from data on disk. **§10's "PASS 517/517" is SUPERSEDED by 11.2.**
+
+### 11.1 The object, stated (his re-derivations folded)
+- **Build:** the 517 refusals came from build **`cd2b794de`** (in force 11-12 12:15:09Z → 11-13 21:03:28Z), not the ref this file is read at. `server/services/trade-safety.ts` (the guard) and `server/services/guardrail-settings.ts` (`getMoneyHeld`) are outside the files changed between that build and today's head, so the guard is behaviourally the same.
+- **The formula with its middle term:** money held = anchor + straddler entry cost + realized P/L.
+  - **Straddlers measured, not assumed:** `straddlers=0 straddleEntryCost=0.00` is the **only** value across all **143,112** `[MONEY_HELD] mode=paper` lines retained (2026-11-10 14:58:00Z → 2026-11-16 13:31:47Z).
+  - **`anchorVersion=5` is the only version** in those lines, so there is no anchor event inside the window. Each re-run asserts both again.
+
+### 11.2 F1 — the deciding test, as he defined it
+- **Test:** the shrink explains a refusal only where the refused ticket **would have fitted** at the money held when the book was bought (`projected <= avg_at_open`) **and** does not fit now (`projected > max`).
+- **Result on the 517:**
+  - **363 / 517 (70.2 %) — the shrink alone explains the refusal.**
+  - **154 / 517 — the shrink alone does NOT explain it.** Every one of the 154 has the same **7** book members opened before 2026-11-07, while B-BALANCE-SESSION-PAIRING's money-held basis (`e0e68dfdb`, 2026-11-07) was not yet in place:
+    - AMZN/USD 11-05 21:38 $38.56 · KKR/USD 11-05 16:26 $38.88 · EPAM/USD 11-05 14:55 $39.71 · BDX/USD 11-05 14:49 $39.74 · WM/USD 10-30 13:55 $38.99 · ABBV/USD 10-30 12:30 $38.68 · UL/USD 10-30 11:17 $38.66.
+    - Each is ≈ $820 × 0.05 × 0.97 = $39.77, i.e. sized on the **old $820 basis**, not on money held at its open time.
+  - **Pricing those 7 at the $820 basis they were sized on, all 154 are explained (0 left).**
+- ⇒ **Two causes, both measured:**
+  - **(a) the structural one:** positions keep the size they were given while realized losses shrink the pot (363);
+  - **(b) the transitional one:** the 11-07 basis change left larger, older tickets in the book (154), as the record §4 and ANALYST named it.
+  - These 7 are KD-77's seven manual closes (2026-11-13 23:52Z), so (b) has since cleared itself. (a) does not.
+  - **517 / 517 are explained by "the book was sized on a bigger basis than the money held now", with none left over.** §10's "average-exceeds" PASS was the weaker statement and is withdrawn as the gate.
+
+### 11.3 F2 — the positive control on the at-open side
+- Every book member opened after stdout reach (2026-11-10 14:58Z) has a logged `MONEY_HELD` line at its own open time.
+- **Reconstructed vs logged at the open instant: 103 / 103 exact to the cent; maximum absolute difference $0.00.** The lag from the open to the nearest earlier logged line is 0-1 s, for example LLY/USD 2026-11-12T14:48:01Z 563.45 = 563.45, and SNAP/USD 2026-11-10T15:05:52Z 576.79 = 576.79.
+- ⇒ **The at-open reconstruction is controlled where the log reaches.** The older opens use the same arithmetic over the same trade list, and the global sum is controlled (−$260.36 = the live line).
+
+### 11.4 F3 — the minimum-margin refusal and the error bound
+- **Error bound on the reconstruction:** $0.00 against 103 at-open instants plus 517 refusal instants.
+- **The minimum-margin refusal:** 2026-11-13T16:44:34Z, current $580.63, projected $609.24, max $589.88, average money held at the book's open times $594.60, 18 members.
+  - It is one of the 154: by (a) alone it fails (609.24 > 594.60); with the 7 at their $820 basis it is explained.
+  - The §10 margin of $4.72 (it rounded to $4.73 there) **sits inside the in-window money-held spread** of $558.07-$589.88. That is why §10's test was not decision-grade, and why 11.2 replaces it.
+
+### 11.5 F4 — the 7 / 517 residual, enumerated; my hypothesis was wrong
+- **No open or close falls between the `MULTI_PROMOTE` snapshot and any of the 7 refusals,** all on 2026-11-13 between 09:46:03Z and 10:42:03Z, each 1 s after its snapshot. Enumerated: the event list is empty for every one.
+- **The real cause:** a `never_filled` row, **Q/USD, opened 09:42:22.756Z and closed 10:42:23.661Z**, spans exactly those 7 instants. A pending maker entry **holds a slot** in the engine's open-position count, and my book excluded `never_filled` rows. Reconstructed members 16 + 1 pending = 17 = `maxTrades 20 − openSlots 3`.
+- `maxTrades` is read from each `MULTI_PROMOTE` line (a read site), not taken as a constant.
+- **This also bears on the fix:** a pending maker position consumes a slot. Whether it consumes **exposure** is settled at Step 3 by reading `getActivePositions` (open question, named).
+
+### 11.6 F5 — the filtered close count, at the same instant
+- Paper trades closed after the anchor and at or before 2026-11-16T12:37:47Z with a net P/L: 825. **Excluding `never_filled`: 715 = the live line's `closes=715`.**
+- The 110 `never_filled` rows all carry net P/L 0, so they do not move the sum.
+- Asset classes in the population: **crypto_spot and xstock_spot**, mode paper.
+
+### 11.7 F6 / F7 — rule 24, settled before Step 3
+- **At 100 %, `checkMaxTotalExposure` compares committed cash at cost with capital held at cost.** It is a cash-availability check, and a refusal with `openSlots > 0` is the expected state of a book that is fully committed on cash. ⇒ **Outcome (2): working as designed, unaddressed.**
+- **What was unaddressed is that promotion does not know cash is exhausted.** It claims, and loses, a signal the cap was always going to refuse. That is exactly what this batch's design already answers:
+  - **OBJ-2 is admission control on free cash, ABOVE the claim** (Kyle's intent: *never consume a signal when the money is short*).
+  - The restore/park budget (C1) is **not** the money answer. It governs the non-money failures (MAKER_MARKETABLE_DROPPED, DEPTH_GATE …) and the post-claim money **races**.
+- **The structural cause (a) is not "fixed" by this batch, and is not a defect.** Capacity stays about 17 while the pot is down; the fix stops the signals from being destroyed. Re-sizing tickets against the pot is row 9i (`#1135`), out of scope (§5).
+
+### 11.8 Re-run assertions (carried to every later R3-style read)
+For each re-run:
+- assert one anchor version and no anchor event inside the window;
+- assert straddlers = 0, or carry the term;
+- count pending (`never_filled`-to-be) rows as slot holders;
+- read `maxTrades` from the line.
+
+Scripts: staging `/tmp/r3b_ccb.py`, `/tmp/r3c_ccb.py`, `/tmp/r3d_ccb.py`.
