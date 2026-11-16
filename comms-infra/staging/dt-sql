@@ -372,7 +372,7 @@ def entry(args):
     try:
         return main(args)
     except SystemExit as exc:
-        if isinstance(exc.code, int):
+        if isinstance(exc.code, int) and exc.code != 1:      # 1 is published as "logged in, the SQL failed" only
             return exc.code
         print(str(exc.code), file=sys.stderr)
         return 2

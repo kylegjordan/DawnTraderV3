@@ -284,6 +284,20 @@ r = subprocess.run([sys.executable, build(psql=os.path.join(work, "no-such-psql"
                    text=True, timeout=60)
 check("psql that cannot even start: exit 2 (not 1), and its INTENT stays so the next call locks 'ambiguous'",
       r.returncode == 2 and intent(), (r.returncode, intent(), r.stderr[-200:]))
+import importlib.machinery
+import importlib.util
+_ldr = importlib.machinery.SourceFileLoader("dt_sql_copy", build(psql=FAKE_SHIM))
+_mod = importlib.util.module_from_spec(importlib.util.spec_from_loader("dt_sql_copy", _ldr))
+_ldr.exec_module(_mod)
+
+
+def _raise_exit1(args):
+    raise SystemExit(1)
+
+
+_mod.main = _raise_exit1
+check("a SystemExit(1) from anywhere is reported as 2, never 1 (1 means only 'logged in, the SQL failed')",
+      _mod.entry([]) == 2)
 tool = build(psql=FAKE_SHIM)
 
 print("== 8. the psql wrapper")

@@ -43,6 +43,8 @@ MUTANTS = [
      '        argv += ["-f", opts["file"]] if opts["file"] else ["-f", "-"]  # always'),
     ("BEGIN READ WRITE slips the guard", "dt-sql", r'|\bread\s+write\b"', r'|transaction\s+read\s+write"'),
     ("an unexpected error around the attempt exits 1", "dt-sql", "        return 2" + NL + NL + NL + 'if __name__', "        return 1" + NL + NL + NL + 'if __name__'),
+    ("an int SystemExit(1) passes through as 1", "dt-sql", "        if isinstance(exc.code, int) and exc.code != 1:",
+     "        if isinstance(exc.code, int):"),
     ("a pre-attempt SystemExit exits 1", "dt-sql", "        print(str(exc.code), file=sys.stderr)" + NL + "        return 2",
      "        print(str(exc.code), file=sys.stderr)" + NL + "        return 1"),
     ("piped SQL beside -c is silently dropped", "dt-sql", '    if (opts["sql"] is not None or opts["file"] is not None) and piped_input_waiting():',
