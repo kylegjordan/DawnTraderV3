@@ -65,6 +65,8 @@
 
 - **NUDGE 11-16 11:31Z:** NEW - CLEARED: started row 9j Step 1 (pool-fix scope), pausing for PFC readings 14:45Z/20:30Z.
 
+- **NUDGE 11-16 12:01Z:** OLD (idle since 10:10Z) - asked if #705 econnrefused-retry fix is waiting on Langston or free.
+
 # OPEN
 - Archived 2026-11-04 · stale-local-session-ids → `1-system-manual/pm/archive/memory/2026-11.md`
 - Hourly "Wake watcher heartbeat" sessions pile up unarchived in the sidebar — ask Kyle whether to archive.
