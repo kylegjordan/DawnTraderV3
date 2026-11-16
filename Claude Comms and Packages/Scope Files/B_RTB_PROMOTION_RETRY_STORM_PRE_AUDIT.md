@@ -203,7 +203,16 @@ MISTAKE: wrong-object [B-RTB-PROMOTION-RETRY-STORM] — "by construction" claime
 - the pm2 restart counter;
 - an assertion, with the evidence, that no restart fell between the build write and that start.
 
-The `lifetime.pmUptime` of that generation (Langston C-3) is recorded beside it. If the two disagree, that disagreement is reported, not resolved silently. | 8c split; ANALYST (1)-(5) |
+The `lifetime.pmUptime` of that generation (Langston C-3) is recorded beside it. If the two disagree, that disagreement is reported, not resolved silently.
+
+**Langston's two conditions (Discord 1571862636457627740):**
+- **(i)** "carries 9j's code" is an **ancestry test**: `git merge-base --is-ancestor <9j's landed sha> <BUILD_SHA>`, never sha equality.
+- **(ii)** each stamp names its read-site:
+  - `pm2.log` line and position for the online line;
+  - `level-basis-funnel.jsonl` row for `lifetime.pmUptime` / `processStartedAt`;
+  - `pm2 jlist` for `pm_uptime` and the restart counter.
+
+**The deploy names every open window by batch token** (seven at `f77ea08df`, 8c's being `B-PRICE-SIDE-BY-JOB`). | 8c split; ANALYST (1)-(5); Langston 1571859426703441994, 1571862636457627740 |
 
 ## 5. The failure-exit table with verdicts
 
