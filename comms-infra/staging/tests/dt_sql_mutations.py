@@ -59,6 +59,7 @@ MUTANTS = [
     ("a refused attempt is not audited", "dt-sql", '        log("refused_readonly_sql", sql_head=sql.strip()[:160])', '        pass'),
     ("no exit row (the tool's real exit is not logged)", "dt-sql",
      '    log("exit", exit=code, mode=("status" if "--status" in args else "unlock" if "--unlock" in args else "query"))', '    pass'),
+    ("the alert row calls npm's code rc again", "dt-sql", '        log("alert", alert_rc=r.returncode)', '        log("alert", rc=r.returncode)'),
     ("the log calls psql's code rc again", "dt-sql", "            log(kind, psql_rc=rc)", "            log(kind, rc=rc)"),
     ("--unlock takes any actor", "dt-sql", "    if by not in ACTORS:", "    if False:"),
     ("the wrapper keeps libpq's default sslmode", "psql-wrapper", ': "${PGSSLMODE:=require}"', ': "${PGSSLMODE:=}"'),

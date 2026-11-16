@@ -169,7 +169,7 @@ def alert(arm, detail):
                         "--title", title, "--body", body]
     try:
         r = subprocess.run(argv, capture_output=True, text=True, cwd=APP_DIR, timeout=150)
-        log("alert", rc=r.returncode)
+        log("alert", alert_rc=r.returncode)                 # npm's code — never read as dt-sql's exit
     except Exception as exc:                                       # noqa: BLE001 — the lock stands either way
         log("alert", error=str(exc)[:200])
 
@@ -382,7 +382,8 @@ def entry(args):
     except Exception as exc:                                       # noqa: BLE001
         print("dt-sql: unexpected error before or around the attempt: %s: %s" % (type(exc).__name__, exc), file=sys.stderr)
         code = 2
-    # ⛔ ONE "exit" line for EVERY call — refusals, busy, locked, usage errors included — carrying the tool's real exit
+    # ⛔ ONE "exit" line for EVERY call BY ROOT OR DEPLOY (another account cannot write the 0750 state dir; log()
+    #    swallows that — such a call also achieves nothing) — refusals, busy, locked, usage errors included — carrying the tool's real exit
     #    code (Langston Step 8 F-1/F-2: the log showed what ran but not what was attempted and blocked, and its psql
     #    rc 3 read as an exit code that is really 1). Reaches here only in the process that did the work (as root the
     #    first process execv's into deploy and never returns).

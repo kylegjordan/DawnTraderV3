@@ -214,6 +214,9 @@ lk = locked()
 check("a wrong password: exit 4, LOCKED arm 'credential'", r.returncode == 4 and lk and lk["arm"] == "credential", (r.returncode, lk))
 check("... and a critical alert is raised", os.path.exists(alert_log) and "critical" in open(alert_log).read()
       and "dt-sql-credential-locked" in open(alert_log).read())
+lr = [json.loads(l) for l in open(os.path.join(state, "log.jsonl"))]
+check("the alert row carries npm's code as alert_rc, never as rc", any(e["event"] == "alert" and "alert_rc" in e and "rc" not in e
+      for e in lr), lr)
 n = len(calls())
 r = run(tool, "-c", "select 1")
 check("the NEXT call refuses (exit 4) with NO second attempt", r.returncode == 4 and len(calls()) == n, (r.returncode, len(calls())))
