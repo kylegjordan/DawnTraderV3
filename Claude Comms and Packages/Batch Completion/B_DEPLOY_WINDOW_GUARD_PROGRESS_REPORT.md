@@ -70,6 +70,18 @@ Read-sites: staging `journalctl -u dt-install-drift.service` (the `deploy_window
 
 **Known code residual surfaced by A-1, recorded rather than fixed here:** `WAKE_NAME` maps a SEAT (`cc-c` → "ANALYST Claude"), so when the Codex crew holds that seat, the owner still lands in the post's opening list (the head), though nothing wakes it. (The line *"the alert reaches every session"* renders in the TAIL, beside *"not woken from here"*, `dt-deploy-notice.py:149`, not in the head — corrected per Langston.) The adjudication rule in (b-ii) keeps this from deciding O-1; the wording in the post is the residual.
 
+### 3a. O-1 RESULT — the data, against the criterion as written (read 2026-11-16 ~03:50Z by Infra Claude)
+**The prerequisite was met** before any of these: other owners' windows were filed (`B-PRICE-SIDE-BY-JOB`, cc-c, among others).
+**The first occurrence is NOT the 11-16 one.** Three deploys have proceeded into open windows: `3e2504129d2d` (cc-a, 2026-11-15T04:22:21Z, into `B-PRICE-SIDE-BY-JOB`/cc-c) · `84eeb168ef86` (cc-a, 11-15T11:05:02Z, same window) · `8fac86e5e33e` (cc-c, 11-16T03:38:30Z, seven windows, four owners). O-1 is judged on the **first**:
+- **(a) notice line:** `attempt_key=20261115T042221Z … in_window=B-PRICE-SIDE-BY-JOB/cc-c/open window_notice=alerted` in staging `/home/deploy/dawntrader-deploy.notice`. ✅
+- **(b-i) START post:** `1571379854820114504` (Helsinki inbox, `cc_outbound`, sender `Deploy notice`), opening list `ANALYST Claude —`, the window's only owner. No `others` tail is needed (no other owner). ✅
+- **(b-ii) wake record for ANALYST Claude:** asked in-channel 2026-11-16 (`1571731724403085353`). **OPEN until ANALYST quotes its watcher line** (or states it was not armed, which is a residual).
+- **(c) outcome post within 30 min:** `1571380358031872051` at 04:24:32Z, *"COMPLETED (record deployed_at=2026-11-15T04:22:48Z)"*, 2 min 11 s after the attempt. ✅
+- **(d) watcher resolve:** Helsinki `/var/log/dt-deploy-notice/log` `04:24:33Z RESOLVED deploy-in-window:B-PRICE-SIDE-BY-JOB:3e2504129d2d…:20261115T042221Z rows=1`; the alert `91459622…` reads `resolved` by `deploy-notice-watcher`. ✅
+**Corroboration from the multi-owner case (11-16, not the judged instance):** the notice line lists all seven windows. The START post `1571731414079246449` opens `OLD Claude, NEW Claude, ANALYST Claude, Infra Claude —`, every owner of the four. Seven `RESOLVED … rows=1` lines at 03:39:32-40Z; all seven alert rows are resolved by `deploy-notice-watcher`. The outcome post `1571731415421296863` *"COMPLETED"* followed within ~1 min. **(b-ii) for Infra Claude:** my watcher printed `WAKE[Deploy notice via Discord->CC-INFRA]` on post `1571731414079246449`.
+**MISSED, recorded:** the 11-15 occurrences went unjudged for ~23 h. O-1's data existed before this read, and nothing told the owner. That is a gap in the window's own reach: the owner of the guard is woken only for windows they own, and these were cc-c's. DISPOSITION: folded into this batch; the decision record notes it.
+**O-2 (first stale window) and O-3 (first refusal in the wild): not yet occurred.** The batch stays OPEN on them.
+
 ## 4. What is unproven, stated as unproven
 
 - **LIMIT-2 (Langston, Step 8): none of the new paths has had a real input.** The notice file does not exist on staging yet; the stale-alert mint has never run (zero `deploy-window-stale:*` rows all-time). Every count so far is from a sandbox or a fixture: parser 52/0 with 15/15 mutants; sandbox 27/27; drift 87/87 with 51/51 mutants; watcher 29/29 with 10/10; gate 16/16.
