@@ -56,9 +56,15 @@ MUTANTS = [
     ("liveness ignores planned windows (a planned off window pages as a dead feed)", T,
      [("liveness.py", "            covered = planned_overlap(prev, ts, windows) if delta > LIVENESS_GAP_SECONDS else 0.0",
        "            covered = 0.0")]),
+    ("a gap 'recovers' with no row arrived (B-1)", T,
+     [("liveness.py", '        elif open_gap and last_dt <= datetime.fromisoformat(open_gap["started_at"]):', "        elif False:")]),
+    ("a failed OFF keeps its planned window (B-2)", T,
+     [("liveness.py", "            b = ts" + NL, "            pass" + NL)]),
+    ("a dead controller's OFF stays planned to the full bound", T,
+     [("liveness.py", "            end = min(end, max(off, alive_until)", "            end = max(end, max(off, alive_until)")]),
     ("an OFF with no ON stays planned forever (the dead-man goes blind)", T,
-     [("liveness.py", "        out.append((off, max(midnight, off + timedelta(seconds=MAX_BLOCK_S))",
-       "        out.append((off, max(midnight, off + timedelta(days=3650))")]),
+     [("liveness.py", "        end = max(midnight, off + timedelta(seconds=MAX_BLOCK_S))",
+       "        end = max(midnight, off + timedelta(days=3650))")]),
 ]
 files = sorted({f for _n, _t, edits in MUTANTS for f, _a, _b in edits})
 orig = {f: open(f, encoding="utf-8").read() for f in files}

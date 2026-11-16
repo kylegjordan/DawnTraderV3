@@ -35,6 +35,7 @@ import budget
 import liveness
 import providers
 from config import (
+    BIRTHCAP_STATE_NAME,
     BIRTHCAP_DIVERGENCE_MIN, BIRTHCAP_DIVERGENCE_SHARE, BIRTHCAP_FAILED_OFF_MIN_ROWS,
     BIRTHCAP_FAILED_OFF_RATE_SHARE, BIRTHCAP_OFF_GRACE_S, BIRTHCAP_PHASE_STEP, BIRTHCAP_PLANNED_OFF,
     BIRTHCAP_RESERVE_RATE_ERROR, BIRTHCAP_SWITCHES, BIRTHCAP_TRUNCATED, BIRTHCAP_W_MAX, BIRTHCAP_W_MIN,
@@ -45,7 +46,7 @@ from store import load_state, save_state
 
 UTC = timezone.utc
 LOG = logging.getLogger("token-watch.birthcap")
-STATE = "birthcap"
+STATE = BIRTHCAP_STATE_NAME
 RESULT = "birthcap_result"
 ENABLE_FLAG = f"{STATE_DIR}/birthcap.enabled"
 RESULT_MAX_AGE = timedelta(minutes=5)
@@ -277,7 +278,7 @@ def tick(now: datetime | None = None, usage_fn=providers.helius_usage, put=provi
                 logged = 0                                    # the state counter below is the floor
             used = max(logged, int(calls.get(today, 0)))
             if used >= hard:
-                pages.append(_page("birthcap-disabled-not-restored-%s" % today, "critical",
+                pages.append(_page("birthcap-disabled-restore-capped-%s" % today, "critical",
                                    "Birth cap is disabled but could not restore the feed — hard daily ceiling reached",
                                    "%d vendor calls today against a hard ceiling of %d; applied %s. Check the webhook "
                                    "in the Helius dashboard." % (used, hard, st.get("applied"))))

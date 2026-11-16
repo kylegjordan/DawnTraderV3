@@ -258,7 +258,9 @@ for i in range(60):
 hard_d = config.birthcap_switch_ceiling(12) + birthcap.HARD_MARGIN
 check("disabled and the restore keeps failing: it RETRIES each tick, up to the hard ceiling, then stops",
       len(v.puts) == hard_d and r["action"] == "disabled-restore-capped", (len(v.puts), hard_d, r["action"]))
-check("one page key per UTC day while the restore fails", keys == {"birthcap-disabled-not-restored-%s" % off_time.strftime("%Y-%m-%d")}, keys)
+check("one page key per UTC day per cause while the restore fails (failed PUT, then the hard ceiling)",
+      keys == {"birthcap-disabled-not-restored-%s" % off_time.strftime("%Y-%m-%d"),
+               "birthcap-disabled-restore-capped-%s" % off_time.strftime("%Y-%m-%d")}, keys)
 reset(); enable(False); v = Vendor(active=False, echo_ok=False)
 store.save_state(birthcap.STATE, {"applied": "off", "plan": full})
 open(config.BIRTHCAP_SWITCHES, "a").write("not json" + chr(10))  # log unparseable: only the state counter caps
@@ -313,6 +315,46 @@ store.save_state(liveness.STATE, {"cursor": {"path": liveness._birth_path(t_off)
                                   "last_row_at": (t_off - timedelta(seconds=5)).isoformat()})
 s = liveness.check(t_off + timedelta(minutes=20))
 check("an unreadable switch log gives no planned windows: silence opens a gap", liveness.open_gap() is not None, s)
+# B-1: a gap opened while the switch log was unreadable must not "recover" when the log later covers it
+s = liveness.check(t_off + timedelta(minutes=20))
+with open(config.BIRTHCAP_SWITCHES, "w") as fh:
+    fh.write(json.dumps({"kind": "put", "requested": "off", "requested_at": t_off.isoformat(), "ok": True}) + NL)
+s = liveness.check(t_off + timedelta(minutes=25))
+gaps = open(liveness.GAPS_PATH).read() if os.path.exists(liveness.GAPS_PATH) else ""
+check("an open gap later covered by a planned window is NOT closed as a recovery (no row arrived)",
+      "prospective_closed" not in gaps and liveness.open_gap() is None
+      and "reclassified_open_gap" in open(config.BIRTHCAP_PLANNED_OFF).read(), (gaps, liveness.open_gap()))
+# B-2: births keep arriving 29 min after an echoed OFF (it did not take), then the feed really dies
+reset()
+with open(config.BIRTHCAP_SWITCHES, "w") as fh:
+    fh.write(json.dumps({"kind": "put", "requested": "off", "requested_at": t_off.isoformat(), "ok": True}) + NL)
+store.save_state(liveness.STATE, {"cursor": {"path": liveness._birth_path(t_off), "offset": 0}})
+add_births([t_off + timedelta(minutes=m) for m in range(-5, 30)])
+s = liveness.check(t_off + timedelta(minutes=29, seconds=30))
+s = liveness.check(t_off + timedelta(minutes=50))
+check("a failed OFF (rows 29 min after it) followed by real silence opens a gap within the threshold, not at ~24 h",
+      liveness.open_gap() is not None, s)
+reset()
+with open(config.BIRTHCAP_SWITCHES, "w") as fh:
+    fh.write(json.dumps({"kind": "put", "requested": "off", "requested_at": t_off.isoformat(), "ok": True}) + NL)
+store.save_state(liveness.STATE, {"cursor": {"path": liveness._birth_path(t_off), "offset": 0}})
+add_births([t_off - timedelta(seconds=5)] + [t_off + timedelta(seconds=x) for x in (10, 30, 49, 90)])
+s = liveness.check(t_off + timedelta(minutes=50))
+check("an in-flight tail up to 90 s after the OFF leaves the planned window whole (no gap)", liveness.open_gap() is None, s)
+# a controller that died with the feed OFF: its last_tick ends the planned window
+reset()
+with open(config.BIRTHCAP_SWITCHES, "w") as fh:
+    fh.write(json.dumps({"kind": "put", "requested": "off", "requested_at": t_off.isoformat(), "ok": True}) + NL)
+store.save_state(liveness.STATE, {"cursor": {"path": liveness._birth_path(t_off), "offset": 0},
+                                  "last_row_at": (t_off - timedelta(seconds=5)).isoformat()})
+store.save_state(config.BIRTHCAP_STATE_NAME, {"last_tick": (t_off + timedelta(minutes=1)).isoformat()})
+s = liveness.check(t_off + timedelta(minutes=30))
+check("a controller silent since off+1 min: 30 min of silence is a gap, not a planned window", liveness.open_gap() is not None, s)
+store.save_state(config.BIRTHCAP_STATE_NAME, {"last_tick": (t_off + timedelta(minutes=29)).isoformat()})
+store.save_state(liveness.STATE, {"cursor": {"path": liveness._birth_path(t_off), "offset": 0},
+                                  "last_row_at": (t_off - timedelta(seconds=5)).isoformat()})
+s = liveness.check(t_off + timedelta(minutes=30))
+check("a controller still ticking: the same silence stays planned", liveness.open_gap() is None, s)
 
 print("== 10. the hourly cross-check against the vendor's own counter")
 reset(); enable(); v = Vendor()

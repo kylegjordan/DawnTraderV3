@@ -452,6 +452,8 @@ BIRTHCAP_WEBHOOK_BODY = {
     "webhookType": "enhanced",
     "txnStatus": "success",
 }
+BIRTHCAP_STATE_NAME = "birthcap"             # the controller's state file; liveness reads its last_tick (Langston gate B)
+BIRTHCAP_CONTROLLER_STALE_S = 300          # a minute timer silent this long is a dead controller, not a planned OFF
 BIRTHCAP_SWITCHES = f"{ROOT}/provenance/switches.jsonl"     # the weight record (OBJ-8)
 BIRTHCAP_PLANNED_OFF = f"{ROOT}/provenance/planned_off.jsonl"
 BIRTHCAP_TRUNCATED = f"{ROOT}/provenance/truncated_days.jsonl"
@@ -461,6 +463,7 @@ BIRTHCAP_W_MAX = 12
 BIRTHCAP_W_MIN = 4                   # below 4 the longest off-block exceeds ~4.5 h of one day
 BIRTHCAP_RESERVE_RATE_ERROR = 0.20   # one day of launch-rate error, as a share of a day's births
 BIRTHCAP_OFF_GRACE_S = 60            # in-flight tail after a pause (A5: 49 s measured)
+BIRTHCAP_OFF_PROOF_S = 120            # a census row this long after an OFF proves the OFF did not take (2 x the grace)
 BIRTHCAP_RESTART_GRACE_S = 90        # deliveries resume after a restore (A5: 55 s measured)
 BIRTHCAP_FAILED_OFF_MIN_ROWS = 4     # Langston r2-4: max(4, 0.25 x the on-window's last-5-min rate)
 BIRTHCAP_FAILED_OFF_RATE_SHARE = 0.25

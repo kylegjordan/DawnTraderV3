@@ -44,8 +44,11 @@ import os
 from datetime import datetime, timedelta, timezone
 
 from config import (
+    BIRTHCAP_CONTROLLER_STALE_S,
+    BIRTHCAP_OFF_PROOF_S,
     BIRTHCAP_PLANNED_OFF,
     BIRTHCAP_RESTART_GRACE_S,
+    BIRTHCAP_STATE_NAME,
     BIRTHCAP_SWITCHES,
     BIRTHCAP_W_MIN,
     BIRTHS_DIR,
@@ -85,7 +88,7 @@ MAX_BLOCK_S = 86400 // BIRTHCAP_W_MIN
 SWITCHES_PATH = BIRTHCAP_SWITCHES
 
 
-def planned_windows(path: str = SWITCHES_PATH) -> list[tuple[datetime, datetime | None]]:
+def planned_windows(path: str = SWITCHES_PATH, alive_until: datetime | None = None) -> list[tuple[datetime, datetime | None]]:
     """(start, end) of every planned off window: from a confirmed OFF to the next confirmed ON, widened by the
     restart grace at the end; an OFF with no ON yet is open-ended (end None)."""
     try:
@@ -109,8 +112,37 @@ def planned_windows(path: str = SWITCHES_PATH) -> list[tuple[datetime, datetime 
         #    the next UTC midnight) or one off-block at the minimum window count (86400/4 s); past that, silence is
         #    a gap again, plus two ticks and the restart grace.
         midnight = (off + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
-        out.append((off, max(midnight, off + timedelta(seconds=MAX_BLOCK_S))
-                    + timedelta(seconds=BIRTHCAP_RESTART_GRACE_S + 120)))
+        end = max(midnight, off + timedelta(seconds=MAX_BLOCK_S)) + timedelta(seconds=BIRTHCAP_RESTART_GRACE_S + 120)
+        if alive_until is not None:
+            # ⛔ a DEAD CONTROLLER cannot be keeping the feed off on purpose (Langston gate B): the window ends when
+            #    its minute timer went quiet, so a controller that died with the feed OFF is a gap within minutes,
+            #    not at the ~25 h bound above.
+            end = min(end, max(off, alive_until) + timedelta(seconds=BIRTHCAP_RESTART_GRACE_S + 120))
+        out.append((off, end))
+    return out
+
+
+def controller_alive_until() -> datetime | None:
+    """last_tick of the birth-cap controller + its staleness allowance; None when it has never run or is unreadable
+    (then the open-ended bound in planned_windows stands)."""
+    try:
+        t = load_state(BIRTHCAP_STATE_NAME, {}).get("last_tick")
+        return datetime.fromisoformat(t) + timedelta(seconds=BIRTHCAP_CONTROLLER_STALE_S) if t else None
+    except (OSError, ValueError, TypeError) as exc:
+        LOG.warning("liveness: birth-cap state unreadable (%s) — an OFF with no ON keeps its full bound", exc)
+        return None
+
+
+def void_failed_offs(windows: list, ts: datetime) -> list:
+    """A census row more than BIRTHCAP_OFF_PROOF_S after a window's OFF, and before its end, proves that OFF did not
+    take (Langston gate B, B-2). The window ENDS at that row: the silence after it is NOT planned, so a failed OFF
+    followed by a real outage opens a gap instead of hiding inside the window until its ~24 h bound. Rows inside the
+    first BIRTHCAP_OFF_PROOF_S are the in-flight tail (measured 49 s, A5) and leave the window whole."""
+    out = []
+    for a, b in windows:
+        if a + timedelta(seconds=BIRTHCAP_OFF_PROOF_S) < ts and (b is None or ts < b):
+            b = ts
+        out.append((a, b))
     return out
 
 
@@ -289,7 +321,9 @@ def check(now: datetime = None) -> dict:
     stats["rows"] = len(stamps)
 
     # ── RETROSPECTIVE ────────────────────────────────────────────────────────
-    windows = planned_windows()
+    windows = planned_windows(alive_until=controller_alive_until())
+    if last_dt is not None:
+        windows = void_failed_offs(windows, last_dt)
     prev = last_dt
     for ts in stamps:
         if prev is not None:
@@ -318,6 +352,7 @@ def check(now: datetime = None) -> dict:
                 LOG.warning("liveness: %.0fs gap in the census between %s and %s "
                             "— gap record written", delta, prev.isoformat(),
                             ts.isoformat())
+        windows = void_failed_offs(windows, ts)
         prev = ts
     if prev is not None:
         last_dt = prev
@@ -337,6 +372,15 @@ def check(now: datetime = None) -> dict:
             else:
                 LOG.error("liveness: still no census rows — silent for %.0fs",
                           silent)
+        elif open_gap and last_dt <= datetime.fromisoformat(open_gap["started_at"]):
+            # ⛔ NO ROW HAS ARRIVED since the gap opened (Langston gate B, B-1): the silence was re-classified as planned
+            #    (a switch log read late), not recovered. Never write a "closed" gap with no closing row.
+            _append_planned({"kind": "reclassified_open_gap", "started_at": open_gap["started_at"],
+                             "recorded_at": now.isoformat(), "note": "open gap now covered by a planned window; "
+                             "no census row arrived, so no recovery is recorded"})
+            st["open_gap"] = None
+            LOG.warning("liveness: open gap from %s re-classified as planned silence — no row arrived, no recovery "
+                        "recorded", open_gap["started_at"])
         elif open_gap:
             started = datetime.fromisoformat(open_gap["started_at"])
             dur = (last_dt - started).total_seconds()
