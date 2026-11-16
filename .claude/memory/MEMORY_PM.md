@@ -53,7 +53,7 @@
 
 - Archived 2026-11-16 · nudge-0231-cleared → `1-system-manual/pm/archive/memory/2026-11.md`
 
-- **RESOLVED 11-16 05:20Z: staging DB outage** 04:20:40-05:20:28Z (~60 min, likely Supabase 1h network ban lapsing; trigger unknown; Infra records incident). Loss <=132,466 rows (ticker 109,560 unrecoverable; bars 22,906 maybe refillable; xStock spot bars retained). Pooler switch cancelled. Follow-ups: OLD #705 econnrefused retry; NEW+Langston proposal to un-park 59g4 B-DB-REACHABILITY-ALERT (page + staleness ceiling + exit posture) -> Kyle with slot check; Langston note: no failover + no durable spool = item for Kyle list. ANALYST items for Kyle list: (a) 3 crons (feed-integrity, xStock QD probe, awareness) lock off on DB-unreachable until restart - design question (B-CRON-MISSED-CATCHUP behaviour); restart with Langston before 14:45Z; (b) fill-safety alert wording says "seed config" on outage. 6 paper positions unobserved 04:20-05:20, stop crossings unknowable. Langston ruled SEPARATE: (1) un-park 59g4 B-DB-REACHABILITY-ALERT as filed (page only); (2) new B-DB-UNREACHABLE-POSTURE (#1260 a959cc343, CC-B, options paper incl. venue-resting stops); both before live after 11-20 read + 2a/2b; pushes back B-PRICE-FEED-COVERAGE (order 3). Put to Kyle ~05:50Z. Slot-check 20261116T054501Z_CC-B_two-items-* UNCOMMITTED, commit with KD row. ANALYST items -> small-items bundle: (a) cron self-lock on DB outage - 6 sites in code, one alert then quiet, some misses unrecorded; question for Kyle: should a plain outage stop a job (not urgent); (b) alert wording. Langston also proposes Infra item: fast lane for restart-permission asks (waited 48 min). Not placed.
+- Archived 2026-11-16 · outage-resolved-0520z → `1-system-manual/pm/archive/memory/2026-11.md`
 
 - Archived 2026-11-16 · nudge-0801-withdrawn → `1-system-manual/pm/archive/memory/2026-11.md`
 
@@ -61,7 +61,7 @@
 
 - Archived 2026-11-16 · nudge-0931-census-done → `1-system-manual/pm/archive/memory/2026-11.md`
 
-- **KD-93 CAUSE FOUND (OLD, Discord 1571824719739486239):** Langston probe from staging 04:20:11Z sent the URL-encoded DB password undecoded (sed off .env) -> 2 failed logins x2 -> Supabase Fail2ban bans staging IP ~30 min+. App/pool not at fault. Infra proposal put to Kyle ~09:55Z: (a) PREVENT read-only DB query tool, Infra next after birth-cap, ahead of conversation index (slot-check 20261116T095431Z_CC-INFRA_kd-93-* UNCOMMITTED); (b) RECOVER auto-unban watcher needs Kyle mgmt token (beta API, IPv4-only documented; IPv6 untested). Interim rule sent to all: no hand-built DB logins on staging.
+- Archived 2026-11-16 · kd93-cause-found → `1-system-manual/pm/archive/memory/2026-11.md`
 
 - **NUDGE 11-16 11:31Z:** NEW - CLEARED: started row 9j Step 1 (pool-fix scope), pausing for PFC readings 14:45Z/20:30Z.
 
