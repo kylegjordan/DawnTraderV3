@@ -127,6 +127,16 @@ r = run_guard(base, ["follow_up.py", "ops/unit_failed.py"], raw={"t@.service": "
               "ExecStart=/usr/bin/python3 /opt/token-watch/ops/unit_failed.py %i" + NL + "MemoryMax=64M" + NL})
 check("H4 POSITIVE CONTROL: a template unit whose script is placed passes", r.returncode == 0, (r.returncode, r.stderr[-300:]))
 
+print(NL + "=== TasksMax IS A GUARDED CAP TOO (B-TOKEN-WATCH-BIRTH-CAP, Langston §13 (ii): the birthcap mint aborted at 32)")
+r = run_guard(base, ["follow_up.py"], raw={"x.service": "[Service]" + NL +
+              "ExecStart=/usr/bin/python3 /opt/token-watch/birthcap.py --tick" + NL + "TasksMax=64" + NL})
+check("T1 a NEW TasksMax on a script this run does not place REFUSES", r.returncode != 0
+      and "TasksMax" in r.stderr and "birthcap.py" in r.stderr, (r.returncode, r.stderr[-300:]))
+r = run_guard(base, ["follow_up.py", "birthcap.py"], raw={"x.service": "[Service]" + NL +
+              "ExecStart=/usr/bin/python3 /opt/token-watch/birthcap.py --tick" + NL + "TasksMax=64" + NL})
+check("T2 POSITIVE CONTROL: the same TasksMax with its script in this run passes", r.returncode == 0
+      and "GUARD-PASSED" in r.stdout, (r.returncode, r.stderr[-300:]))
+
 print(NL + "=== THE SHIPPED UNIT FILES PASS THE GUARD AS THEY STAND")
 units_dir = os.path.join(PKG, "systemd")
 summary_unit = open(os.path.join(units_dir, "token-watch-summary.service"), encoding="utf-8").read()

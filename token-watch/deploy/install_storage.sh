@@ -90,18 +90,22 @@ g merge-base --is-ancestor "$PREV" origin/migration/aws-supabase || fail "previo
 #    measured nowhere). An unchanged cap on a script this installer never places (the receiver's) is not touched.
 # Langston's P12 rider, folded early: EVERY ExecStart* line (a oneshot may carry several), EVERY /opt/token-watch
 # script on them (an argument must not shadow the executable), and an INDENTED MemoryMax= (systemd honours it).
+# B-TOKEN-WATCH-BIRTH-CAP (Langston §13 (ii), 2026-11-16): TasksMax= is a measured, load-bearing cap too (the birthcap
+# mint aborted at 32, rc 134), so the same rule covers it: a NEW or CHANGED TasksMax= needs its script in this install.
 for u in $UNIT_FILES; do
-  new_cap=$(grep -E '^[[:space:]]*MemoryMax=' "$stage/units/$u" | tr -d ' \t' || true)
+  for key in MemoryMax TasksMax; do
+  new_cap=$(grep -E "^[[:space:]]*$key=" "$stage/units/$u" | tr -d ' \t' || true)
   [ -n "$new_cap" ] || continue
   old_cap=""                                          # a unit new at this sha had no cap before
   if g cat-file -e "$PREV:token-watch/systemd/$u"; then
-    old_cap=$(g cat-file blob "$PREV:token-watch/systemd/$u" | grep -E '^[[:space:]]*MemoryMax=' | tr -d ' \t' || true)
+    old_cap=$(g cat-file blob "$PREV:token-watch/systemd/$u" | grep -E "^[[:space:]]*$key=" | tr -d ' \t' || true)
   fi
   [ "$new_cap" = "$old_cap" ] && continue
   scripts=$(grep -E '^[[:space:]]*ExecStart[A-Za-z]*=' "$stage/units/$u" | grep -oE '/opt/token-watch/[^ ]+\.py' | sed 's#^/opt/token-watch/##' || true)
-  [ -n "$scripts" ] || fail "$u gains or changes MemoryMax= but no ExecStart line names an /opt/token-watch script"
+  [ -n "$scripts" ] || fail "$u gains or changes $key= but no ExecStart line names an /opt/token-watch script"
   for script in $scripts; do
-    printf '%s\n' $ALL | grep -qx "$script" || fail "$u gains or changes MemoryMax= (\"$new_cap\") but $script is not installed by this run (not in OPS/PINNED/CORE/TOOLS): a cap may not land ahead of the code it was measured on"
+    printf '%s\n' $ALL | grep -qx "$script" || fail "$u gains or changes $key= (\"$new_cap\") but $script is not installed by this run (not in OPS/PINNED/CORE/TOOLS): a cap may not land ahead of the code it was measured on"
+  done
   done
 done
 for f in $PINNED; do [ -f "$DEST/$f" ] || fail "$DEST/$f is missing: this is not the install it expects"; done

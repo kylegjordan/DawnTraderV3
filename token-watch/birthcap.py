@@ -49,6 +49,10 @@ UTC = timezone.utc
 LOG = logging.getLogger("token-watch.birthcap")
 STATE = BIRTHCAP_STATE_NAME
 RESULT = "birthcap_result"
+# pages a failed mint could not deliver, re-offered by every later mint (Langston §13 (i)): bounded in count and age
+CARRY = "birthcap_carry"
+CARRY_MAX = 50
+CARRY_MAX_AGE = timedelta(hours=24)
 ENABLE_FLAG = f"{STATE_DIR}/birthcap.enabled"
 RESULT_MAX_AGE = timedelta(minutes=5)
 TRAILING_DAYS = 7
@@ -542,10 +546,29 @@ def mint(now: datetime | None = None, mint_fn=None) -> int:
     if now - checked > RESULT_MAX_AGE:
         LOG.error("birthcap mint: the tick result is from %s — not this run's", res["checked_at"])
         return 1
-    bad = 0
-    for p in res.get("pages", []):
-        bad += not mint_fn(severity=p["severity"], dedupe_key=p["dedupe_key"], title=p["title"], body=p["body"])
-    return 1 if bad else 0
+    # ⛔ A FAILED MINT USED TO DISCARD ITS PAGES (2026-11-16 11:00Z: the false divergence page never reached the
+    #    queue). The hourly cross-check pages are made ONCE per hour, so a lost one is lost for good. Undelivered pages
+    #    are carried in state and offered again by every later mint until one lands, bounded by CARRY_MAX / CARRY_MAX_AGE.
+    carry = load_state(CARRY, {}).get("pages", [])
+    pending, seen = [], set()
+    for p in list(res.get("pages", [])) + carry:
+        if p["dedupe_key"] in seen:
+            continue
+        seen.add(p["dedupe_key"])
+        pending.append(dict(p, carried_at=p.get("carried_at") or now.isoformat()))
+    failed = []
+    for p in pending:
+        if not mint_fn(severity=p["severity"], dedupe_key=p["dedupe_key"], title=p["title"], body=p["body"]):
+            failed.append(p)
+    kept = [p for p in failed if now - _ts(p["carried_at"]) <= CARRY_MAX_AGE][-CARRY_MAX:]
+    if kept or carry:
+        save_state(CARRY, {"pages": kept, "updated_at": now.isoformat()})
+        if getattr(os, "geteuid", lambda: -1)() == 0:                                 # the mint runs as root; the file stays the tick user's
+            import shutil
+            shutil.chown(f"{STATE_DIR}/{CARRY}.json", "tokenwatch", "tokenwatch")
+    if len(failed) > len(kept):
+        LOG.error("birthcap mint: %d undelivered page(s) dropped past the carry bound", len(failed) - len(kept))
+    return 1 if failed else 0
 
 
 def main(argv: list[str]) -> int:

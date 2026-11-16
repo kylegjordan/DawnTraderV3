@@ -450,6 +450,33 @@ check("the floor holds (rule says 2, the plan runs 4): floor_binds True, below_f
 check("a plan that walks below the floor for the 900 s assert says so: below_floor True, floor_binds False",
       below.get("windows", 9) < 4 and below.get("below_floor") is True and below.get("floor_binds") is False, below)
 
+print("== 12. a failed mint does not lose its pages (Langston §13 (i))")
+reset()
+tm = datetime(2026, 11, 28, 4, 0, 30, tzinfo=UTC)
+page = {"dedupe_key": "birthcap-divergence-2026-11-28T03", "severity": "warning", "title": "t", "body": "b"}
+store.save_state(birthcap.RESULT, {"checked_at": tm.isoformat(), "pages": [page]})
+sent = []
+def failing(**k):
+    sent.append(("fail", k["dedupe_key"])); return False
+def working(**k):
+    sent.append(("ok", k["dedupe_key"])); return True
+rc = birthcap.mint(now=tm, mint_fn=failing)
+carry = store.load_state(birthcap.CARRY, {}).get("pages", [])
+check("a failed mint returns non-zero and CARRIES the page", rc == 1 and [p["dedupe_key"] for p in carry] == [page["dedupe_key"]], (rc, carry))
+store.save_state(birthcap.RESULT, {"checked_at": (tm + timedelta(minutes=1)).isoformat(), "pages": []})
+rc = birthcap.mint(now=tm + timedelta(minutes=1), mint_fn=working)
+check("the next mint (a tick with no new pages) re-offers and delivers the carried page, then clears the carry",
+      rc == 0 and ("ok", page["dedupe_key"]) in sent and store.load_state(birthcap.CARRY, {}).get("pages") == [], (rc, sent))
+store.save_state(birthcap.RESULT, {"checked_at": tm.isoformat(), "pages": [page]})
+birthcap.mint(now=tm, mint_fn=failing)
+store.save_state(birthcap.RESULT, {"checked_at": (tm + timedelta(hours=25)).isoformat(), "pages": []})
+rc = birthcap.mint(now=tm + timedelta(hours=25), mint_fn=failing)
+check("a page undeliverable for over 24 h is dropped from the carry (bounded), not kept forever",
+      store.load_state(birthcap.CARRY, {}).get("pages") == [], store.load_state(birthcap.CARRY, {}))
+store.save_state(birthcap.RESULT, {"checked_at": tm.isoformat(), "pages": [dict(page, dedupe_key="k%d" % i) for i in range(80)]})
+birthcap.mint(now=tm, mint_fn=lambda **k: False)
+check("the carry is bounded in count (CARRY_MAX)", len(store.load_state(birthcap.CARRY, {}).get("pages", [])) == birthcap.CARRY_MAX)
+
 print()
 shutil.rmtree(ROOT, ignore_errors=True)
 print("%d passed, %d failed" % (PASS, FAIL))
