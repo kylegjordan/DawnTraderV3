@@ -50,6 +50,9 @@ RESULT = "birthcap_result"
 ENABLE_FLAG = f"{STATE_DIR}/birthcap.enabled"
 RESULT_MAX_AGE = timedelta(minutes=5)
 TRAILING_DAYS = 7
+# The breaker blocks OFF switches at the ceiling; switching back ON may use HARD_MARGIN more calls, and then every
+# vendor call stops for the day (a GET or an ON-PUT that keeps failing would otherwise cost 100 credits a minute).
+HARD_MARGIN = 4
 
 
 class RecordUnreadable(RuntimeError):
@@ -312,7 +315,19 @@ def tick(now: datetime | None = None, usage_fn=providers.helius_usage, put=provi
         records, want = None, "on"
 
     applied = st.get("applied")
-    if applied is None:
+    ceiling = birthcap_switch_ceiling(int(plan.get("windows", 0)) if plan else 0)
+    hard = ceiling + HARD_MARGIN                              # beyond this, NO vendor call of any kind today
+    # the log is the count; a state-held counter is its floor, so an unreadable log cannot uncap the calls
+    calls = st.setdefault("calls", {})
+    for d in sorted(calls)[:-3]:
+        del calls[d]
+    used = max(switches_on_day(records or [], today), int(calls.get(today, 0)))
+    if applied is None and used >= hard:
+        pages.append(_page("birthcap-hard-ceiling-%s" % today, "critical",
+                           "Birth cap hit its hard daily call ceiling — no further vendor calls today",
+                           "%d vendor calls today against a hard ceiling of %d; the applied state is unknown. Check the "
+                           "webhook in the Helius dashboard." % (used, hard)))
+    elif applied is None:
         # the applied state is lost: ONE GET learns it, and it counts against the breaker
         try:
             obj = get(BIRTHCAP_WEBHOOK_ID)
@@ -324,6 +339,7 @@ def tick(now: datetime | None = None, usage_fn=providers.helius_usage, put=provi
             _append(BIRTHCAP_SWITCHES, rec)
             records.append(rec)
         budget.record_pending("switch", 1, now)               # a GET is charged like a PUT (pre-audit A3)
+        calls[today] = int(calls.get(today, 0)) + 1
         st["applied"] = applied
 
     if want == "off":
@@ -333,17 +349,23 @@ def tick(now: datetime | None = None, usage_fn=providers.helius_usage, put=provi
             want = "on"
 
     if applied != want and applied is not None:
-        ceiling = birthcap_switch_ceiling(int(plan.get("windows", 0)) if plan else 0)
-        used = switches_on_day(records or [], today)
+        used = max(switches_on_day(records or [], today), int(calls.get(today, 0)))
         if used >= ceiling and want == "off":
             pages.append(_page("birthcap-breaker-%s" % today, "critical", "Birth cap switch breaker tripped — feed left ON",
                                "%d vendor calls today against a ceiling of %d" % (used, ceiling)))
+        elif used >= hard:
+            # ⛔ even a switch back ON stops here: a PUT that keeps failing would otherwise spend 100 credits a minute
+            pages.append(_page("birthcap-hard-ceiling-%s" % today, "critical",
+                               "Birth cap hit its hard daily call ceiling — no further vendor calls today",
+                               "%d vendor calls today against a hard ceiling of %d; wanted %s, applied %s. Check the "
+                               "webhook in the Helius dashboard." % (used, hard, want.upper(), applied)))
         elif records is None and want == "off":
             pass                                              # already paged; never switch OFF blind
         else:
             if want == "off":
                 st["off_rate_per_min"] = rate_per_min_before(st, now)
             rec = do_switch(want, now, put=put)
+            calls[today] = int(calls.get(today, 0)) + 1
             _append(BIRTHCAP_SWITCHES, rec)
             if rec.get("credits"):
                 budget.record_pending("switch", 1, now)

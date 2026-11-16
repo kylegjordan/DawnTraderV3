@@ -189,6 +189,24 @@ with open(config.BIRTHCAP_SWITCHES, "w") as fh:
 r = tick(v, off_time)
 check("breaker at the ceiling: no OFF switch, page", not v.puts and any(p["dedupe_key"].startswith("birthcap-breaker") for p in r["pages"]), r)
 
+reset(); enable(); v = Vendor(active=False, echo_ok=False)
+store.save_state(birthcap.STATE, {"applied": "off", "plan": full})
+on_t2 = next(T0 + timedelta(minutes=m) for m in range(0, 1440) if birthcap.desired(T0 + timedelta(minutes=m), full) == "on")
+for i in range(80):                                           # an ON-PUT that never takes, once a minute
+    tick(v, on_t2 + timedelta(seconds=30 * i))
+hard = config.birthcap_switch_ceiling(12) + birthcap.HARD_MARGIN
+calls = sum(1 for r in switches() if r.get("kind") in ("put", "get"))
+check("a switch that keeps failing stops at the HARD daily ceiling (no runaway at 100 credits a minute)",
+      calls <= hard and len(v.puts) + v.gets <= hard, (calls, len(v.puts), v.gets, hard))
+
+reset(); enable(); v = Vendor(active=False, echo_ok=False)
+store.save_state(birthcap.STATE, {"applied": "off", "plan": full})
+open(config.BIRTHCAP_SWITCHES, "a").write("not json" + chr(10))  # stays unparseable after appends: only the state counter caps
+for i in range(80):
+    tick(v, on_t2 + timedelta(seconds=30 * i))
+check("with the switch log unreadable, the state counter still holds the hard ceiling",
+      len(v.puts) + v.gets <= hard, (len(v.puts), v.gets, hard))
+
 print("== 6. a switch-OFF that succeeded at the API but births keep arriving")
 reset(); enable(); v = Vendor(active=False)
 store.save_state(birthcap.STATE, {"applied": "off", "plan": full, "off_at": off_time.isoformat(), "off_rate_per_min": 24})
