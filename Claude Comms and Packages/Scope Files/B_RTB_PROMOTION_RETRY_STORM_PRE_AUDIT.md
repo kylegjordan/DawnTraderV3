@@ -197,6 +197,13 @@ MISTAKE: wrong-object [B-RTB-PROMOTION-RETRY-STORM] — "by construction" claime
 | P10 | **The OBJ-7 sweep:** `SYSTEM_MANUAL` §19.2/§19.3 (and the stale FinalScore line); `ACTIVE_PATH_FLOW` promotion hop; `SYSTEM_IMPACT_MAP` §4.3 (claim marker, budget column, the refresh/promotion contention); the trade-safety Check-7 comment `:602-607` and the `* 0.97` diagnostic literal `:420` (C6); `promoteSignal`'s "known hazard" header line; `emitSlotOpened` removal (A-11); the `active-funnel-tracker.ts:119-125` exit list, whose stale line numbers and count of six (now nine) the census found; `#1136`, `#648` and `#1079` annotated; the B-DB-SIZE-RELIEF cross-batch note to OLD Claude. | A-1, A-8, A-11, C6, OBJ-7 |
 | P11 | **Tests:** unit tests for P1-P9. A source fence pins that the claim deletes nothing except on `stale_plan`. The fixture is parameterised on the resolved buffer factor (C6), never the literal 3.1 %. | all |
 | P12 | **The DEPLOY_WINDOWS row,** pre-registered here (§6) and filed in the commit that lands the deploy. | OBJ-6, KD-56 — **deviation flagged in §6** |
+| P13 | **In the deploy turn (ANALYST's ask, Discord 1571861388995985530):** append an `amend` on the `B-PRICE-SIDE-BY-JOB` window. It records:
+- the anchor: the first `pm2.log` "App [dawntrader:0] online" line at or after `BUILD_SHA` becomes this batch's sha, identified by position;
+- the sha;
+- the pm2 restart counter;
+- an assertion, with the evidence, that no restart fell between the build write and that start.
+
+The `lifetime.pmUptime` of that generation (Langston C-3) is recorded beside it. If the two disagree, that disagreement is reported, not resolved silently. | 8c split; ANALYST (1)-(5) |
 
 ## 5. The failure-exit table with verdicts
 
