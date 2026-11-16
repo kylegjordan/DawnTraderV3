@@ -19,6 +19,8 @@
 
 ## 1. WHAT THIS IS FOR
 
+> ★ **KYLE'S STATED INTENT FOR THE STUDY (2026-11-16, KD-90, verbatim):** *"Right now, we are in observe and learn mode to see if there are ways to identify early (with a relatively high probability) which newly launched coins will go on to become coins that make on to the main exchanges and trade significantly higher."* Births are capped per day from the same decision (`B_TOKEN_WATCH_BIRTH_CAP_SCOPE.md`); the census wording below is superseded by that batch's pre-registration amendment once it lands.
+
 Record every new Solana token launch **at birth**, then observe it on a fixed schedule, so that in 90 days we hold **the winners and the thousands of failures, recorded identically from the same starting line.**
 
 **The durable prize is the machinery, not the tokens.** The published survival result already exists; re-deriving it replicates a paper. What we keep is **case-control survival machinery built where a published answer key exists**, then pointed at `#594`/`#596`/`#597` — the same statistical problem on scarce data with no answer key. **A null result still delivers it.**
