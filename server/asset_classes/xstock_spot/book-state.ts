@@ -90,6 +90,10 @@ export const BOOK_STATE_SEED: Readonly<Record<BookStateKnob, number>> = {
   own_mark_deviation_d_pct: 5,
   // Langston gate 1 r2 (2026-10-10): 1% stands. Above the regular-session p99 of all eight stranding symbols (max HUT
   // 0.8336%), below every blown seed (seedImplausible median 5.53%). A change is a DB write, recorded PREVIOUSLY/NOW.
+  // ⛔ FORWARD DEPENDENCY (row 2 C-P5, 2026-11-16): since the paper exit pause at the venue's session changes was retired,
+  // this ceiling + `spread_blown_enabled` are the ONLY upstream hold on a blown handoff book. RAISING it, switching
+  // `spread_blown` off, or adding a yield path that releases `spread_blown` RE-OPENS the venue-pause question (progress
+  // report §3g, RUNNING_ISSUES #943, System Manual §3.5.1).
   ri_abs_spread_ceiling_pct: 1.0,
   // Row 2 objective 6: ON. Design `Langston Design Asks/B-XSTOCK-BID-TRIGGER-RELAND_spread-blown-arming_r1.md` r1-r2.
   spread_blown_enabled: 1,

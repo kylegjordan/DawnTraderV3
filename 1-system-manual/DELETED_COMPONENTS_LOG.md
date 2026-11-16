@@ -1670,3 +1670,19 @@ Archive: git history is authoritative (this is a field-retirement within live fi
 - `…token-watch.providers.py.pre-quote-fix-20260902.20261115-B-TOKEN-WATCH-FOLLOWUP-MEMORY.removed` — `91bd9f4f…` → `7ac576bd…` (453 CRs)
 - `…token-watch.receiver.py.pre-creator-stake.20261115-B-TOKEN-WATCH-FOLLOWUP-MEMORY.removed` — `c6534bd1…` → `a6bf6b53…` (571 CRs)
 - `…token-watch.store.py.pre-corrections-20260902.20261115-B-TOKEN-WATCH-FOLLOWUP-MEMORY.removed` — `49605848…` → `52ed5fcd…` (659 CRs)
+
+## 2026-11-16 — the paper xStock exit pause at the venue's session changes (C-P2) — B-XSTOCK-BID-TRIGGER-RELAND C-P5 retirement, CC-C
+
+| what | where | why |
+|---|---|---|
+| the C-P2 exit-pause block; `_venuePausePending`; `_venuePauseExitTicks` / `_venuePauseWouldFire` / `_venuePauseBidWouldFire`; four `[EVAL_EXIT]` fields (`venuePauseExitTicksSinceStart`, `venuePauseWouldFireSinceStart`, `venuePauseBidWouldFireSinceStart`, `venuePausedPositionsNow`); the close-path cleanup line; the `[VENUE_PAUSE]` / `[VENUE_PAUSE_RESUMED]` log lines | `server/services/active-execution-engine.ts` (block `:3405-3452`, fields `:787-789` + `:797`, cleanup `:5287`, at `b1634120e`) | Its pre-registered retirement read (C-P5) ruled RETIRE: over four weeks, 14 stop-side episodes, inside dip share 5/14 not above outside 127/280; the delayed sales averaged −0.58% at resume. `sun_reopen` retired on mechanism (all 28 lines at ET 20:15-20:33, a live sub-1% book). Langston rulings Discord `1571711573180027016`, `1571717549157130291`. |
+
+**WHAT STAYS (left intentionally, so a later grep does not read as a missed sweep):** the predicate `isXstockVenueTransitionPause` and its window table (`market-hours.ts`); the paper ENTRY refusal C-P3 (`aee:606`) with `_venuePauseEntriesRefused` and its `[EVAL_EXIT]` field `venuePauseEntriesRefusedSinceStart`; the VTS lane (`vts-runner.ts:128`, `:5161`, `[VTS_VENUE_PAUSE]`); the archiver's Sunday stall-watchdog suppression (`equity-spot-archiver.ts:573`). C-P5 measured none of these.
+
+**BLAST RADIUS:** census at `b1634120e` (plan A1/A4): four production callers of the predicate, one of them this block. State the block wrote: the Map and three counters (readers: the `[EVAL_EXIT]` line and two test fixtures — removed together) and the two log lines (reader: the C-P5 harvest, whose cron was removed 2026-11-16; no script, route or dashboard parses them). Tests: the `inc2-chain` C-P2 describe deleted with its subject; the `incc` ordering fence RE-POINTED to the book-state guard's position before the exit decision (Langston condition 3); a new in-window fence mutation-proved (a reinstated pause fails it, its control passes). tsc error count unchanged (324 at both refs).
+
+**FORWARD DEPENDENCY:** objective 6's `spread_blown` hold is now the only upstream hold on a blown handoff book — written in this commit at the ceiling's seed (`book-state.ts`) and bounds check (`book-state-config.ts`); `RUNNING_ISSUES` `#943` and System Manual §3.5.1 at Step 10.
+
+**RESTORE PATH:** git at `b1634120e`, or the archived copy below.
+**ARCHIVE:** `1-system-manual/_archive/deleted-code/active-execution-engine.venue-pause-exit-block.20261116-B-XSTOCK-BID-TRIGGER-RELAND.ts.removed`.
+**COMMIT:** the C-P5 retirement Step-3 commit.

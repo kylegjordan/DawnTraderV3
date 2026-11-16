@@ -60,25 +60,28 @@ describe('C-P1 — across the 2026-11-01 DST change (EST = UTC-5): the windows m
 
 const SRC = (rel: string) => readFileSync(join(__dirname, '..', '..', ...rel.split('/')), 'utf8').split(String.fromCharCode(13)).join('');
 
-describe('C-P2 — the paper exit pause: after the book-state block, before the exit decision, never a price-skip', () => {
+describe('the book-state guard runs BEFORE the exit decision (re-pointed from C-P2 at its C-P5 retirement, Langston Step-2 condition 3)', () => {
+  // The exit pause these anchors once bracketed is retired (2026-11-16). What survives is the subject it rested on and
+  // that the retirement now depends on alone: a hollow or blown book never reaches `checkExitConditions`.
   const AEE = SRC('services/active-execution-engine.ts');
-  const pauseAt = AEE.indexOf("const _vp = isXstockVenueTransitionPause(new Date());\n          const _pend");
   const evalAt = AEE.indexOf('const exitCondition = await this.checkExitConditions(');
   const advanceAt = AEE.indexOf('advanceBookStateComparator(\n');
-  it('CONTROL: all three anchors exist', () => {
-    expect(pauseAt).toBeGreaterThan(0); expect(evalAt).toBeGreaterThan(0); expect(advanceAt).toBeGreaterThan(0);
+  const yieldRefusedAt = AEE.indexOf("await this._recordPriceSkip(position, 'book_state_yield_refused');\n                  continue;");
+  const hollowSkipAt = AEE.indexOf("await this._recordBookStateEvent(position, { kind: 'skip', streak: _next, reasons: _r.reasons, inputs: _r.inputs });");
+  it('CONTROL: all four anchors exist', () => {
+    expect(evalAt).toBeGreaterThan(0); expect(advanceAt).toBeGreaterThan(0);
+    expect(yieldRefusedAt).toBeGreaterThan(0); expect(hollowSkipAt).toBeGreaterThan(0);
   });
-  it('the pause sits after the book-state advance and before the exit decision', () => {
-    expect(pauseAt).toBeGreaterThan(advanceAt);
-    expect(pauseAt).toBeLessThan(evalAt);
+  it('both hollow arms continue, and both precede the exit decision, as does the guard advance', () => {
+    expect(yieldRefusedAt).toBeLessThan(evalAt);
+    expect(hollowSkipAt).toBeLessThan(evalAt);
+    expect(advanceAt).toBeLessThan(evalAt);
+    expect(AEE.slice(hollowSkipAt, AEE.indexOf('continue;', hollowSkipAt))).not.toMatch(/checkExitConditions\s*\(/);
   });
-  it('the paused branch never calls _recordPriceSkip and never addAlert', () => {
-    const branch = AEE.slice(pauseAt, AEE.indexOf('continue;', pauseAt));
-    expect(branch).not.toMatch(/_recordPriceSkip\s*\(/);
-    expect(branch).not.toMatch(/addAlert\s*\(/);
+  it('the retired exit pause is gone from the exit loop (entry refusal C-P3 keeps the predicate)', () => {
+    expect(AEE).not.toMatch(/\[VENUE_PAUSE\]/);
+    expect(AEE).not.toMatch(/_venuePausePending/);
   });
-  // (The r1 "CONTROL" here matched a string literal declared inside itself, so it could not fail — Langston Step 4 C1.
-  // The behaviour is now driven through the real exit loop in `b-xstock-bid-trigger-reland-inc2-chain.test.ts`.)
 });
 
 describe('C-P3 — the paper entry refusal precedes the depth read', () => {

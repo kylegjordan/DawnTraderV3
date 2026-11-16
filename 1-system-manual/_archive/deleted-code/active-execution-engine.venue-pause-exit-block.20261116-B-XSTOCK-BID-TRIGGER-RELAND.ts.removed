@@ -1,0 +1,52 @@
+// ARCHIVED 2026-11-16 (CC-C) — row 2 B-XSTOCK-BID-TRIGGER-RELAND C-P5 retirement: the paper xStock exit pause (C-P2).
+// Deleted from server/services/active-execution-engine.ts (block at :3405-3452 of b1634120e). Non-compilable copy for browsing; git history is authoritative.
+// See 1-system-manual/DELETED_COMPONENTS_LOG.md and Batch Completion/B_XSTOCK_BID_TRIGGER_RELAND_PROGRESS_REPORT.md §3g.
+
+        // ⛔⛔ row 2 increment C (C-P2) — THE VENUE-TRANSITION PAUSE. xStock only. Placed AFTER the book-state block (the
+        // guard has already judged and advanced this tick, so no chain is held back) and AFTER the P/L update, and BEFORE
+        // the exit decision: inside the pause there is NO trigger and NO resting-exit fill this tick (the maker rest
+        // lifecycle below is reached only through this iteration). A resting order stays resting; a level crossed during
+        // the pause is decided at the first tick after it, on the book as it is then. One line per position per window,
+        // plus `VENUE_PAUSE_RESUMED` at resume — the cost read for the retirement criterion (pre-audit C-P5).
+        // ⛔ NOT `_recordPriceSkip` and no alert: the pause is a deliberate fidelity deviation, never a page (objective 9).
+        if (_posClass === 'xstock_spot') {
+          const _vp = isXstockVenueTransitionPause(new Date());
+          const _pend = this._venuePausePending.get(position.id);
+          if (_vp.paused) {
+            this._venuePauseExitTicks++;
+            const _lvl = (px: number | null): 'stop' | 'target' | null =>
+              px === null ? null
+                : stopLoss !== null && px <= stopLoss ? 'stop'
+                  : takeProfit !== null && px >= takeProfit ? 'target' : null;
+            const _wf = _lvl(currentPrice);
+            const _bwf = _lvl(xsBid);
+            if (!_pend) {
+              this._venuePausePending.set(position.id, { window: _vp.window as string, atMs: Date.now(), mark: currentPrice, bid: xsBid, wouldFire: _wf, bidWouldFire: _bwf });
+              if (_wf) this._venuePauseWouldFire++;
+              if (_bwf) this._venuePauseBidWouldFire++;
+              console.warn(
+                `[B-XSTOCK-BID-TRIGGER-RELAND][VENUE_PAUSE] ${position.symbol} pos=${position.id} window=${_vp.window} ` +
+                `mark=${currentPrice} bid=${xsBid ?? 'none'} sl=${stopLoss ?? 'none'} tp=${takeProfit ?? 'none'} ` +
+                `wouldFire=${_wf ?? 'none'} bidWouldFire=${_bwf ?? 'none'}`,
+              );
+            } else if ((_wf && !_pend.wouldFire) || (_bwf && !_pend.bidWouldFire)) {
+              if (_wf && !_pend.wouldFire) { _pend.wouldFire = _wf; this._venuePauseWouldFire++; }
+              if (_bwf && !_pend.bidWouldFire) { _pend.bidWouldFire = _bwf; this._venuePauseBidWouldFire++; }
+              console.warn(
+                `[B-XSTOCK-BID-TRIGGER-RELAND][VENUE_PAUSE] ${position.symbol} pos=${position.id} window=${_pend.window} ` +
+                `WOULD_FIRE mark=${currentPrice} bid=${xsBid ?? 'none'} sl=${stopLoss ?? 'none'} tp=${takeProfit ?? 'none'} ` +
+                `wouldFire=${_pend.wouldFire ?? 'none'} bidWouldFire=${_pend.bidWouldFire ?? 'none'}`,
+              );
+            }
+            continue;
+          }
+          if (_pend) {
+            this._venuePausePending.delete(position.id);
+            console.warn(
+              `[B-XSTOCK-BID-TRIGGER-RELAND][VENUE_PAUSE_RESUMED] ${position.symbol} pos=${position.id} window=${_pend.window} ` +
+              `pausedS=${Math.round((Date.now() - _pend.atMs) / 1000)} wouldFireDuring=${_pend.wouldFire ?? 'none'} bidWouldFireDuring=${_pend.bidWouldFire ?? 'none'} ` +
+              `markAtStart=${_pend.mark} bidAtStart=${_pend.bid ?? 'none'} markNow=${currentPrice} bidNow=${xsBid ?? 'none'} ` +
+              `sl=${stopLoss ?? 'none'} tp=${takeProfit ?? 'none'}`,
+            );
+          }
+        }

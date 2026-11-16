@@ -76,6 +76,7 @@ export function assertBookStateKnobsAtBoot(): Record<BookStateKnob, number> {
   if (!(r.feed_cohort_floor >= 1)) fail(`feed_cohort_floor=${r.feed_cohort_floor} must be >= 1`);
   if (!(r.hollow_skip_cap >= 1)) fail(`hollow_skip_cap=${r.hollow_skip_cap} must be >= 1`);
   if (!(r.own_mark_deviation_d_pct > 0)) fail(`own_mark_deviation_d_pct=${r.own_mark_deviation_d_pct} must be > 0`);
+  // ⛔ A value above the 1.0 seed re-opens the retired venue pause question (row 2 C-P5; see the seed in book-state.ts).
   if (!(r.ri_abs_spread_ceiling_pct > 0 && r.ri_abs_spread_ceiling_pct <= 10)) fail(`ri_abs_spread_ceiling_pct=${r.ri_abs_spread_ceiling_pct} must be in (0,10]`);
   if (!(r.spread_blown_enabled === 0 || r.spread_blown_enabled === 1)) fail(`spread_blown_enabled=${r.spread_blown_enabled} must be 0 or 1`);
   return r;
