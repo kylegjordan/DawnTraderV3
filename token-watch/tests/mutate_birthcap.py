@@ -75,6 +75,8 @@ MUTANTS = [
      [("birthcap.py", "        if clock() - start > budget:", "        if False:")]),
     ("the mint budget is not anchored to the tick's start", T,
      [("birthcap.py", "    budget = min(float(MINT_BUDGET_S),", "    budget = max(float(MINT_BUDGET_S),")]),
+    ("after the group kill, communicate() again (blocks on an escaped descendant's pipe)", T,
+     [("birthcap.py", "            proc.wait()" + NL + "            raise", "            proc.communicate()" + NL + "            raise")]),
     ("the per-call timeout is not cut", T,
      [("birthcap.py", '    timeout = min(float(kw.pop("timeout", None) or MINT_CALL_TIMEOUT_S), float(MINT_CALL_TIMEOUT_S))',
        '    timeout = float(kw.pop("timeout", None) or MINT_CALL_TIMEOUT_S)')]),

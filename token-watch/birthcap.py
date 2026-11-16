@@ -562,8 +562,12 @@ def _bounded_run(argv, **kw):
                 os.killpg(proc.pid, signal.SIGKILL)
             except (ProcessLookupError, PermissionError):
                 proc.kill()
-            out, err = proc.communicate()
-            raise subprocess.TimeoutExpired(argv, timeout, output=out, stderr=err)
+            # ⛔ WAIT ON THE PROCESS, NOT ITS PIPES (Langston Step-9 BLOCKER `:565`): a descendant that left the group
+            #    (setsid) still holds the inherited stdout, so a second communicate() would block for ITS lifetime — past
+            #    the unit's start timeout, and the carry save never runs. communicate() already put the partial output on
+            #    the TimeoutExpired it raised; the bare raise keeps it (stdlib subprocess.run does the same).
+            proc.wait()
+            raise
     return subprocess.CompletedProcess(argv, proc.returncode, out, err)
 
 

@@ -530,6 +530,22 @@ if os.name == "posix":
     check("a call is cut at MINT_CALL_TIMEOUT_S though alert_mint asks for 120", timed_out and took < 5, (timed_out, took))
     check("the timeout kills the whole process GROUP: the grandchild never writes (rider 2)",
           not os.path.exists(marker), "the grandchild survived")
+    # a descendant that LEAVES the group (setsid) survives the group kill and keeps the inherited stdout open: the
+    # call must still return at the cut, not after that descendant's lifetime (Langston Step-9 BLOCKER `:565`)
+    escaper = ("import subprocess,sys,time; subprocess.Popen([sys.executable,'-c',"
+               "\"import os,time; os.setsid(); time.sleep(4)\"]); time.sleep(30)")
+    birthcap.MINT_CALL_TIMEOUT_S = 1
+    t0 = _time.monotonic()
+    try:
+        birthcap._bounded_run([sys.executable, "-c", escaper], capture_output=True, text=True, timeout=120)
+        cut = False
+    except _sp.TimeoutExpired:
+        cut = True
+    finally:
+        birthcap.MINT_CALL_TIMEOUT_S = saved
+    took = _time.monotonic() - t0
+    check("a descendant that escaped the group (setsid) and holds stdout does NOT hold the call past the cut",
+          cut and took < 2.5, (cut, took))
 else:
     print("  skip the process-group kill check (POSIX only; CI runs it)")
 unit_text = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "systemd", "token-watch-birthcap.service")).read()
