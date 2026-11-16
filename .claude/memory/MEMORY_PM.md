@@ -73,6 +73,8 @@
 
 - **NUDGE 11-16 16:23Z:** NEW - WITHDRAWN: 9j Step 2 done (Langston PROCEED x2, 1c2ac6a4f); Step 3 waits B-ENTRY-GATE close by design (KD-87); only PFC C-1 END read 20:30Z left today. MISTAKE: stall-misread.
 
+- **USAGE 87% @ ~18:23Z 11-16:** all four told to reach safe stopping points (once). At 90% run pm-usage-stop.
+
 # OPEN
 - Archived 2026-11-04 · stale-local-session-ids → `1-system-manual/pm/archive/memory/2026-11.md`
 - Hourly "Wake watcher heartbeat" sessions pile up unarchived in the sidebar — ask Kyle whether to archive.
