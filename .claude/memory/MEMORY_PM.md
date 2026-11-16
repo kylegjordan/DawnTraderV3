@@ -3,7 +3,7 @@
 > Per-session notebook (cap 10 KB; rules file + this ≤ 18 KB). Rules: `1-system-manual/PM_CLAUDE_RULES.md`. Startup prompt: `Claude Comms and Packages/PM_CLAUDE_STARTUP_PROMPT.md`. Clone: `C:\DawnTraderV3-pm`. Records: `1-system-manual/pm/` (DECISIONS.md, reviews/).
 
 # ▶▶ CURRENT POSITION — READ FIRST
-- **11-16 ~00:35Z Kyle decided (1ea8e8287):** KD-85 no narrow Backblaze key (told OLD: re-plan 3d close with Langston); KD-86 Guardrail Max from money held $567; KD-87 (Langston ruled 11-16: re-pool refused signal is primary, money check second; rows 9j/172 = CC-B 2a/2b at 83ce3a3b9; KD-84 record PROCEED r7 c2362762e, 8c hold stays until Langston confirms the unpriced item (NEW will say)) KD-84 fix into row 9j after B-ENTRY-GATE ~11-20, ahead of row 172 (told NEW: update rows 9j/172); KD-88 B-CONVERSATION-INDEX pre-sprint after token-watch 48h read, ALL convos back to ChatGPT era + Codex chats, Infra asks COMMAND CENTER how it built its archive (question only). Langston/Coltrane chats yes/no goes with Infra cost figures.
+- Archived 2026-11-16 · kd85-88-decided → `1-system-manual/pm/archive/memory/2026-11.md`
 - **11-16 ~01:30Z Kyle (bc5b6e2a7):** KD-89 restricted Backblaze key YES (reverses KD-85; OLD told). KD-90 NO $49: free tier + daily cap on new coins, keep tracking existing list; Infra designs with Langston (stop feed not drop; no time-of-day skew; budget), live before ~11-20, Infra next item ahead of B-CONVERSATION-INDEX; study intent recorded. Infra scoped B-TOKEN-WATCH-BIRTH-CAP (b86ea91fd), with Langston Step 1: ~27k/day from ~11-27 (2/3 of ~40k; 12 windows), ~8.5k/day rest of cycle (Langston ruled 1571684619387146251, scope ad55cb91e, Step 2; timetable 81 min per 2h, shifting daily), Infra read Helius counter: cycle Oct 27-Nov 27, runs out ~11-19 20:00Z (7ce96930e); 11-16 ~03Z Infra: liquidity reads ~2,300 credits/h would exhaust ~11-17 pm, hotfix pauses them (shed order), with Langston, back to ~11-19 eve; target live before 11-19 evening; reset-date ask to Kyle WITHDRAWN. Langston idea for later: measure how often a new coin reaches a main exchange. KD-84 PROCEED r8 7ad75fa87 -> 8c hold met; ANALYST switch-on ask received (rec yes, 18 of 50 refused mostly strong_bull_trend, expect 25-40 crypto trades wk1, stop-and-look <10; plan 1aca4decd) -> PUT TO KYLE 11-16. Also pending: transcript trims at next restart; index cost figures + Langston/Coltrane chats yes/no. Archive gap: 15 days Aug-Nov missing, batch fills first.
 - Archived 2026-11-16 · kyle-2320z-2026-11-15 → `1-system-manual/pm/archive/memory/2026-11.md`
 - Archived 2026-11-16 · kd81-84-decided-2026-11-15 → `1-system-manual/pm/archive/memory/2026-11.md`
@@ -46,11 +46,11 @@
 
 - Archived 2026-11-04 · done-today-2026-11-04 → `1-system-manual/pm/archive/memory/2026-11.md`
 
-- **NUDGE 11-16 01:31Z:** Infra (idle 41 min) - 166b read due. CLEARED: done d2a6ec06c, fe5b5abd resolved (0 capacity refusals all weekend, no crowd-out, one sample).
+- Archived 2026-11-16 · nudge-0131-cleared → `1-system-manual/pm/archive/memory/2026-11.md`
 
-- **NUDGE 11-16 02:01Z:** ANALYST (idle 1h40) - C-P5 read due; CLEARED: done 20a07a822, points to retiring the pause, with Langston; OLD (idle 1h37) - CLEARED: key steps wait only on Kyle typing yes in OLD chat (access-key rule); told Kyle. Questions, not assumptions.
+- Archived 2026-11-16 · nudge-0201-cleared → `1-system-manual/pm/archive/memory/2026-11.md`
 
-- **NUDGE 11-16 02:31Z:** NEW (idle 52 min) - forced-carrier run was waiting on NEW itself (instrument live since 84eeb168e); NEW now drafting pre-registration + crew restart agreement, run before ~14:30Z. Real stall, moving.
+- Archived 2026-11-16 · nudge-0231-cleared → `1-system-manual/pm/archive/memory/2026-11.md`
 
 - **RESOLVED 11-16 05:20Z: staging DB outage** 04:20:40-05:20:28Z (~60 min, likely Supabase 1h network ban lapsing; trigger unknown; Infra records incident). Loss <=132,466 rows (ticker 109,560 unrecoverable; bars 22,906 maybe refillable; xStock spot bars retained). Pooler switch cancelled. Follow-ups: OLD #705 econnrefused retry; NEW+Langston proposal to un-park 59g4 B-DB-REACHABILITY-ALERT (page + staleness ceiling + exit posture) -> Kyle with slot check; Langston note: no failover + no durable spool = item for Kyle list. ANALYST items for Kyle list: (a) 3 crons (feed-integrity, xStock QD probe, awareness) lock off on DB-unreachable until restart - design question (B-CRON-MISSED-CATCHUP behaviour); restart with Langston before 14:45Z; (b) fill-safety alert wording says "seed config" on outage. 6 paper positions unobserved 04:20-05:20, stop crossings unknowable. BUNDLE all outage items to Kyle once NEW 59g4 proposal ruled.
 
