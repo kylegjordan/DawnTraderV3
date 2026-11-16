@@ -9,6 +9,7 @@ Run:  python tests/test_birthcap.py        (exit 0 = every check passed)
 """
 
 import json
+import re
 import os
 import shutil
 import sys
@@ -393,6 +394,25 @@ tick(v, h0)
 v.webhooks, v.rpc = 1000, 501                                 # one rpc credit with a zero allowance
 r = tick(v, h0 + timedelta(hours=1))
 check("ANY rpc spend against a zero allowance pages (no absolute +50 slack)", any(p["dedupe_key"].startswith("birthcap-rpc-overrun") for p in r["pages"]), r["pages"])
+
+reset(); enable(); v = Vendor()
+store.save_state(birthcap.STATE, {"applied": "on", "plan": dict(full, always_on=True)})
+h1 = datetime(2026, 11, 28, 10, 37, 20, tzinfo=UTC)          # the first snapshot lands mid-hour (switch-on, restart)
+v.webhooks, v.rpc = 5000, 500
+tick(v, h1)
+add_births([h1.replace(minute=5) + timedelta(seconds=i) for i in range(700)])   # births from the WHOLE hour 10
+v.webhooks = 5148                                              # the vendor delta covers only 10:37 -> 11:00
+r = tick(v, h1.replace(hour=11, minute=0, second=20))
+check("a mid-hour first snapshot is NOT compared (no false divergence, no false replan)",
+      not any(p["dedupe_key"].startswith("birthcap-divergence") for p in r["pages"])
+      and not store.load_state(birthcap.STATE, {}).get("replan"), r["pages"])
+add_births([h1.replace(hour=11, minute=5) + timedelta(seconds=i) for i in range(300)])
+v.webhooks = 5148 + 600                                        # the next, WHOLE hour is compared again (2x: pages)
+r = tick(v, h1.replace(hour=12, minute=0, second=20))
+check("the next whole hour is compared again", any(p["dedupe_key"].startswith("birthcap-divergence") for p in r["pages"]), r["pages"])
+unit = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "systemd", "token-watch-birthcap.service")).read()
+tasks = int(re.search(r"^TasksMax=(\d+)", unit, re.M).group(1))
+check("the unit's TasksMax leaves room for the node mint (measured minimum 48; 32 aborted rc 134)", tasks >= 48, tasks)
 
 print("== 11. the cap does not disable itself (Langston gate C blocker)")
 reset()

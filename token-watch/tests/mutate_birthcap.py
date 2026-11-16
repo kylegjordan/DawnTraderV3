@@ -62,6 +62,8 @@ MUTANTS = [
      [("birthcap.py", "        st[\"replan\"] = True                                   # the webhook leg", "        pass  # the webhook leg")]),
     ("the divergence gate reads the vendor delta only (a frozen counter is never tested)", T,
      [("birthcap.py", "    base_n = max(dv_web, expected)", "    base_n = dv_web")]),
+    ("a mid-hour snapshot is compared (false divergence and replan at switch-on)", T,
+     [("birthcap.py", "    if snap_at is None or (snap_at - hour_start).total_seconds() > BIRTHCAP_SNAP_OPEN_S:", "    if snap_at is None:")]),
     ("floor_binds reads True where the floor was abandoned", T,
      [("birthcap.py", "rule_w < BIRTHCAP_W_MIN and w == BIRTHCAP_W_MIN", "rule_w < BIRTHCAP_W_MIN")]),
     ("liveness ignores planned windows (a planned off window pages as a dead feed)", T,

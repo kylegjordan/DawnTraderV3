@@ -35,6 +35,7 @@ import budget
 import liveness
 import providers
 from config import (
+    BIRTHCAP_SNAP_OPEN_S,
     BIRTHCAP_STATE_NAME,
     BIRTHCAP_DIVERGENCE_MIN, BIRTHCAP_DIVERGENCE_SHARE, BIRTHCAP_FAILED_OFF_MIN_ROWS,
     BIRTHCAP_FAILED_OFF_RATE_SHARE, BIRTHCAP_OFF_GRACE_S, BIRTHCAP_PHASE_STEP, BIRTHCAP_PLANNED_OFF,
@@ -449,6 +450,14 @@ def _hourly_crosscheck(st: dict, now: datetime, records: list[dict], usage_fn, p
     st["usage_snap"] = cur
     if not snap or snap.get("hour") != (now - timedelta(hours=1)).strftime("%Y-%m-%dT%H"):
         return                                                # need two consecutive hours to align
+    # ⛔ THE PREVIOUS SNAPSHOT MUST OPEN ITS HOUR. A snapshot taken mid-hour (the first enabled tick, a restart, a
+    #    missed tick) covers only part of the hour while the census and switch sums cover all of it — a false
+    #    divergence AND a false replan. Measured at switch-on, 2026-11-16 11:00Z: snap at 10:37:20, vendor +148
+    #    against 724 births + 200 switch credits. Skip that hour; the next one is whole.
+    snap_at = _ts(snap["at"]) if snap.get("at") else None
+    hour_start = (now - timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
+    if snap_at is None or (snap_at - hour_start).total_seconds() > BIRTHCAP_SNAP_OPEN_S:
+        return
     dv_web = cur["webhooks"] - snap["webhooks"]
     dv_rpc = cur["rpc"] - snap["rpc"]
     prev = snap["hour"]

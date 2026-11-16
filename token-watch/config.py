@@ -467,6 +467,7 @@ BIRTHCAP_OFF_PROOF_S = 120            # a census row this long after an OFF prov
 BIRTHCAP_RESTART_GRACE_S = 90        # deliveries resume after a restore (A5: 55 s measured)
 BIRTHCAP_FAILED_OFF_MIN_ROWS = 4     # Langston r2-4: max(4, 0.25 x the on-window's last-5-min rate)
 BIRTHCAP_FAILED_OFF_RATE_SHARE = 0.25
+BIRTHCAP_SNAP_OPEN_S = 120             # an hourly vendor snapshot later than this into its hour is partial: not compared
 BIRTHCAP_DIVERGENCE_MIN = 200        # vendor-vs-census ratio computed only above this hourly delta
 BIRTHCAP_DIVERGENCE_SHARE = 0.10
 BIRTHCAP_PHASE_STEP = 0.618          # daily phase rotation, as a fraction of a block
