@@ -196,7 +196,8 @@ function makeEngine(): Stub {
     _entryFillRefusedSteady: 0,
     _entryFillLooked: new Set<string>(),
     // B-VENUE-QUIET-ALERTING (row 3a1) fields the real constructor sets: the streak reset notes the venue price, and the
-    // post-cycle sweep is held off by its throttle (this test drives the exit loop, not the alert sweep).
+    // post-cycle sweep is held off by its throttle (this test drives the exit loop, not the alert sweep). A test that
+    // moves the clock forward must re-stamp `_lastVenueQuietSweepAt` after the jump, or the sweep runs once (C-2).
     _priceSkipEscalated: new Set<string>(),
     _venueQuiet: new VenueQuietState(),
     _lastVenueQuietSweepAt: Date.now(),
@@ -513,6 +514,7 @@ describe('row 2 C-P5 retirement (2026-11-16) — the exit pause is gone: a tick 
     const eng = makeEngine();
     await warm(eng);
     vi.setSystemTime(new Date('2026-10-14T20:20:00Z')); // Wed 16:20 ET — inside the 16:15 window
+    eng._lastVenueQuietSweepAt = Date.now(); // keep the post-cycle alert sweep throttled after the clock jump (Langston Step-4 C-2)
     const f: Frame = { bid: 399.4, ask: 400.2, last: 400 }; // mark 399.8 > stop; bid 399.4 <= stop; spread 0.2%
     const t = await tick(eng, f);
     expect(t.warns.filter((l) => PAUSE.test(l))).toHaveLength(0);
@@ -527,6 +529,7 @@ describe('row 2 C-P5 retirement (2026-11-16) — the exit pause is gone: a tick 
     const eng = makeEngine();
     await warm(eng);
     vi.setSystemTime(new Date('2026-10-14T20:20:00Z')); // Wed 16:20 ET — inside the 16:15 window
+    eng._lastVenueQuietSweepAt = Date.now(); // keep the post-cycle alert sweep throttled after the clock jump (Langston Step-4 C-2)
     await blowoutToYield(eng);
     const before = warnSpy.mock.calls.length;
     await wideAfterYield(eng, 20);
@@ -543,6 +546,7 @@ describe('row 2 C-P5 retirement (2026-11-16) — the exit pause is gone: a tick 
     const eng = makeEngine();
     await warm(eng, 'mark');
     vi.setSystemTime(new Date('2026-10-14T20:20:00Z'));
+    eng._lastVenueQuietSweepAt = Date.now(); // as above
     const t = await tick(eng, BLOWN);
     expect(t.warns.find((l) => XS_FRAME.test(l))).toContain('markExit=y');
     expect(t.closes).toHaveLength(1);
