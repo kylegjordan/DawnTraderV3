@@ -23,6 +23,7 @@ EXIT CODES
     3  "Connection refused": the address may be BANNED — do not retry; no password was judged
     4  LOCKED: an earlier call failed its login, or ended without a result. `dt-sql --status` says which; unlock by hand
     5  BUSY: another dt-sql call is running right now (one at a time, never queued)
+    (anything unexpected BEFORE an attempt exits 2, never 1: 1 means only "logged in, the SQL failed")
 
 ONE ATTEMPT PER CALL: `sslmode=require` (no non-SSL retry), `hostaddr` pinned to ONE resolved address,
 `connect_timeout=15`. The password goes to psql through PGPASSWORD in the child's environment, never argv.
@@ -33,7 +34,12 @@ password was judged). A wrong password locks the arm `credential` and raises a c
 classify — a timeout, a signal, an unparsed failure — locks the arm `ambiguous`. A call killed mid-attempt leaves its
 INTENT behind, and the next call reads that as LOCKED (`ambiguous`). Every later call refuses until --unlock.
 ⚠️ The guarantee is dt-sql's own: LOCKED is dt-sql's state, and the ban is per address, shared with the app, ~50
-helper scripts and any hand-run psql. The `/usr/local/bin/psql` wrapper (same batch) honours LOCKED too.
+helper scripts and any hand-run psql. The `/usr/local/bin/psql` wrapper (same batch) refuses while LOCKED or INTENT
+exists — FOR ROOT AND DEPLOY ONLY: /var/lib/dt-sql is 0750 deploy, so another account's `[ -e ]` cannot see in and
+fails open (only root and deploy run psql on staging today).
+Both arms raise an alert — `credential` critical, `ambiguous` warning — through `npm run system-alerts`, whose code
+(`scripts/system-alerts.ts` -> `server/services/system-alerts.ts`) imports only fs/path/crypto and touches NO database,
+so raising a page can never itself spend a login attempt.
 
 ⛔ READ-ONLY IS AN ACCIDENT GUARD, NOT A BOUNDARY (stated, the dt-api C11 form): PGOPTIONS sets
 `default_transaction_read_only=on` and a statement timeout, and SQL naming `transaction_read_only` is refused before
@@ -72,9 +78,11 @@ LOCK_FILE = os.path.join(STATE_DIR, "lock")
 INTENT_FILE = os.path.join(STATE_DIR, "INTENT")
 LOCKED_FILE = os.path.join(STATE_DIR, "LOCKED")
 LOG_FILE = os.path.join(STATE_DIR, "log.jsonl")
+# A local tuple, NOT read from server/services/system-alerts.ts's ALERT_ACTORS at run time (Langston §5.3): a
+# root-installed tool resolving a list out of an unpinned repo copy trades a two-name divergence (cc-pm, coltrane)
+# for a read site that can vanish. --by is unauthenticated free text: it is logged as by_claimed (the #447 class).
 ACTORS = ("cc-a", "cc-b", "cc-c", "cc-infra", "cc-pm", "kyle", "langston", "coltrane")
-READONLY_SWITCH = re.compile(r"transaction_read_only|default_transaction_read_only|transaction\s+read\s+write",
-                             re.IGNORECASE)
+READONLY_SWITCH = re.compile(r"transaction_read_only|default_transaction_read_only|\bread\s+write\b", re.IGNORECASE)
 CREDENTIAL = re.compile(r"password authentication failed|no pg_hba\.conf entry", re.IGNORECASE)
 REFUSED = re.compile(r"Connection refused", re.IGNORECASE)
 
@@ -137,17 +145,27 @@ def lock_state(arm, reason, detail=""):
     log("locked", arm=arm, reason=reason)
 
 
-def alert(detail):
-    """A critical page for the credential arm only. Best-effort: the LOCKED state is already written."""
-    body = ("dt-sql made one login attempt to the staging database and it was REFUSED as a wrong password. dt-sql is "
-            "now LOCKED: it will make no further attempt until someone runs `dt-sql --unlock --by <actor>`. Before "
-            "unlocking, find out why the password was wrong (a rotation? an edited .env?): a second wrong password "
-            "from this address gets it banned by Supabase.\n\npsql said: %s\n\nOwner: Infra Claude (CC-INFRA). "
-            "Source: /usr/local/bin/dt-sql (B-DB-READ-TOOL). Resolve with evidence, never ack." % detail[:400])
+ALERTS = {
+    "credential": ("critical", "dt-sql-credential-locked", "dt-sql locked: the staging database refused its password",
+                   "dt-sql made one login attempt to the staging database and it was REFUSED as a wrong password."),
+    "ambiguous": ("warning", "dt-sql-ambiguous-locked", "dt-sql locked: a login attempt ended without a result",
+                  "dt-sql made a login attempt that ended without a classifiable result (a timeout, a signal, or an "
+                  "unexpected failure) — it may or may not have been judged a wrong password."),
+}
+
+
+def alert(arm, detail):
+    """A page for either arm (Langston §5.1: an ambiguous lock takes the only sanctioned read path away from every
+    session, so it may not be silent). Best-effort: the LOCKED state is already written. DB-free (see the docstring)."""
+    severity, key, title, lead = ALERTS[arm]
+    body = (lead + " dt-sql is now LOCKED: it will make no further attempt, and the psql wrapper refuses too, until "
+            "someone runs `dt-sql --unlock --by <actor>`. Before unlocking, find out why (a rotation? an edited .env? "
+            "the network?): a second wrong password from this address gets it banned by Supabase.\n\npsql said: %s\n\n"
+            "Owner: Infra Claude (CC-INFRA). Source: /usr/local/bin/dt-sql (B-DB-READ-TOOL). Resolve with evidence, "
+            "never ack." % detail[:400])
     argv = ALERT_NPM + ["add", "--triggers-at", datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-                        "--category", "health_check", "--severity", "critical",
-                        "--dedupe-key", "dt-sql-credential-locked",
-                        "--title", "dt-sql locked: the staging database refused its password", "--body", body]
+                        "--category", "health_check", "--severity", severity, "--dedupe-key", key,
+                        "--title", title, "--body", body]
     try:
         r = subprocess.run(argv, capture_output=True, text=True, cwd=APP_DIR, timeout=150)
         log("alert", rc=r.returncode)
@@ -215,7 +233,7 @@ def unlock(by):
                 os.remove(p)
             except FileNotFoundError:
                 pass
-        log("unlocked", by=by, was=was)
+        log("unlocked", by_claimed=by, was=was)
     print("dt-sql: unlocked by %s (was: %s)" % (by, json.dumps(was)))
     return 0
 
@@ -232,11 +250,17 @@ def parse(args):
         elif a == "--unlock":
             opts["unlock"] = True
         elif a in ("--by", "-c", "-f") and i + 1 < len(args):
-            opts[{"--by": "by", "-c": "sql", "-f": "file"}[a]] = args[i + 1]
+            key = {"--by": "by", "-c": "sql", "-f": "file"}[a]
+            if opts[key] is not None:
+                raise ValueError("%s given twice" % a)
+            opts[key] = args[i + 1]
             i += 1
         else:
             raise ValueError("unknown or incomplete argument: %r" % a)
         i += 1
+    if opts["sql"] is not None and opts["file"] is not None:
+        # ⛔ D-1 (Langston Step 4): the read-only check inspected -c while psql executed -f. One input, always.
+        raise ValueError("give the SQL ONE way: -c, -f, or stdin")
     return opts
 
 
@@ -259,8 +283,7 @@ def main(args):
         sql = stdin_data = opts["sql"] if opts["sql"].rstrip().endswith(";") else opts["sql"] + ";"
     elif opts["file"] is not None:
         with open(opts["file"]) as fh:
-            sql = fh.read()
-        stdin_data = None
+            sql = stdin_data = fh.read()        # psql runs THESE bytes (via stdin), the ones just checked — not the path
     else:
         sql = stdin_data = sys.stdin.read()
     if not sql.strip():
@@ -285,6 +308,7 @@ def main(args):
             prior = read_json(INTENT_FILE)
             lock_state("ambiguous", "a previous call ended without a result (killed, or the box restarted)",
                        json.dumps(prior))
+            alert("ambiguous", "a previous call left its attempt unrecorded: %s" % json.dumps(prior))
             print("dt-sql: LOCKED (ambiguous) — a previous call left its attempt unrecorded: %s" % json.dumps(prior),
                   file=sys.stderr)
             return 4
@@ -296,7 +320,7 @@ def main(args):
         argv = [PSQL, conninfo, "-X", "-v", "ON_ERROR_STOP=1", "-At", "-F", "|"]
         if opts["csv"]:
             argv = [PSQL, conninfo, "-X", "-v", "ON_ERROR_STOP=1", "--csv"]
-        argv += ["-f", opts["file"]] if opts["file"] is not None else ["-f", "-"]
+        argv += ["-f", "-"]                                      # always the checked bytes, on stdin (D-1)
         rc, out, err = run_psql(argv, env, stdin_data)
         kind = classify(rc, err)
         sys.stdout.buffer.write(out)
@@ -314,12 +338,28 @@ def main(args):
         detail = err.decode("utf-8", "replace").strip().splitlines()[-1:] or [""]
         if kind == "credential":
             lock_state("credential", "the database refused the password", detail[0])
-            alert(detail[0])
+            alert("credential", detail[0])
         else:
             lock_state("ambiguous", "psql ended without a classifiable result (rc %s)" % rc, detail[0])
+            alert("ambiguous", "rc %s: %s" % (rc, detail[0]))
         print("dt-sql: LOCKED (%s) — no further attempt until `dt-sql --unlock --by <actor>`" % kind, file=sys.stderr)
         return 4
 
 
+def entry(args):
+    """Exit 1 means ONLY "logged in, the SQL failed". An unexpected error or SystemExit before an attempt is 2
+    (Langston rider); an INTENT already written is left in place, so the next call still locks 'ambiguous'."""
+    try:
+        return main(args)
+    except SystemExit as exc:
+        if isinstance(exc.code, int):
+            return exc.code
+        print(str(exc.code), file=sys.stderr)
+        return 2
+    except Exception as exc:                                       # noqa: BLE001
+        print("dt-sql: unexpected error before or around the attempt: %s: %s" % (type(exc).__name__, exc), file=sys.stderr)
+        return 2
+
+
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))
+    sys.exit(entry(sys.argv[1:]))

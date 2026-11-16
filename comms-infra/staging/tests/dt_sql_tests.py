@@ -143,10 +143,31 @@ check("-c SQL goes in through stdin with -f - (psql exits 1 for a SQL error unde
       c and "-c" not in c[0]["argv"] and c[0]["argv"][-2:] == ["-f", "-"] and c[0]["stdin"].strip() == "select 1;", c)
 check("a clean read leaves no INTENT and no LOCKED", not intent() and locked() is None)
 
-print("== 2. read-only SQL refusal (before connecting)")
+print("== 2. read-only SQL refusal (before connecting), and ONE input mode")
 reset("ok")
 r = run(tool, "-c", "set default_transaction_read_only = off; delete from x")
 check("SQL naming the read-only setting is refused, exit 2, psql never called", r.returncode == 2 and calls() == [], (r.returncode, calls()))
+for stmt in ("BEGIN READ WRITE; delete from x", "START TRANSACTION READ WRITE", "BEGIN TRANSACTION READ WRITE"):
+    reset("ok")
+    r = run(tool, "-c", stmt)
+    check("refused before connecting: %r" % stmt, r.returncode == 2 and calls() == [], (r.returncode, calls()))
+evil = os.path.join(work, "evil.sql")
+with open(evil, "w") as fh:
+    fh.write("BEGIN READ WRITE; delete from x;")
+reset("ok")
+r = run(tool, "-c", "select 1", "-f", evil)
+check("D-1: -c and -f together are REFUSED (exit 2), psql never called", r.returncode == 2 and calls() == [], (r.returncode, calls()))
+reset("ok")
+r = run(tool, "-f", evil)
+check("a -f file that switches read-only off is refused (exit 2)", r.returncode == 2 and calls() == [], (r.returncode, calls()))
+good = os.path.join(work, "good.sql")
+with open(good, "w") as fh:
+    fh.write("select 1;")
+reset("ok")
+r = run(tool, "-f", good)
+c = calls()
+check("D-1: a -f file's CHECKED BYTES go to psql on stdin (-f -), never the path", r.returncode == 0 and c
+      and c[0]["argv"][-2:] == ["-f", "-"] and c[0]["stdin"] == "select 1;" and good not in c[0]["argv"], c)
 
 print("== 3. every outcome of the one attempt (fail closed)")
 reset("sql_error")
@@ -171,8 +192,10 @@ check("Connection refused (a ban): exit 3, NOT locked, intent cleared, 'do not r
 reset("fatal")
 r = run(tool, "-c", "select 1")
 lk = locked()
-check("an unclassifiable failure (rc 1): exit 4, LOCKED arm 'ambiguous', no alert",
-      r.returncode == 4 and lk and lk["arm"] == "ambiguous" and not os.path.exists(alert_log), (r.returncode, lk))
+al = open(alert_log).read() if os.path.exists(alert_log) else ""
+check("an unclassifiable failure (rc 1): exit 4, LOCKED arm 'ambiguous', and a WARNING alert (never silent, §5.1)",
+      r.returncode == 4 and lk and lk["arm"] == "ambiguous" and "dt-sql-ambiguous-locked" in al and "warning" in al
+      and "critical" not in al, (r.returncode, lk, al[:200]))
 
 print("== 4. a call that dies mid-attempt leaves its INTENT, and the next call locks")
 reset("hang")
@@ -229,16 +252,29 @@ setmode("ok")
 r = run(tool, "-c", "select 1")
 check("after unlocking, a read works again", r.returncode == 0, r.returncode)
 log = [json.loads(l) for l in open(os.path.join(state, "log.jsonl"))]
-check("the unlock is logged with who did it", any(e["event"] == "unlocked" and e.get("by") == "cc-infra" for e in log))
+check("the unlock is logged with who CLAIMED to do it (by_claimed: --by is unauthenticated)",
+      any(e["event"] == "unlocked" and e.get("by_claimed") == "cc-infra" for e in log))
+reset("ok")
+with open(env_file, "w") as fh:
+    fh.write("NODE_ENV=production\n")                        # no DATABASE_URL: a pre-attempt failure
+r = run(tool, "-c", "select 1")
+check("a failure BEFORE any attempt exits 2, never 1 (1 means only 'logged in, the SQL failed')", r.returncode == 2
+      and calls() == [], (r.returncode, r.stderr[-200:]))
+reset("ok")
+r = subprocess.run([sys.executable, build(psql=os.path.join(work, "no-such-psql")), "-c", "select 1"], capture_output=True,
+                   text=True, timeout=60)
+check("psql that cannot even start: exit 2 (not 1), and its INTENT stays so the next call locks 'ambiguous'",
+      r.returncode == 2 and intent(), (r.returncode, intent(), r.stderr[-200:]))
+tool = build(psql=FAKE_SHIM)
 
 print("== 8. the psql wrapper")
 wdir = os.path.join(work, "wrap")
 os.makedirs(wdir)
 wsrc = open(WRAPPER, encoding="utf-8").read()
-wcopy = wsrc.replace("/var/lib/dt-sql/LOCKED", os.path.join(state, "LOCKED")).replace(
-    "exec /usr/bin/psql", "exec %s %s" % (sys.executable, FAKE))
-check("the wrapper copy differs only in the two substituted paths",
-      wsrc.count("/var/lib/dt-sql/LOCKED") == 1 and wsrc.count("exec /usr/bin/psql") == 1)
+wcopy = wsrc.replace("/var/lib/dt-sql/", state + "/").replace("exec /usr/bin/psql", "exec %s %s" % (sys.executable, FAKE))
+check("the wrapper copy differs only in the state directory and the psql path",
+      wsrc.count("[ -e /var/lib/dt-sql/LOCKED ]") == 1 and wsrc.count("[ -e /var/lib/dt-sql/INTENT ]") == 1
+      and wsrc.count("exec /usr/bin/psql") == 1)
 wpath = os.path.join(wdir, "psql")
 with open(wpath, "w") as fh:
     fh.write(wcopy)
@@ -266,6 +302,13 @@ check("while dt-sql is LOCKED the wrapper refuses (exit 4) and psql is not run",
       (r.returncode, r.stderr))
 r = wrun({"DT_SQL_IGNORE_LOCK": "1"})
 check("DT_SQL_IGNORE_LOCK=1 lets a deliberate single check through", r.returncode == 0 and len(calls()) == n + 1)
+os.remove(write)
+with open(os.path.join(state, "INTENT"), "w") as fh:
+    fh.write('{"at": "x"}')
+n = len(calls())
+r = wrun({})
+check("D-2: an unfinished attempt (INTENT, no LOCKED) also makes the wrapper refuse, psql not run",
+      r.returncode == 4 and len(calls()) == n, (r.returncode, r.stderr))
 
 print("== 9. ONE attempt, proved against a fake Postgres server (real psql + openssl)")
 real_psql, openssl = shutil.which("psql"), shutil.which("openssl")
@@ -303,7 +346,7 @@ else:
         open(count, "w").close()
         live_wrapper = os.path.join(wdir, "psql-live")
         with open(live_wrapper, "w") as fh:                   # the committed wrapper, LOCKED path moved to the test state
-            fh.write(wsrc.replace("/var/lib/dt-sql/LOCKED", os.path.join(state, "LOCKED")))
+            fh.write(wsrc.replace("/var/lib/dt-sql/", state + "/"))
         os.chmod(live_wrapper, 0o755)
         subprocess.run([live_wrapper, "postgresql://postgres@127.0.0.1:%d/postgres" % port, "-c", "select 1"],
                        env={"PATH": "/usr/bin:/bin", "PGPASSWORD": "wrong"}, capture_output=True, timeout=60)
