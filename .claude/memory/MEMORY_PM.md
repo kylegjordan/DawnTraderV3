@@ -71,6 +71,8 @@
 
 - **Small-items bundle +1 (ANALYST 11-16 ~16Z):** Settings "config snapshot" view 500s (route calls removed storage.getPortfolioBalance; repoint vs remove undecided). Not paper/VTS. Bundle ids in archive 2026-11: small-items-bundle-1/2-pending-kyle.
 
+- **NUDGE 11-16 16:23Z:** NEW (idle since 14:49Z, in PFC window) - asked if 9j Step 2 moving between 14:45/20:30 readings; no deploy ask.
+
 # OPEN
 - Archived 2026-11-04 · stale-local-session-ids → `1-system-manual/pm/archive/memory/2026-11.md`
 - Hourly "Wake watcher heartbeat" sessions pile up unarchived in the sidebar — ask Kyle whether to archive.
