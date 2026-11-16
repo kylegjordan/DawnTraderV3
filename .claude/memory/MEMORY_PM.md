@@ -73,7 +73,7 @@
 
 - **NUDGE 11-16 16:23Z:** NEW - WITHDRAWN: 9j Step 2 done (Langston PROCEED x2, 1c2ac6a4f); Step 3 waits B-ENTRY-GATE close by design (KD-87); only PFC C-1 END read 20:30Z left today. MISTAKE: stall-misread.
 
-- **USAGE 87% @ ~18:23Z 11-16:** all four told to reach safe stopping points (once). At 90% run pm-usage-stop.
+- **USAGE 87% @ ~18:23Z 11-16:** all four AT SAFE STOP (OLD 6a67e252e, combined deploy after 21:00Z only if room; Infra clean, birth-cap unattended; NEW 20:30Z PFC read or re-run next US session; ANALYST d2c30001a, timed reads 11-17/18/21/23). At 90% run pm-usage-stop (guard cron 6b575bdd).
 
 # OPEN
 - Archived 2026-11-04 · stale-local-session-ids → `1-system-manual/pm/archive/memory/2026-11.md`
