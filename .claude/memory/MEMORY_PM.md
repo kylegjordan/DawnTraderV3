@@ -63,7 +63,7 @@
 
 - **KD-93 CAUSE FOUND (OLD, Discord 1571824719739486239):** Langston probe from staging 04:20:11Z sent the URL-encoded DB password undecoded (sed off .env) -> 2 failed logins x2 -> Supabase Fail2ban bans staging IP ~30 min+. App/pool not at fault. Infra proposal put to Kyle ~09:55Z: (a) PREVENT read-only DB query tool, Infra next after birth-cap, ahead of conversation index (slot-check 20261116T095431Z_CC-INFRA_kd-93-* UNCOMMITTED); (b) RECOVER auto-unban watcher needs Kyle mgmt token (beta API, IPv4-only documented; IPv6 untested). Interim rule sent to all: no hand-built DB logins on staging.
 
-- **NUDGE 11-16 11:31Z:** NEW (idle 90 min) - KD-75: start row 9j Step 1 (pool-fix scope) while B-ENTRY-GATE waits on 11-20 read? Asked, not assumed.
+- **NUDGE 11-16 11:31Z:** NEW - CLEARED: started row 9j Step 1 (pool-fix scope), pausing for PFC readings 14:45Z/20:30Z.
 
 # OPEN
 - Archived 2026-11-04 · stale-local-session-ids → `1-system-manual/pm/archive/memory/2026-11.md`
