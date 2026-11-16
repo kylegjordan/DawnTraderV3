@@ -373,6 +373,63 @@ check("vendor charged 2x the census births: divergence page", any(p["dedupe_key"
 check("RPC spend above a zero allowance: overrun page and a replan",
       any(p["dedupe_key"].startswith("birthcap-rpc-overrun") for p in r["pages"]) and store.load_state(birthcap.STATE, {}).get("replan"), r["pages"])
 
+store.save_state(birthcap.STATE, dict(store.load_state(birthcap.STATE, {}), replan=False))
+add_births([h0 + timedelta(hours=2, minutes=5, seconds=i) for i in range(300)])
+v.webhooks = 1900 + 600                                        # 2x again, and NO rpc this hour: only the divergence can replan
+r = tick(v, h0 + timedelta(hours=3))
+check("a webhook divergence alone sets replan (the webhook leg is the births budget)",
+      not any(p["dedupe_key"].startswith("birthcap-rpc-overrun") for p in r["pages"])
+      and store.load_state(birthcap.STATE, {}).get("replan") is True, r["pages"])
+h0 = h0 + timedelta(hours=1)
+store.save_state(birthcap.STATE, dict(store.load_state(birthcap.STATE, {}), replan=False))
+v.webhooks = 2500                                              # the vendor counter freezes while the census records 300
+add_births([h0 + timedelta(hours=2, minutes=5, seconds=i) for i in range(300)])
+r = tick(v, h0 + timedelta(hours=3))
+check("a frozen vendor counter (vendor +0, census +300) pages a divergence", any(p["dedupe_key"].startswith("birthcap-divergence") for p in r["pages"]), r["pages"])
+reset(); enable(); v = Vendor()
+store.save_state(birthcap.STATE, {"applied": "on", "plan": dict(full, always_on=True)})
+v.webhooks, v.rpc = 1000, 500
+tick(v, h0)
+v.webhooks, v.rpc = 1000, 501                                 # one rpc credit with a zero allowance
+r = tick(v, h0 + timedelta(hours=1))
+check("ANY rpc spend against a zero allowance pages (no absolute +50 slack)", any(p["dedupe_key"].startswith("birthcap-rpc-overrun") for p in r["pages"]), r["pages"])
+
+print("== 11. the cap does not disable itself (Langston gate C blocker)")
+reset()
+day0 = datetime(2026, 11, 20, 0, 0, tzinfo=UTC)
+recs = []
+for d in range(7, 0, -1):                                      # 7 capped days, oldest first as the log is: ON 18 h, OFF 6 h
+    ds = day0 - timedelta(days=d)
+    recs.append({"kind": "put", "requested": "off", "requested_at": (ds + timedelta(hours=6)).isoformat(), "ok": True})
+    recs.append({"kind": "put", "requested": "on", "requested_at": (ds + timedelta(hours=12)).isoformat(), "ok": True})
+    add_births([ds + timedelta(seconds=i * 50) for i in range(300)])       # 300 recorded rows a day
+check("on_fraction reads the measured ON share of a day", abs(birthcap.on_fraction(recs, day0 - timedelta(days=1)) - 0.75) < 1e-9,
+      birthcap.on_fraction(recs, day0 - timedelta(days=1)))
+check("the launch rate is de-censored: 300 rows at 0.75 ON = 400 launches/day",
+      abs(birthcap.trailing_launch_rate(day0, recs) - 400.0) < 1e-6, birthcap.trailing_launch_rate(day0, recs))
+check("without the switch log the rate falls back to the raw rows (300)", abs(birthcap.trailing_launch_rate(day0, None) - 300.0) < 1e-6)
+reset(); enable(); v = Vendor()
+st_always = dict(full, always_on=True, births_allowance_per_day=5)
+store.save_state(birthcap.STATE, {"applied": "on", "plan": st_always})
+t_mid = datetime(2026, 11, 28, 12, 0, 30, tzinfo=UTC)
+add_births([t_mid - timedelta(seconds=10 + i) for i in range(6)])
+r = tick(v, t_mid)
+check("an ALWAYS-ON plan still stops at its daily allowance (the backstop applies in every plan state)",
+      v.puts and v.puts[-1]["active"] is False, (v.puts, r))
+reset(); enable(); v = Vendor()
+store.save_state(birthcap.STATE, {"applied": "on", "plan": dict(tiny)})
+r = tick(v, TT + timedelta(minutes=1))                         # inside tiny's own cycle (no replan)
+check("a REFUSED plan with a negative allowance switches the feed OFF (credits gone), not ON with no ceiling",
+      tiny.get("births_allowance_per_day", 0) < 0 and v.puts and v.puts[-1]["active"] is False, (tiny.get("births_allowance_per_day"), v.puts))
+def _plan(rem):
+    return birthcap.plan_cycle(TT, {"creditsRemaining": rem, "creditCycle": {"start": "2026-10-27", "end": "2026-11-27"}},
+                               39_611, 0.0)
+at_floor, below = _plan(60_000), _plan(25_000)
+check("the floor holds (rule says 2, the plan runs 4): floor_binds True, below_floor False",
+      at_floor.get("windows") == 4 and at_floor.get("floor_binds") is True and at_floor.get("below_floor") is False, at_floor)
+check("a plan that walks below the floor for the 900 s assert says so: below_floor True, floor_binds False",
+      below.get("windows", 9) < 4 and below.get("below_floor") is True and below.get("floor_binds") is False, below)
+
 print()
 shutil.rmtree(ROOT, ignore_errors=True)
 print("%d passed, %d failed" % (PASS, FAIL))

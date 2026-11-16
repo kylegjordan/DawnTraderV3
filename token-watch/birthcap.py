@@ -135,7 +135,9 @@ def plan_cycle(now: datetime, usage: dict, launch_rate_per_day: float, rpc_rate_
         block = 86400.0 / w
         on_s = duty * block
         if on_s > LIVENESS_GAP_SECONDS:
-            return dict(base, always_on=False, windows=w, rule_windows=rule_w, floor_binds=rule_w < BIRTHCAP_W_MIN,
+            return dict(base, always_on=False, windows=w, rule_windows=rule_w,
+                        floor_binds=rule_w < BIRTHCAP_W_MIN and w == BIRTHCAP_W_MIN,
+                        below_floor=w < BIRTHCAP_W_MIN,         # the floor was abandoned for the 900 s assert
                         switching_per_day=switching, births_allowance_per_day=round(allow, 1),
                         duty=round(duty, 4), block_s=block, on_s=round(on_s, 1))
         if w <= 1:
@@ -309,12 +311,17 @@ def tick(now: datetime | None = None, usage_fn=providers.helius_usage, put=provi
     if plan is None or now >= _ts(plan["cycle_end"]) or st.get("replan"):
         try:
             usage = usage_fn()
-            launch = trailing_launch_rate(now)
+            try:
+                rate_records = read_switches()
+            except RecordUnreadable:
+                rate_records = None                           # the backstop still bounds the spend
+            launch = trailing_launch_rate(now, rate_records)
             plan = plan_cycle(now, usage, launch, st.get("rpc_rate_per_day", 0.0))
             st["plan"], st["replan"] = plan, False
             LOG.info("birthcap plan: %s", plan)
             if plan.get("refused"):
-                pages.append(_page("birthcap-plan-refused", "critical", "Birth cap refused its schedule — feed left ON",
+                pages.append(_page("birthcap-plan-refused", "critical",
+                                   "Birth cap refused its schedule — no timetable; the daily allowance still caps the feed",
                                    plan["refused"]))
         except Exception as exc:                              # noqa: BLE001
             LOG.error("birthcap: could not plan: %s", exc)
@@ -323,12 +330,14 @@ def tick(now: datetime | None = None, usage_fn=providers.helius_usage, put=provi
 
     # the backstop: a day that reaches its allowance stops early and is its own stratum
     today = now.strftime("%Y-%m-%d")
-    if plan and not plan.get("refused") and not plan.get("always_on"):
+    # ⛔ APPLIED IN EVERY PLAN STATE, always_on and refused included (Langston gate C blocker): those are exactly the
+    #    states where nothing else bounds the spend.
+    if plan and plan.get("births_allowance_per_day") is not None:
         if st.get("days", {}).get(today, 0) >= float(plan["births_allowance_per_day"]):
             want = "off"
             if st.get("truncated_day") != today:
                 st["truncated_day"] = today
-                _append(BIRTHCAP_TRUNCATED, {"day": today, "at": now.isoformat(), "births": st["days"][today],
+                _append(BIRTHCAP_TRUNCATED, {"day": today, "at": now.isoformat(), "births": st.get("days", {}).get(today, 0),
                                              "allowance": plan["births_allowance_per_day"]})
 
     # the switch record must be readable before anything is switched (r2-5)
@@ -446,12 +455,16 @@ def _hourly_crosscheck(st: dict, now: datetime, records: list[dict], usage_fn, p
     births = sum(v for k, v in st.get("minutes", {}).items() if k.startswith(prev))
     switch_cr = sum(int(r.get("credits", 0)) for r in records if str(r.get("requested_at", ""))[:13] == prev)
     expected = births + switch_cr
-    if dv_web >= BIRTHCAP_DIVERGENCE_MIN and abs(dv_web - expected) / dv_web > BIRTHCAP_DIVERGENCE_SHARE:
+    base_n = max(dv_web, expected)                            # a frozen vendor counter is tested too (gate C item 3)
+    if base_n >= BIRTHCAP_DIVERGENCE_MIN and abs(dv_web - expected) / base_n > BIRTHCAP_DIVERGENCE_SHARE:
+        st["replan"] = True                                   # the webhook leg IS the births budget (gate C item 2)
         pages.append(_page("birthcap-divergence-%s" % prev, "warning", "Birth cap: vendor webhook spend disagrees with the census",
                            "hour %s: vendor webhooks +%d, census births %d + switch credits %d = %d" % (
                                prev, dv_web, births, switch_cr, expected)))
     allow_rpc_hour = float(st.get("rpc_rate_per_day", 0.0)) / 24.0
-    if dv_rpc > 1.25 * allow_rpc_hour + 50:
+    # switch credits land in `webhooks`, not `rpc` (live pause: rpc flat at 25,168 across both PUTs, webhooks +~200
+    # each); with a zero allowance ANY rpc spend is unplanned (gate C item 4)
+    if dv_rpc > 0 and dv_rpc > 1.25 * allow_rpc_hour + (50 if allow_rpc_hour > 0 else 0):
         st["replan"] = True
         pages.append(_page("birthcap-rpc-overrun-%s" % prev, "warning", "Birth cap: RPC spend above its allowance — replanning",
                            "hour %s: vendor rpc +%d against an allowance of %.0f/hour (liquidity carve is 0 under "
@@ -462,16 +475,40 @@ def _hourly_crosscheck(st: dict, now: datetime, records: list[dict], usage_fn, p
         del hours[k]
 
 
-def trailing_launch_rate(now: datetime) -> float:
-    """Births per day over the last TRAILING_DAYS complete UTC days, from the rows themselves (B6)."""
-    total, days = 0, 0
+def on_fraction(records: list[dict], day_start: datetime) -> float:
+    """The measured share of one UTC day the feed was ON, from the confirmed switches (a day with none is all ON)."""
+    day_end = day_start + timedelta(days=1)
+    state, t, on_s = "on", day_start, 0.0
+    for r in records:
+        if r.get("kind") != "put" or not r.get("ok"):
+            continue
+        ts = _ts(r["requested_at"])
+        if ts >= day_end:
+            break
+        if ts > t:
+            on_s += (ts - t).total_seconds() if state == "on" else 0.0
+            t = ts
+        state = r.get("requested", state)
+    on_s += (day_end - t).total_seconds() if state == "on" else 0.0
+    return on_s / 86400.0
+
+
+def trailing_launch_rate(now: datetime, records: list[dict] | None = None) -> float:
+    """LAUNCHES per day over the last TRAILING_DAYS complete UTC days: each day's recorded rows divided by that day's
+    measured ON fraction (Langston gate C blocker). Delivered rows alone are censored by the cap itself — they converge
+    on the allowance, which would make the next plan always-on. A day ON under 5 % of the time is skipped; with no
+    readable switch log every day counts as fully ON (an under-estimate; the daily backstop still bounds the spend)."""
+    rates = []
     for i in range(1, TRAILING_DAYS + 1):
-        path = f"{BIRTHS_DIR}/{(now - timedelta(days=i)).strftime('%Y-%m-%d')}.jsonl"
+        day = (now - timedelta(days=i)).replace(hour=0, minute=0, second=0, microsecond=0)
+        path = f"{BIRTHS_DIR}/{day.strftime('%Y-%m-%d')}.jsonl"
         if os.path.exists(path):
             with open(path, "rb") as fh:
-                total += sum(1 for _ in fh)
-            days += 1
-    return total / days if days else float(EXPECTED_LAUNCHES_PER_DAY)
+                rows = sum(1 for _ in fh)
+            frac = on_fraction(records, day) if records is not None else 1.0
+            if frac >= 0.05:
+                rates.append(rows / frac)
+    return sum(rates) / len(rates) if rates else float(EXPECTED_LAUNCHES_PER_DAY)
 
 
 def _page(key: str, severity: str, title: str, body: str) -> dict:
