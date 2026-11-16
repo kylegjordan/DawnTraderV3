@@ -1,0 +1,29 @@
+# B-TOKEN-WATCH-LIQ-SHED-HOTFIX — SCOPE: shed token-watch's liquidity reads now, so the free Helius credits last until the birth cap is live
+
+change-class: hotfix
+**Owner:** Infra Claude (CC-INFRA) · **Opened:** 2026-11-16 ~02:45Z · **Parent:** `B-TOKEN-WATCH-BIRTH-CAP` (KD-90), whose pre-audit r2 finding B3 and Langston's r2-1 surfaced it · **Path A** (the defect is a finding of a just-completed audit).
+
+## 1. QUALIFYING TEST (all three)
+1. **Broken now.** token-watch's credit ledger keys the CALENDAR month (`budget._month_key`, `budget.py:74`). The shed gate reads it: `allowed()` → `spent_total()` (`budget.py:483-511`). Helius bills a cycle from the 27th: vendor counter `creditCycle` 2026-10-27 → 2026-11-27, read 2026-11-16 (`#1247`). The cycle is 85% spent (854,007 at 02:36Z). But November's ledger reads only 598,506 births + 25,231 liquidity, so the liquidity leg is still allowed (`spent_by("liquidity")` 25,231 < carve 190,000). It spends the vendor credits the births need. This is the failure §5.1 exists to forbid: a discretionary leg starving the irreplaceable one.
+2. **Waiting harms.** Measured spend: births ~39,611/day (11-01..11-15) ≈ 1.65k/h; liquidity since the follow-up switch-on 25,231 in ~11.4 h (ledger hourly buckets 11-15T16 → 11-16T01, mean ~2.3k/h; the vendor `rpc` agrees: 20,530 → 25,205 from 00:44Z to 02:36Z). 145,993 remaining ÷ ~3.95k/h ⇒ **projected dry ~2026-11-17 mid-afternoon (≈37 h)**. Births would then stop until 11-27, ~10 days of an unrecoverable census. `B-TOKEN-WATCH-BIRTH-CAP` cannot be built, reviewed and installed by then. With liquidity shed, births alone last ~88 h (~11-19 evening), which is that batch's target.
+3. **Small, proven blast radius.** One constant and its assert (§2).
+
+## 2. BLAST RADIUS (census at the ref)
+- **`LIQUIDITY_AUDIT_CARVE`** — writer: `config.py` only. Readers: `budget.allowed()` (`budget.py:509`, the liquidity bound) and three tests that use the symbol, not the number (`test_collector.py:202`, `test_pipeline.py:131`, `test_mutations.py:140`). Also `UNALLOCATED` (`config.py:155`) and its two asserts (`:166`, `:167`). No other module, no state file, no page.
+- **What sheds:** `providers.pool_sol_reserves` and `holder_concentration` raise `Shed("liquidity")` before any call (`providers.py:500`, `:541`). The follow-up records `pool_sol: {"sol": None, "source": "shed"}` and counts `stats["shed"]` (`follow_up.py:423-425`). That is the designed, recorded path — no silent skip.
+- **What does not shed:** births (`NEVER_SHED`, `budget.py:468`). The follow-up itself (`allowed("follow_up")` = `non_birth < headroom(197,000) and remaining > 0`; non_birth 25,231). DexScreener follow-up observations continue at 0 credits.
+- **Ledger readers:** `burn_report` reads the same constants; it is a log line only.
+- **Ledger search:** `receiver.py:185` already records the design's expectation that the carve *"exhausts in about three days"* at ~2,300/hour; the shed is designed behaviour, and this fix only brings its timing inside the vendor's cycle. `#1247` (cause confirmed), `#1246`.
+- **Larger design fault?** Yes — the ledger and the vendor have different boundaries (B3), and births alone overrun the free cycle. **Both are the parent batch's subject** (`B-TOKEN-WATCH-BIRTH-CAP` P3 + AMENDMENT 18). This hotfix changes no design; it moves one designed threshold so the designed shed fires before the account runs dry.
+
+## 3. THE FIX
+`token-watch/config.py`: `LIQUIDITY_AUDIT_CARVE` 190,000 → **20,000** (below November's 25,231, so liquidity sheds at the next follow-up run's first liquidity read); `UNALLOCATED` 7,000 → 177,000 and its assert (`:166`) updated; a dated INTERIM block naming the parent batch. The separation still exists (follow-up keeps running while liquidity sheds), so the shed order stays observable. The `:167` assert holds (20,000 < 197,000).
+**Interim until:** `B-TOKEN-WATCH-BIRTH-CAP` AMENDMENT 18 re-derives the split. On 12-01 the ledger month resets, and liquidity is allowed again up to 20,000 in December unless that amendment has landed.
+**Tests (local, at the change):** `test_collector.py` ALL PASSED · `test_round2.py` ALL PASSED · `test_wiring.py` ALL PASSED · `test_mutations.py` ALL PASSED · `test_promote.py` 59/0. `test_pipeline.py` (not in CI) fails one check, *"exactly ONE module makes OUTBOUND calls"* (`obs_fold.py`, `providers.py`), **identically without this change** (verified by stash), so it is pre-existing.
+
+## 4. INSTALL AND VERIFY
+Install with `token-watch/deploy/install_storage.sh <sha>` (token-watch's installer; restarts nothing). The follow-up run in progress keeps the code it loaded. **The next run is the first on it.**
+**Verify, once:** in the first post-install run, `stats["shed"]` > 0 and observation rows carry `pool_sol.source == "shed"`; the ledger's liquidity bucket stops growing; the vendor `rpc` counter flattens across that run (counter delta, the parent's instrument) while `webhooks` keeps tracking births.
+
+## 5. OUT-OF-SCOPE FINDING
+`test_pipeline.py`'s outbound-module check flags `obs_fold.py` and fails on a clean tree; the test is not in CI. DISPOSITION: added to `B-TOKEN-WATCH-BIRTH-CAP` as a Step-3 item (investigate whether `obs_fold.py` really makes outbound calls or the check is matching text; fix whichever is wrong).

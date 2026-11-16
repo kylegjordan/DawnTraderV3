@@ -151,8 +151,16 @@ MONTHLY_CREDIT_CAP = 1_000_000
 #   defence is that every number is traced inline, a stale trace is the defect
 #   it exists to prevent, wearing the fix's clothes. (Langston, condition 1.)
 BIRTHS_RESERVED = 803_000        # 31-day month at +25% variance. PROTECTED FLOOR.
-LIQUIDITY_AUDIT_CARVE = 190_000  # DELIBERATELY BELOW the headroom, see below
-UNALLOCATED = MONTHLY_CREDIT_CAP - BIRTHS_RESERVED - LIQUIDITY_AUDIT_CARVE  # 7,000
+# ⛔ HOTFIX 2026-11-16 (B-TOKEN-WATCH-LIQ-SHED-HOTFIX, Langston-gated): the carve is 20,000 UNTIL
+#    B-TOKEN-WATCH-BIRTH-CAP's AMENDMENT 18 re-derives the split. WHY: this ledger keys the CALENDAR
+#    month, but Helius bills a cycle from the 27th (vendor counter, `#1247`). Births alone (~39,600/day)
+#    overrun the cycle, and liquidity reads since the follow-up switch-on (~2,300/hour) were spending the
+#    same credits, projecting the account dry about 11-17 — a dark birth census for ~10 days, the one loss
+#    §5.1 forbids. 20,000 sits below November's liquidity spend (25,231 at 11-16 02:36Z), so liquidity
+#    SHEDS NOW, first, as §5.1 orders; follow-up (0 credits) keeps running. The 190,000 / 7,000 history
+#    in the paragraphs above and below is the design this interim departs from.
+LIQUIDITY_AUDIT_CARVE = 20_000   # INTERIM (hotfix above); was 190_000, deliberately below the headroom
+UNALLOCATED = MONTHLY_CREDIT_CAP - BIRTHS_RESERVED - LIQUIDITY_AUDIT_CARVE  # 177,000 under the interim carve
 
 # ⛔ WHY THE CARVE IS 190,000 AND NOT THE FULL 197,000 THAT REMAINS: with the
 #    carve set exactly equal to the headroom, BOTH discretionary legs refuse at
@@ -163,7 +171,7 @@ UNALLOCATED = MONTHLY_CREDIT_CAP - BIRTHS_RESERVED - LIQUIDITY_AUDIT_CARVE  # 7,
 # ⇒ 7,000 credits of separation buys a window in which liquidity has stopped
 #   and follow-up has not, which is what the injection test observes.
 
-assert UNALLOCATED == 7_000, "the §5.1 arithmetic changed — amend the scope, not this file"
+assert UNALLOCATED == 177_000, "the §5.1 arithmetic changed — amend the scope (B-TOKEN-WATCH-BIRTH-CAP AMENDMENT 18), not this file"
 assert LIQUIDITY_AUDIT_CARVE < MONTHLY_CREDIT_CAP - BIRTHS_RESERVED, (
     "the carve must sit BELOW the headroom or the shed order is unobservable")
 
