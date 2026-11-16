@@ -56,4 +56,4 @@ Corpora searched: `RUNNING_ISSUES.md` (`#705`, `#1082`, `#1034`, `#1032`), `BATC
 - **J4** — RULED: accepted with the label. **Step-7 note (Langston):** "flushes continue on all eight pairs" needs WINDOW coverage, not presence — a class that cannot flush in the chosen window (an xStock class off-session) reads as neither pass nor fail (`#661` leg 2).
 
 ## Delivery
-Card: the delivery board is retired for status (KD-35); status lives in `SPRINT_TO_LIVE_PLAN.md` §0a CC-A list item 3.
+Card: `B-ARCHIVE-NETWORK-RETRY` on the delivery board (created at Step 2; KD-35 retired the phone status board, NOT this board — this line wrongly said otherwise in r1/r2). Plan line: `SPRINT_TO_LIVE_PLAN.md` §0a CC-A list item 3.
