@@ -86,10 +86,16 @@ DISPLAY_AGES = GRID_LABELS
 assert set(DISPLAY_AGES) <= set(GRID_LABELS), "display cannot offer an unobserved age"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# SAMPLING — pre-registration §6 + AMENDMENT 1 §A1.3.
-# Census on birth (no sampling, ever). Case-control on follow-up.
+# SAMPLING — pre-registration §6 + AMENDMENT 1 §A1.3 + AMENDMENT 18.
+# Births: a CENSUS from 2026-08-31 to the birth cap's switch-on (the base-rate anchor), then a TIME SAMPLE on a
+# published timetable with a measured inclusion probability (KD-90; birthcap.py). Case-control on follow-up.
 # ─────────────────────────────────────────────────────────────────────────────
-EXPECTED_LAUNCHES_PER_DAY = 20_700    # measured against the chain, scope §5
+# ⚠️ 20,700 WAS MEASURED AGAINST THE CHAIN ON 2026-08-27; THE RATE IS ~39,600/day BY 2026-11 (births rows, #1247).
+#    Kept at 20,700 for its two live consumers — the control-sample design target (config CONTROL_INCLUSION_P; the
+#    daily log wins) and promote.MAX_CHECKS_PER_RUN (moving it would change B-TOKEN-WATCH-FOLLOWUP-MEMORY's own P10
+#    inputs mid-observation). The birth cap and the dead-man use the MEASURED rate instead. Removal point:
+#    B-TOKEN-WATCH-FOLLOWUP-MEMORY P15 / #1246.
+EXPECTED_LAUNCHES_PER_DAY = 20_700
 CONTROL_SAMPLE_PER_DAY = 500          # fixed random non-carriers, A1.3
 
 # ⛔ THE TRAIT THRESHOLD. It lived in receiver.py, OUTSIDE the file whose own
@@ -124,66 +130,35 @@ CONTROL_INCLUSION_P = CONTROL_SAMPLE_PER_DAY / (
 # CREDIT BUDGET — scope §5.1, r3 (the r2 double-count is corrected here).
 # 1,000,000 credits/month on the free tier.
 # ─────────────────────────────────────────────────────────────────────────────
+# ⛔ THE SPLIT — B-TOKEN-WATCH-BIRTH-CAP AMENDMENT 18 (Kyle KD-90; Langston ruling (A), Discord
+#    `1571799979847057452`). It supersedes the 2026-08 split (births 803,000 · liquidity carve 190,000 · separation
+#    7,000), whose derivation stays in git history and in the pre-registration §5.1 r2-r4. Two measured facts moved it:
+#    (1) BIRTHS ALONE OVERRUN THE FREE CYCLE: ~39,600/day against 1,000,000 (`#1247`). Births are now CAPPED on a
+#        timetable by birthcap.py, so the birth leg is an allowance the controller plans once per cycle, never a
+#        variance band around a launch rate.
+#    (2) THE LIQUIDITY LEG CANNOT BE FUNDED, AND AN EXHAUST-FIRST CARVE IS BIASED. Its natural demand is ~2.3k
+#        credits/hour (~1.7M per cycle) because it is called per alive follow-up observation; and the follow-up
+#        reads buckets OLDEST FIRST (follow_up._buckets_to_read), so any carve spends itself on the oldest backlog —
+#        a bias that hourly pacing only repeats. ⇒ CARVE 0: the leg is suspended, every pool read records source
+#        "shed", and a paced design is a proposal for Kyle's list, not this file.
+# ⛔ THE CYCLE IS THE VENDOR'S (27th to 27th), NOT THE CALENDAR MONTH THIS LEDGER KEYS (budget._month_key). The
+#    controller plans against the vendor counter; this ledger still governs the shed gate. At carve 0 the gate
+#    sheds liquidity at every spend, so the two boundaries cannot disagree about that leg.
 MONTHLY_CREDIT_CAP = 1_000_000
-
-# ⛔ THE STATED DERIVATION WAS WRONG AND THE BUDGET DID NOT FIT. A fresh reader
-#    did the arithmetic across month lengths; I had done it for one.
-#    "621k mean + 25% variance = 776,000" is a THIRTY-DAY month — and it does
-#    not hold even there:
-#        28-day: 579,600 mean -> 724,500 at +25%   fits
-#        30-day: 621,000 mean -> 776,250 at +25%   EXCEEDS 776,000 by 250
-#        31-day: 641,700 mean -> 802,125 at +25%   EXCEEDS 776,000 by 26,125
-#    In the SEVEN 31-day months of the year, births at the stated variance
-#    exceeded both the reserve AND the cap-minus-carve — so the only clause
-#    that can shed anything would have been firing on births alone.
-# ⇒ RE-DERIVED AGAINST THE WORST MONTH, not the convenient one. 31 days at
-#   +25% is 802,125; rounded up to 803,000. The liquidity carve takes what is
-#   left after a 7,000 separation, which is 190,000 rather than 200,000 — a 5%
-#   reduction on a leg the study can afford to lose, against a birth census it
-#   cannot.
-# ⚠️ UNALLOCATED IS 7,000, AND THAT IS THE SEPARATION, NOT SPARE CAPACITY.
-#   Above +25% the shed order fires and the carve becomes a residual by design
-#   — which the scope already says, and which is now arithmetically true
-#   instead of merely written down.
-# ⚠️ THIS PARAGRAPH PREVIOUSLY SAID "197,000" AND "UNALLOCATED IS NOW ZERO",
-#   eight lines above constants reading 190,000 and 7,000. A correction
-#   stacked on superseded text is not a correction — in a file whose whole
-#   defence is that every number is traced inline, a stale trace is the defect
-#   it exists to prevent, wearing the fix's clothes. (Langston, condition 1.)
-BIRTHS_RESERVED = 803_000        # 31-day month at +25% variance. PROTECTED FLOOR.
-# ⛔ HOTFIX 2026-11-16 (B-TOKEN-WATCH-LIQ-SHED-HOTFIX, Langston-gated): the carve is 20,000 UNTIL
-#    B-TOKEN-WATCH-BIRTH-CAP's AMENDMENT 18 re-derives the split. WHY: this ledger keys the CALENDAR
-#    month, but Helius bills a cycle from the 27th (vendor counter, `#1247`). Births alone (~39,600/day)
-#    overrun the cycle, and liquidity reads since the follow-up switch-on (~2,300/hour) were spending the
-#    same credits, projecting the account dry about 11-17 — a dark birth census for ~10 days, the one loss
-#    §5.1 forbids. 20,000 sits below November's liquidity spend (25,231 at 11-16 02:36Z), so liquidity
-#    SHEDS NOW, first, as §5.1 orders; follow-up (0 credits) keeps running. The 190,000 / 7,000 history
-#    in the paragraphs above and below is the design this interim departs from.
-LIQUIDITY_AUDIT_CARVE = 20_000   # INTERIM (hotfix above); was 190_000, deliberately below the headroom
-UNALLOCATED = MONTHLY_CREDIT_CAP - BIRTHS_RESERVED - LIQUIDITY_AUDIT_CARVE  # 177,000 under the interim carve
-
-# ⏸ SUSPENDED 2026-11-16 by the interim carve above (B-TOKEN-WATCH-LIQ-SHED-HOTFIX); restored or replaced by
-#   B-TOKEN-WATCH-BIRTH-CAP AMENDMENT 18. Under 20,000 the separation is 177,000, so the order below still holds.
-# ⛔ (DESIGN, 2026-08) WHY THE CARVE WAS 190,000 AND NOT THE FULL 197,000 THAT REMAINS: with the
-#    carve set exactly equal to the headroom, BOTH discretionary legs refuse at
-#    the same instant and the SHED ORDER BECOMES UNOBSERVABLE — there is no
-#    state in which liquidity has shed and follow-up has not. The scope
-#    specifies an order, and an order that can never be seen firing in sequence
-#    is the same shape as the guard that was never tested.
-# ⇒ (design) 7,000 credits of separation bought a window in which liquidity has stopped
-#   and follow-up has not, which is what the injection test observes.
-
-assert UNALLOCATED == 177_000, "the §5.1 arithmetic changed — amend the scope (B-TOKEN-WATCH-BIRTH-CAP AMENDMENT 18), not this file"
-assert LIQUIDITY_AUDIT_CARVE < MONTHLY_CREDIT_CAP - BIRTHS_RESERVED, (
-    "the carve must sit BELOW the headroom or the shed order is unobservable")
+SWITCH_RESERVED = 75_000          # 12 windows x 2 switches x 31 days x 100 credits = 74,400 (pre-audit P5)
+LIQUIDITY_AUDIT_CARVE = 0         # suspended (above): allowed("liquidity") is False at every spend
+UNALLOCATED = 7_000               # the separation, NOT spare capacity
+BIRTHS_RESERVED = MONTHLY_CREDIT_CAP - SWITCH_RESERVED - LIQUIDITY_AUDIT_CARVE - UNALLOCATED   # 918,000
+assert BIRTHS_RESERVED == 918_000, "the AMENDMENT 18 split changed — amend the pre-registration, not this file"
+assert SWITCH_RESERVED >= 12 * 2 * 31 * 100, "the switch reserve must cover the window ceiling for the longest cycle"
 
 
 # ⛔ THE SHED ORDER (scope §5.1, OBJ-9). Enforced in code, not intention.
-#    BIRTHS ARE NEVER SHED: a sampled birth record destroys the base rate
-#    irrecoverably, and §5 measures reconstruction as unaffordable at every
-#    tier. Reconstructable-but-unaffordable is operationally not reconstructable.
+#    A DELIVERED BIRTH IS NEVER SHED: Helius has charged for it already, so discarding it saves nothing and loses
+#    the row. How many births are DELIVERED is the birth cap's job (AMENDMENT 18), done by switching the
+#    subscription off on a published timetable — never by refusing an arrival here.
 SHED_ORDER = ("liquidity", "follow_up")   # first to go, then second
-NEVER_SHED = ("birth", "delivery")
+NEVER_SHED = ("birth", "delivery", "switch")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # BURN MONITOR — OBJ-9, r3.
@@ -325,6 +300,13 @@ UNPACED_HOSTS = {
         "it to RATE_PER_MIN_BY_HOST -- do not delete it from both.",
     "api.helius.xyz":
         "same account and same credit gate as the RPC host above.",
+    "api-mainnet.helius-rpc.com":
+        "the webhook management API (birthcap.py only). Each call costs 100 "
+        "credits and is bounded by the birth cap's daily switch ceiling "
+        "(birthcap_switch_ceiling), not by a rate: at most ~28 calls a day.",
+    "admin-api.helius.xyz":
+        "the project usage read (birthcap.py only): uncharged (pre-audit A1/A4), "
+        "read at most once a minute by the controller.",
 }
 assert not (set(RATE_PER_MIN_BY_HOST) & set(UNPACED_HOSTS)), (
     "a host cannot be both paced and deliberately exempt")
@@ -335,18 +317,21 @@ CREDITS = {"birth": 1, "follow_up": 0, "liquidity": 1,
            # the same journal so the received/recorded ratio survives beyond a
            # log line. Zero credits, and it is in NEVER_SHED so the shed
            # decision can never suppress an audit record.
-           "delivery": 0}
+           "delivery": 0,
+           # `switch` is the birth cap's webhook management call (PUT, or the
+           # rare GET): 100 credits each (B-TOKEN-WATCH-BIRTH-CAP pre-audit A3).
+           # NEVER_SHED: it is charged AFTER a call that has already happened,
+           # so there is nothing left to refuse; the cap's own breaker bounds it.
+           "switch": 100}
 
-# ⛔ THE RESERVE IS A FUNCTION OF THE PER-EVENT CREDIT, AND THE GUARD MUST SAY SO.
-#    Langston's tripwire on the §5.1 amendment: the first version of this assert
-#    omitted CREDITS["birth"], so a MEASURED 1.01 credits per birth at §8.8
-#    would break the reserve with the assert still green — at 7,000 unallocated
-#    there is no slack to absorb it.
-# ★ Put §8.8's result INTO THE GUARD, not into a paragraph. A measurement that
-#   only ever lands in prose is the shape this whole batch keeps failing on.
-assert BIRTHS_RESERVED >= EXPECTED_LAUNCHES_PER_DAY * 31 * 1.25 * CREDITS["birth"], (
-    "the reserve no longer covers the worst month at the stated variance and "
-    "the measured per-birth credit — re-derive §5.1 before changing this")
+# ⛔ THE RESERVE IS A FUNCTION OF THE PER-EVENT CREDIT, AND THE GUARD MUST SAY SO — WITH ITS UNITS (Langston's
+#    tripwire on §5.1, kept; restated for AMENDMENT 18). Under the cap the reserve must cover the CAP, not the launch
+#    rate: the old form (20,700/day x 31 x 1.25) passed by 875 only because 20,700 was 1.9x low, and at the measured
+#    ~39,600/day it fails by ~731,900 — the cap is what makes the reserve hold at all.
+#    BIRTHS_RESERVED [credits/cycle] >= BIRTHCAP_MAX_BIRTHS_PER_DAY [births/day] x 31 [days] x CREDITS["birth"] [credits/birth]
+BIRTHCAP_MAX_BIRTHS_PER_DAY = 29_600   # the controller never plans more (birthcap.plan_cycle clamps to it)
+assert BIRTHS_RESERVED >= BIRTHCAP_MAX_BIRTHS_PER_DAY * 31 * CREDITS["birth"], (
+    "the births reserve no longer covers the cap's daily ceiling over the longest cycle at the per-birth credit")
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -430,3 +415,69 @@ def harden(directory: str, path: str) -> None:
         except OSError:
             pass
 
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# THE BIRTH CAP (B-TOKEN-WATCH-BIRTH-CAP, KD-90) — a timetable that switches the
+# Helius birth subscription on and off, so the study stays on the free tier.
+#
+# ⛔ THE CAP STOPS HELIUS SENDING; IT NEVER DISCARDS AN ARRIVAL. Helius charges a
+#    birth "per event sent ... regardless of successful or failed endpoint
+#    responses" (helius.dev/docs/billing/credits), so a dropped arrival saves
+#    nothing and loses the row. NEVER_SHED keeps birth. The cap lives only in
+#    birthcap.py, which flips the webhook's `active` flag.
+# ⛔ SCHEDULED BY TIME, NOT BY COUNT (Langston ruling 1b): fixed on-duration
+#    windows, so each birth's inclusion probability is a known constant and the
+#    sample stays stateable. The credit allowance is a BACKSTOP; a day it binds is
+#    logged `truncated_day` and analysed as its own stratum.
+# Measured facts this rests on (pre-audit A1-A5): `active:false` on a FULL-body
+#    PUT pauses the webhook (create refuses the field); a partial PUT is 400;
+#    fields omitted from a full PUT persist (authHeader included, read off the
+#    PUT RESPONSE); create/edit/delete/GET cost 100 credits each, a 400 is free;
+#    the admin usage endpoint is uncharged; ~49 s of in-flight deliveries follow
+#    a pause and deliveries resume ~55 s after a restore.
+# ═════════════════════════════════════════════════════════════════════════════
+BIRTHCAP_WEBHOOK_ID = "d3f861dd-3c9e-415c-8b07-7c6267fc2b67"
+HELIUS_PROJECT_ID = "9913a9e5-651b-4fb5-ab1c-25942eecfba2"
+HELIUS_WEBHOOKS_BASE = "https://api-mainnet.helius-rpc.com/v0/webhooks"
+HELIUS_USAGE_URL = f"https://admin-api.helius.xyz/v0/admin/projects/{HELIUS_PROJECT_ID}/usage"
+# ⛔ THE BODY CARRIES NO SECRET. `authHeader` is deliberately ABSENT: a full PUT
+#    keeps the stored header (measured on the PUT response), and the controller
+#    checks the echo still carries one. So the controller never holds the
+#    receiver's secret; it can only switch the webhook, not re-point it.
+BIRTHCAP_WEBHOOK_BODY = {
+    "webhookURL": "https://188.245.193.8.sslip.io/token-watch/webhook",
+    "transactionTypes": ["CREATE"],
+    "accountAddresses": ["6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P"],
+    "webhookType": "enhanced",
+    "txnStatus": "success",
+}
+BIRTHCAP_SWITCHES = f"{ROOT}/provenance/switches.jsonl"     # the weight record (OBJ-8)
+BIRTHCAP_PLANNED_OFF = f"{ROOT}/provenance/planned_off.jsonl"
+BIRTHCAP_TRUNCATED = f"{ROOT}/provenance/truncated_days.jsonl"
+SWITCH_CREDITS = 100                 # per create/edit/delete/GET (pre-audit A3)
+SWITCH_SHARE_MAX = 0.08              # switching <= 8% of the GROSS day allowance (ruling 1, L-11)
+BIRTHCAP_W_MAX = 12
+BIRTHCAP_W_MIN = 4                   # below 4 the longest off-block exceeds ~4.5 h of one day
+BIRTHCAP_RESERVE_RATE_ERROR = 0.20   # one day of launch-rate error, as a share of a day's births
+BIRTHCAP_OFF_GRACE_S = 60            # in-flight tail after a pause (A5: 49 s measured)
+BIRTHCAP_RESTART_GRACE_S = 90        # deliveries resume after a restore (A5: 55 s measured)
+BIRTHCAP_FAILED_OFF_MIN_ROWS = 4     # Langston r2-4: max(4, 0.25 x the on-window's last-5-min rate)
+BIRTHCAP_FAILED_OFF_RATE_SHARE = 0.25
+BIRTHCAP_DIVERGENCE_MIN = 200        # vendor-vs-census ratio computed only above this hourly delta
+BIRTHCAP_DIVERGENCE_SHARE = 0.10
+BIRTHCAP_PHASE_STEP = 0.618          # daily phase rotation, as a fraction of a block
+
+# ⛔ THE BREAKER (Langston blocker 4): a lost applied-state file plus a minute
+#    timer would PUT 1,440 times a day (144,000 credits). Hard ceiling per UTC
+#    day, independent of the schedule; at the ceiling the controller stops
+#    switching, leaves the feed ON, and pages.
+def birthcap_switch_ceiling(windows_per_day: int) -> int:
+    return 2 * windows_per_day + 4
+
+assert BIRTHCAP_W_MIN <= BIRTHCAP_W_MAX
+# A failed switch-ON is only visible as on-window silence > LIVENESS_GAP_SECONDS,
+# so a schedule whose on-duration is shorter has no instrument (Langston C-5).
+# birthcap.plan_cycle refuses such a schedule; this assert pins the constant.
+assert LIVENESS_GAP_SECONDS < 86400 // BIRTHCAP_W_MAX
+assert CREDITS["switch"] == SWITCH_CREDITS, "the ledger and the controller must charge one price per switch"

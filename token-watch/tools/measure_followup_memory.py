@@ -801,6 +801,12 @@ def cmd_run(a) -> int:
     cur["last_bucket"] = (first - timedelta(hours=1)).strftime("%Y-%m-%dT%H")
     store.save_state("follow_up_cursor", cur)
     ledger = budget._blank(budget._month_key(now))
+    # ⛔ THE LIVE ARMS MEASURE THE ENVELOPE WITH THE LIQUIDITY LEG RUNNING, which is what this tool was built to bound
+    #    (B-TOKEN-WATCH-FOLLOWUP-MEMORY P1-P2). AMENDMENT 18 (B-TOKEN-WATCH-BIRTH-CAP) suspends that leg in production
+    #    (carve 0), so a live arm on the shipped carve would shed every read and measure a smaller process than the
+    #    one the cap must hold. The harness therefore restores the 2026-08 carve in its own process only.
+    if a.arm != "all_shed":
+        budget.LIQUIDITY_AUDIT_CARVE = max(budget.LIQUIDITY_AUDIT_CARVE, 190_000)
     if a.arm == "all_shed":
         ledger["spent"]["birth"] = MONTHLY_CREDIT_CAP + 1
     store.save_state(budget.STATE, ledger)

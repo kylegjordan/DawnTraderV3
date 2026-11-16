@@ -195,7 +195,13 @@ section("4. ⛔ THE SHED ORDER — THE HARD CLOSE CONDITION, FIRED ON PURPOSE")
 # guard.' "It ran 72 hours and never fired" is absence of opportunity, not
 # evidence of capability. So we drive the budget past its threshold.
 # ─────────────────────────────────────────────────────────────────────────────
-check("POSITIVE CONTROL: liquidity IS allowed at zero spend", budget.allowed("liquidity", T0))
+# AMENDMENT 18 (B-TOKEN-WATCH-BIRTH-CAP): the shipped carve is 0, so the liquidity leg is suspended at EVERY spend.
+check("AMENDMENT 18: under the shipped carve (0) liquidity is refused at zero spend", not budget.allowed("liquidity", T0))
+# The shed-ORDER mechanism is still the hard close condition, so it is exercised with a non-zero carve below the
+# 7,000 headroom (a carve the code must keep honouring if a paced liquidity design restores one).
+LIQUIDITY_AUDIT_CARVE = 5_000
+budget.LIQUIDITY_AUDIT_CARVE = LIQUIDITY_AUDIT_CARVE
+check("POSITIVE CONTROL: with a 5,000 carve, liquidity IS allowed at zero spend", budget.allowed("liquidity", T0))
 check("POSITIVE CONTROL: births allowed at zero spend", budget.allowed("birth", T0))
 
 # Injection 1 — exhaust the liquidity carve exactly.

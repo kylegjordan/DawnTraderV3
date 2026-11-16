@@ -49,7 +49,9 @@ PINNED="config.py liveness.py provenance.py store.py tier.py"
 # P12 (B-TOKEN-WATCH-FOLLOWUP-MEMORY): the plan row named summary.py + budget.py; promote.py (P2b-2 F-f, streamed
 # read) and obs_fold.py (P7, new; summary imports it) are imported by follow_up/summary too, so all five are installed
 # together - a follow-up importing a NEW store/summary beside an OLD promote is a mixed tree.
-CORE="follow_up.py summary.py budget.py promote.py obs_fold.py"
+# B-TOKEN-WATCH-BIRTH-CAP: birthcap.py (new) and providers.py (its vendor calls go through the one egress). providers.py
+# was last placed by hand on 2026-09-02 and equals its blob at 953ce3af5, so the box-edit guard passes it.
+CORE="follow_up.py summary.py budget.py promote.py obs_fold.py providers.py birthcap.py"
 # B-TOKEN-WATCH-FOLLOWUP-MEMORY added four of these six tools (its docstrings tell the operator to run them from
 # /opt/token-watch/tools)
 # (Langston, P11 Step 4 C-1: a documented tool the installer never placed cannot be run as documented)
@@ -58,7 +60,8 @@ tools/backlog_census.py tools/move_followup_cursor.py tools/derive_obs_window.py
 UNIT_FILES="token-watch-cold-offbox.service token-watch-cold-offbox.timer token-watch-store-watch.service
 token-watch-store-watch.timer token-watch-failed@.service token-watch-tier.service token-watch-receiver.service
 token-watch-followup.service token-watch-summary.service token-watch-feed-watch.service token-watch-feed-watch.timer
-token-watch-followup.timer token-watch-summary.timer token-watch-tier.timer"
+token-watch-followup.timer token-watch-summary.timer token-watch-tier.timer token-watch-birthcap.service
+token-watch-birthcap.timer"
 ALL="$OPS $PINNED $CORE $TOOLS"
 # the four lists are disjoint: a file in two would be installed, guarded and recorded twice
 DUP=$(printf '%s\n' $ALL | sort | uniq -d)
@@ -125,13 +128,18 @@ done
 # ALL, not OPS+CORE+TOOLS (Langston C-1): the guard rewrite makes a CHANGED pinned file installable, so a syntax
 # error in store.py must stop here, not install clean and surface as every timer failing at import.
 for f in $ALL; do python3 -m py_compile "$stage/$f" || fail "$f does not compile"; done
+# ⛔ py_compile RUNS NO MODULE-LEVEL ASSERT (Langston, LIQ-SHED-HOTFIX C-3), and config.py's whole defence is import-time
+#    asserts on the credit split. A bad split would install clean and darken births at the next unit start. Import it,
+#    and the modules that check it at import, against the staged tree, under a throwaway root.
+( cd "$stage" && TOKEN_WATCH_ROOT="$stage/importcheck" python3 -c "import config, budget, liveness, birthcap" ) \
+  || fail "the staged tree does not import (a module-level assert in config/budget/liveness/birthcap failed)"
 
 # ── 3. install ──────────────────────────────────────────────────────────────
 install -d -o root -g root -m 0755 "$DEST/ops" "$DEST/tools"
 for f in $ALL; do install -o root -g root -m 0644 "$stage/$f" "$DEST/$f"; done
 for u in $UNIT_FILES; do install -o root -g root -m 0644 "$stage/units/$u" "$UNITS/$u"; done
 systemctl daemon-reload
-for u in token-watch-cold-offbox.service token-watch-store-watch.service token-watch-feed-watch.service token-watch-followup.service token-watch-summary.service; do   # a template cannot be verified bare
+for u in token-watch-cold-offbox.service token-watch-store-watch.service token-watch-feed-watch.service token-watch-followup.service token-watch-summary.service token-watch-birthcap.service; do   # a template cannot be verified bare
   systemd-analyze verify "$UNITS/$u" || fail "systemd-analyze rejects $u — files are in place but NOT recorded: INSTALLED still names $PREV, so the next run's guard will report every changed file as edited on the box. Fix the unit and re-run this sha, or restore the files from $PREV"
 done
 

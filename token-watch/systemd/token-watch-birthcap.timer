@@ -1,0 +1,12 @@
+# B-TOKEN-WATCH-BIRTH-CAP: once a minute. Windows are minutes to hours long, so a minute's resolution is enough;
+# the measured in-flight and restart graces (60 s, 90 s) are the same order.
+[Unit]
+Description=token-watch birth cap, every minute
+
+[Timer]
+OnCalendar=*-*-* *:*:20
+AccuracySec=5s
+Persistent=false
+
+[Install]
+WantedBy=timers.target

@@ -131,7 +131,10 @@ section("3. THE RESERVE ACTUALLY BOUNDS NON-BIRTH SPEND")
 # BIRTHS_RESERVED cancelled out and constrained nothing.
 # ─────────────────────────────────────────────────────────────────────────────
 headroom = MONTHLY_CREDIT_CAP - BIRTHS_RESERVED
-check("POSITIVE CONTROL: liquidity allowed well below the headroom",
+check("AMENDMENT 18: under the shipped carve (0) liquidity is refused at zero spend", not budget.allowed("liquidity"))
+_saved_carve = budget.LIQUIDITY_AUDIT_CARVE
+budget.LIQUIDITY_AUDIT_CARVE = 5_000      # exercise the mechanism with a non-zero carve below the headroom
+check("POSITIVE CONTROL: liquidity allowed well below the headroom (5,000 carve)",
       budget.allowed("liquidity"))
 budget.inject_spend("liquidity", headroom)
 # ⚠️ THIS CHECK CANNOT ATTRIBUTE THE REFUSAL, and its name used to claim it
@@ -144,6 +147,7 @@ check("liquidity is refused once spend passes the carve/headroom region",
       f"headroom={headroom}; the old expression would still allow up to {MONTHLY_CREDIT_CAP}")
 check("births still allowed with non-birth spend at the boundary",
       budget.allowed("birth"))
+budget.LIQUIDITY_AUDIT_CARVE = _saved_carve
 
 raised = False
 try:

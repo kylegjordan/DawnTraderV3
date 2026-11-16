@@ -511,7 +511,7 @@ import re as _re2  # noqa: E402
 check("the installer installs both units and verifies the service",
       "token-watch-feed-watch.service token-watch-feed-watch.timer" in inst
       and "token-watch-store-watch.service token-watch-feed-watch.service token-watch-followup.service "
-          "token-watch-summary.service; do" in inst)
+          "token-watch-summary.service token-watch-birthcap.service; do" in inst)
 check("P12: the installer places the follow-up and summary TIMERS too (the INSTALLED record covers them, A10)",
       "token-watch-followup.timer token-watch-summary.timer" in inst)
 _units = (_re2.search(r'^UNIT_FILES="([^"]*)"', inst, _re2.M | _re2.S) or [None, ""])[1].split()
@@ -530,8 +530,10 @@ check("★ the record names the actor as declared AND as observed (C-2)",
 import re as _re  # noqa: E402
 _tools = (_re.search(r'^TOOLS="([^"]*)"', inst, _re.M) or [None, ""])[1].split()
 _core = (_re.search(r'^CORE="([^"]*)"', inst, _re.M) or [None, ""])[1].split()
-check("P12: CORE = the five modules the follow-up and summary import (plan row's two + promote.py + obs_fold.py)",
-      set(_core) == {"follow_up.py", "summary.py", "budget.py", "promote.py", "obs_fold.py"}, _core)
+check("P12 + B-TOKEN-WATCH-BIRTH-CAP: CORE = the five modules the follow-up and summary import, plus providers.py "
+      "(the one egress, which the birth cap's vendor calls pass through) and birthcap.py",
+      set(_core) == {"follow_up.py", "summary.py", "budget.py", "promote.py", "obs_fold.py", "providers.py",
+                     "birthcap.py"}, _core)
 check("the installer carries TOOLS (the storage batch's two + B-TOKEN-WATCH-FOLLOWUP-MEMORY's five)",
       set(_tools) == {
           "tools/backfill_consumed_from.py", "tools/due_census.py", "tools/census_cold_versions.py",

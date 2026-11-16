@@ -143,6 +143,35 @@ def helius_key() -> str:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# THE BIRTH CAP'S VENDOR CALLS (B-TOKEN-WATCH-BIRTH-CAP) — through `_request`, the one egress.
+# ⛔ The key goes in the X-Api-Key HEADER, never the URL: a URL lands in logs and tracebacks.
+# ─────────────────────────────────────────────────────────────────────────────
+def _helius_admin(method: str, url: str, body: dict | None = None):
+    data = json.dumps(body).encode("utf-8") if body is not None else None
+    req = urllib.request.Request(url, data=data, method=method, headers={
+        "User-Agent": USER_AGENT, "Content-Type": "application/json", "X-Api-Key": helius_key()})
+    return _request(req)
+
+
+def webhook_put(webhook_id: str, body: dict) -> dict:
+    """A FULL-body PUT (a partial one is refused 400; pre-audit A3). Returns the stored object Helius echoes."""
+    from config import HELIUS_WEBHOOKS_BASE
+    return _helius_admin("PUT", f"{HELIUS_WEBHOOKS_BASE}/{webhook_id}", body)
+
+
+def webhook_get(webhook_id: str) -> dict:
+    """Costs 100 credits (pre-audit A3) — the controller calls it only when its applied state is lost."""
+    from config import HELIUS_WEBHOOKS_BASE
+    return _helius_admin("GET", f"{HELIUS_WEBHOOKS_BASE}/{webhook_id}")
+
+
+def helius_usage() -> dict:
+    """The vendor's own credit counter for this project's cycle (uncharged; pre-audit A1)."""
+    from config import HELIUS_USAGE_URL
+    return _helius_admin("GET", HELIUS_USAGE_URL)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # FOLLOW-UP — DexScreener. Free, no account, no key. 300 req/min against our
 # ~19k/day need (under 5% of the limit).
 # ⚠️ NO ACCOUNT MEANS NO SERVICE GUARANTEE. Named residual: if it throttles or

@@ -61,6 +61,7 @@ from config import (
     NEVER_SHED,
     SHED_ORDER,
     STATE_DIR,
+    SWITCH_RESERVED,
 )
 # closed_journal_months lives in store so tier can use it without importing budget (the ops/ import boundary,
 # tests/test_ops_boundary.py: budget is a provider-path module)
@@ -447,7 +448,10 @@ def allowed(kind: str, now: datetime | None = None) -> bool:
     deliberately small enough to read in one go.
 
     BIRTHS: always allowed, unconditionally, no threshold anywhere in the
-    path. There is no state of the budget in which a birth is refused —
+    path. There is no state of the budget in which a DELIVERED birth is refused —
+    (AMENDMENT 18: how many births are delivered is decided upstream, by the birth
+    cap switching the subscription off on a published timetable; a delivered birth
+    is already paid for, so refusing it here would save nothing and lose the row) —
     because a missing birth record destroys the denominator of every rate in
     the study, and §5 measures reconstruction as unaffordable at every tier.
 
@@ -481,7 +485,10 @@ def allowed(kind: str, now: datetime | None = None) -> bool:
     #    ★ A fresh reader found this by doing the algebra; I had read that line
     #      several times and seen the constant rather than the arithmetic.
     non_birth = spent_by("liquidity", now) + spent_by("follow_up", now)
-    headroom = MONTHLY_CREDIT_CAP - BIRTHS_RESERVED  # 197,000
+    # ⛔ THE SWITCH RESERVE IS NOT DISCRETIONARY SPACE (Langston r2-2): without it this was 82,000 under AMENDMENT 18
+    #    while the real discretionary space is 7,000, so bound (a) would let the discretionary legs eat the reserve
+    #    the birth cap switches on — the third instance of this cancellation shape in this file.
+    headroom = MONTHLY_CREDIT_CAP - BIRTHS_RESERVED - SWITCH_RESERVED  # 7,000 under AMENDMENT 18
     remaining = MONTHLY_CREDIT_CAP - spent_total(now)
 
     # ⚠️ TWO BOUNDS, AND THE SECOND WAS LOST IN MY FIRST FIX — the suite caught
@@ -496,7 +503,7 @@ def allowed(kind: str, now: datetime | None = None) -> bool:
     #        reserve exists for, silently unprotected.
     # ⚠️ HONEST NOTE ON REACHABILITY, because a fresh reader caught me shipping
     #    the SAME cancellation defect one step over. Today
-    #    LIQUIDITY_AUDIT_CARVE (20,000 interim, B-TOKEN-WATCH-LIQ-SHED-HOTFIX; 190,000 by design) < headroom (197,000) and
+    #    LIQUIDITY_AUDIT_CARVE (0 under AMENDMENT 18; 190,000 in the 2026-08 design) <= headroom (7,000) and
     #    CREDITS["follow_up"] == 0, so `non_birth` IS `spent_by("liquidity")`
     #    and the headroom clause on the liquidity leg CANNOT BIND FIRST — the
     #    carve always trips before it. It is not decorative: it becomes the

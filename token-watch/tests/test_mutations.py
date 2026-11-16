@@ -128,9 +128,13 @@ section("M4. the reserve clause must bind when the follow-up leg costs credits")
 # state where the clause cannot speak.
 # ─────────────────────────────────────────────────────────────────────────────
 original = config.CREDITS["follow_up"]
+_saved_carve = budget.LIQUIDITY_AUDIT_CARVE
 try:
     config.CREDITS["follow_up"] = 1        # the documented re-homing case
     budget.CREDITS["follow_up"] = 1
+    # AMENDMENT 18 ships carve 0 (the leg is suspended); this case needs an UNSPENT carve so that only the headroom
+    # clause can refuse, so it runs with a 5,000 carve below the 7,000 headroom.
+    budget.LIQUIDITY_AUDIT_CARVE = config.LIQUIDITY_AUDIT_CARVE = 5_000
     mut_root = tempfile.mkdtemp(prefix="token-watch-m4-")
     os.environ["TOKEN_WATCH_ROOT"] = mut_root
     # Spend on the FOLLOW-UP leg only, up to the reserve boundary. The carve is
@@ -148,6 +152,7 @@ try:
 finally:
     config.CREDITS["follow_up"] = original
     budget.CREDITS["follow_up"] = original
+    budget.LIQUIDITY_AUDIT_CARVE = config.LIQUIDITY_AUDIT_CARVE = _saved_carve
     os.environ["TOKEN_WATCH_ROOT"] = ROOT
 
 

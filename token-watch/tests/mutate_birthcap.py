@@ -1,0 +1,86 @@
+#!/usr/bin/env python3
+"""B-TOKEN-WATCH-BIRTH-CAP mutants: each safety rule of the birth cap, broken on purpose, must fail test_birthcap.py.
+Run from anywhere (CI runs it from the repo root):  python3 token-watch/tests/mutate_birthcap.py
+It mutates a SCRATCH COPY of token-watch/ under the home directory and removes it afterwards; never the checkout.
+exit 0 = every mutant killed (its test exits non-zero WITH a FAIL line). NOT-APPLIED counts as a failure."""
+import os, shutil, subprocess, sys, tempfile
+
+PKG = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SCRATCH = tempfile.mkdtemp(prefix="tw-mut-birthcap-", dir=os.path.expanduser("~"))
+WORK = os.path.join(SCRATCH, "token-watch")
+shutil.copytree(PKG, WORK, ignore=shutil.ignore_patterns("__pycache__"))
+os.chdir(WORK)
+
+NL = chr(10)
+T = "tests/test_birthcap.py"
+MUTANTS = [
+    ("the plan accepts an on-window too short to see a failed switch-ON", T,
+     [("birthcap.py", "        if on_s > LIVENESS_GAP_SECONDS:", "        if on_s > 0:")]),
+    ("the daily allowance is not clamped to the births reserve", T,
+     [("birthcap.py", "                    float(BIRTHCAP_MAX_BIRTHS_PER_DAY))", "                    float(10 ** 9))")]),
+    ("the phase never rotates (the same hours are missed every day)", T,
+     [("birthcap.py", "    offset = (day_index * BIRTHCAP_PHASE_STEP % 1.0) * block", "    offset = 0.0")]),
+    ("an unconfirmed echo is taken as a successful switch", T,
+     [("birthcap.py", '        rec["ok"] = (resp.get("active") is (target == "on")) and rec["echo_auth_set"] and rec["echo_url_ok"]',
+       '        rec["ok"] = True')]),
+    ("an unreadable switch log does not force the feed ON", T,
+     [("birthcap.py", '        records, want = None, "on"', '        records = None')]),
+    ("the liveness handshake is not checked", T,
+     [("birthcap.py", '    if not getattr(liveness, "PLANNED_OFF_READER", False):', '    if False:')]),
+    ("the breaker never trips", T,
+     [("birthcap.py", '        if used >= ceiling and want == "off":', '        if False:')]),
+    ("births arriving while OFF never page", T,
+     [("birthcap.py", "        if hits:", "        if False:")]),
+    ("the in-flight grace is dropped (a decaying tail pages)", T,
+     [("birthcap.py", "    first = off_at + timedelta(seconds=BIRTHCAP_OFF_GRACE_S)", "    first = off_at")]),
+    ("disabling leaves the feed OFF", T,
+     [("birthcap.py", '        if st.get("applied") == "off":', '        if False:')]),
+    ("the backstop never truncates a day", T,
+     [("birthcap.py", '        if st.get("days", {}).get(today, 0) >= float(plan["births_allowance_per_day"]):', '        if False:')]),
+    ("a GET to re-learn the state is not charged", T,
+     [("birthcap.py", '        budget.record_pending("switch", 1, now)               # a GET is charged like a PUT (pre-audit A3)' + NL, "")]),
+    ("the hourly vendor cross-check never pages a divergence", T,
+     [("birthcap.py", "    if dv_web >= BIRTHCAP_DIVERGENCE_MIN and abs(dv_web - expected) / dv_web > BIRTHCAP_DIVERGENCE_SHARE:",
+       "    if False:")]),
+    ("RPC spend above its allowance is not caught", T,
+     [("birthcap.py", "    if dv_rpc > 1.25 * allow_rpc_hour + 50:", "    if False:")]),
+    ("liveness ignores planned windows (a planned off window pages as a dead feed)", T,
+     [("liveness.py", "            covered = planned_overlap(prev, ts, windows) if delta > LIVENESS_GAP_SECONDS else 0.0",
+       "            covered = 0.0")]),
+    ("an OFF with no ON stays planned forever (the dead-man goes blind)", T,
+     [("liveness.py", "        out.append((off, max(midnight, off + timedelta(seconds=MAX_BLOCK_S))",
+       "        out.append((off, max(midnight, off + timedelta(days=3650))")]),
+]
+files = sorted({f for _n, _t, edits in MUTANTS for f, _a, _b in edits})
+orig = {f: open(f, encoding="utf-8").read() for f in files}
+bad = 0
+try:
+    for name, test, edits in MUTANTS:
+        texts = dict(orig)
+        ok = True
+        for f, a, b in edits:
+            if texts[f].count(a) != 1:
+                print("NOT-APPLIED %s (anchor count %d in %s)" % (name, texts[f].count(a), f))
+                ok = False
+                break
+            texts[f] = texts[f].replace(a, b)
+        if not ok:
+            bad += 1
+            continue
+        for f in files:
+            if texts[f] != orig[f]:
+                open(f, "w", encoding="utf-8", newline="").write(texts[f])
+        p = subprocess.run([sys.executable, test], capture_output=True, env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"),
+                           text=True, timeout=900)
+        fails = [l.strip()[:110] for l in p.stdout.splitlines() if l.strip().startswith("FAIL")]
+        killed = p.returncode != 0 and bool(fails)
+        print(("KILLED  " if killed else "SURVIVED") + " %-70s rc=%d %s" % (name, p.returncode, fails[:1]))
+        bad += not killed
+        for f in files:
+            open(f, "w", encoding="utf-8", newline="").write(orig[f])
+finally:
+    for f, t in orig.items():
+        open(f, "w", encoding="utf-8", newline="").write(t)
+    os.chdir(os.path.expanduser("~"))
+    shutil.rmtree(SCRATCH, ignore_errors=True)
+sys.exit(1 if bad else 0)

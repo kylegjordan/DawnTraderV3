@@ -44,6 +44,10 @@ import os
 from datetime import datetime, timedelta, timezone
 
 from config import (
+    BIRTHCAP_PLANNED_OFF,
+    BIRTHCAP_RESTART_GRACE_S,
+    BIRTHCAP_SWITCHES,
+    BIRTHCAP_W_MIN,
     BIRTHS_DIR,
     EXPECTED_LAUNCHES_PER_DAY,
     LIVENESS_GAP_SECONDS,
@@ -60,6 +64,73 @@ PROVENANCE_DIR = f"{ROOT}/provenance"
 GAPS_PATH = f"{PROVENANCE_DIR}/gaps.jsonl"
 
 STATE = "liveness"
+
+# ═════════════════════════════════════════════════════════════════════════════
+# PLANNED SILENCE (B-TOKEN-WATCH-BIRTH-CAP). The birth cap switches the feed OFF
+# on a timetable, and every off window is longer than LIVENESS_GAP_SECONDS. Without
+# this, the first planned off window opens a `token-watch-feed-gap` row that then
+# suppresses every REAL gap for the rest of the cycle (Langston C-13), and stamps a
+# four-figure "missed" estimate into gaps.jsonl, the record the study reads.
+# ⇒ Silence COVERED by a planned off window (the switch log's own timestamps, widened
+#   by the measured in-flight and restart graces) is a `planned_off` record in its
+#   own file, with no loss estimate, and never opens a gap or a page. Silence NOT
+#   covered still opens a gap after LIVENESS_GAP_SECONDS, exactly as before.
+# ⛔ The controller refuses to switch OFF unless these two names exist and agree
+#    (birthcap.handshake_ok) — the "same install" is a code check, not a promise.
+# ⛔ An unreadable switch log yields NO planned windows, so silence pages: the safe
+#    direction when we cannot prove the silence was ours.
+# ═════════════════════════════════════════════════════════════════════════════
+PLANNED_OFF_READER = True
+MAX_BLOCK_S = 86400 // BIRTHCAP_W_MIN
+SWITCHES_PATH = BIRTHCAP_SWITCHES
+
+
+def planned_windows(path: str = SWITCHES_PATH) -> list[tuple[datetime, datetime | None]]:
+    """(start, end) of every planned off window: from a confirmed OFF to the next confirmed ON, widened by the
+    restart grace at the end; an OFF with no ON yet is open-ended (end None)."""
+    try:
+        with open(path, encoding="utf-8") as fh:
+            recs = [json.loads(l) for l in fh if l.strip()]
+    except (OSError, ValueError):
+        return []
+    out, off = [], None
+    for r in recs:
+        if r.get("kind") != "put" or not r.get("ok"):
+            continue
+        t = datetime.fromisoformat(r["requested_at"])
+        if r.get("requested") == "off" and off is None:
+            off = t
+        elif r.get("requested") == "on" and off is not None:
+            out.append((off, t + timedelta(seconds=BIRTHCAP_RESTART_GRACE_S)))
+            off = None
+    if off is not None:
+        # ⛔ AN OFF WITH NO ON YET IS NOT OPEN-ENDED FOREVER. If the controller died with the feed OFF, an unbounded
+        #    window would blind this alarm for good. The longest legitimate off is a backstop-truncated day (until
+        #    the next UTC midnight) or one off-block at the minimum window count (86400/4 s); past that, silence is
+        #    a gap again, plus two ticks and the restart grace.
+        midnight = (off + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+        out.append((off, max(midnight, off + timedelta(seconds=MAX_BLOCK_S))
+                    + timedelta(seconds=BIRTHCAP_RESTART_GRACE_S + 120)))
+    return out
+
+
+def planned_overlap(a: datetime, b: datetime, windows: list) -> float:
+    """Seconds of the silence (a, b) that fall inside a planned off window."""
+    tot = 0.0
+    for s0, e0 in windows:
+        e0 = e0 or b
+        lo, hi = max(a, s0), min(b, e0)
+        if hi > lo:
+            tot += (hi - lo).total_seconds()
+    return tot
+
+
+def _append_planned(rec: dict) -> None:
+    os.makedirs(os.path.dirname(BIRTHCAP_PLANNED_OFF), exist_ok=True)
+    with open(BIRTHCAP_PLANNED_OFF, "a", encoding="utf-8") as fh:
+        fh.write(json.dumps(rec, sort_keys=True) + "\n")
+        fh.flush()
+        os.fsync(fh.fileno())
 
 
 def _now() -> datetime:
@@ -218,12 +289,21 @@ def check(now: datetime = None) -> dict:
     stats["rows"] = len(stamps)
 
     # ── RETROSPECTIVE ────────────────────────────────────────────────────────
+    windows = planned_windows()
     prev = last_dt
     for ts in stamps:
         if prev is not None:
             delta = (ts - prev).total_seconds()
-            if delta > LIVENESS_GAP_SECONDS:
+            covered = planned_overlap(prev, ts, windows) if delta > LIVENESS_GAP_SECONDS else 0.0
+            if delta > LIVENESS_GAP_SECONDS and delta - covered <= LIVENESS_GAP_SECONDS:
+                _append_planned({"kind": "planned_off", "started_at": prev.isoformat(), "ended_at": ts.isoformat(),
+                                 "duration_s": round(delta, 1), "planned_s": round(covered, 1),
+                                 "recorded_at": now.isoformat()})
+                stats["planned_off"] = stats.get("planned_off", 0) + 1
+            elif delta > LIVENESS_GAP_SECONDS:
+                delta = delta - covered
                 _append_gap({
+                    "planned_s_excluded": round(covered, 1),
                     "kind": "feed_gap",
                     "detected": "retrospective",
                     "started_at": prev.isoformat(),
@@ -246,6 +326,8 @@ def check(now: datetime = None) -> dict:
     open_gap = st.get("open_gap")
     if last_dt is not None:
         silent = (now - last_dt).total_seconds()
+        if silent > LIVENESS_GAP_SECONDS:
+            silent -= planned_overlap(last_dt, now, windows)     # planned silence never opens a gap
         if silent > LIVENESS_GAP_SECONDS:
             if not open_gap:
                 st["open_gap"] = {"started_at": last_dt.isoformat()}

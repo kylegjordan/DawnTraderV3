@@ -412,10 +412,12 @@ def run_hour(now: datetime | None = None) -> dict:
             # ★ IT READS THE POOL, NOT THE MINT. Liquidity is a property of the
             #   pot; the mint is only the label on one side of it. That is why
             #   the corrected call takes `pair_address`.
-            # ⚠️ STILL THE FIRST LEG TO SHED, unchanged: it is credit-metered,
-            #    the carve affords ~645/day under the 20,000 interim (~6,100/day at the 190,000 design) against ~30,000 live
-            #    observations, so it is SAMPLED and the shed is expected rather
-            #    than exceptional. Births are never touched by it.
+            # ⚠️ THE FIRST LEG TO SHED, AND UNDER AMENDMENT 18 IT ALWAYS SHEDS. The gate is
+            #    `spent_by("liquidity") < LIQUIDITY_AUDIT_CARVE` (budget.allowed) — an exhaust-first
+            #    calendar-month carve, never paced — and the carve is now 0, so every read below raises
+            #    Shed and records source "shed". Demand was ~2.3k credits/hour (one or two calls per
+            #    alive observation), and buckets are read oldest-first, so any carve would have sampled
+            #    the oldest backlog. Births are never touched by it.
             if state.get("alive"):
                 try:
                     fields["pool_sol"] = providers.pool_sol_reserves(
