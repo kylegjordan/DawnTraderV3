@@ -274,3 +274,19 @@ Owner: **NEW Claude**, right after whichever deploy carries `3f06dd940`. Instrum
 - **C-1 — the xStock denominator pair inside today's US session, PRE-REGISTERED HERE before any read.** Instrument `GET /api/active-engine/diagnostics/depth-gate` via `dt-api`, raw response kept, staging `git rev-parse HEAD` and `pm2 jlist` read on the box at each read. **START 2026-11-16T14:45Z, END 2026-11-16T20:30Z.** PASS = same `processPid` both reads, END `processUptimeSeconds` strictly greater, and `evaluations.xstock_spot.count` at END greater than at START (START may be absent), with `lastAt` quoted. A pid change voids the pair; re-run on the new pid in the next session. `xstock_spot` absent at END on the same pid = "not exercised in this window", extended to the next session registered the same way — **never published as 0/0.**
 - **C-2 — PFC's `open` row filed in `1-system-manual/DEPLOY_WINDOWS.jsonl`** in this same commit, before C-1 is taken. Branch commit, no deploy.
 - **C-3 — leg (c), owed in the Step-8 package:** xStock paper regular-hours opens / non-null `entry_book_age_ms` / median, per session, never pooled (C-5): 11-10 (pre) 10 / 5 / 6,029 ms · 11-12 15 / 10 / 4,640 ms · 11-13 11 / 7 / 5,255 ms (Langston's read; CC-B re-derives in the package). The lower post medians are NOT read as loosening — `max(row, tick)` is monotone upward; the difference is population, not definition.
+
+## r19 - C-1 START read, 2026-11-16 (CC-B)
+
+Read at **2026-11-16T14:45:15.323Z** (`observedAt`), pre-registered START 14:45Z (r18).
+
+- **Raw**, `dt-api GET /api/active-engine/diagnostics/depth-gate`, HTTP 200:
+  `{"schema":"open-depth-gate/v1","observedAt":"2026-11-16T14:45:15.323Z","processPid":1153725,"processUptimeSeconds":31024.385178255,"evaluations":{"xstock_spot":{"count":2,"lastAt":1794821657534},"crypto_spot":{"count":3,"lastAt":1794828317781}},"blocks":{}}`
+- **The pre-registered START values:**
+  - **`processPid` 1153725**, which is also pm2's pid;
+  - **`processUptimeSeconds` 31024.39**;
+  - **`evaluations.xstock_spot.count` = 2**, `lastAt` 1794821657534 = **2026-11-16T09:34:17.534Z**;
+  - crypto_spot count 3, `lastAt` 2026-11-16T11:25:17.781Z;
+  - `blocks` empty.
+- **Process identity:** `git rev-parse HEAD` = `dist/BUILD_SHA` = `8fac86e5e33e34415a1ab21f309d3ffaf7275ac7`; pm2 `restart_time` 708; `pm_uptime` 1794809290932 = 2026-11-16T06:08:10.932Z; status online.
+- **What PASS needs at END (20:30Z, r18):** the same `processPid` 1153725, `processUptimeSeconds` strictly greater than 31024.39, and `evaluations.xstock_spot.count` greater than 2, with `lastAt` quoted. A pid change voids the pair.
+- **Note, no claim made:** the xStock count of 2 at START is from the 09:34Z pre-market window. The US session opened at 14:30Z, so evaluations in the session are what END reads.
