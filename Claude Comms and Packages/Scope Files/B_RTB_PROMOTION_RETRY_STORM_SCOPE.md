@@ -140,3 +140,46 @@ Either the pre-check also covers `checkPositionSizeCap`, or OBJ-1 restores its r
   - the DEPLOY_WINDOWS row.
 - **Steps 3-11:** follow, and **no code lands before B-ENTRY-GATE closes** (KD-87).
 - **Board card:** created at `Scope`, Blocked on = Langston.
+
+---
+
+## 8. Langston's Step-1 ruling (2026-11-16 ~11:55Z, Discord 1571855803785281608): PROCEED to Step 2, six binding conditions. Board `Review = Approved`.
+
+He re-read every §3/§4 citation at `cf167ca52`. **His ruling is the authority; this section is its record, folded into Step 2.**
+
+- **Q1 → (a), the in-memory claim.**
+  - He measured the leg I flagged as NOT RE-READ. `unique_symbol_mode UNIQUE (symbol, mode)` is in `shared/schema.ts:2123` and in the live staging database, with a positive control (the same query returned `paper_sim_open_positions_pkey`). `unique_symbol_side` is gone.
+  - **Rider 1:** `promoteSignal` deletes refresh state as part of the claim (`ready_to_buy_service.ts:1745`, and `:1701` on `stale_plan`). Under (a) that delete moves to the success path.
+  - **Rider 2:** the claim already returns `plan_age_unresolved` / `stale_plan` / `unpriced` (B-ENTRY-GATE P11/P7, inside the claim). Under (a) these become pre-claim gates, and their deferrals are not claims and are not counted as claims.
+- **Q2 — the right test, but insufficient: add a COST axis.**
+  - Discard = can never open; restore = can clear. Restore then splits by what a retry costs.
+  - `EV_REJECT` (`:6133`) and `DEPTH_GATE` (`:6203`) sit before the Kraken `validate=true` round-trip (`:6274-6340`). `FILL_ECONOMICS` (`:6388`) and `ENTRY_WINDOW` (`:6590`) sit after it.
+  - `EV_REJECT` writes `active_trade_logs` (`:6117`) and `emitEvReject` (`:6087`) on every refusal. One stuck row is 2,880 inserts a day.
+- **C1 (not waivable).** Every restore-class stage carries an attempt budget: a persisted per-signal attempt counter, a cap, and discard-with-reason at the cap. Specified and PRE-REGISTERED at Step 2. OBJ-5's churn count is the measurement, not the bound.
+- **C2.** `executePromotedSignal` collapses `OpenOutcome` to a string at `:5785` and has two stage-less exits: `:5711` `invalid_target` and `:5787` the catch-all.
+  - Widen it to return the typed outcome. Parsing the stage back out of `error` is refused.
+  - The catch-all gets an explicit written verdict.
+- **Q3 → the pre-check covers both money checks.**
+- **C3 — the mechanism constraint.** Hoist the PREDICATE, not the orchestrator.
+  - `checkGuardrailRisk` calls `recordAttempt` unconditionally (`trade-safety.ts:728`) and `recordBlock` (`:776`). `checkPositionSizeCap` writes `b4Diagnostics` (`:410`) and `aj19Diagnostic` (`:440`).
+  - So extract the computation per check (the F2 pattern), with the counters in one place.
+  - A pre-claim deferral is **not an attempt** (`recordAttempt` is the I3 denominator).
+- **Q4 → OVERRULED, narrowly.**
+  - Cooldown goes ABOVE the claim: it refuses every pass for the whole period.
+  - Kill switch (`:785`), stop-loss required (`:791`) and max-per-asset (`:797`) go above the claim too.
+  - Low-priced protection (`:817`) is decided at Step 2 on the same test.
+- **C4.** `portfolioMismatchDetected` (`:437-438`) sits inside `if (aj19Diagnostic.isActive())` (`:425`). Move the computation out of the gate, or show aj19 active on staging. Otherwise it publishes a structural zero.
+- **C5 — enumerate, don't count.** `OpenFailStage` has **22** members (`rtb-metrics-service.ts:47-68`), not 23, and there are **34** `opened: false` sites, not 33. OBJ-1's test fixture pins to the union.
+- **C6 — citation corrections.**
+  - `checkMaxTotalExposure` begins at `:614`.
+  - `active-position-sizing.ts:92-104` holds `getMaxPositionBufferFactor`, not a 0.97 literal. The value is `module_constants` `active_sizing.max_position_buffer_factor = 0.97`: one `*` row, set 2026-05-05, no per-class split. ⇒ OBJ-3's test is parameterised on the resolved factor.
+  - `trade-safety.ts:420` hardcodes `* 0.97` in a diagnostic payload, so it joins the OBJ-7 sweep.
+  - The decisions path is `1-system-manual/pm/DECISIONS.md` (KD-86/87 at `:110`/`:111`, quotes exact).
+- **C7 — KD-91 switched 8c ON** (`level_basis.crypto_birth_sided_enabled = 1`, `updated_at 2026-11-16 09:45:01.351822+00`, by `kd-91-8c-switch-on-cc-c`).
+  - It does not move the money arithmetic.
+  - It does move crypto birth geometry, and so the failure-stage mix and OBJ-6's census.
+  - ⇒ **the R3 baseline must not straddle 09:45:01Z, and OBJ-6 states which side of the flip it sits on.**
+- **§9.4 dispositions:**
+  - C1-C5 and the C7 baseline clause are folded into Step 2 of this batch.
+  - The `:420` literal is folded into OBJ-7.
+- **Scheduling question, named and not placed (for PM / Kyle):** KD-87 lands this batch right after B-ENTRY-GATE (~11-20), which is inside 8c's own pre-registered first-week read (25-40 crypto trades). That puts two pre-registered windows on the same signal path. Relayed to PM.
