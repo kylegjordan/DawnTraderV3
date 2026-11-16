@@ -297,3 +297,111 @@ All line references are `active-execution-engine.ts` unless marked `ts:` (`trade
 - **Q-D — folding the four I3 breaks (A-6), `missed_refreshes` (A-9) and `emitSlotOpened` (A-11) into this batch.** Agreed, or placed elsewhere?
 - **Q-E — the DEPLOY_WINDOWS deviation** (§6).
 
+---
+
+## 8. r2 — Langston's Step-2 send-back (Discord 1571866471758434338), folded. **Where this section and §0-§7 differ, this section is authoritative.**
+
+**Status:** Q-A confirmed with an addition; Q-B cap and weights accepted, FAIL arm sent back; Q-C agreed with a condition; Q-D all folded, two understated; Q-E REFUSED; one plan hole (C-A1); two R3 conditions. Each item is below.
+
+### 8.1 PREVIOUSLY STATED vs NOW (r2)
+- **PREVIOUSLY STATED (§0):** the paper cost of a non-positive-EV row is "one `emitEvReject` write … per open attempt". **NOW:** one emit per **organic** non-positive attempt; **zero** for exploration admits, because the `_exploOpen` arm (`active-execution-engine.ts:6080`) skips the emit. **REASON:** Langston's refinement, re-read.
+- **PREVIOUSLY STATED (A-4):** at the cap the row is deleted. The residual re-mint rate was "bounded by the generation cadence × the cap", with the cadence unstated. **NOW, MEASURED:** a lost setup is re-issued **a median 30 s later**. **REASON:** at 30 s, deletion makes the budget decoration, so A-4 is replaced by PARK (8.3).
+  - **Object:** every `Signal <SYM> was removed from RTB but trade failed - signal not restored` line dated 2026-11-13 (`error__2026-11-14_00-00-00.log`, 566 lines, 142 distinct symbols).
+  - **Paired with:** the next paper `[A3.R9.3.HF-2] Upserting RTB signal: <SYM>/…` line after it in `out__2026-11-13*` / `out__2026-11-14*` (897 paper upsert lines in those files).
+  - **Result:** 427 of 566 were followed by a re-issue. Gap: min 1 s · p10 29 s · p25 29 s · **median 30 s** · p75 60 s · p90 2,130 s · max 69,320 s. 139 had no re-issue inside the files read.
+  - **Population limit:** paired by symbol, not symbol + strategy, because the loss line carries no strategy. Script at staging `/tmp/reissue_ccb.py`.
+- **PREVIOUSLY STATED (A-9):** "no placement or reason exists". **NOW:** the **reason** exists and argues FOR the drop — directive 8.8.4-A3.R8, *"No 'missed refresh' counter. Any failed reconfirmation → immediate expiry."* (`attached_assets/Pasted--Updated-Directive-Directive-8-8-4-A3-R8-Final-RTB-Inte_1766087068953.txt:64`, cited at `B_ENTRY_GATE_SCOPE.md:73`). What was never kept is the **placement**. **REASON:** Langston, re-read.
+- **PREVIOUSLY STATED (A-10):** `bridge/canonical` has no coverage, so no history for SlotOpened. **NOW:** the history is in `bridge/reference`. Directive 8.8.4-A3.R7, *"TCL listens for three event types only: SlotOpened — emitted by Trade Manager when a trade closes. RTBThresholdMet … FailsafeTrigger"* (`bridge/reference/DawnTrader_Chat_Archive_12.21.25.md:30619-30626`; *"Only 3 events trigger TCL"* at `:30879`). **REASON:** wrong corpus searched.
+- **NEW, MEASURED (R3 condition 1): stdout reach.** The earliest retained stdout line is **2026-11-10 14:57:50Z** (the first line of `out__2026-11-11_00-00-00.log`, the oldest of 14 `out__*` files), so **2026-11-13 00:00-21:00Z is reachable**. "Stdout ~2 days" does not hold on this box today.
+- **NEW, MEASURED (R3 condition 2): the anchor.** The live paper anchor is **v5, $820.00**, `reason=measurement_override`, `anchorAt=2026-10-06T15:52:57.373Z`. It is not v4 $824.11 and not v3 $2,250. The read site is the money-held line itself: `[B-BALANCE-SESSION-PAIRING][MONEY_HELD] mode=paper anchorVersion=5 … anchor=820.00 straddlers=0 … realizedPnl=-260.36 closes=715 moneyHeld=559.64` (`out.log`, 2026-11-16 12:37:47Z; printed by `getMoneyHeld` in `server/services/guardrail-settings.ts`). It is printed on **every** call: 2,126 lines in `out__2026-11-13_00-00-00.log`.
+- **NEW, read:** the promotion interval resolves to **30 s**, per `[8.8.8][TCL_LOOP] Started continuous promotion loop (30s interval) for paper` (`out.log` 2026-11-16 06:08:15Z; the getter is `active-execution-engine.ts:1166`).
+
+### 8.2 Q-A addition — MAX_POSITION is split
+- A per-row refusal **because the pot is currently small** (`notional > maxPositionPercent × moneyHeld`) **DEFERS**.
+- A row whose own notional exceeds the **whole** cap (`notional > moneyHeld × maxTotalExposurePct/100`) can never pass at any book. It is **PARKED** (8.3), never deferred.
+
+### 8.3 C1 rebuilt as PARK, not delete — the measured 30 s re-issue forces it (A-4 SUPERSEDED)
+- **The mechanism:** a refused row is **never deleted by the promotion path** (except `stale_plan`, which deletes by design). At the cap, or on a row-intrinsic DISCARD verdict, the row is **parked**:
+  - `rtb_signals.promotion_parked_until timestamptz` is set to `now + rtb_promotion.park_ms` (`module_constants`, per class, fail-closed: a missing row means park = 0 and is logged once per class per process; see the honest residual below);
+  - `promotion_attempts` is held at the cap.
+- **Why parking holds where deleting did not:** `getRankedSignals` excludes parked rows, and the refresh still prices and can retire them by economics. Because the queue holds **one row per `(mode, symbol, strategy)`** (`schema.ts:2266`), the orchestrator's re-issue 30 s later lands **on the parked row**. `upsertRtbSignal` leaves `promotion_attempts` and `promotion_parked_until` out of its conflict SET, like `consecutive_unpriced_passes`, so the re-issue cannot unpark it or reset the count.
+- **At park expiry:** the next claim resets the count to 0, and the setup gets one fresh budget.
+- ⇒ **The bound is now real:** at most `cap` charged retries per setup per park period, whatever the generation cadence. That is what C1 asked for.
+- **Row-intrinsic DISCARD verdicts park too.** Deleting them would re-mint the same defect every 30 s, which is `#1136` in its original form.
+- **DISCARD-PARTIAL (`TRADE_INSERT_ERROR`) parks, never retries early.** The symbol's position, if one was written, is also filtered by `getRankedSignals`' 19F active-symbol guard.
+- **Pre-registered:** `park_ms` = **1,800,000 (30 min)** per class.
+  - **Reasoning:** the cap (20 at cheap weight) is spent in ~10 minutes at one charged retry per 30 s pass. A 30-minute park then holds a persistently refused setup to ≤ 20 charged retries per ~40 minutes, about a 4× cut against an unbounded 120 per hour.
+- **Honest residual:** park = 0, meaning a missing `module_constants` row, degrades to delete-and-re-mint. That is loud, and it is today's behaviour, not worse.
+
+### 8.4 Q-B FAIL arm — derived, per setup, with the pre-change control beside it
+- **Pre-change control (§0's window, ≈144 h):**
+  - non-`GUARDRAIL_BLOCK` failed promotions = 2,528 − 2,401 = **127 ≈ 0.88 per hour**;
+  - priced at the weights (122 cheap + 3 costly + 2 discard) ≈ **134 charge units ≈ 0.93 per hour**.
+  - These are first failures only: today a failure deletes the row, so retries were not countable.
+- **Ceiling by construction after the change:** with the cap at 20 per setup per park period, each failing setup can contribute ≤ 20 charge units per ~40 minutes.
+- **The arms:**
+  - **(a) per setup:** any `(mode, symbol, strategy)` parked **more than 3 times in any 24 h** ⇒ FAIL. A park that recurs at the park cadence is the re-mint loop under a new name.
+  - **(b) aggregate:** more than **40 charge units in any clock hour** ⇒ FAIL. That is ~2× the case where every failing setup at the control rate (0.88 per hour, rounded up to 1) exhausts a full budget (20) in the same hour. It is reachable only by multiple setups looping at once.
+- **Read site:** OBJ-5's per-signal-id restore and park lines plus the `PROMOTION_SUMMARY` totals.
+
+### 8.5 Q-C condition — "charges nothing" must not mean "counts nothing"
+- `PROMOTION_SUMMARY` gains `restoredGlobal{by cause}`, and the first occurrence of each cause is logged once per process.
+- **Escalation:** one global cause holding **20 consecutive passes (10 minutes at 30 s)** raises a system alert, deduped per cause per process episode.
+- `GUARDRAIL_READ_FAIL` has **0 fires to date**. It is **unexercised, not quiet**, and is not cited as reassurance. A unit test drives each global cause through the counter and the escalation.
+
+### 8.6 C-A1 — the classification domain is the UNION (P3's domain SUPERSEDED)
+`claimSignal` (renamed from `promoteSignal`) has these non-open returns at the ref: `refreshing` (`:1672`), `plan_age_unresolved` (`:1696`, `:1711`), `stale_plan` (`:1702`), `unpriced` (`:1729`), `missing` (`:1744`). Under P1 `delete_failed` leaves the claim; the claim deletes nothing. P3's total map and its fence key on **`OpenFailStage` ∪ the claim's return type**:
+
+| claim return | verdict |
+|---|---|
+| `refreshing` | DEFER (stays queued) |
+| `unpriced` | DEFER (the P7 gate; the refresh prices the row) |
+| `plan_age_unresolved` | RESTORE-GLOBAL (a config row) |
+| `missing` | nothing to do (the row is gone) |
+| `stale_plan` | deleted by design |
+
+- All land in `deferredPreClaim{by reason}`. **None is an attempt.**
+- **New on the success path:** if the delete after a **successful** open fails, the row stays queued while the position is open. The 19F active-symbol guard hides it from ranking until the position closes, and the next finalize retries the delete. Unit-tested.
+
+### 8.7 A-11 rebuilt — the A3.R7 event model, enumerated and argued against its directive
+- **The directive's intent (A3.R7, quoted 8.1):** promote when a trade closes, when 15 signals are queued, or after 120 s idle.
+- **Today's wiring achieves that intent by other means:**
+  - `TRADE_CLOSED` (`active-execution-engine.ts:1194` → `:1210`) for the slot;
+  - `tcl_watchdog.activateTCL` → `TCL_ACTIVATED` (`:1187` → `:1190`) for both the threshold (`checkSignalThresholdLive`, `tcl_watchdog.ts:205-218`, which logs `RTBThresholdMet` as **text only**) and the failsafe (`:111-120`, which calls `activateTCL` directly);
+  - plus the 30 s loop of directive 8.8.8, which supersedes A3.R7's *"after first activation, TCL runs exclusively on event basis"*.
+  - ⇒ **Rule 24 outcome (3), legacy that no longer fits.** The intent survives; the three event names do not carry it.
+- **The dead set, every member** (`git grep -w` over `server`, `client` and `shared`, tests excluded):
+  - `emitSlotOpened` (`event-bus.ts:197`, 1 occurrence = its definition);
+  - `onSlotOpened` (`:227`) and its only subscriber `server/startup/trading-bootstrap.ts:46-48`, which logs only;
+  - `offSlotOpened` (`:251`, 0 callers);
+  - `SlotOpenedEvent` (`:71`);
+  - `emitRTBThresholdMet` (`:203`, 0 callers) and `onRTBThresholdMet` (`:231`, 0 callers);
+  - `onFailsafeTrigger` (`:235`, 0 subscribers). ⇒ `emitFailsafeTrigger` (`:209`), whose one caller is `tcl_watchdog.ts:115`, emits to nobody. Its real effect is the `activateTCL` call on the next line. The positive control is that `emitFailsafeTrigger` does find its caller;
+  - `queueEvent` (`:132`, whose only caller is `:200` inside `emitSlotOpened`), and therefore the constructor's **producerless 200 ms `setInterval` queue processor** (`:104-129`) with `QueuedEvent` (`:94`), `eventQueue` (`:101`), `isProcessing` (`:102`), `queueInterval` (`:103`) and `getQueueStatus` (`:255`, 0 callers);
+  - the deprecated `checkSignalThreshold` (`tcl_watchdog.ts:228`, 0 callers per the §2 census).
+- **The governed docs that assert it, and are swept:**
+  - `SYSTEM_MANUAL.md:7590` and `sections/PHASE7_SYSTEM_LIFECYCLE_AND_INFRASTRUCTURE.md:243`, both *"Register event listeners (TCL_ACTIVATED, SlotOpened)"*;
+  - the comments `event-bus.ts:14` and `tcl_watchdog.ts:17-18`.
+- **Disposition:** delete the set, keeping the failsafe log line as text beside `activateTCL`. Log it in `DELETED_COMPONENTS_LOG.md`, with the §9.5(a-ii) state-write census at Step 3. The queue processor writes only its own in-memory queue and emits on the bus, and the emit side has no subscriber.
+
+### 8.8 A-9 sites — four, not two
+- `shared/schema.ts:2222` — drop.
+- `server/storage.ts:4506` — comment, update.
+- `docs/schema_reference_v1_5_1.md:51` — update (P4 now names it).
+- `drizzle/migrations/2026-04-22-initial-schema.sql:5916` — shipped and immutable, **left intentionally** and named as such in the log entry, so that a later grep is not read as a missed sweep (§15).
+
+### 8.9 Q-E — REFUSED, and the row is FILED IN THIS COMMIT
+- **What I measured right, and wrong:**
+  - right: `opened_at` is parsed, never compared, and is not amendable (`obs-windows.py:45`);
+  - wrong: "blocks every crew deploy for ~5 days" was a cost I did not measure. Every deploy today already names seven windows, and an eighth is one more name.
+- **The filed row:**
+  - `opened_at` = the filing instant;
+  - the deferred open is expressed in `disturbs`, per my own B-ALERT-INSERT-CONTRACT precedent;
+  - `expected_by` and `review_by` are real dates, amended once the anchor resolves;
+  - the anchor lives in `until_event` and `detail` (both amendable).
+
+### 8.10 R3 — instrument replaced, both conditions met
+- **The money-held series** is read **directly** from the `[MONEY_HELD] mode=paper` lines (8.1): v5 anchor, every call printed. It is neither reconstructed from closes nor derived from tickets, so it is not circular.
+- **At each refusal:** money held now = the latest `MONEY_HELD` line at or before it. Money held at each open time of the current book = the latest `MONEY_HELD` line at or before that position's open line.
+- **Positive control:** at each refusal, the latest `MONEY_HELD` value equals the cap's own `100% of $X` to the cent. A mismatch voids that refusal from the read, and more than 5 % voided voids the read.
+- **Object, day, prediction and FAIL are unchanged (§6).** It runs before Step 3, from logs only.
