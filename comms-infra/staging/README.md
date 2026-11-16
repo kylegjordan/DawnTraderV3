@@ -102,7 +102,7 @@ changed by someone else, it touches nothing, raises a page and exits 4. Steps an
 
 ## Tests (run on Helsinki as root)
 `tests/dt_api_tests.py` · `tests/dt_api_mutations.py` · `tests/setter_tests.py` ·
-`tests/setter_mutations.py` · `tests/drift_tests.py` · `tests/alert_tests.py` · `tests/staging_session_tests.py` · `tests/drift_mutations.py`. Each runs a copy of the committed file that
+`tests/setter_mutations.py` · `tests/drift_tests.py` · `tests/alert_tests.py` · `tests/staging_session_tests.py` · `tests/drift_mutations.py` · `tests/dt_sql_tests.py` · `tests/dt_sql_mutations.py` (B-DB-READ-TOOL; these two also run in CI, and the one-attempt check against `tests/fakepg_server.py` runs wherever `psql` and `openssl` exist). Each runs a copy of the committed file that
 differs ONLY in its CONSTANTS block (asserted). The mutation runners refuse to report unless the
 unmutated suite passes, and count a crash as a problem, never as a kill.
 `tests/c10_express_variants.js` runs on staging (as deploy) against the installed Express.

@@ -102,14 +102,21 @@ BOXES = {
             ("scripts/obs-windows.py", "/usr/local/bin/dt-obs-windows", 0o755, "root", "root"),
             # the deploy-notice watcher's forced command (Langston gate B attack 1)
             ("comms-infra/staging/dt-deploy-notice-gate", "/usr/local/bin/dt-deploy-notice-gate", 0o755, "root", "root"),
+            # B-DB-READ-TOOL (KD-96, #1259; Langston Step-2 hard gate, the #1004 class): the one database read tool, and
+            # the psql wrapper that SHADOWS /usr/bin/psql in root's and deploy's PATH — the file on this box most worth
+            # hashing, because `psql --version` cannot see it.
+            ("comms-infra/staging/dt-sql", "/usr/local/bin/dt-sql", 0o755, "root", "root"),
+            ("comms-infra/staging/psql-wrapper", "/usr/local/bin/psql", 0o755, "root", "root"),
         ],
-        "pending_days": {"scripts/dt-deploy.sh": 1, "scripts/obs-windows.py": 1, "comms-infra/staging/dt-deploy-notice-gate": 1},
+        "pending_days": {"scripts/dt-deploy.sh": 1, "scripts/obs-windows.py": 1, "comms-infra/staging/dt-deploy-notice-gate": 1,
+                         "comms-infra/staging/dt-sql": 1, "comms-infra/staging/psql-wrapper": 1},
         "dirs": [
             ("/etc/dt-api", 0o750, "root", "dtapi"),
             ("/var/lib/dt-api", 0o700, "dtapi", "dtapi"),
             ("/home/dtmint", 0o750, "root", "dtmint"),     # r3: root-owned, so .ssh cannot be renamed away
             ("/home/dtmint/.ssh", 0o750, "root", "dtmint"),
             ("/var/lib/dt-install-drift", 0o755, "root", "root"),
+            ("/var/lib/dt-sql", 0o750, "deploy", "deploy"),     # B-DB-READ-TOOL: its lock, INTENT, LOCKED, log
         ],
         "private": [("/etc/dt-api/staging-api.env", 0o600, "dtapi", "dtapi"),
                     ("/var/lib/dt-api/login-ledger.jsonl", 0o600, "dtapi", "dtapi"),
