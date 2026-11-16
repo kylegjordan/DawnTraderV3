@@ -397,7 +397,8 @@ export function startDbPoolAlerts(opts: MonitorOptions): { stop: () => void; onF
               + `connection with no application_name, usually a script. Excluded by construction: Supabase's own loopback `
               + `backends and postgres_exporter; dt-sql is excluded only by its own sslmode, so a page on it is real. REACH: `
               + `sampled every ${IDLE_IN_TX_POLL_MS / 1000} s, so a connection shorter than that can be missed; a quiet `
-              + `'(unnamed)' is not evidence that no unencrypted script connected. RESOLVE this row (never acknowledge it); `
+              + `'(unnamed)' is not evidence that no unencrypted script connected; and only connections under the app's own `
+              + `database role are seen, so one made under any other role is invisible to this page. RESOLVE this row (never acknowledge it); `
               + `it also clears itself after two consecutive reads without '${app}', but never before the dispatcher has `
               + `promoted it. Later sightings fold into the metadata. B-DB-APP-TLS (B-DB-POOL-GUARD r4, KD-100).`,
             dedupe_key: `${UNENCRYPTED_PREFIX}${app}`, metadata: { source: 'db-pool-alerts', app, n } },
