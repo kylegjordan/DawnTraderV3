@@ -114,6 +114,47 @@ export function parseIdleRow(rows: unknown): IdleRead | IdleFail {
   return { ok: true, n, maxS };
 }
 
+// ═══ (d) LEVEL per application — an app connection to the database that is NOT encrypted ════════════════════════
+// B-DB-APP-TLS (Kyle KD-100, folded into this batch as scope r4; Langston Step-1 C-2, Step-2 T-J1 and T-C1..T-C4).
+// "Ours" = backends of the app's own role (`current_user` on the monitor's connection) arriving from a NON-loopback
+// address: that selects the app pools, this monitor and every script (scripts set no application_name → '(unnamed)'),
+// and excludes every Supabase-internal backend, which all arrive over loopback under other roles (measured with
+// dt-sql, 2026-11-16). `postgres_exporter` (Supabase's, unencrypted, loopback) is ALSO excluded by name, not by luck.
+// ⚠️ `dt-sql` (Infra's query tool) sits inside the role + address filter and is excluded only by its own
+// `sslmode=require`: if that is ever dropped this page fires on it, correctly — it is not a false positive.
+// ⚠️ REACH (T-C4): a 25 s sample cannot see a connection shorter than the interval, and the '(unnamed)' scripts are
+// the short-lived ones. A quiet '(unnamed)' key is NOT evidence that no unencrypted script connected.
+export const UNENCRYPTED_PREFIX = 'db-unencrypted-connection:';
+export const UNENCRYPTED_BLIND_KEY = 'db-unencrypted-blind';   // OUTSIDE the prefix, so no family read ever touches it
+export const UNENCRYPTED_SQL =
+  `select coalesce(nullif(a.application_name, ''), '(unnamed)') as app, count(*)::int as n
+     from pg_stat_activity a
+     join pg_stat_ssl s on s.pid = a.pid
+    where a.backend_type = 'client backend'
+      and a.usename = current_user
+      and a.client_addr is not null
+      and not (a.client_addr << inet '127.0.0.0/8' or a.client_addr << inet '::1/128')
+      and a.application_name <> 'postgres_exporter'
+      and not s.ssl
+    group by 1`;
+
+export interface UnencryptedRead { ok: true; apps: Record<string, number> }
+
+/** PURE. Each row is a non-empty `app` and an integer `n >= 1`; zero rows means none unencrypted. */
+export function parseUnencryptedRows(rows: unknown): UnencryptedRead | IdleFail {
+  if (!Array.isArray(rows)) return { ok: false, error: `expected rows, got ${typeof rows}` };
+  const apps: Record<string, number> = {};
+  for (const raw of rows) {
+    const r = raw as { app?: unknown; n?: unknown };
+    const n = Number(r.n);
+    if (typeof r.app !== 'string' || r.app === '' || !Number.isInteger(n) || n < 1) {
+      return { ok: false, error: `malformed row app=${String(r.app)} n=${String(r.n)}` };
+    }
+    apps[r.app] = n;
+  }
+  return { ok: true, apps };
+}
+
 // ═══ (c) INCIDENT per value — an unplanned restart ═══════════════════════════════════════════════════════════════
 export const RESTART_PREFIX = 'app-unplanned-restart:';
 export const RESTART_BLIND_KEY = `${RESTART_PREFIX}blind`;
@@ -196,6 +237,8 @@ export interface MonitorOptions {
   restartInputs?: () => RestartInputs;
   /** Run the (b) sample; returns the parsed read. */
   idleRead?: () => Promise<IdleRead | IdleFail>;
+  /** Run the (d) sample (B-DB-APP-TLS): unencrypted app connections per application_name. */
+  unencryptedRead?: () => Promise<UnencryptedRead | IdleFail>;
   log?: (l: string) => void;
 }
 
@@ -218,7 +261,12 @@ export function startDbPoolAlerts(opts: MonitorOptions): { stop: () => void; onF
   // 25 s and 60 s loops do not re-read the alert file each pass. (A row resolved by a person meanwhile only costs one
   // no-op resolve; a row we think closed is re-minted by addAlert's own dedupe if it is in fact open.)
   const known = new Set<string>();
-  for (const k of [waitKey, waitBlindKey, idleKey, idleBlindKey, RESTART_BLIND_KEY]) if (deps.openRow(k)) known.add(k);
+  for (const k of [waitKey, waitBlindKey, idleKey, idleBlindKey, RESTART_BLIND_KEY, UNENCRYPTED_BLIND_KEY]) if (deps.openRow(k)) known.add(k);
+  // T-C1 (Langston): the unencrypted family's keys are DYNAMIC (one per application_name), so they are seeded from the
+  // open rows by prefix — otherwise a restart (the TLS switch is one) would leave the earlier rows open with nothing
+  // that could ever clear them.
+  for (const row of deps.openRowsByPrefix(UNENCRYPTED_PREFIX)) known.add(row.dedupe_key);
+  const unencZeroRun = new Map<string, number>();
   const pending = new Set<string>();
   const mint = (what: string, o: Parameters<AlertDeps['addAlert']>[0]) => { pending.delete(o.dedupe_key); known.add(o.dedupe_key); return safe(what, deps.addAlert(o)); };
   // DEFERRED CLEAR (inc 3b P4 Step-7 fold, Langston-ruled). A new row is 'scheduled' and only the dispatcher's 15-minute
@@ -324,6 +372,49 @@ export function startDbPoolAlerts(opts: MonitorOptions): { stop: () => void; onF
     }, IDLE_IN_TX_POLL_MS));
   }
 
+  // (d) unencrypted app connections, every 25 s on the monitor's own connection (B-DB-APP-TLS). One LEVEL per
+  // application_name; it clears after two consecutive reads without that name, through the deferred `clear` (T-J1:
+  // without the deferral a short-lived '(unnamed)' script class would be minted and resolved before it was ever sent).
+  if (opts.unencryptedRead) {
+    const unencryptedRead = opts.unencryptedRead;
+    timers.push(setInterval(() => {
+      void (async () => {
+        const read = await unencryptedRead().catch((e) => ({ ok: false as const, error: (e as Error)?.message ?? String(e) }));
+        if (!read.ok) {
+          await mint('mint unencrypted blind', { severity: 'warning', title: 'Unencrypted-connection monitor is blind',
+            body: `The monitor could not read pg_stat_ssl: ${read.error}. While blind, an app database connection without TLS `
+              + `would not be paged. B-DB-APP-TLS (B-DB-POOL-GUARD r4).`, dedupe_key: UNENCRYPTED_BLIND_KEY });
+          return;
+        }
+        if (known.has(UNENCRYPTED_BLIND_KEY)) await clear('resolve unencrypted blind', UNENCRYPTED_BLIND_KEY);
+        for (const [app, n] of Object.entries(read.apps)) {
+          unencZeroRun.set(app, 0);
+          await raiseLevel(`mint unencrypted ${app}`, { severity: 'warning',
+            title: `Database connection without encryption: ${app}`,
+            body: `${n} database connection(s) from this server under the app's own role, application_name '${app}', are NOT `
+              + `encrypted (pg_stat_ssl.ssl = false), as first seen. They cross the internet to Supabase in clear: the password `
+              + `is protected by SCRAM, the query traffic is not, and an on-path attacker could alter it. '(unnamed)' is a `
+              + `connection with no application_name, usually a script. Excluded by construction: Supabase's own loopback `
+              + `backends and postgres_exporter; dt-sql is excluded only by its own sslmode, so a page on it is real. REACH: `
+              + `sampled every ${IDLE_IN_TX_POLL_MS / 1000} s, so a connection shorter than that can be missed; a quiet `
+              + `'(unnamed)' is not evidence that no unencrypted script connected. RESOLVE this row (never acknowledge it); `
+              + `it also clears itself after two consecutive reads without '${app}', but never before the dispatcher has `
+              + `promoted it. Later sightings fold into the metadata. B-DB-APP-TLS (B-DB-POOL-GUARD r4, KD-100).`,
+            dedupe_key: `${UNENCRYPTED_PREFIX}${app}`, metadata: { source: 'db-pool-alerts', app, n } },
+            (cur) => ({ ...cur, n: maxOf(cur.n, n) }));
+        }
+        for (const key of [...known]) {
+          if (!key.startsWith(UNENCRYPTED_PREFIX)) continue;
+          const app = key.slice(UNENCRYPTED_PREFIX.length);
+          if (app in read.apps) continue;
+          const z = (unencZeroRun.get(app) ?? 0) + 1;
+          unencZeroRun.set(app, z);
+          if (z >= 2) await clear(`resolve unencrypted ${app}`, key);
+        }
+      })();
+    }, IDLE_IN_TX_POLL_MS));
+  }
+
   // (c) unplanned restart: the boot read (60 s) is the FIRE path; the 5-minute poll is the CLEAR-edge poll
   if (opts.restartInputs) {
     const restartInputs = opts.restartInputs;
@@ -391,29 +482,51 @@ export function productionRestartInputs(): RestartInputs {
   };
 }
 
-/** The (b) reader: ONE connection outside the app pool, server bound below client bound below connect bound. */
+/** The monitor's ONE connection outside the app pool (server bound below client bound below connect bound), shared by
+ *  the (b) and (d) readers so B-DB-APP-TLS adds no connection and no cadence (Langston C-2). pg queues the two
+ *  readers' queries on it; a failure in either drops it and the next read reconnects. */
+let monitorClient: pg.Client | null = null;
+async function monitorQuery(sql: string, params: unknown[]): Promise<pg.QueryResult> {
+  try {
+    if (!monitorClient) {
+      const c = new pg.Client({
+        connectionString: process.env.DATABASE_URL,
+        application_name: 'dawntrader_pool_monitor',
+        connectionTimeoutMillis: 3_000,
+        statement_timeout: 2_000,
+        query_timeout: 2_500,
+      });
+      c.on('error', () => { if (monitorClient === c) monitorClient = null; }); // an ended connection is replaced next read
+      monitorClient = c;
+      await c.connect();
+    }
+    return await monitorClient.query(sql, params);
+  } catch (e) {
+    const c = monitorClient; monitorClient = null;
+    c?.end().catch(() => {});
+    throw e;
+  }
+}
+
+/** The (b) reader. */
 export function productionIdleReader(watchedLabel: string): () => Promise<IdleRead | IdleFail> {
-  let client: pg.Client | null = null;
-  const fresh = async () => {
-    const c = new pg.Client({
-      connectionString: process.env.DATABASE_URL,
-      application_name: 'dawntrader_pool_monitor',
-      connectionTimeoutMillis: 3_000,
-      statement_timeout: 2_000,
-      query_timeout: 2_500,
-    });
-    c.on('error', () => { client = null; }); // an ended monitor connection is replaced on the next read
-    await c.connect();
-    return c;
-  };
   return async () => {
     try {
-      if (!client) client = await fresh();
-      const res = await client.query(IDLE_IN_TX_SQL, [watchedLabel, IDLE_IN_TX_BOUND_S]);
+      const res = await monitorQuery(IDLE_IN_TX_SQL, [watchedLabel, IDLE_IN_TX_BOUND_S]);
       return parseIdleRow(res.rows);
     } catch (e) {
-      const c = client; client = null;
-      c?.end().catch(() => {});
+      return { ok: false, error: (e as Error)?.message ?? String(e) };
+    }
+  };
+}
+
+/** The (d) reader (B-DB-APP-TLS). */
+export function productionUnencryptedReader(): () => Promise<UnencryptedRead | IdleFail> {
+  return async () => {
+    try {
+      const res = await monitorQuery(UNENCRYPTED_SQL, []);
+      return parseUnencryptedRows(res.rows);
+    } catch (e) {
       return { ok: false, error: (e as Error)?.message ?? String(e) };
     }
   };
@@ -439,6 +552,7 @@ export async function startProductionDbPoolAlerts(label: string): Promise<void> 
     label, deps,
     restartInputs: underPm2 ? productionRestartInputs : undefined,
     idleRead: productionIdleReader(label),
+    unencryptedRead: productionUnencryptedReader(),
   });
-  console.log(`[B-DB-POOL-GUARD][ALERTS] started for pool=${label} (wait, acquire-timeout, idle-in-tx every ${IDLE_IN_TX_POLL_MS / 1000}s, 25P03, restart=${underPm2})`);
+  console.log(`[B-DB-POOL-GUARD][ALERTS] started for pool=${label} (wait, acquire-timeout, idle-in-tx and unencrypted every ${IDLE_IN_TX_POLL_MS / 1000}s, 25P03, restart=${underPm2})`);
 }

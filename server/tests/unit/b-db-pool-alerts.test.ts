@@ -8,6 +8,7 @@ import { attachPoolGuards, subscribeCheckedOutClientErrors } from '../../db-pool
 import {
   evaluateWaitLevel, nextIdleState, parseIdleRow, evaluateRestart, raiseIncident, startDbPoolAlerts,
   RESTART_PREFIX, RESTART_BLIND_KEY, IDLE_IN_TX_POLL_MS, IDLE_IN_TX_BOUND_S, ACTOR, type AlertDeps, type RestartInputs,
+  parseUnencryptedRows, UNENCRYPTED_PREFIX, UNENCRYPTED_BLIND_KEY, type UnencryptedRead,
 } from '../../db-pool-alerts.js';
 import { ALERT_ACTORS } from '../../services/system-alerts.js';
 
@@ -386,5 +387,109 @@ describe('the wiring', () => {
 
   it('the machine actor is in the one canonical table', () => {
     expect(ALERT_ACTORS.some((a) => a.value === ACTOR && a.tag === 'machine')).toBe(true);
+  });
+});
+
+
+describe('B-DB-APP-TLS — (d) unencrypted app connections (KD-100; Langston C-2, T-J1, T-C1..T-C4)', () => {
+  it('parseUnencryptedRows: zero rows is a clean read; malformed rows are blind, never a silent zero', () => {
+    expect(parseUnencryptedRows([])).toEqual({ ok: true, apps: {} });
+    expect(parseUnencryptedRows([{ app: 'dawntrader_main', n: 5 }, { app: '(unnamed)', n: 1 }]))
+      .toEqual({ ok: true, apps: { dawntrader_main: 5, '(unnamed)': 1 } });
+    expect(parseUnencryptedRows([{ app: '', n: 1 }]).ok).toBe(false);
+    expect(parseUnencryptedRows([{ app: 'x', n: 0 }]).ok).toBe(false);
+    expect(parseUnencryptedRows(null).ok).toBe(false);
+  });
+
+  const run = (d: ReturnType<typeof memDeps>, readRef: { v: UnencryptedRead | { ok: false; error: string } }) =>
+    startDbPoolAlerts({ label: 'wd', deps: d, flushIntervalMs: 3_600_000, unencryptedRead: async () => readRef.v, log: () => {} });
+
+  // MUTATION: drop the per-app raise and this fails.
+  it('pages ONE row per application_name, keyed under the family prefix', async () => {
+    vi.useFakeTimers();
+    try {
+      const d = memDeps();
+      const ref = { v: { ok: true, apps: { dawntrader_main: 5, '(unnamed)': 1 } } as UnencryptedRead };
+      const mon = run(d, ref);
+      await vi.advanceTimersByTimeAsync(IDLE_IN_TX_POLL_MS);
+      expect(d.log.sort()).toEqual([`mint ${UNENCRYPTED_PREFIX}(unnamed)`, `mint ${UNENCRYPTED_PREFIX}dawntrader_main`]);
+      await vi.advanceTimersByTimeAsync(2 * IDLE_IN_TX_POLL_MS);   // still unencrypted: folds, never a second row
+      expect(d.log).toHaveLength(2);
+      expect(d.rows.get(`${UNENCRYPTED_PREFIX}dawntrader_main`)!.metadata.fires).toBe(3);
+      mon.stop();
+    } finally { vi.useRealTimers(); }
+  });
+
+  // T-J1. MUTATION: resolve on the first clean read (drop the two-read run) and this fails.
+  it('clears after TWO reads without the app, and never before the dispatcher has promoted the row', async () => {
+    vi.useFakeTimers();
+    try {
+      const d = memDeps({ promote: false });
+      const ref = { v: { ok: true, apps: { dawntrader_main: 2 } } as UnencryptedRead };
+      const mon = run(d, ref);
+      await vi.advanceTimersByTimeAsync(IDLE_IN_TX_POLL_MS);
+      ref.v = { ok: true, apps: {} };
+      await vi.advanceTimersByTimeAsync(IDLE_IN_TX_POLL_MS);
+      expect(d.rows.get(`${UNENCRYPTED_PREFIX}dawntrader_main`)!.open).toBe(true);   // one clean read: not yet
+      await vi.advanceTimersByTimeAsync(2 * IDLE_IN_TX_POLL_MS);
+      expect(d.rows.get(`${UNENCRYPTED_PREFIX}dawntrader_main`)!.open).toBe(true);   // due, but unpromoted: deferred
+      d.rows.get(`${UNENCRYPTED_PREFIX}dawntrader_main`)!.fired = true;
+      await vi.advanceTimersByTimeAsync(IDLE_IN_TX_POLL_MS);
+      expect(d.rows.get(`${UNENCRYPTED_PREFIX}dawntrader_main`)!.open).toBe(false);
+      mon.stop();
+    } finally { vi.useRealTimers(); }
+  });
+
+  // T-J1, the threshold on its own (a PROMOTED row, so the deferral cannot mask it). MUTATION: clear on the first
+  // clean read and this fails.
+  it('a promoted row survives ONE clean read and clears on the SECOND', async () => {
+    vi.useFakeTimers();
+    try {
+      const d = memDeps();
+      const ref = { v: { ok: true, apps: { dawntrader_main: 2 } } as UnencryptedRead };
+      const mon = run(d, ref);
+      await vi.advanceTimersByTimeAsync(IDLE_IN_TX_POLL_MS);
+      ref.v = { ok: true, apps: {} };
+      await vi.advanceTimersByTimeAsync(IDLE_IN_TX_POLL_MS);
+      expect(d.rows.get(`${UNENCRYPTED_PREFIX}dawntrader_main`)!.open).toBe(true);
+      await vi.advanceTimersByTimeAsync(IDLE_IN_TX_POLL_MS);
+      expect(d.rows.get(`${UNENCRYPTED_PREFIX}dawntrader_main`)!.open).toBe(false);
+      mon.stop();
+    } finally { vi.useRealTimers(); }
+  });
+
+  // T-C1: rows left open by the PREVIOUS process (the TLS switch is a restart). MUTATION: drop the prefix seeding and
+  // this fails — nothing in the new process would ever know the old rows exist.
+  it('a row opened by an earlier process is seeded from the prefix and clears once the app is encrypted', async () => {
+    vi.useFakeTimers();
+    try {
+      const d = memDeps();
+      d.rows.set(`${UNENCRYPTED_PREFIX}dawntrader_pool_monitor`, { id: 'old1', open: true, metadata: {}, fired: true });
+      const ref = { v: { ok: true, apps: {} } as UnencryptedRead };
+      const mon = run(d, ref);
+      await vi.advanceTimersByTimeAsync(2 * IDLE_IN_TX_POLL_MS);
+      expect(d.rows.get(`${UNENCRYPTED_PREFIX}dawntrader_pool_monitor`)!.open).toBe(false);
+      mon.stop();
+    } finally { vi.useRealTimers(); }
+  });
+
+  // MUTATION: treat a failed read as a clean one and this fails (a blind monitor must page, never go quiet).
+  it('a failed read pages the BLIND key (outside the family prefix) and clears neither family row', async () => {
+    vi.useFakeTimers();
+    try {
+      const d = memDeps();
+      const ref = { v: { ok: true, apps: { dawntrader_main: 1 } } as UnencryptedRead | { ok: false; error: string } };
+      const mon = run(d, ref);
+      await vi.advanceTimersByTimeAsync(IDLE_IN_TX_POLL_MS);
+      ref.v = { ok: false, error: 'connection refused' };
+      await vi.advanceTimersByTimeAsync(3 * IDLE_IN_TX_POLL_MS);
+      expect(UNENCRYPTED_BLIND_KEY.startsWith(UNENCRYPTED_PREFIX)).toBe(false);
+      expect(d.rows.get(UNENCRYPTED_BLIND_KEY)!.open).toBe(true);
+      expect(d.rows.get(`${UNENCRYPTED_PREFIX}dawntrader_main`)!.open).toBe(true);   // blind is not clean
+      ref.v = { ok: true, apps: { dawntrader_main: 1 } };
+      await vi.advanceTimersByTimeAsync(IDLE_IN_TX_POLL_MS);
+      expect(d.rows.get(UNENCRYPTED_BLIND_KEY)!.open).toBe(false);
+      mon.stop();
+    } finally { vi.useRealTimers(); }
   });
 });
