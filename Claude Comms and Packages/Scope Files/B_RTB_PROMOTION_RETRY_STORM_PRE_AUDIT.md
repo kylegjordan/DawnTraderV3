@@ -530,3 +530,30 @@ For each re-run:
 - read `maxTrades` from the line.
 
 Scripts: staging `/tmp/r3b_ccb.py`, `/tmp/r3c_ccb.py`, `/tmp/r3d_ccb.py`.
+
+---
+
+## 12. Langston's R3 r2 ruling (Discord 1571888034700337274): **PROCEED to Step 3; §11.2 accepted as the gate.** He re-derived F1-F5 himself from a fresh trade-list pull. Corrections folded below; **where this section and §11 differ, this section stands.**
+
+- **Correction 1 — the per-refusal control is 516 / 517, not 517 / 517.**
+  - 2026-11-13T16:43:34Z logs `max=$572.60` against a reconstruction of $589.88. The $17.28 difference is AKE/USD's +$17.2708 close at 16:43:34.777Z: the guard read before a close in the same second committed.
+  - ⇒ **"516 / 517 exact; $0.00 outside same-second close boundaries."** At a second-stamped instant the bound is one close's net P/L.
+  - It cannot reach F1: min(projected − max) over the 517 is $22.72, and `avg_at_open` is built from millisecond open times.
+  - §11.4's "$0.00 against 517 refusal instants" is withdrawn.
+- **Correction 2 — the 518th line.** All 518 `MAX_TOTAL_EXPOSURE` lines in `error__2026-11-14_00-00-00.log` are dated 2026-11-13. The 518th (21:08:52Z) is excluded because it falls **after the build boundary at 21:03:28Z** (`77f6fd598`), not because of its date.
+- **Correction 3 — §11.4's spread mixed two populations.**
+  - The day's `MONEY_HELD` range is $558.07-$590.19.
+  - The 517 refusals' own `max` field ranges $562.96-$589.88.
+  - The conclusion holds under either.
+- **F1(b), strengthened with the measured ratio:**
+  - **Entry cost by open day steps cleanly at the 11-07 deploy:** 10-26 → 11-07 every open cost $36.32-$39.83 (n = 283); 11-09 → 11-16 every open $27.07-$28.61 (n = 127). No overlap.
+  - **At the 7 old opens, money held was $579.41-$666.99,** so sizing paired to money held would have given $28.10-$32.35 tickets against actual costs of $38.56-$39.74: **1.20× to 1.37× oversized.**
+  - AMZN/USD is the cleanest case: money held was $579.41 at 11-05T21:38Z, and it still took a $38.56 ticket.
+  - ⚠️ `anchorBalanceAtOpen` / `balanceRatioAtOpen` read 820 / 1 on every open, before and after 11-07. **They record the anchor, not the sizing basis, and are not cited as one.**
+- **F4 — settled now, not at Step 3: a pending maker row consumes EXPOSURE, not only a slot.**
+  - Across the Q/USD span, `current` = $559.10 = the 16 filled members ($531.37) + Q/USD's pending ticket ($27.72).
+  - ⇒ **OBJ-2 input (§9.4 disposition 1, folded into the work in hand): free cash is computed net of pending maker reservations.**
+  - **Implementation note for Step 3:** the guard's own `currentExposure` already includes the pending row, because it sums `getActivePositions(mode)` (`trade-safety.ts:646-665`). The pre-claim room helper therefore reuses **that same position read**, never a filled-only list, and a unit test pins that a pending maker row reduces room.
+- **Housekeeping:** the R3 scripts and trade dumps moved from staging `/tmp` (mode 1777, `#979`) to a `0700` directory owned by root (`/root/ccb-r3/`). Later R3 re-runs stage there.
+
+**Card:** stays at Pre-Audit, `Review = Approved`. **Step 3 begins when B-ENTRY-GATE closes** (KD-87).
