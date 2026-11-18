@@ -61,7 +61,11 @@ The backbone is sound and should stay. Four gaps are worth fixing:
 - **CLOSED-UNPROVEN is an explicit residual, never counted as done.** It needs an owner, a placed home, a closing condition, a failure condition, and an alert that opens the follow-up when the event occurs. An armed alert is not proof.
 - **Classify the 29 before using them as a baseline:** scoped objective, observation leg, new finding, or honest residual.
 
-**R2. A tool-driven impact census, with its limits stated.** (Completeness, correctness.) The strongest change.
+**R2. A supporting census script, with its limits stated.** (Completeness, correctness.) The strongest change.
+- **What it is and is not (Kyle, 2026-11-19).** It is a script that searches and lists. It does no reasoning, and it replaces nothing. The code read, the runtime and database read, the System Impact Map, the System Manual, the ledger search and the provenance read all stay mandatory and unchanged. It hands the session a list of places to check and cross-checks the hand census. The session does the thinking.
+- **When it runs.** Step 2, alongside the hand census. Optionally a quick run at Step 1 to help bound the scope.
+- **Its output is a lead, never a verdict.** A hit is a place to read. A clean result is never evidence that nothing else is affected, the same standing as a clean helper result. Where it disagrees with the System Impact Map, the gap is a finding: either the map is stale or the script missed something.
+- **Its limits are investigated before it is used.** The pilot on closed batches measures what it finds, what it misses and what the hand audit missed. It produces a written list of blind spots, and the reliance written into the Step 2 skill is set from that list, not assumed. No batch depends on it until then.
 - **At Step 2, a script lists for each changed symbol, table or column:** type-aware references; schedulers, timers and start paths repo-wide; and database readers.
 - **It never claims "every" reader.** It labels what it found apart from surfaces it cannot see:
   - dynamic dispatch;
