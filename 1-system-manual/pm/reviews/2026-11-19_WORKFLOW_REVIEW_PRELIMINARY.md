@@ -1,59 +1,112 @@
 # The eleven-step workflow: preliminary review (PM Claude, 2026-11-19)
 
-Status: PRELIMINARY, for Kyle and for Coltrane's review. Nothing changes until Kyle agrees; any change then runs as its own batch.
+Status: PRELIMINARY r2 (Coltrane's advisory review at `aa14c2114`, 2026-11-18 23:21Z, folded in; every point accepted), for Kyle. Nothing changes until Kyle agrees; any change then runs as its own batch.
 
 ## The ask (Kyle, 2026-11-18)
-Review the eleven-step workflow, designed months ago, against today's models and tools. Recommend a change only if it meaningfully improves completeness, correctness, accuracy or speed. That includes catching a batch's intent and proving it is met at close, and audits and scopes that cover every part of the system the batch touches, so the build is correct and breaks nothing else. If the workflow is good enough, say so.
+Review the eleven-step workflow, designed months ago, against today's models and tools. Recommend a change only if it meaningfully improves completeness, correctness, accuracy or speed. That covers:
+- capturing a batch's intent and proving it is met at close;
+- audits and scopes that cover every part of the system the batch touches, so the build is correct and breaks nothing else.
+
+If the workflow is good enough, say so.
 
 ## What was read
-- The twelve step skills at `origin/migration/aws-supabase` (166 KB in all; step 10 alone is 52 KB). PM read steps 1 and 2 in full, and a helper summarised 3-11 and hotfix.
-- 74 completion reports first added 2026-09-01 to 11-16, plus the scope files' first-commit dates (73 of them). A helper read them. Its counts are line matches over report text, so they are indicative, not tallied findings.
-- The test footprint at the ref: 453 test files against 671 server source files. 604 of the 704 server commits since 09-01 touched a test file.
-- Current Anthropic guidance (Claude Code best-practices page, read 11-18).
+- **The twelve step skills** at `origin/migration/aws-supabase`: 166 KB in all, with step 10 alone at 52 KB. PM read steps 1 and 2 in full; a helper summarised 3-11 and hotfix.
+- **74 completion reports** first added 2026-09-01 to 11-16, plus the first-commit dates of 73 scope files. A helper read them. Its counts are line matches over report text: indicative, not tallied findings.
+- **The test footprint at the ref:** 453 test files against 671 server source files. 604 of the 704 server commits since 09-01 touched a test file.
+- **Current Anthropic guidance:** the Claude Code best-practices page, read 11-18.
 
 ## Verdict in one line
-The backbone is sound and should stay. Most of the time a batch takes is waiting (timed reads, late slotting, reviewer and Kyle waits), not process steps. The real gaps are three: batches close with their intent unproven, the impact census is done by hand, and the paperwork at close is written three or four times. Four changes are worth making; the rest is fine.
+The backbone is sound and should stay. Four gaps are worth fixing:
+- batches close with their intent unproven;
+- the impact census is done by hand;
+- the closing paperwork is written three or four times;
+- the second verification has no defined method.
+
+(Withdrawn in r2: "most of the time is waiting" and "step count is not the bottleneck". Time per step is unmeasured.)
 
 ## What the evidence shows
-- **Speed.** Median 33 hours from scope to close (n=73). 44 batches closed in 3 days or less; 20 took more than a week. The long tail is mostly batches scoped long before they were slotted, plus observation windows. Step count is not the bottleneck.
-- **The gates catch real problems.** Langston sent back or re-rounded Step 1 in 24 of 74 reports and Step 4 in 18; Step 8 caught wrong Step-7 statements (B_BOOK_STATE_RESTART_DURABLE). Rough split of mentions: ~40% scope and audit, ~35% code, ~25% verification.
-- **Intent is often closed unproven.** 29 of 74 reports close objectives as PARTIAL, UNEXERCISED or "not seen live" (for example, B_ENTRY_DISTANCE_GUARD: the refusal "has never fired live"; B_CRYPTO_FEED_WATCHDOG: four objectives PARTIAL).
-- **Escaped defects are coverage misses of a specific shape**:
-  - a second code path (#903: a field added to the main return, not the empty-window return);
-  - code and database disagreeing on allowed values (#1063: six pattern types in code, five in the database; 22,368 failed inserts over 13 days);
-  - a consumer reading a value with a different meaning (#1160: `active` meant "any engine" to the server and "this mode's engine" to the page);
-  - a failed read treated as an empty answer (#691/#1211).
-  Each would have been caught by asking, for every changed value, *who else reads it, by what path, and what does each reader assume it means*.
-- **Close-out paperwork.** The ~30-row governance ledger is written in the session, the commit message and the report; step 4's header lists the documents a fourth time. Report median ~10.5 KB. No report showed a document row changing a decision.
-- **Tests are already standard practice** (604 of 704 server commits touch tests). "Write tests" is not a new recommendation.
+- **Elapsed time.** Median 33 hours from scope to close (n=73). 44 batches closed in 3 days or less; 20 took more than a week. Some of the long tail is batches scoped long before they were slotted, or observation windows. Time per step is not recorded.
+- **The gates catch real problems.**
+  - Langston sent back or re-rounded Step 1 in 24 of 74 reports, and Step 4 in 18.
+  - Step 8 caught wrong Step-7 statements (B_BOOK_STATE_RESTART_DURABLE).
+- **Intent is often closed unproven.** 29 of 74 reports close objectives as PARTIAL, UNEXERCISED or "not seen live". Examples: B_ENTRY_DISTANCE_GUARD, whose refusal "has never fired live"; B_CRYPTO_FEED_WATCHDOG, with four objectives PARTIAL. This is report-level line matching, not a count of scoped objectives, so it shows the gap exists, not its size.
+- **The escaped defects found are coverage misses of a recognisable shape:**
+  - a second code path: #903, a field added to the main return but not the empty-window return;
+  - code and database disagreeing on allowed values: #1063, with 22,368 failed inserts over 13 days;
+  - a consumer reading a value to mean something else: #1160, where `active` meant "any engine" to the server and "this mode's engine" to the page;
+  - a failed read treated as an empty answer: #691/#1211.
+- **Close-out paperwork.** The ~30-row governance ledger is written in the session, the commit message and the report, and step 4's header lists the documents a fourth time. Report median is ~10.5 KB.
+- **Tests are routine:** 604 of 704 server commits touch a test. That shows activity, not adequacy.
 
-## Recommendations (meaningful only, highest value first)
+## Recommendations
 
-**R1. Every objective carries its proof of done, designed at Step 1, and "unproven" is a real status.** (Intent, correctness.)
-Each objective states, in the scope, how it will be shown working: the exact query, test, log line or page. For a rare event, it states how the batch will *force* it on staging, because waiting for a refusal to fire naturally is how 29 of 74 closed partial. If a live proof truly cannot happen inside the batch, the batch closes as **CLOSED-UNPROVEN** with an armed alert to verify at the first live occurrence. It is never reported as done. Langston reviews the proof plan at Step 1, which is already where he finds the most problems.
+**R0. One traceability ledger per batch, the spine the rest hang on.** (Intent, completeness.)
+- **One machine-readable file per batch, filled in as the batch goes:** objective → original intent → affected components, entry points and readers → plan item → diff and tests → Step-7 proof → Step-8 challenge → final status.
+- **R1-R3 write into it** instead of each adding its own table, so scope, audit and close cannot drift apart.
+- **It records the census and proof tool versions and outputs at the graded ref,** so a later reviewer can reproduce what "complete" meant.
 
-**R2. A tool-driven impact census in Step 2, with a "readers and meaning" table.** (Completeness, correctness.)
-Today the census of entry points, callers, writers and readers is hand-grepped, and the System Impact Map it leans on is hand-maintained. A script run at Step 2 lists, for each changed symbol and table or column: every reference (type-aware, not text grep), every scheduler, timer and start-up path repo-wide, and every database reader. Its output pastes into the pre-audit. The session then fills one table for each changed value: *reader · path · what it assumes the value means · still true after this change?* That table targets exactly the #903 and #1160 misses. Where a value is backed by a database type, a CI check compares the code's allowed values against the database's (the #1063 class). Large censuses fan out to Sonnet helpers, one per component, with the session checking every hit.
+**R1. A discriminating proof record per objective, and an honest residual status.** (Intent, correctness.)
+- **Fix the existing contradiction first.** Step 9 ends only when every objective is green, but Step 11 allows NO / PARTIAL.
+- **At Step 1, each objective records in R0:**
+  - what is observed;
+  - the population;
+  - the instrument;
+  - the expected result;
+  - a positive and a negative control;
+  - the evidence class needed: static, unit, integration, staging or live-only;
+  - a safe forcing method for rare events;
+  - the change that would turn it red.
+- **Forcing is done only through a safe deterministic harness or injection.** The proof rule never justifies polluting staging or unsafe state.
+- **Success criteria are fixed before results are seen.** They change only by a recorded, reviewed amendment, so "done" cannot be redefined after the evidence.
+- **CLOSED-UNPROVEN is an explicit residual, never counted as done.** It needs an owner, a placed home, a closing condition, a failure condition, and an alert that opens the follow-up when the event occurs. An armed alert is not proof.
+- **Classify the 29 before using them as a baseline:** scoped objective, observation leg, new finding, or honest residual.
 
-**R3. Write the close-out once, generated, and merge Steps 10 and 11.** (Speed, accuracy.)
-The governance checker already holds the class-to-documents table. A script pre-fills the ledger from the diff and the declared class: which documents are required, which the diff touched, and which are judged. The session confirms or edits it. The same output feeds the step-4 header and the completion report, so nothing is retyped. The completion report shrinks to objectives, proof, outcome (including CLOSED-UNPROVEN items) and the generated ledger. That makes ten steps instead of eleven, and removes the most-repeated paperwork without dropping any document update.
+**R2. A tool-driven impact census, with its limits stated.** (Completeness, correctness.) The strongest change.
+- **At Step 2, a script lists for each changed symbol, table or column:** type-aware references; schedulers, timers and start paths repo-wide; and database readers.
+- **It never claims "every" reader.** It labels what it found apart from surfaces it cannot see:
+  - dynamic dispatch;
+  - string-built SQL;
+  - stored routines, triggers and views;
+  - shell, systemd, cron and PM2 starts;
+  - config-driven paths;
+  - external consumers.
 
-**R4. Give Step 8 a defined independent method.** (Accuracy.)
-Step 8's skill is 2.8 KB and does not say what Langston re-measures, so it tends to re-run Step 7's instrument. Make it: for each load-bearing objective, the reviewer proves it with an instrument *he chooses* (a different query, log or page), at the deployed sha. This keeps the step's value (it caught wrong-object claims) and makes its independence real rather than assumed.
+  It states the population searched and carries positive controls.
+- **The reader table in R0:** reader · path · assumed meaning · missing, error and stale handling (the #691/#1211 class) · concurrency or mutual-exclusion assumption · still true after the change?
+- **A CI check compares code and database allowed values in both directions.** It covers named shared contracts only, with intentionally historical values listed.
+- **The tool must be proven before it becomes a gate.** Replay or seed the #903, #1063, #1160 and #691 cases and mutate each until the check goes red. Until then, "would have caught them" is a hypothesis.
+- **Helpers may shard a large census.** The workflow names no model, and helper agreement is never evidence.
 
-**Smaller, worth doing in the same pass:** split Steps 1 and 2 cleanly. Step 1 keeps intent, objectives, proof plan and change class; the System Impact Map, System Manual and provenance reads move wholly to Step 2, so they stop being done twice. Strip repeated blocks from the step skills: the fresh-reader block appears three times, the board block in every step, plus each step's "preserved verbatim" copy of retired text. That makes them faster to load and read.
+**R3. Generate the close-out once; keep Steps 10 and 11 separate.** (Speed, accuracy.)
+- **One durable machine-readable governance artifact,** rendered into the session post, the commit and the report instead of retyped.
+- **It is generated from more than the diff:** the declared class, the Step-2 census, R0, and the base-to-deployed tree diff. An omitted update leaves no diff, so a diff alone misses it.
+- **Every judged or N/A row keeps its reason.**
+- **Steps 10 and 11 stay separate.** Step 10 does the governance work; Step 11 attests the finished result. One close-out skill may hold both as ordered phases with one final review, but the evidence shows retyping, not that merging the gates helps.
+
+**R4. Step 8 becomes two-legged.** (Accuracy.) For each load-bearing objective:
+1. **Reproduce Step 7's result** with the same instrument and population, which keeps the comparison valid.
+2. **Run an orthogonal challenge** aimed at wrong-object, alternate-path or failure-state risk, and state what would turn it red.
+
+The reviewer tries to falsify the proof. If either leg cannot be done, the objective stays unproven.
+
+**Also:**
+- **Tests:** each load-bearing objective maps to named tests in R0, with one representative red mutant each.
+- **Hotfix:** keeps its structure and inherits the proof record and census in proportion. It is the highest-pressure path and should not sit outside the safeguards.
+- **Strip repetition from the skills:** 11 preserved-verbatim blocks, 11 board blocks and four full fresh-reader blocks. The common rules go into one always-loaded contract, and the historical text is archived.
+- **Withdrawn:** moving all reading from Step 1 to Step 2. Intent and a credible boundary need architecture and provenance. Step 1 keeps targeted reading to bound the object; Step 2 owns the exhaustive census and extends the same R0 file.
 
 ## What should NOT change
-- Independent code review at the graded ref (Step 4), and the CI 4/4 gate (Step 5). Both catch real defects; review by a reader who never saw the reasoning is what current Anthropic guidance recommends.
-- `dt-deploy` and its guards (Step 6). Already machine-checked.
-- The provenance read and audit-before-plan ordering in Step 2.
-- UI-navigated verification in Step 7: Anthropic's guidance treats live checks and tests as complementary.
-- The hotfix path and its qualifying test.
+- Independent code review at the graded ref (Step 4), and the CI 4/4 gate (Step 5).
+- `dt-deploy` and its guards (Step 6).
+- The provenance read, and the audit-before-plan ordering.
+- UI-navigated verification in Step 7: live checks and tests are complementary.
+- The hotfix qualifying test.
+
+## How to proceed
+- **One workflow-improvement batch,** carrying R0-R4 as tightened above.
+- **Pilot first.** Run the census tool and the generated ledger on several closed batches, including the four named escapes, before either becomes a mandatory gate.
 
 ## Not established
-- Time per step: reports rarely timestamp steps, so where the 33-hour median goes inside a batch is unmeasured.
-- How many escaped defects trace to scope or audit misses: no report records what review missed. Recommend R3's generated report add one line, "missed earlier, found at step N", so this becomes measurable.
-- The value of the System Impact Map as maintained: not tested here.
-
-## If Kyle agrees
-One batch (or R1+R4 as rule edits, and R2+R3 as a tooling batch). The owner and placement are Kyle's to slot after a slot check; Langston or Coltrane reviews the rule edits before they land.
+- **Time per step.** Reports rarely timestamp steps, so where the 33-hour median goes inside a batch is unmeasured.
+- **How many escaped defects trace to scope or audit misses.** No report records what review missed. R0 should carry one line, "missed earlier, found at step N", so this becomes measurable.
+- **The value of the System Impact Map as maintained.** Not tested here.
