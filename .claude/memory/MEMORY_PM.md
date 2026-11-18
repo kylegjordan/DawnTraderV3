@@ -76,6 +76,8 @@
 
 - **USAGE 87% @ ~18:23Z 11-16:** all four AT SAFE STOP (OLD 6a67e252e, combined deploy after 21:00Z only if room; Infra clean, birth-cap unattended; NEW 20:30Z PFC read or re-run next US session; ANALYST d2c30001a, timed reads 11-17/18/21/23). At 90% run pm-usage-stop (guard cron 6b575bdd).
 
+- **B-TOKEN-ECONOMY proposal (11-18, PM, Kyle-asked 11-17):** Scope Files/B_TOKEN_ECONOMY_PROPOSAL.md. Key: cap live context (autoCompactWindow ~250k, idleCompaction off), slim CLAUDE.md 123KB, changes-only alert hook, alert nag volume, subagents Sonnet, heartbeat->script, PM pacing governor. Owner PM, Langston review. Awaiting Kyle: approve + apply A before Langston back?
+
 # OPEN
 - Archived 2026-11-04 · stale-local-session-ids → `1-system-manual/pm/archive/memory/2026-11.md`
 - Hourly "Wake watcher heartbeat" sessions pile up unarchived in the sidebar — ask Kyle whether to archive.
