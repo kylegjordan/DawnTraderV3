@@ -40,7 +40,6 @@ Never placed: automatic transcript/context limits; per-prompt hook output size; 
 - New: a size cap with one-in-one-out, warned at session start the way CONDUCT.md's cap is, so the next addition has to move something out. This is what the August batches lacked.
 - Due-alert hook: inject only alerts that are new or changed since the session's last turn, plus a one-line count; map PM's clone.
 - Hook warnings: once per session per kind, not per command.
-- Fix the five-way registration of load-own-memory/load-conduct if it duplicates.
 
 **C. Cut the alert volume at the source.**
 - Standing "batch open > 48 h / > 7 d" nags fire once and then weekly, not on every sweep; store the owner on the alert (row 1l) so the lane stops re-guessing.
@@ -60,10 +59,22 @@ Kyle: helper agents only; no per-step model switching, no effort changes.
 
 ## Ownership and order
 - Owner: PM Claude (Kyle 11-17: not Infra), reviewed by Langston at each step; Infra consulted only for Langston-box files.
-- Order: A first (settings, reversible in one line), then D (also settings), then B, C, E. A can be applied while the crew is stopped so the restart benefits.
+- Order: superseded by Coltrane's revised order below (measurement first, then A canary). A can be applied while the crew is stopped so the restart benefits.
 
 ## Kyle's decisions
 Given 11-18: approve A to D; reject the pacer; cheaper models for helper agents only.
 Still his:
 1. The batch's place: now, ahead of other crew work, while the crew is stopped.
 2. Whether A and D (persistent laptop settings) may go in before Langston is back, with his review on resume, or wait for him.
+
+## Coltrane's review (advisory, 2026-11-18 22:54Z, at c634f4062): PROCEED WITH CONDITIONS. All six accepted.
+Langston stays the routine reviewer; this is a second reviewer's ruling.
+1. **A: canary first.** On one real session, force a 250k compaction and positively verify: the threshold, every start-up manifest, the current task and handover, the wake watcher re-armed, alert state, resume, and zero duplicate transcript ids. Then roll out to the rest with a stated rollback trigger.
+2. **The five memory/conduct registrations are deliberate slices, not duplicates** (`settings.local.json`; `load-own-memory.mjs`, `load-conduct.mjs`). The "fix" line is withdrawn.
+3. **B moves depth, never point-of-action rules.** These stay always-loaded in short operative form: identity, sender, opening-list and reply-on-Discord rules; autonomous completion and escalation; blocked-notify and reviewer-approval relay; one-direction, source of truth, own clone and sync gate; batch identity, change class and the memory-write core; the 9.4/9.5 triggers; alert-result semantics. The cap gets an exact byte ceiling, its warning is tested red by exceeding it, and it is byte cap plus one-in-one-out.
+4. **Alert deltas need state rules first.** The first prompt after start, resume or compaction gets the full list. Later prompts get changes only (new, owner, severity, due state, resolved or gone), plus a count that tells "zero", "unchanged" and "check failed" apart. The baseline advances only after a complete successful read. Hook warnings: only identical advisory repeats are suppressed. Blocks, changed violations, failures and the first warning after compaction always show.
+5. **C narrowly:** weekly cadence only for the two open-batch nags (fire at the threshold, weekly after, owner changes at once). The general unresolved-alert closure stays as is. The owner is stored when the alert is created. Any daily lane cap has a critical bypass and a digest with full ids, owners and the overflow count, never silent drops.
+6. **D's helper rule gains a test:** delegate only when the task is self-contained, independently checkable, returns a short cited answer, and is cheaper to verify than to read yourself. Haiku only for literal file finding; Sonnet for anything needing interpretation. Prove the model actually served with four controls: default Sonnet, explicit Haiku, requested Opus 5.5, and refusal of anything above the ceiling.
+
+**Revised order:** measurement baseline first (pre-registered: usage rate, compaction count, continuity, helper routing, hook bytes, lane volume, with acceptance and rollback criteria); then the A canary, A rollout, D, B slimming, C, and the B alert-delta hook once owner state is stable. Measure after every leg.
+
