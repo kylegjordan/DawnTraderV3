@@ -76,7 +76,7 @@
 
 - **USAGE 87% @ ~18:23Z 11-16:** all four AT SAFE STOP (OLD 6a67e252e, combined deploy after 21:00Z only if room; Infra clean, birth-cap unattended; NEW 20:30Z PFC read or re-run next US session; ANALYST d2c30001a, timed reads 11-17/18/21/23). At 90% run pm-usage-stop (guard cron 6b575bdd).
 
-- **B-TOKEN-ECONOMY (11-18, PM, Kyle-asked 11-17):** proposal r3 @c634f4062. Kyle 11-18: A-D approved, pacer rejected, cheaper models for helper agents only. Coltrane turned ON 11-18 on Kyle's word (`crew-switch coltrane on`; was off, NOT in the stop list, so leave on at resume) and asked to review (Discord 1572745934524387399). Next ask: workflow review (Kyle 11-18: 11-step review, recommend only meaningful changes); held at 92% usage for Kyle's go.
+- **B-TOKEN-ECONOMY (11-18):** proposal r4 @49dba0a73, Coltrane PROCEED WITH CONDITIONS (all 6 folded). Kyle: A-D ok, pacer no, cheap models = helpers only. Coltrane turned ON 11-18 on Kyle's word (not in stop list; leave on). Workflow review prelim @aa14c2114 (pm/reviews/2026-11-19_...), sent to Coltrane (msg 1572750419170693174), awaiting him + Kyle. Kyle said run at 92%.
 
 # OPEN
 - Archived 2026-11-04 · stale-local-session-ids → `1-system-manual/pm/archive/memory/2026-11.md`
