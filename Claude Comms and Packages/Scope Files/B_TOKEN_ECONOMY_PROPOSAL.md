@@ -34,6 +34,8 @@ Never placed: automatic transcript/context limits; per-prompt hook output size; 
 
 **B. Slim what loads every turn, and stop it growing back.**
 - Provenance: OLD Claude slimmed CLAUDE.md in four batches, 2026-08-20 to 08-29 (B-CONDUCT-FILE, B-RULES-1c/1d with the eleven step skills, B-CLAUDEMD-SLIM): 140,011 B to 112,081 B. Its own catalog entry says it "does not stop the regrowth", and it has not: 122,263 B now, +10.2 KB in 25 commits since 08-30 (roster names, the opening-list wake rule, alert-routing rules, the 10-19 rules in 9.4, dt-sql, each added with its incident story).
+- Discord and wake: no skill read before each post. The few lines a session needs to post (its sender name, the opening-list wake rule, the send command, reply on Discord when woken there) stay in CLAUDE.md, ~1.5 KB; the tools already enforce the sender and parse the opening list. Bridge internals, chunking, diagnostics and history go to COMMS_BRIDGE_RUNBOOK and the wake-watcher runbook, read only when something breaks or is being changed.
+- Langston's server (section 8): replace with a pointer to LANGSTON_ARCHITECTURE.md, which already holds it. It sits in CLAUDE.md because section 8 was written at the 05-06 migration, before that document existed (07-24), and was never moved.
 - What can still move (judged section by section, not measured): comms and wake mechanics 6.1-6.10 to a comms skill or runbook (~12 KB); rule backstories and "MEASURED" paragraphs in 5 to the history doc and skills (~9-10 KB); 7.1 backup and who-moves-what detail to the topology runbook (~5 KB); 8 Langston runtime, already in LANGSTON_ARCHITECTURE (~5 KB); 3.0/3.1/9-intro/10.5 mechanics to the step skills (~7 KB); 9.4 essays (~4 KB); 0.a narrative (~3-4 KB); 4 file index (~3 KB). About 45-50 KB, to ~72-77 KB. The earlier 40 KB target was too aggressive: the eight non-negotiables, the 9.4 and 9.5 triggers, the sync gate, the one-direction rule, the per-turn alert check and the roster names must stay always-loaded.
 - New: a size cap with one-in-one-out, warned at session start the way CONDUCT.md's cap is, so the next addition has to move something out. This is what the August batches lacked.
 - Due-alert hook: inject only alerts that are new or changed since the session's last turn, plus a one-line count; map PM's clone.
@@ -44,17 +46,12 @@ Never placed: automatic transcript/context limits; per-prompt hook output size; 
 - Standing "batch open > 48 h / > 7 d" nags fire once and then weekly, not on every sweep; store the owner on the alert (row 1l) so the lane stops re-guessing.
 - Alert lane stays on Sonnet; Langston only by rule (already). Add a daily cap on lane posts with a digest.
 
-**D. Cheaper models, automatically, under a ceiling (Kyle 11-18).**
-What the tools allow (official docs, model-config, sub-agents and prompt-caching pages, read 11-18):
-- Ceiling: yes. An allowed-models list in settings caps every session, helper agent and skill at Opus 5.5 while allowing Sonnet and Haiku. A blocked choice falls back to the default.
-- Helper agents: yes, cleanly. Default them to Sonnet (CLAUDE_CODE_SUBAGENT_MODEL, with the force flag so built-in search agents follow), Haiku for plain file searches. No quality risk to the main conversation.
-- The main conversation: there is no built-in "pick by difficulty" model. Two automatic routes exist:
-  1. A skill can carry its own model. The routine workflow steps (5 CI, 6 deploy, 7 first-pass verify reads, memory housekeeping, alert reads) can run on Sonnet; scope, audit, implementation and review stay on Opus. The switch happens on its own when the step's skill loads.
-  2. PM can set a running session's model and effort from outside, at a step boundary.
-  "opusplan" (Opus while planning, Sonnet otherwise) is not recommended: the crew rarely uses plan mode, so it would run almost everything on Sonnet.
-- Cost of switching: each model has its own cache, so every switch re-reads the whole live conversation once at the uncached rate. Switch only at step boundaries; with A's 250k cap, one switch costs at most ~250k uncached tokens.
-- Effort is the cheaper lever: lowering thinking effort keeps the cache. Routine steps can run at lower effort without changing model.
-- Trial first: one session for one week, model per step, measured against its own previous week, before the crew.
+**D. Cheaper models for helper agents only (Kyle 11-18).**
+Kyle: helper agents only; no per-step model switching, no effort changes.
+- When a helper is used: a self-contained read, search or measurement whose answer comes back short (searching many files, reading logs, git history, counting, docs lookups, slot checks). Not for decisions, design, code that ships, or review of trading logic; those stay in the session. Added saving: the file dumps stay out of the session's own conversation, so its 250k fills more slowly.
+- Which model: Sonnet by default (one laptop setting, CLAUDE_CODE_SUBAGENT_MODEL=sonnet); Haiku for plain file-finding (our own Explore agent definition with model haiku, which replaces the built-in one that runs on Opus); Opus only when the session asks for it on that call, capped at Opus 5.5 by the allowed-models list.
+- Quality check: the session checks a helper's answer against the object before relying on it (CONDUCT 6b, already a rule). Sonnet helpers already run PM's slot checks (KD-28) and research.
+- Rule text: two lines in CLAUDE.md beside the delegation guidance; the setting does the rest.
 - Langston: keep Opus 5 for reviews; stable prompt prefix so repeat calls hit the cache; heartbeat becomes a plain script (no Claude session), folding in B-HEARTBEAT-RESCOPE.
 
 **E. Measurement (no pacing).**
@@ -63,10 +60,10 @@ What the tools allow (official docs, model-config, sub-agents and prompt-caching
 
 ## Ownership and order
 - Owner: PM Claude (Kyle 11-17: not Infra), reviewed by Langston at each step; Infra consulted only for Langston-box files.
-- Order: A first (settings, reversible in one line), then D's helper-agent default and ceiling (also settings), then B, C, the D skill-model trial, E. A can be applied while the crew is stopped so the restart benefits.
+- Order: A first (settings, reversible in one line), then D (also settings), then B, C, E. A can be applied while the crew is stopped so the restart benefits.
 
 ## Kyle's decisions
-Given 11-18: approve A to D; reject the pacer; add automatic model switching under a ceiling.
+Given 11-18: approve A to D; reject the pacer; cheaper models for helper agents only.
 Still his:
 1. The batch's place: now, ahead of other crew work, while the crew is stopped.
-2. Whether A, and D's ceiling and helper-agent default (persistent laptop settings), may go in before Langston is back, with his review on resume, or wait for him.
+2. Whether A and D (persistent laptop settings) may go in before Langston is back, with his review on resume, or wait for him.
