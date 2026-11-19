@@ -64,7 +64,7 @@
 
 - Archived 2026-11-16 · kd93-cause-found → `1-system-manual/pm/archive/memory/2026-11.md`
 
-- **NUDGE 11-16 11:31Z:** NEW - CLEARED: started row 9j Step 1 (pool-fix scope), pausing for PFC readings 14:45Z/20:30Z.
+- Archived 2026-11-16 · nudge-11-16-1131z → `1-system-manual/pm/archive/memory/2026-11.md`
 
 - **11-16 ~12:35Z Kyle (b785d8714):** KD-96 DB query tool NOW, interrupts birth-cap (Infra told; flag if ~11-19 at risk); KD-97 #705 retry fix now by OLD (told; out of NEW row 119); KD-98 sessions may verify KD rows in PM transcript (rules 6a). Backblaze key still needs his yes in OLD chat.
 
@@ -72,7 +72,7 @@
 
 - **Small-items bundle +1 (ANALYST 11-16 ~16Z):** Settings "config snapshot" view 500s (route calls removed storage.getPortfolioBalance; repoint vs remove undecided). Not paper/VTS. Bundle ids in archive 2026-11: small-items-bundle-1/2-pending-kyle.
 
-- **NUDGE 11-16 16:23Z:** NEW - WITHDRAWN: 9j Step 2 done (Langston PROCEED x2, 1c2ac6a4f); Step 3 waits B-ENTRY-GATE close by design (KD-87); only PFC C-1 END read 20:30Z left today. MISTAKE: stall-misread.
+- Archived 2026-11-16 · nudge-11-16-1623z → `1-system-manual/pm/archive/memory/2026-11.md`
 
 - **USAGE 87% @ ~18:23Z 11-16:** all four AT SAFE STOP (OLD 6a67e252e, combined deploy after 21:00Z only if room; Infra clean, birth-cap unattended; NEW 20:30Z PFC read or re-run next US session; ANALYST d2c30001a, timed reads 11-17/18/21/23). At 90% run pm-usage-stop (guard cron 6b575bdd).
 
