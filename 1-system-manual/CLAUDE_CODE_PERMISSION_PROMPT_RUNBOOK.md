@@ -55,3 +55,15 @@
 
     Working file at `.claude/settings.local.json` (commit `39b033738`). If a future update breaks this, go straight to the structural `bypassPermissions` fix, not individual rules. See history doc §5.16.
 
+---
+
+## Moved from CLAUDE.md — B-TOKEN-ECONOMY P5 (2026-11-19)
+
+Verbatim passages moved out of the always-loaded rules file to cut what every session re-reads. Each block id is the pointer `CLAUDE.md` carries in its place. `scripts/crew-tooling/move-ledger-check.mjs` proves each block is here once, unchanged, and gone from `CLAUDE.md` (ledger: `Claude Comms and Packages/Change Lists/B_TOKEN_ECONOMY_MOVE_LEDGER.json`).
+
+<!-- P5-MOVED id=P5-16 -->
+### P5-16 — moved from CLAUDE.md, under "5. Critical Rules (Non-Negotiable Invariants)"
+
+    **⚠️ SCHEDULED ROUTINES ARE A DIFFERENT, UNFIXED PROBLEM** — an open upstream regression ([#77817](https://github.com/anthropics/claude-code/issues/77817), [#76469](https://github.com/anthropics/claude-code/issues/76469), [#76141](https://github.com/anthropics/claude-code/issues/76141), all reproducing on 2.1.215). **NO settings file can fix a routine.** Workaround: recreate it via the app's Routines → New routine FORM, not by asking a session. **Do not re-diagnose this as a settings problem.**
+    **Full detail** — the settings block, protected paths, session-mode drift, the shipped-CLI mechanics, and what was verified NOT to be the cause — is in **`1-system-manual/CLAUDE_CODE_PERMISSION_PROMPT_RUNBOOK.md`**. See history doc §5.16.
+<!-- /P5-MOVED id=P5-16 -->

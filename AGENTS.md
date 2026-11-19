@@ -22,7 +22,7 @@
 2. Read **`CONDUCT.md`** (how you behave and report to Kyle) and **`CLAUDE.md`** (the binding rules). Wherever they say "Claude", "CC" or "the session", read **you**. Wherever they say **Langston**, read **Coltrane** for this shift.
 3. Read **`.claude/memory/MEMORY.md`** and **your own** file: `MEMORY_CC_A.md` (OLD) · `MEMORY_CC_B.md` (NEW) · `MEMORY_CC_C.md` (ANALYST) · `MEMORY_CC_INFRA.md` (INFRA) · `MEMORY_PM.md` (PM) in `.claude/memory/`. Its **POSITION** block says which batch and which step you are on. **Resume from there.**
 4. Before working any step of the 11-step workflow, read that step's file: `.claude/skills/workflow-NN-*/SKILL.md` (the table is at the top of `CLAUDE.md`).
-⚠️ `CLAUDE.md` is large (~118 KB). After a compaction, re-read `CONDUCT.md` and your memory file in full, and only the `CLAUDE.md` sections you need.
+⚠️ `CLAUDE.md` is large; read its size with `node scripts/crew-tooling/claude-md-cap.mjs --report`, never from a figure written here. After a compaction, re-read `CONDUCT.md` and your memory file in full, and only the `CLAUDE.md` sections you need.
 
 ### 2a. PM Codex read order and limits
 PM Codex reads these after the startup checks above, in order:

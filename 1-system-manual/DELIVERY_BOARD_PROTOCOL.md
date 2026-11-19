@@ -171,3 +171,14 @@ Setting **Blocked on** on a card succeeded, and `gh project item-list --format j
 
 **RULE: verify card fields against the item's `fieldValues` via the API, not `item-list`.** The convenience command is fine for "does a card exist" and for the fields it does report; it is not authoritative for absence. Same family as every other lesson here — **a silent zero is a claim about the instrument before it is a claim about the data.**
 
+---
+
+## Moved from CLAUDE.md — B-TOKEN-ECONOMY P5 (2026-11-19)
+
+Verbatim passages moved out of the always-loaded rules file to cut what every session re-reads. Each block id is the pointer `CLAUDE.md` carries in its place. `scripts/crew-tooling/move-ledger-check.mjs` proves each block is here once, unchanged, and gone from `CLAUDE.md` (ledger: `Claude Comms and Packages/Change Lists/B_TOKEN_ECONOMY_MOVE_LEDGER.json`).
+
+<!-- P5-MOVED id=P5-09 -->
+### P5-09 — moved from CLAUDE.md, under "3.0 BATCH IDENTITY — NAMING + CHANGE-CLASS *(relocated intact from the removed §2 preamble"
+
+**★ `1-system-manual/DELIVERY_BOARD_PROTOCOL.md` — THE DELIVERY BOARD (Kyle-directed 2026-08-03).** A GitHub Projects board — https://github.com/users/kylegjordan/projects/1 — is now the at-a-glance state of every batch, phase, hotfix and task: **columns = the workflow stage, plus Owner · Type · Issue (`#NNN`) · Review · Blocked-on on each card, and a plain-language description so a card explains itself.** ★ **THE CARD-UPDATE STEPS ARE FOLDED INTO THE 11-STEP WORKFLOW — see the protocol's §4 table; the card moves when the WORK moves, it is never a separate status to remember.** **The OWNER moves the card; LANGSTON sets `Review` (Kyle's decision).** ⛔ **HARD BOUNDARY: the board holds STATUS, OWNER, ORDER and the description — NOTHING ELSE. Every finding, citation and verdict stays in the repo and the card LINKS to it; evidence written into a card rebuilds the two-sources-of-truth failure this project keeps paying for.** ⚠️ **NOTHING AUTOMATES IT — an un-updated board becomes a confidently wrong second record, which is worse than none.** Depth, field values and the honest limits live in the protocol; this pointer is deliberately short (§4 placement rule).
+<!-- /P5-MOVED id=P5-09 -->

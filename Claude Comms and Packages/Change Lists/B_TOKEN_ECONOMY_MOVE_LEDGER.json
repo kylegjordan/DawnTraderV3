@@ -1,0 +1,990 @@
+{
+ "version": 1,
+ "source": "CLAUDE.md",
+ "moves": [
+  {
+   "id": "P5-01",
+   "origin_heading": "0.a ⛔⛔ THE WORKFLOW — **ELEVEN STEPS. READ THE STEP'S FILE BEFORE YOU DO THE STEP. EVERY T",
+   "destination": "1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md",
+   "sha256": "8903eb763ae11ca65c85a588580e860fdea54d6b5ae3b5ca05d0d12f2701ba07",
+   "bytes": 2063,
+   "pointer": "⛔⛔ **`STEP: N` IS A NAVIGATION AID, NEVER AN ATTESTATION — no reviewer, Langston included, may cite it as evidence that step N happened.** Numbers make an omitted step visible to the session that wrote them (`1 → 3` is visibly wrong; \"then build\" is not). *(Measured origin `#754`, the honest limit, and the reconciler deliberately not built: `CLAUDE_MD_RULE_HISTORY.md` · `P5-01`.)*"
+  },
+  {
+   "id": "P5-02",
+   "origin_heading": "0.a ⛔⛔ THE WORKFLOW — **ELEVEN STEPS. READ THE STEP'S FILE BEFORE YOU DO THE STEP. EVERY T",
+   "destination": "1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md",
+   "sha256": "f706e4dcc885d1c752d39a01901b459c9b705a529bf374b884fd13e301375336",
+   "bytes": 1048,
+   "pointer": "★ **This table is the PRIMARY trigger** (it always loads, so reading the step file needs no skill machinery). Each step file is ALSO a skill — a backup trigger that is never relied on, and that registers only at a session start. *(`CLAUDE_MD_RULE_HISTORY.md` · `P5-02`)*"
+  },
+  {
+   "id": "P5-03",
+   "origin_heading": "0.a ⛔⛔ THE WORKFLOW — **ELEVEN STEPS. READ THE STEP'S FILE BEFORE YOU DO THE STEP. EVERY T",
+   "destination": "1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md",
+   "sha256": "4eebc6dcf22fc5685744f697f0f5b695ac696eb50ef7127b08370392a649ea1a",
+   "bytes": 885,
+   "pointer": "⛔ **Never put a colon-space inside a skill description value — the YAML drops the description silently and the skill loses its trigger. Use a dash or a comma, then CHECK THE SKILL LISTING, not the file.** *(Measured case: `CLAUDE_MD_RULE_HISTORY.md` · `P5-03`.)*"
+  },
+  {
+   "id": "P5-05",
+   "origin_heading": "1. Identity & Persona",
+   "destination": "1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md",
+   "sha256": "30b5fb1ef49f3ccfeb85588ab3709b080717abea16c151d7d1e58a1e5afbb390",
+   "bytes": 461,
+   "pointer": "Role, style, plain language, canonical terms, the step-report shape and problem-solving disposition live in `CONDUCT.md`. *(Why the expertise blurb was cut: `CLAUDE_MD_RULE_HISTORY.md` · `P5-05`.)*"
+  },
+  {
+   "id": "P5-06",
+   "origin_heading": "2. *(REMOVED 2026-08-21 — the workflow lives in §0.a + the eleven step skills)*",
+   "destination": "1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md",
+   "sha256": "ff9675256ebfe46e3ff7f1c08e86f3789ee39438f78fae6d61fd744cfcba4f7a",
+   "bytes": 916,
+   "pointer": "**This heading is a forwarding address — `§2` is cited across frozen reports, so a citation to \"§2 step N\" means the step-N skill.** Batch naming and the change-class declaration moved intact to §3.0. *(`CLAUDE_MD_RULE_HISTORY.md` · `P5-06`)*"
+  },
+  {
+   "id": "P5-07",
+   "origin_heading": "3. Batch Identity, Governance Documents & Memory Rules *(renamed 2026-08-23)*",
+   "destination": "1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md",
+   "sha256": "a8f9d675d3286cf12c3fa25ab5f73eaf4f4905bf12bc1c5689ab22723a04007e",
+   "bytes": 450,
+   "pointer": "> *(Renamed 2026-08-23; the number is unchanged so every `§3.x` citation resolves — `CLAUDE_MD_RULE_HISTORY.md` · `P5-07`.)*"
+  },
+  {
+   "id": "P5-08",
+   "origin_heading": "3.0 BATCH IDENTITY — NAMING + CHANGE-CLASS *(relocated intact from the removed §2 preamble",
+   "destination": "1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md",
+   "sha256": "b3ef1d176af91852cba819633cd06ec1af5fb9ab84b99e4de5a08a4f1997e5af",
+   "bytes": 1009,
+   "pointer": "★ **The independent detector is the governance checker** (`scripts/governance-checker/`, its table in `config.mjs`), which grades the declared class at the ref and raises an alert on a miss. ⛔ **It has NO entry for `CLAUDE.md`, `CONDUCT.md` or `MEMORY.md` — never cite it as coverage for those.** *(`CLAUDE_MD_RULE_HISTORY.md` · `P5-08`)*"
+  },
+  {
+   "id": "P5-09",
+   "origin_heading": "3.0 BATCH IDENTITY — NAMING + CHANGE-CLASS *(relocated intact from the removed §2 preamble",
+   "destination": "1-system-manual/DELIVERY_BOARD_PROTOCOL.md",
+   "sha256": "84215e3adc5665fdfb8dc244d80e983e12a6d0526dc9a9661467343551e68821",
+   "bytes": 1199,
+   "pointer": "**★ THE DELIVERY BOARD** (https://github.com/users/kylegjordan/projects/1) is the at-a-glance state of every batch; the owner moves the card when the work moves, Langston sets `Review`. ⛔ **It holds status, owner, order and description only — never evidence.** Full rules: `1-system-manual/DELIVERY_BOARD_PROTOCOL.md` (`P5-09`)."
+  },
+  {
+   "id": "P5-10",
+   "origin_heading": "3.1 MEMORY.md two-file pattern (Kyle directive 2026-04-29)",
+   "destination": "1-system-manual/CLAUDE_CODE_SESSION_TRANSCRIPT_TRIM_RUNBOOK.md",
+   "sha256": "ea20f3d04538f8a135acc280cfaee27f08ba2fcd510b9790200c23ab117a72d5",
+   "bytes": 1824,
+   "pointer": "> **★ MEMORY IS SHARED; TRANSCRIPTS ARE NOT — only the `memory\\` subfolder is junctioned to one shared store, and each session keeps its own transcript folder. Never re-junction a whole project folder.** *(Setup history, the 2026-07-27 fix and the two backup tasks: `CLAUDE_CODE_SESSION_TRANSCRIPT_TRIM_RUNBOOK.md` · `P5-10`.)*"
+  },
+  {
+   "id": "P5-12",
+   "origin_heading": "4. Canonical File Locations (post-reorganization 2026-04-14)",
+   "destination": "1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md",
+   "sha256": "b9a3dfba82c3a7e69fe5629cd6f486a6ffde9114eb5eaa43346f432dc2603d79",
+   "bytes": 745,
+   "pointer": "**`CLAUDE.md` lives at the repo ROOT only — never recreate `./.claude/CLAUDE.md` (both would load and concatenate).** *(`CLAUDE_MD_RULE_HISTORY.md` · `P5-12`)*"
+  },
+  {
+   "id": "P5-13",
+   "origin_heading": "4. Canonical File Locations (post-reorganization 2026-04-14)",
+   "destination": "1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md",
+   "sha256": "54422ee16c0441a5dd25ae1df401d241a4ce26dcdc109104126e38946df5d2c7",
+   "bytes": 1709,
+   "pointer": "**★ RUNBOOKS:** `REPO_TOPOLOGY_AND_SYNC_RUNBOOK.md` · `COMMS_BRIDGE_RUNBOOK.md` · `CLAUDE_CODE_PERMISSION_PROMPT_RUNBOOK.md` · `CLAUDE_CODE_SESSION_TRANSCRIPT_TRIM_RUNBOOK.md` · `CLAUDE_CODE_WAKE_WATCHER_RUNBOOK.md`. **★ PLACEMENT RULE (#564): this file holds the OPERATIVE statement; depth, evidence, histories and repair procedures go to a named runbook or skill behind a short pointer. Nothing is deleted — Kyle ruled NO-TRIM (#339).** Live loaded-set bytes: `~/.claude/instructions-loaded.jsonl`. *(`CLAUDE_MD_RULE_HISTORY.md` · `P5-13`)*"
+  },
+  {
+   "id": "P5-14",
+   "origin_heading": "4. Canonical File Locations (post-reorganization 2026-04-14)",
+   "destination": "1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md",
+   "sha256": "600679ad06399a8f544e6735b7563d94f2300e2eee82aa43224b3236a2ba9753",
+   "bytes": 1613,
+   "pointer": "**★ `LANGSTON_ARCHITECTURE.md`** — how the reviewer is built; living, updated when his BUILD changes. **★ `BUILD_METHOD_PLAYBOOK.md`** — the portable, descriptive account of how we build; not binding here. *(`CLAUDE_MD_RULE_HISTORY.md` · `P5-14`)*"
+  },
+  {
+   "id": "P5-15",
+   "origin_heading": "4. Canonical File Locations (post-reorganization 2026-04-14)",
+   "destination": "1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md",
+   "sha256": "dcc60ff8e5e8064465ccf6575aa9fadcb67c86024c11161638384a9589a0621b",
+   "bytes": 409,
+   "pointer": "Only ONE `Claude Comms and Packages/` exists — inside the repo; do not create duplicates. *(Retired locations: `CLAUDE_MD_RULE_HISTORY.md` · `P5-15`.)*"
+  },
+  {
+   "id": "P5-16",
+   "origin_heading": "5. Critical Rules (Non-Negotiable Invariants)",
+   "destination": "1-system-manual/CLAUDE_CODE_PERMISSION_PROMPT_RUNBOOK.md",
+   "sha256": "d634fadcf7380b6f164803e434a69a93dccaab3721a2b66cffc17250b9bd0548",
+   "bytes": 759,
+   "pointer": "    ⚠️ **Scheduled routines are a separate upstream regression no settings file fixes — recreate one through the app's Routines → New routine form.** Full detail: `CLAUDE_CODE_PERMISSION_PROMPT_RUNBOOK.md` · `P5-16`."
+  },
+  {
+   "id": "P5-17",
+   "origin_heading": "5. Critical Rules (Non-Negotiable Invariants)",
+   "destination": "1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md",
+   "sha256": "271bfa4b815436766cd882b9e6c334cb8d272b9678abeec32b3bfab70d4223e4",
+   "bytes": 488,
+   "pointer": "    Counts and current state come from the SSOT and the System Manual, never a rules file. *(`CLAUDE_MD_RULE_HISTORY.md` · `P5-17`)*"
+  },
+  {
+   "id": "P5-18",
+   "origin_heading": "5. Critical Rules (Non-Negotiable Invariants)",
+   "destination": "1-system-manual/CLAUDE_CODE_FEATURE_WATCH.md",
+   "sha256": "72a7d7b730dbde6fc17c554be85091ad01681a9a82d3bc49a21500281700185a",
+   "bytes": 1426,
+   "pointer": "21. **Daily Claude model + feature check** (scheduled `daily-claude-model-check`): surface a newer model or a useful feature to Kyle in plain language. **Never switch anything unilaterally — Langston rules on capability, Kyle on cost, a switch needs both, and a Langston switch flips BOTH his model sites. Software updates automatically; the model never does.** Procedure, Part C and the run log: `1-system-manual/CLAUDE_CODE_FEATURE_WATCH.md` (`P5-18`)."
+  },
+  {
+   "id": "P5-19",
+   "origin_heading": "5. Critical Rules (Non-Negotiable Invariants)",
+   "destination": "1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md",
+   "sha256": "28c65794325214ca60ef1572fc03fb2c7f2d0911d471da2e06b4d3680f5b3039",
+   "bytes": 402,
+   "pointer": "    *(`CLAUDE_MD_RULE_HISTORY.md` · `P5-19`)*"
+  },
+  {
+   "id": "P5-20",
+   "origin_heading": "5. Critical Rules (Non-Negotiable Invariants)",
+   "destination": "1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md",
+   "sha256": "3f547031d06ea90b938a606ad7fa711aff814b6dd6dcf2c7ce3ec3a3975a99bc",
+   "bytes": 1699,
+   "pointer": "25.c **★ EXPLICIT PATHS PROTECT YOU FROM THE WRONG *FILE*, NOT THE WRONG *CONTENT* — READ THE STAGED HUNK, NOT THE FILENAME.** A `git status` entry you do not remember staging is a SIGNAL: check WHOSE content it is before committing. Recovery: `stash` → `pull` → confirm it arrived from origin, and **keep the stash until the cause is established.** *(Measured case: `CLAUDE_MD_RULE_HISTORY.md` · `P5-20`.)*"
+  },
+  {
+   "id": "P5-21",
+   "origin_heading": "5. Critical Rules (Non-Negotiable Invariants)",
+   "destination": "1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md",
+   "sha256": "0e1fc4b20a110923862cbc016e87fbbbc9e9239a16c2b9b6849247b28229b9e9",
+   "bytes": 1016,
+   "pointer": "25.a **The crew coordination board is RETIRED (2026-08-23) — do not re-propose without a new failure the #702 number blocks miss.** Residual: shared prose in `CLAUDE.md`, `CONDUCT.md` and `MEMORY.md` has detection, not prevention (`B-CREW-BOARD-REMOVAL`). *(`CLAUDE_MD_RULE_HISTORY.md` · `P5-21`)*"
+  },
+  {
+   "id": "P5-22",
+   "origin_heading": "5. Critical Rules (Non-Negotiable Invariants)",
+   "destination": "1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md",
+   "sha256": "f5b6a138bfec5f630f84e4e093ac78f2b14242a8d7b15a56239056ddaab33f70",
+   "bytes": 1177,
+   "pointer": "    Langston's reviewer obligation (a number with no object and population is ruled unevidenced; `RULED ON REPORTED FACT` disqualifies a PROCEED on its leg) lives in HIS auto-loaded file, which is authoritative. *(Mirror copy: `CLAUDE_MD_RULE_HISTORY.md` · `P5-22`.)*"
+  },
+  {
+   "id": "P5-23",
+   "origin_heading": "6. Three-Way Communication Protocol (Kyle ↔ Langston ↔ Claude Code)",
+   "destination": "1-system-manual/COMMS_BRIDGE_RUNBOOK.md",
+   "sha256": "0de2e1db538195c476faadc1758dc67b147d261eb992dee778338431f19a1883",
+   "bytes": 469,
+   "pointer": "> *(Circuit breaker effectively removed; relay hand-off §6.9 — `COMMS_BRIDGE_RUNBOOK.md` · `P5-23`.)*"
+  },
+  {
+   "id": "P5-24",
+   "origin_heading": "6.1 Send / receive architecture",
+   "destination": "1-system-manual/COMMS_BRIDGE_RUNBOOK.md",
+   "sha256": "7bf3890b0fb3b2f8d3203a3fd50b3a3b9018c1400cf85057365317c323a8f9bc",
+   "bytes": 854,
+   "pointer": "Two Helsinki services: `discord-cc-bridge` (CC outbound + Kyle and voice inbound) and `discord-langston-bridge` (Langston). **The single read-tap is `/var/log/cc-discord-inbox.jsonl`.** *(`COMMS_BRIDGE_RUNBOOK.md` · `P5-24`)*"
+  },
+  {
+   "id": "P5-25",
+   "origin_heading": "6.5 CC → Langston (AI-to-AI delivery) — Discord native",
+   "destination": "1-system-manual/COMMS_BRIDGE_RUNBOOK.md",
+   "sha256": "fea580f99cd153f725817a534f3dd281e23536303b9af9a8108d176fdf4c0da8",
+   "bytes": 897,
+   "pointer": "> **★ Length is no constraint on a Langston dispatch** (#553 reassembles a CC dispatch that names him and exceeds 2000 chars; nothing else changes). *(`COMMS_BRIDGE_RUNBOOK.md` · `P5-25`)*"
+  },
+  {
+   "id": "P5-27",
+   "origin_heading": "6.9 CC wake channel + five-session naming (Kyle directive 2026-06-11/12; roster current th",
+   "destination": "1-system-manual/CLAUDE_CODE_WAKE_WATCHER_RUNBOOK.md",
+   "sha256": "f494c92d7bf66d880ea3ec3754e7fa8b7dc19393f0d158b6f6936cddda95c792",
+   "bytes": 408,
+   "pointer": "**Status:** all five roster entries are ACTIVE; the roster is authoritative for binding, `address_list.py` for wake forms. *(`CLAUDE_CODE_WAKE_WATCHER_RUNBOOK.md` · `P5-27`)*"
+  },
+  {
+   "id": "P5-29",
+   "origin_heading": "6.11 Session-transcript bloat + scroll-bounce repair — governed procedure (B-DISCORD OBJ-7",
+   "destination": "1-system-manual/CLAUDE_CODE_SESSION_TRANSCRIPT_TRIM_RUNBOOK.md",
+   "sha256": "aed6d6625efccec1e2e6f6c40e217a00186363353cb0c9d47deddff03b4daec1",
+   "bytes": 983,
+   "pointer": "When a transcript grows too large or the window scroll-bounces (duplicate uuids), follow `CLAUDE_CODE_SESSION_TRANSCRIPT_TRIM_RUNBOOK.md` (§2.5 = dedup). *(`CLAUDE_CODE_SESSION_TRANSCRIPT_TRIM_RUNBOOK.md` · `P5-29`)*"
+  },
+  {
+   "id": "P5-30",
+   "origin_heading": "7.1 Storage & sync workflow — THE canonical flow (🔒 SET IN STONE — Kyle 2026-07-23, supers",
+   "destination": "1-system-manual/REPO_TOPOLOGY_AND_SYNC_RUNBOOK.md",
+   "sha256": "16068cede77f64eb8acb6165703d58183147f4d8ee06ec95c32959653cd300a0",
+   "bytes": 517,
+   "pointer": "**★ Google Drive is NEVER a git remote** (a bare repo there reported success while holding no pack). *(`REPO_TOPOLOGY_AND_SYNC_RUNBOOK.md` · `P5-30`)*"
+  },
+  {
+   "id": "P5-31",
+   "origin_heading": "7.1 Storage & sync workflow — THE canonical flow (🔒 SET IN STONE — Kyle 2026-07-23, supers",
+   "destination": "1-system-manual/REPO_TOPOLOGY_AND_SYNC_RUNBOOK.md",
+   "sha256": "5991907a1158d225eada70a6ce2b3a147a947b570050763912b9e544de117675",
+   "bytes": 921,
+   "pointer": "**Backups:** the Helsinki bare mirror (push-disabled, self-pulling every 15 min) and a nightly Drive `git bundle`. **★ The gate is REPRODUCTION, not comparison; a backup is a separate remote, never a second push URL on `origin`.** *(`REPO_TOPOLOGY_AND_SYNC_RUNBOOK.md` · `P5-31`)*"
+  },
+  {
+   "id": "P5-32",
+   "origin_heading": "7.1 Storage & sync workflow — THE canonical flow (🔒 SET IN STONE — Kyle 2026-07-23, supers",
+   "destination": "1-system-manual/REPO_TOPOLOGY_AND_SYNC_RUNBOOK.md",
+   "sha256": "cc460bd1b14654d0f3be849e25caa6f86e0a72db58b6394ed00a81aef53e6bd4",
+   "bytes": 1832,
+   "pointer": "**★ WHO MOVES WHAT:** clone → review branch = the session that did the work; → backups is automatic; → staging and → `main` = the batch owner, deliberately manual (`main` is force-push and delete protected). Push notices post the sha only and **do not wake you; the \"RULES CHANGED — PULL AND RELOAD NOW\" variant does.** Never narrate push notices to Kyle. *(`REPO_TOPOLOGY_AND_SYNC_RUNBOOK.md` · `P5-32`)*"
+  },
+  {
+   "id": "P5-33",
+   "origin_heading": "7.1 Storage & sync workflow — THE canonical flow (🔒 SET IN STONE — Kyle 2026-07-23, supers",
+   "destination": "1-system-manual/REPO_TOPOLOGY_AND_SYNC_RUNBOOK.md",
+   "sha256": "90b9f85b64e5727d5dcb4a2e7069238a1f13779e59bc6c64dd7c51126165c3aa",
+   "bytes": 908,
+   "pointer": "**★ Nothing carries to a new clone** (git identity, remotes, `http.postBuffer`, untracked config). **★ Langston reads off the review branch** (`dt-review`; `LANGSTON_ARCHITECTURE.md` §6). *(Retired locations: `REPO_TOPOLOGY_AND_SYNC_RUNBOOK.md` · `P5-33`.)*"
+  },
+  {
+   "id": "P5-34",
+   "origin_heading": "7.1 Storage & sync workflow — THE canonical flow (🔒 SET IN STONE — Kyle 2026-07-23, supers",
+   "destination": "1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md",
+   "sha256": "9eb924acf10db44a723915aca8d35c37cf4b62da731052ae8e116e7e72f76d9e",
+   "bytes": 626,
+   "pointer": "*(The old crew-board guidance here is superseded by rule 25.a — `CLAUDE_MD_RULE_HISTORY.md` · `P5-34`.)*"
+  },
+  {
+   "id": "P5-35",
+   "origin_heading": "8. Langston Operations Reference (post-OpenClaw, 2026-05-06)",
+   "destination": "1-system-manual/LANGSTON_ARCHITECTURE.md",
+   "sha256": "71964662b9e5d24ea33c5e1c62c4ced64c7f044d41f4e3856ce322bdcdc7c75f",
+   "bytes": 6111,
+   "pointer": "- **Langston runs on Helsinki `204.168.141.77`** under Claude Code on Kyle's Max OAuth (token rotates by 2027-04). **★ His model is set at TWO live sites — switch BOTH or he runs split.** His always-loaded size rule: `PHASE_19_PLAN` row 2.8b, numbers from `langston-size-watch --status`. Reviewers reach staging as `deploy@188.245.193.8` with their own keys, read-only by intent (`#110`). **Runtime, model sites and rollback, his files, the Discord fabric, logs, voice and the Telegram decommission: `1-system-manual/LANGSTON_ARCHITECTURE.md` (`P5-35`).**"
+  },
+  {
+   "id": "P5-36",
+   "origin_heading": "8.1 OpenClaw — DECOMMISSIONED 2026-05-06",
+   "destination": "1-system-manual/LANGSTON_ARCHITECTURE.md",
+   "sha256": "c5eab25e06dac050ac6243d99e2b75cb4214f8a3da7dc33aa400a884a48b1599",
+   "bytes": 737,
+   "pointer": "OpenClaw is decommissioned: post with `cc-send`, read `/var/log/cc-discord-inbox.jsonl`. *(History and the obsolete-command table: `LANGSTON_ARCHITECTURE.md` · `P5-36`.)*"
+  },
+  {
+   "id": "P5-37",
+   "origin_heading": "9. Investigation, Findings & Reporting Discipline *(renamed 2026-08-23 — Kyle)*",
+   "destination": "1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md",
+   "sha256": "b9b1cd59dba547ae2d21a12f00e7853eb883015eb0195e558fae436b7511b341",
+   "bytes": 1075,
+   "pointer": "> How you INVESTIGATE and REPORT: §9.1 scaffolding · §9.2 changed numbers · §9.3 staging-verified · §9.4 dispositions · §9.5 audits. *(Rename history: `CLAUDE_MD_RULE_HISTORY.md` · `P5-37`.)*"
+  },
+  {
+   "id": "P5-38",
+   "origin_heading": "9.4 THE FIND IS THE TRIGGER — EVERY OUT-OF-SCOPE FINDING GETS A DECLARED DISPOSITION, IN T",
+   "destination": "1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md",
+   "sha256": "72b5a7114f8dea911cb8004458871e0d84a46db70349f49ea18f35de3d4b5e95",
+   "bytes": 421,
+   "pointer": "*(Why #5 exists: `CLAUDE_MD_RULE_HISTORY.md` · `P5-38`.)*"
+  },
+  {
+   "id": "P5-39",
+   "origin_heading": "9.4 THE FIND IS THE TRIGGER — EVERY OUT-OF-SCOPE FINDING GETS A DECLARED DISPOSITION, IN T",
+   "destination": "1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md",
+   "sha256": "60878f6a50952a26d83aa7f20558fd864628f42cd1b03239cf35245ed41848f4",
+   "bytes": 380,
+   "pointer": "**Naming is not placing.** *(`CLAUDE_MD_RULE_HISTORY.md` · `P5-39`)*"
+  },
+  {
+   "id": "P5-40",
+   "origin_heading": "10.5 System Alerts per-turn check (Kyle directive 2026-05-17 — MANDATORY)",
+   "destination": "1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md",
+   "sha256": "8c18f92e64d9eb383274bf34200d1f83ed4243c73c8e63331c1ede0239ef1086",
+   "bytes": 764,
+   "pointer": "*(Why mandatory, and what the queue holds: `CLAUDE_MD_RULE_HISTORY.md` · `P5-40`.)*"
+  },
+  {
+   "id": "P5-41",
+   "origin_heading": "6.4 CC → Kyle",
+   "destination": "1-system-manual/CLAUDE_CODE_WAKE_WATCHER_RUNBOOK.md",
+   "sha256": "1bc2346739cf52a4b7c9803f64f07820daf6fa4c986d2c847d01efa3ae808a6c",
+   "bytes": 728,
+   "pointer": "Session naming and wake routing: §6.9. *(`CLAUDE_CODE_WAKE_WATCHER_RUNBOOK.md` · `P5-41`)*"
+  },
+  {
+   "id": "P5-42",
+   "origin_heading": "6. Three-Way Communication Protocol (Kyle ↔ Langston ↔ Claude Code)",
+   "destination": "1-system-manual/COMMS_BRIDGE_RUNBOOK.md",
+   "sha256": "c75437fea7e668982b45252c7e8a3a1d80d78be77276f31219218369def35d2f",
+   "bytes": 713,
+   "pointer": "> **★ COMMS BACKEND — DISCORD ONLY** (`COMMS_BACKEND=discord` in `/etc/dawntrader/comms-active.env`). Telegram is decommissioned: switching back makes `cc-send` fail loudly; restoring it is a restore-from-archive job. *(`COMMS_BRIDGE_RUNBOOK.md` · `P5-42`)*"
+  },
+  {
+   "id": "P5-43",
+   "origin_heading": "0.a ⛔⛔ THE WORKFLOW — **ELEVEN STEPS. READ THE STEP'S FILE BEFORE YOU DO THE STEP. EVERY T",
+   "destination": "1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md",
+   "sha256": "6b9a853a796faa3d4e4f3218c0273a98c7f2cd4be39bf41508451529ad0ce27c",
+   "bytes": 778,
+   "pointer": "⛔⛔ **NOT EVERY CHANGE IS A BATCH — an urgent live break runs the HOTFIX PATH, `.claude/skills/workflow-hotfix/SKILL.md`, and Langston still reviews it BEFORE staging. Read its qualifying test before declaring one; if in doubt it is a batch.** *(`CLAUDE_MD_RULE_HISTORY.md` · `P5-43`)*"
+  },
+  {
+   "id": "P5-44",
+   "origin_heading": "9. Investigation, Findings & Reporting Discipline *(renamed 2026-08-23 — Kyle)*",
+   "destination": ".claude/skills/workflow-10-governance/SKILL.md",
+   "sha256": "ad40cbc4066bc7d492c4b842c415d804ad47205b2b4fcb9145087ae062655934",
+   "bytes": 1368,
+   "pointer": "**Anti-pattern: \"we reorganized the doc, so it is current.\" NO — every APPLICABLE doc gets a CONTENT update at every batch AND sub-batch that changes what it documents; judge applicability explicitly, never skip by default.** *(`SKILL.md` · `P5-44`)*"
+  },
+  {
+   "id": "P5-45",
+   "origin_heading": "3.0 BATCH IDENTITY — NAMING + CHANGE-CLASS *(relocated intact from the removed §2 preamble",
+   "destination": "1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md",
+   "sha256": "f5d392a20995b863d045618559d5ef20adfe1dd78afdb04493d77cd6a7e06fbc",
+   "bytes": 1633,
+   "pointer": "> **Batch & phase NAMING (governed — the governance checker parses it):** phases `Phase NN`; batches `P<phase>-B<n>`, sub-batches `P19-B6.5a`, letter-named `B-<NAME>`; `B-NEW-NN` stays valid. **Every code or governance commit for a batch STARTS its subject with the batch-id.** ⛔ **Never put a closed or not-yet-existent batch-id ANYWHERE in the subject of a commit that only references it** — the checker matches it anywhere and floods alerts (#350); use a plain subject and cite it in the body. Exempt: commits touching only MEMORY.md, CLAUDE.md or `Cross-Session Briefs/`. *(Full text: `CLAUDE_MD_RULE_HISTORY.md` · `P5-45`.)*"
+  },
+  {
+   "id": "P5-46",
+   "origin_heading": "3.1 MEMORY.md two-file pattern (Kyle directive 2026-04-29)",
+   "destination": "1-system-manual/CLAUDE_CODE_SESSION_TRANSCRIPT_TRIM_RUNBOOK.md",
+   "sha256": "3a2c91fb01098ae6a2a3f586034a44214c1bf448fcce0587ae7cb64ac7aa24b8",
+   "bytes": 1598,
+   "pointer": "**★ PER-SESSION MEMORY:** the shared `MEMORY.md` holds only the session-start commands and project-consensus truths; each session's volatile state lives in its OWN `MEMORY_<X>.md`, auto-loaded by `.claude/hooks/load-own-memory.mjs` on every start, resume and compaction (fail-open). **Each session WRITES ONLY its own file; the §3.2 cap applies per file.** *(`CLAUDE_CODE_SESSION_TRANSCRIPT_TRIM_RUNBOOK.md` · `P5-46`)*"
+  },
+  {
+   "id": "P5-47",
+   "origin_heading": "5. Critical Rules (Non-Negotiable Invariants)",
+   "destination": "1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md",
+   "sha256": "7054ecf171f6ffaf6eccfe97f0ed14938c73f67ed13c4c2e0f2f98630b0fe156",
+   "bytes": 780,
+   "pointer": "22. **GOVERNED-READ / NO-FALSE-ABSENCE** → `CONDUCT.md` §10. The hook `guard-governed-read.mjs` blocks one shape (a git object read with stderr suppressed) and is FAIL-OPEN, so **its silence is not compliance.** *(`CLAUDE_MD_RULE_HISTORY.md` · `P5-47`)*"
+  },
+  {
+   "id": "P5-48",
+   "origin_heading": "6. Three-Way Communication Protocol (Kyle ↔ Langston ↔ Claude Code)",
+   "destination": "1-system-manual/COMMS_BRIDGE_RUNBOOK.md",
+   "sha256": "a7502fd9a7ff522235e2b871793d0088565792b1e0a2b06bfa53eee0141edff8",
+   "bytes": 2368,
+   "pointer": "> **LIVE MECHANICS:** Discord display names, which are ALSO the wake keys and must be exact — **OLD Claude** (CC-A) · **NEW Claude** (CC-B) · **ANALYST Claude** (CC-C) · **Infra Claude** (CC-INFRA) · **PM Claude** (CC-PM); registry names are bound in `.claude/cc-session-roster.json`. ⛔ **A session's post wakes the parties in its OPENING LIST; a passing mention later wakes nobody** (`#1241`, one rule in `address_list.py`); Kyle may name anyone anywhere. Langston's bridge auto-leads each reply with the addressee's name. The wake watcher is a Bash `run_in_background` task that ends on the first message for you (§6.9). Alerts reach Discord only through the dispatcher's alerts webhook. *(Full text: `COMMS_BRIDGE_RUNBOOK.md` · `P5-48`.)*"
+  },
+  {
+   "id": "P5-49",
+   "origin_heading": "6. Three-Way Communication Protocol (Kyle ↔ Langston ↔ Claude Code)",
+   "destination": "1-system-manual/LANGSTON_ARCHITECTURE.md",
+   "sha256": "63998718cdd1e8586afaeceb964c112de66115fd451ca108a72a55911ba08ffe",
+   "bytes": 835,
+   "pointer": "- **Langston** — senior PM and code-level reviewer on Helsinki (§8); reach him by leading a `#general` post with \"Langston\". **★ He is STATELESS per invoke** — multi-turn context must live in the prompt or a staged file. *(`LANGSTON_ARCHITECTURE.md` · `P5-49`)*"
+  },
+  {
+   "id": "P5-50",
+   "origin_heading": "6.7 Three-way discussion protocol (live)",
+   "destination": "1-system-manual/COMMS_BRIDGE_RUNBOOK.md",
+   "sha256": "717bbb61bfc7b0864741ce0582de311c04532533e4724860b5c3b8205b9360d8",
+   "bytes": 268,
+   "pointer": "*(Image relay: `COMMS_BRIDGE_RUNBOOK.md` · `P5-50`.)*"
+  },
+  {
+   "id": "P5-51",
+   "origin_heading": "6.9 CC wake channel + five-session naming (Kyle directive 2026-06-11/12; roster current th",
+   "destination": "1-system-manual/CLAUDE_CODE_WAKE_WATCHER_RUNBOOK.md",
+   "sha256": "665e50d0661bacd392c07f46a440082112d3f9fbaaeaf5198352440db658443b",
+   "bytes": 1663,
+   "pointer": "**Mechanics:** arm at every session start and re-arm after every wake with the MEMORY §4.5 command — a background task that ends on the first message for you (the Monitor form is retired, `#1127`). A fully CLOSED session cannot be woken. **Arm, verify, re-arm, the traps and the three reliability layers: `1-system-manual/CLAUDE_CODE_WAKE_WATCHER_RUNBOOK.md` (`P5-51`).**"
+  },
+  {
+   "id": "P5-52",
+   "origin_heading": "6.10 Remote Control + push-when-blocked (Kyle directive 2026-06-16) — DON'T be the bottlen",
+   "destination": "1-system-manual/CLAUDE_CODE_WAKE_WATCHER_RUNBOOK.md",
+   "sha256": "467f8967acf37ce60e54b3721dca721993fab380b64303e84c0392aabf66597c",
+   "bytes": 2761,
+   "pointer": "**Remote Control is ON** — Kyle can drive and approve any open session from his phone. **★ When you end a turn BLOCKED on Kyle, arm a one-shot 10-minute timer that, if he has not answered, posts `STILL NEED YOU: <ask>` with `cc-send --notify` (plus a `PushNotification`); `TaskStop` it by its returned id on his next turn.** Genuine blocks only. **★ A Langston-flagged approval that needs Kyle is relayed to him the same way.** *(`CLAUDE_CODE_WAKE_WATCHER_RUNBOOK.md` · `P5-52`)*"
+  },
+  {
+   "id": "P5-53",
+   "origin_heading": "9. Investigation, Findings & Reporting Discipline *(renamed 2026-08-23 — Kyle)*",
+   "destination": "1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md",
+   "sha256": "4c4a2980ab413689c66cb13ecb333a9e18780b74695bf9f348097a4207494cc6",
+   "bytes": 859,
+   "pointer": "**Both maps are self-documenting — read and maintain each per its own top-of-file header: new architecture goes INTO the relevant Layer or Chapter (and its Table of Contents), never a dated tail section.** *(`CLAUDE_MD_RULE_HISTORY.md` · `P5-53`)*"
+  },
+  {
+   "id": "P5-54",
+   "origin_heading": "9.4 THE FIND IS THE TRIGGER — EVERY OUT-OF-SCOPE FINDING GETS A DECLARED DISPOSITION, IN T",
+   "destination": "1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md",
+   "sha256": "e3b933e3caf9f30b19260b112a7b3b1255eb82e1c78432f05c30c9cc3dc384af",
+   "bytes": 995,
+   "pointer": "⛔⛔ **A HOME IS A NAME AND A PLACE IN THE QUEUE — NEVER A CALENDAR DATE (Kyle 2026-08-25).** A date belongs only to a period whose LENGTH is the point — a soak, an observation window (\"+48h gate\"). *(`CLAUDE_MD_RULE_HISTORY.md` · `P5-54`)*"
+  },
+  {
+   "id": "P5-55",
+   "origin_heading": "10.5 System Alerts per-turn check (Kyle directive 2026-05-17 — MANDATORY)",
+   "destination": "1-system-manual/ALERT_HANDLING_PROTOCOL.md",
+   "sha256": "15b362cf10b25d756bad5519e1dbf65019ab0c3e3252ea9d07fac7ebced24a05",
+   "bytes": 873,
+   "pointer": "**★ After diagnosis** — owner, ack = owned, resolve = fixed, and the no-silent-drop re-surface guarantee: `1-system-manual/ALERT_HANDLING_PROTOCOL.md` (`P5-55`). An event-wait alert is routed, not acked (step 3)."
+  },
+  {
+   "id": "P5-56",
+   "origin_heading": "6.4 CC → Kyle",
+   "destination": "1-system-manual/COMMS_BRIDGE_RUNBOOK.md",
+   "sha256": "6c6038d3defe73e490d15cd4aa7cfed9d6dcddb6793798af950aac5b293a8235",
+   "bytes": 244,
+   "pointer": "*(Multi-line bodies: the scp pattern above — `COMMS_BRIDGE_RUNBOOK.md` · `P5-56`.)*"
+  },
+  {
+   "id": "P5-57",
+   "origin_heading": "6.5 CC → Langston (AI-to-AI delivery) — Discord native",
+   "destination": "1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md",
+   "sha256": "8795b59f3019a7131be511e350d39abb9956e7212909b78fb4d84fae6d8e8609",
+   "bytes": 282,
+   "pointer": "> *(Telegram apparatus archived — `CLAUDE_MD_RULE_HISTORY.md` · `P5-57`.)*"
+  },
+  {
+   "id": "P5-58",
+   "origin_heading": "7. Infrastructure Reference",
+   "destination": "1-system-manual/REPO_TOPOLOGY_AND_SYNC_RUNBOOK.md",
+   "sha256": "7bcacc28041f5a5878b60c2431416eee6ca2bda4dd6407f8e1a52b812dfea7da",
+   "bytes": 562,
+   "pointer": "- **Staging server:** Hetzner CPX22 `188.245.193.8` (Falkenstein); app `dawntrader` under `deploy` via PM2; Caddy TLS on :443 → nginx → app :5000; SSH key-only; ufw on. *(TLS edge and rollback: `REPO_TOPOLOGY_AND_SYNC_RUNBOOK.md` · `P5-58`.)*"
+  },
+  {
+   "id": "P5-59",
+   "origin_heading": "7. Infrastructure Reference",
+   "destination": "1-system-manual/REPO_TOPOLOGY_AND_SYNC_RUNBOOK.md",
+   "sha256": "dde06e7608427db8efa00d638f9f02741c69ebac0822646959fd7529504a0915",
+   "bytes": 598,
+   "pointer": "- **Staging URL: `https://188.245.193.8.sslip.io`** (plain HTTP redirects to it, so no cleartext login exists). Authenticated shell reads use the server-held crew login through `dt-api`; no password belongs in this file or a session. *(`REPO_TOPOLOGY_AND_SYNC_RUNBOOK.md` · `P5-59`)*"
+  }
+ ],
+ "citations": {
+  "note": "Every `CLAUDE.md:<line>` citation in the repo at the P5 commit (Langston's own file excluded). Live citations were re-pointed to section names; the rest sit in frozen records and are mapped, not rewritten. A citation resolves against CLAUDE.md AS OF THE COMMIT THAT WROTE IT; `pre_p5_line_now_at` follows the line as it stood just before P5, which matches only when the citation was written against that text.",
+  "repointed": [
+   ".claude/skills/workflow-10-governance/SKILL.md:205 CLAUDE.md:108 -> CLAUDE.md §3.2 first rule line",
+   "scripts/measure-gate/test-guard-measurement-shape.mjs:193 CLAUDE.md:279 -> CLAUDE.md §6.6"
+  ],
+  "frozen": [
+   {
+    "site": "1-system-manual/CHANGES_AND_FIXES.md:4162",
+    "cites": "CLAUDE.md:567",
+    "pre_p5_line_now_at": "CLAUDE.md:510"
+   },
+   {
+    "site": "1-system-manual/PHASE_19_PLAN.md:604",
+    "cites": "CLAUDE.md:539",
+    "pre_p5_line_now_at": "CLAUDE.md:482"
+   },
+   {
+    "site": "1-system-manual/PHASE_19_PLAN.md:617",
+    "cites": "CLAUDE.md:564",
+    "pre_p5_line_now_at": "CLAUDE.md:507"
+   },
+   {
+    "site": "1-system-manual/RUNNING_ISSUES.md:4365",
+    "cites": "CLAUDE.md:25",
+    "pre_p5_line_now_at": "CLAUDE.md:25"
+   },
+   {
+    "site": "1-system-manual/RUNNING_ISSUES.md:5854",
+    "cites": "CLAUDE.md:418",
+    "pre_p5_line_now_at": "P5-34 (1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md)"
+   },
+   {
+    "site": "1-system-manual/RUNNING_ISSUES.md:5854",
+    "cites": "CLAUDE.md:418",
+    "pre_p5_line_now_at": "P5-34 (1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md)"
+   },
+   {
+    "site": "1-system-manual/RUNNING_ISSUES.md:7471",
+    "cites": "CLAUDE.md:564",
+    "pre_p5_line_now_at": "CLAUDE.md:507"
+   },
+   {
+    "site": "1-system-manual/RUNNING_ISSUES.md:8238",
+    "cites": "CLAUDE.md:108",
+    "pre_p5_line_now_at": "CLAUDE.md:99"
+   },
+   {
+    "site": "1-system-manual/RUNNING_ISSUES.md:9415",
+    "cites": "CLAUDE.md:317",
+    "pre_p5_line_now_at": "not found — the pre-P5 line was blank or changed; resolve against CLAUDE.md at the commit that wrote the citation"
+   },
+   {
+    "site": "1-system-manual/RUNNING_ISSUES.md:11628",
+    "cites": "CLAUDE.md:224",
+    "pre_p5_line_now_at": "P5-48 (1-system-manual/COMMS_BRIDGE_RUNBOOK.md)"
+   },
+   {
+    "site": "1-system-manual/pm/decisions/2026-11-05_langston-review-capacity.md:26",
+    "cites": "CLAUDE.md:429",
+    "pre_p5_line_now_at": "P5-35 (1-system-manual/LANGSTON_ARCHITECTURE.md)"
+   },
+   {
+    "site": "Claude Comms and Packages/Batch Completion/B_ALERT_ACTOR_ALLOWLIST_COMPLETION_REPORT.md:25",
+    "cites": "CLAUDE.md:567",
+    "pre_p5_line_now_at": "CLAUDE.md:510"
+   },
+   {
+    "site": "Claude Comms and Packages/Batch Completion/B_MISTAKES_FILE_COMPLETION_REPORT.md:66",
+    "cites": "CLAUDE.md:190",
+    "pre_p5_line_now_at": "P5-19 (1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md)"
+   },
+   {
+    "site": "Claude Comms and Packages/Batch Completion/B_WAKE_OPENING_LIST_COMPLETION_REPORT.md:18",
+    "cites": "CLAUDE.md:261",
+    "pre_p5_line_now_at": "P5-41 (1-system-manual/CLAUDE_CODE_WAKE_WATCHER_RUNBOOK.md)"
+   },
+   {
+    "site": "Claude Comms and Packages/Change Lists/B_ALERT_ACTOR_ALLOWLIST_CHANGE_LIST.md:132",
+    "cites": "CLAUDE.md:567",
+    "pre_p5_line_now_at": "CLAUDE.md:510"
+   },
+   {
+    "site": "Claude Comms and Packages/Change Lists/B_ALERT_ACTOR_ALLOWLIST_CHANGE_LIST.md:162",
+    "cites": "CLAUDE.md:567",
+    "pre_p5_line_now_at": "CLAUDE.md:510"
+   },
+   {
+    "site": "Claude Comms and Packages/Change Lists/B_CREDENTIALS_PRIVATE_REPO_OBJ4A_CHANGE_LIST.md:460",
+    "cites": "CLAUDE.md:19",
+    "pre_p5_line_now_at": "CLAUDE.md:19"
+   },
+   {
+    "site": "Claude Comms and Packages/Change Lists/B_GOV_REPORTING_CHANGE_LIST_r6.md:504",
+    "cites": "CLAUDE.md:279",
+    "pre_p5_line_now_at": "CLAUDE.md:260"
+   },
+   {
+    "site": "Claude Comms and Packages/Change Lists/B_GOV_REPORTING_REVIEWER_ROUNDS_r6.md:38",
+    "cites": "CLAUDE.md:202",
+    "pre_p5_line_now_at": "P5-21 (1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md)"
+   },
+   {
+    "site": "Claude Comms and Packages/Change Lists/B_GOV_REPORTING_REVIEWER_ROUNDS_r6.md:42",
+    "cites": "CLAUDE.md:570",
+    "pre_p5_line_now_at": "not found — the pre-P5 line was blank or changed; resolve against CLAUDE.md at the commit that wrote the citation"
+   },
+   {
+    "site": "Claude Comms and Packages/Change Lists/B_GOV_REPORTING_REVIEWER_ROUNDS_r6.md:43",
+    "cites": "CLAUDE.md:419",
+    "pre_p5_line_now_at": "not found — the pre-P5 line was blank or changed; resolve against CLAUDE.md at the commit that wrote the citation"
+   },
+   {
+    "site": "Claude Comms and Packages/Change Lists/B_GOV_REPORTING_REVIEWER_ROUNDS_r6.md:62",
+    "cites": "CLAUDE.md:419",
+    "pre_p5_line_now_at": "not found — the pre-P5 line was blank or changed; resolve against CLAUDE.md at the commit that wrote the citation"
+   },
+   {
+    "site": "Claude Comms and Packages/Change Lists/B_GOV_REPORTING_REVIEWER_ROUNDS_r6.md:70",
+    "cites": "CLAUDE.md:84",
+    "pre_p5_line_now_at": "CLAUDE.md:78"
+   },
+   {
+    "site": "Claude Comms and Packages/Change Lists/B_GOV_REPORTING_REVIEWER_ROUNDS_r6.md:90",
+    "cites": "CLAUDE.md:570",
+    "pre_p5_line_now_at": "not found — the pre-P5 line was blank or changed; resolve against CLAUDE.md at the commit that wrote the citation"
+   },
+   {
+    "site": "Claude Comms and Packages/Change Lists/B_GOV_REPORTING_REVIEWER_ROUNDS_r6.md:103",
+    "cites": "CLAUDE.md:84",
+    "pre_p5_line_now_at": "CLAUDE.md:78"
+   },
+   {
+    "site": "Claude Comms and Packages/Langston Design Asks/B-PLAN-CURRENCY-CHECK_step2_part5_hygiene.md:51",
+    "cites": "CLAUDE.md:530",
+    "pre_p5_line_now_at": "CLAUDE.md:474"
+   },
+   {
+    "site": "Claude Comms and Packages/Langston Design Asks/B-PLAN-CURRENCY-CHECK_step2_part5_hygiene.md:54",
+    "cites": "CLAUDE.md:85",
+    "pre_p5_line_now_at": "P5-08 (1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md)"
+   },
+   {
+    "site": "Claude Comms and Packages/Langston Design Asks/B-PLAN-CURRENCY-CHECK_step2_part5_hygiene.md:54",
+    "cites": "CLAUDE.md:85",
+    "pre_p5_line_now_at": "P5-08 (1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md)"
+   },
+   {
+    "site": "Claude Comms and Packages/Langston Design Asks/B-PLAN-CURRENCY-CHECK_step2_part5_hygiene.md:80",
+    "cites": "CLAUDE.md:530",
+    "pre_p5_line_now_at": "CLAUDE.md:474"
+   },
+   {
+    "site": "Claude Comms and Packages/Langston Design Asks/B-PLAN-CURRENCY-CHECK_step2_part5_hygiene.md:80",
+    "cites": "CLAUDE.md:530",
+    "pre_p5_line_now_at": "CLAUDE.md:474"
+   },
+   {
+    "site": "Claude Comms and Packages/Langston Design Asks/B-PLAN-CURRENCY-CHECK_step2_part5_hygiene.md:97",
+    "cites": "CLAUDE.md:85",
+    "pre_p5_line_now_at": "P5-08 (1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md)"
+   },
+   {
+    "site": "Claude Comms and Packages/Langston Design Asks/B_TOKEN_ECONOMY_B_WORKFLOW_IMPROVE_STEP1_VERDICTS.md:49",
+    "cites": "CLAUDE.md:513",
+    "pre_p5_line_now_at": "CLAUDE.md:457"
+   },
+   {
+    "site": "Claude Comms and Packages/Langston Design Asks/B_TOKEN_ECONOMY_B_WORKFLOW_IMPROVE_STEP1_VERDICTS.md:71",
+    "cites": "CLAUDE.md:108",
+    "pre_p5_line_now_at": "CLAUDE.md:99"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_CENSUS_OWNERLESS_TRIAGE_PRE_AUDIT.md:64",
+    "cites": "CLAUDE.md:25",
+    "pre_p5_line_now_at": "CLAUDE.md:25"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_CLAUDEMD_SLIM_IMPLEMENTATION_PLAN.md:74",
+    "cites": "CLAUDE.md:161",
+    "pre_p5_line_now_at": "CLAUDE.md:150"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_CLAUDEMD_SLIM_PRE_AUDIT.md:87",
+    "cites": "CLAUDE.md:500",
+    "pre_p5_line_now_at": "CLAUDE.md:444"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_CLAUDEMD_SLIM_PRE_AUDIT.md:104",
+    "cites": "CLAUDE.md:161",
+    "pre_p5_line_now_at": "CLAUDE.md:150"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_CLAUDEMD_SLIM_PRE_AUDIT.md:132",
+    "cites": "CLAUDE.md:161",
+    "pre_p5_line_now_at": "CLAUDE.md:150"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_CREDENTIALS_PRIVATE_REPO_PRE_AUDIT.md:286",
+    "cites": "CLAUDE.md:389",
+    "pre_p5_line_now_at": "not found — the pre-P5 line was blank or changed; resolve against CLAUDE.md at the commit that wrote the citation"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_CREDENTIALS_PRIVATE_REPO_PRE_AUDIT.md:311",
+    "cites": "CLAUDE.md:530",
+    "pre_p5_line_now_at": "CLAUDE.md:474"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_CREDENTIALS_PRIVATE_REPO_PRE_AUDIT.md:559",
+    "cites": "CLAUDE.md:429",
+    "pre_p5_line_now_at": "P5-35 (1-system-manual/LANGSTON_ARCHITECTURE.md)"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_CREDENTIALS_PRIVATE_REPO_PRE_AUDIT.md:799",
+    "cites": "CLAUDE.md:343",
+    "pre_p5_line_now_at": "not found — the pre-P5 line was blank or changed; resolve against CLAUDE.md at the commit that wrote the citation"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_CREDENTIALS_PRIVATE_REPO_PRE_AUDIT.md:817",
+    "cites": "CLAUDE.md:343",
+    "pre_p5_line_now_at": "not found — the pre-P5 line was blank or changed; resolve against CLAUDE.md at the commit that wrote the citation"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_CREDENTIALS_PRIVATE_REPO_PRE_AUDIT.md:832",
+    "cites": "CLAUDE.md:173",
+    "pre_p5_line_now_at": "CLAUDE.md:161"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_CREDENTIALS_PRIVATE_REPO_PRE_AUDIT.md:844",
+    "cites": "CLAUDE.md:17",
+    "pre_p5_line_now_at": "CLAUDE.md:17"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_CREDENTIALS_PRIVATE_REPO_PRE_AUDIT.md:844",
+    "cites": "CLAUDE.md:149",
+    "pre_p5_line_now_at": "CLAUDE.md:138"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_CREDENTIALS_PRIVATE_REPO_PRE_AUDIT.md:844",
+    "cites": "CLAUDE.md:173",
+    "pre_p5_line_now_at": "CLAUDE.md:161"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_CREDENTIALS_PRIVATE_REPO_PRE_AUDIT.md:845",
+    "cites": "CLAUDE.md:173",
+    "pre_p5_line_now_at": "CLAUDE.md:161"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_CREDENTIALS_PRIVATE_REPO_PRE_AUDIT.md:865",
+    "cites": "CLAUDE.md:173",
+    "pre_p5_line_now_at": "CLAUDE.md:161"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_CREDENTIALS_PRIVATE_REPO_PRE_AUDIT.md:915",
+    "cites": "CLAUDE.md:389",
+    "pre_p5_line_now_at": "not found — the pre-P5 line was blank or changed; resolve against CLAUDE.md at the commit that wrote the citation"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_CREDENTIALS_PRIVATE_REPO_PRE_AUDIT.md:938",
+    "cites": "CLAUDE.md:389",
+    "pre_p5_line_now_at": "not found — the pre-P5 line was blank or changed; resolve against CLAUDE.md at the commit that wrote the citation"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_CREDENTIALS_PRIVATE_REPO_PRE_AUDIT.md:960",
+    "cites": "CLAUDE.md:389",
+    "pre_p5_line_now_at": "not found — the pre-P5 line was blank or changed; resolve against CLAUDE.md at the commit that wrote the citation"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_CREDENTIALS_PRIVATE_REPO_PRE_AUDIT.md:960",
+    "cites": "CLAUDE.md:389",
+    "pre_p5_line_now_at": "not found — the pre-P5 line was blank or changed; resolve against CLAUDE.md at the commit that wrote the citation"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_CREDENTIALS_PRIVATE_REPO_PRE_AUDIT.md:967",
+    "cites": "CLAUDE.md:389",
+    "pre_p5_line_now_at": "not found — the pre-P5 line was blank or changed; resolve against CLAUDE.md at the commit that wrote the citation"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_CROSS_SESSION_BLEED_PRE_AUDIT.md:219",
+    "cites": "CLAUDE.md:202",
+    "pre_p5_line_now_at": "P5-21 (1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md)"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_DEPLOY_LOCK_PRE_AUDIT.md:32",
+    "cites": "CLAUDE.md:72",
+    "pre_p5_line_now_at": "not found — the pre-P5 line was blank or changed; resolve against CLAUDE.md at the commit that wrote the citation"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_DEPLOY_LOCK_SCOPE.md:22",
+    "cites": "CLAUDE.md:72",
+    "pre_p5_line_now_at": "not found — the pre-P5 line was blank or changed; resolve against CLAUDE.md at the commit that wrote the citation"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_DEPLOY_LOCK_SCOPE.md:48",
+    "cites": "CLAUDE.md:72",
+    "pre_p5_line_now_at": "not found — the pre-P5 line was blank or changed; resolve against CLAUDE.md at the commit that wrote the citation"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_DEPLOY_LOCK_SCOPE.md:48",
+    "cites": "CLAUDE.md:431",
+    "pre_p5_line_now_at": "P5-35 (1-system-manual/LANGSTON_ARCHITECTURE.md)"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_LANGSTON_CONTEXT_PRE_AUDIT.md:59",
+    "cites": "CLAUDE.md:3",
+    "pre_p5_line_now_at": "CLAUDE.md:3"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_LANGSTON_CONTEXT_PRE_AUDIT.md:472",
+    "cites": "CLAUDE.md:108",
+    "pre_p5_line_now_at": "CLAUDE.md:99"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_LANGSTON_CONTEXT_PRE_AUDIT.md:605",
+    "cites": "CLAUDE.md:3",
+    "pre_p5_line_now_at": "CLAUDE.md:3"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_PLAN_CURRENCY_CHECK_PRE_AUDIT.md:100",
+    "cites": "CLAUDE.md:530",
+    "pre_p5_line_now_at": "CLAUDE.md:474"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_PLAN_CURRENCY_CHECK_PRE_AUDIT.md:103",
+    "cites": "CLAUDE.md:85",
+    "pre_p5_line_now_at": "P5-08 (1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md)"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_PLAN_CURRENCY_CHECK_PRE_AUDIT.md:103",
+    "cites": "CLAUDE.md:85",
+    "pre_p5_line_now_at": "P5-08 (1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md)"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_PLAN_CURRENCY_CHECK_PRE_AUDIT.md:643",
+    "cites": "CLAUDE.md:530",
+    "pre_p5_line_now_at": "CLAUDE.md:474"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_PLAN_CURRENCY_CHECK_PRE_AUDIT.md:793",
+    "cites": "CLAUDE.md:85",
+    "pre_p5_line_now_at": "P5-08 (1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md)"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_PLAN_CURRENCY_CHECK_PRE_AUDIT.md:818",
+    "cites": "CLAUDE.md:530",
+    "pre_p5_line_now_at": "CLAUDE.md:474"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_PLAN_CURRENCY_CHECK_PRE_AUDIT.md:819",
+    "cites": "CLAUDE.md:530",
+    "pre_p5_line_now_at": "CLAUDE.md:474"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_PLAN_CURRENCY_CHECK_PRE_AUDIT.md:885",
+    "cites": "CLAUDE.md:85",
+    "pre_p5_line_now_at": "P5-08 (1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md)"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_PLAN_CURRENCY_CHECK_PRE_AUDIT.md:885",
+    "cites": "CLAUDE.md:85",
+    "pre_p5_line_now_at": "P5-08 (1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md)"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_PLAN_CURRENCY_CHECK_PRE_AUDIT.md:900",
+    "cites": "CLAUDE.md:85",
+    "pre_p5_line_now_at": "P5-08 (1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md)"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_PLAN_CURRENCY_CHECK_PRE_AUDIT.md:950",
+    "cites": "CLAUDE.md:530",
+    "pre_p5_line_now_at": "CLAUDE.md:474"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_PLAN_CURRENCY_CHECK_PRE_AUDIT.md:1293",
+    "cites": "CLAUDE.md:85",
+    "pre_p5_line_now_at": "P5-08 (1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md)"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_PLAN_CURRENCY_CHECK_PRE_AUDIT.md:1294",
+    "cites": "CLAUDE.md:85",
+    "pre_p5_line_now_at": "P5-08 (1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md)"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_PLAN_CURRENCY_CHECK_PRE_AUDIT.md:1298",
+    "cites": "CLAUDE.md:85",
+    "pre_p5_line_now_at": "P5-08 (1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md)"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_PLAN_CURRENCY_CHECK_PRE_AUDIT.md:1300",
+    "cites": "CLAUDE.md:85",
+    "pre_p5_line_now_at": "P5-08 (1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md)"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_PLAN_CURRENCY_CHECK_PRE_AUDIT.md:1300",
+    "cites": "CLAUDE.md:85",
+    "pre_p5_line_now_at": "P5-08 (1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md)"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_PLAN_CURRENCY_CHECK_PRE_AUDIT.md:1302",
+    "cites": "CLAUDE.md:85",
+    "pre_p5_line_now_at": "P5-08 (1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md)"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_PLAN_CURRENCY_CHECK_PRE_AUDIT.md:1327",
+    "cites": "CLAUDE.md:530",
+    "pre_p5_line_now_at": "CLAUDE.md:474"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_PLAN_CURRENCY_CHECK_PRE_AUDIT.md:1459",
+    "cites": "CLAUDE.md:530",
+    "pre_p5_line_now_at": "CLAUDE.md:474"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_PLAN_CURRENCY_CHECK_PRE_AUDIT.md:1459",
+    "cites": "CLAUDE.md:530",
+    "pre_p5_line_now_at": "CLAUDE.md:474"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_PLAN_CURRENCY_CHECK_PRE_AUDIT.md:1552",
+    "cites": "CLAUDE.md:85",
+    "pre_p5_line_now_at": "P5-08 (1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md)"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_PLAN_CURRENCY_CHECK_PRE_AUDIT.md:1552",
+    "cites": "CLAUDE.md:85",
+    "pre_p5_line_now_at": "P5-08 (1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md)"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_PLAN_CURRENCY_CHECK_PRE_AUDIT.md:1636",
+    "cites": "CLAUDE.md:530",
+    "pre_p5_line_now_at": "CLAUDE.md:474"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_PLAN_CURRENCY_CHECK_SCOPE.md:248",
+    "cites": "CLAUDE.md:530",
+    "pre_p5_line_now_at": "CLAUDE.md:474"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_TASK_LIST_SLOT_PRE_AUDIT.md:11",
+    "cites": "CLAUDE.md:539",
+    "pre_p5_line_now_at": "CLAUDE.md:482"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_TASK_LIST_SLOT_PRE_AUDIT.md:36",
+    "cites": "CLAUDE.md:539",
+    "pre_p5_line_now_at": "CLAUDE.md:482"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_TASK_LIST_SLOT_PRE_AUDIT.md:39",
+    "cites": "CLAUDE.md:34",
+    "pre_p5_line_now_at": "P5-02 (1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md)"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_TASK_LIST_SLOT_PRE_AUDIT.md:49",
+    "cites": "CLAUDE.md:539",
+    "pre_p5_line_now_at": "CLAUDE.md:482"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_TASK_LIST_SLOT_PRE_AUDIT.md:163",
+    "cites": "CLAUDE.md:539",
+    "pre_p5_line_now_at": "CLAUDE.md:482"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_TASK_LIST_SLOT_PRE_AUDIT.md:180",
+    "cites": "CLAUDE.md:539",
+    "pre_p5_line_now_at": "CLAUDE.md:482"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_TASK_LIST_SLOT_SCOPE.md:14",
+    "cites": "CLAUDE.md:539",
+    "pre_p5_line_now_at": "CLAUDE.md:482"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_TASK_LIST_SLOT_SCOPE.md:43",
+    "cites": "CLAUDE.md:539",
+    "pre_p5_line_now_at": "CLAUDE.md:482"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_TASK_LIST_SLOT_SCOPE.md:135",
+    "cites": "CLAUDE.md:132",
+    "pre_p5_line_now_at": "CLAUDE.md:121"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_TOKEN_BURN_CUT_PRE_AUDIT.md:43",
+    "cites": "CLAUDE.md:224",
+    "pre_p5_line_now_at": "P5-48 (1-system-manual/COMMS_BRIDGE_RUNBOOK.md)"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_TOKEN_BURN_CUT_PRE_AUDIT.md:92",
+    "cites": "CLAUDE.md:317",
+    "pre_p5_line_now_at": "not found — the pre-P5 line was blank or changed; resolve against CLAUDE.md at the commit that wrote the citation"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_TOKEN_ECONOMY_PRE_AUDIT.md:155",
+    "cites": "CLAUDE.md:108",
+    "pre_p5_line_now_at": "CLAUDE.md:99"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_WAKE_OPENING_LIST_PRE_AUDIT.md:45",
+    "cites": "CLAUDE.md:224",
+    "pre_p5_line_now_at": "P5-48 (1-system-manual/COMMS_BRIDGE_RUNBOOK.md)"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_WAKE_OPENING_LIST_PRE_AUDIT.md:46",
+    "cites": "CLAUDE.md:251",
+    "pre_p5_line_now_at": "CLAUDE.md:233"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_WAKE_OPENING_LIST_PRE_AUDIT.md:47",
+    "cites": "CLAUDE.md:255",
+    "pre_p5_line_now_at": "CLAUDE.md:237"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_WAKE_OPENING_LIST_PRE_AUDIT.md:48",
+    "cites": "CLAUDE.md:265",
+    "pre_p5_line_now_at": "CLAUDE.md:247"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_WAKE_OPENING_LIST_PRE_AUDIT.md:49",
+    "cites": "CLAUDE.md:317",
+    "pre_p5_line_now_at": "not found — the pre-P5 line was blank or changed; resolve against CLAUDE.md at the commit that wrote the citation"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_WAKE_OPENING_LIST_PRE_AUDIT.md:56",
+    "cites": "CLAUDE.md:224",
+    "pre_p5_line_now_at": "P5-48 (1-system-manual/COMMS_BRIDGE_RUNBOOK.md)"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_WAKE_OPENING_LIST_SCOPE.md:40",
+    "cites": "CLAUDE.md:317",
+    "pre_p5_line_now_at": "not found — the pre-P5 line was blank or changed; resolve against CLAUDE.md at the commit that wrote the citation"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_WAKE_OPENING_LIST_SCOPE.md:154",
+    "cites": "CLAUDE.md:224",
+    "pre_p5_line_now_at": "P5-48 (1-system-manual/COMMS_BRIDGE_RUNBOOK.md)"
+   },
+   {
+    "site": "scripts/analysis/census-triage-w41/data1n.py:42",
+    "cites": "CLAUDE.md:25",
+    "pre_p5_line_now_at": "CLAUDE.md:25"
+   }
+  ]
+ }
+}

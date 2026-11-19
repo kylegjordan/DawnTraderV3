@@ -34,3 +34,39 @@ Discord msgs/voice, Langston's replies and alert triage (`/var/log/cc-discord-in
 
 ## 5. HISTORY POINTERS
 Built 2026-06-11/12 (naming + routing live-verified 06-12) · reliability hardening 2026-06-24 (Kyle directive; GitHub #25188 compaction behavior) · heartbeat layer 2026-07-13 (Kyle) · Telegram inbox dropped from the tail at the 2026-07-02 decommission. Full protocol: `CLAUDE.md` §6.9.
+
+---
+
+## Moved from CLAUDE.md — B-TOKEN-ECONOMY P5 (2026-11-19)
+
+Verbatim passages moved out of the always-loaded rules file to cut what every session re-reads. Each block id is the pointer `CLAUDE.md` carries in its place. `scripts/crew-tooling/move-ledger-check.mjs` proves each block is here once, unchanged, and gone from `CLAUDE.md` (ledger: `Claude Comms and Packages/Change Lists/B_TOKEN_ECONOMY_MOVE_LEDGER.json`).
+
+<!-- P5-MOVED id=P5-27 -->
+### P5-27 — moved from CLAUDE.md, under "6.9 CC wake channel + five-session naming (Kyle directive 2026-06-11/12; roster current th"
+
+**Status: all five roster entries are ACTIVE.** The original two-session routing was live-verified 2026-06-12 on Telegram; Discord is now the only live backend, and the shared opening-list registry includes CC-A, CC-B, CC-C, CC-INFRA and CC-PM (`#1241`, live 2026-11-06). The roster is authoritative for binding and `address_list.py` / the pinned laptop-filter copy are authoritative for accepted wake forms.
+<!-- /P5-MOVED id=P5-27 -->
+
+<!-- P5-MOVED id=P5-41 -->
+### P5-41 — moved from CLAUDE.md, under "6.4 CC → Kyle"
+
+**Session naming (Kyle directive 2026-06-12) still governs, with two exact forms per session:** the **registry name** binds the session ID; the **Discord display/wake form** routes the post (rule as of `#1241`, §6.9). **A session's post** wakes the sessions in its **opening list** ("OLD Claude" → CC-A, "NEW Claude" → CC-B, "ANALYST Claude" → CC-C, "Infra Claude" → CC-INFRA, "PM Claude" → CC-PM); several names wake several; a later mention wakes nobody. **Kyle's post** wakes any session he names anywhere, and everyone when he names none. Bindings are read from the roster and never inferred from role (§6.9). Wake-watcher mechanics: MEMORY.md session-start item 4.5 + `C:\Users\kyleg\.claude\cc-wake-filter.py`.
+<!-- /P5-MOVED id=P5-41 -->
+
+<!-- P5-MOVED id=P5-51 -->
+### P5-51 — moved from CLAUDE.md, under "6.9 CC wake channel + five-session naming (Kyle directive 2026-06-11/12; roster current th"
+
+**Mechanics (arm at EVERY session start AND re-arm after EVERY wake — MEMORY.md session-start item 4.5 is the canonical command):** a Bash `run_in_background` task — a self-healing SSH loop that runs `cc-wake-follow.py` on Helsinki over the two sources into the filter `C:\Users\kyleg\.claude\cc-wake-filter.py <ALIAS> --once`, which ENDS the task on the first message for you and saves where it stopped, so the next arm delivers anything that arrived meanwhile. **The Monitor form is retired:** since CC 2.1.271 every Monitor ends within 30 minutes, and each ending woke the session with nothing to say (`#1127`). The filter holds the name registry (adding a session = one registry line) and forces UTF-8 output (Windows cp1252 pipe encoding silently killed non-ASCII events — fixed 2026-06-11). Watcher dies with the session; the self-healing loop survives SSH drops and announces reconnects.
+
+**OPERATIONAL DEPTH — relocated (B-RULES-1b C4 r2): `1-system-manual/CLAUDE_CODE_WAKE_WATCHER_RUNBOOK.md` is THE home** for the arm/verify/re-arm procedure, every trap with its incident (the 06-19 run_in_background silent-stream, the 06-25 TaskList blind-re-arm), the compaction behavior (#25188, kills the watcher USUALLY but not always), and the THREE reliability layers — including the **hourly heartbeat scheduled task (Kyle 2026-07-13)**, which closed the mid-session idle-death gap an older copy of this section still called uncovered. Honest residual: a fully-CLOSED desktop session cannot be woken — platform gap. This section keeps the PROTOCOL only (names, routing, wake sources); the shared MEMORY §4.5 keeps the executable arm command inline.
+<!-- /P5-MOVED id=P5-51 -->
+
+<!-- P5-MOVED id=P5-52 -->
+### P5-52 — moved from CLAUDE.md, under "6.10 Remote Control + push-when-blocked (Kyle directive 2026-06-16) — DON'T be the bottlen"
+
+**Remote Control is ON** (app Settings → Claude Code → "Enable remote control by default"). Kyle can view + drive + **approve permission prompts** for any open session from claude.ai/code or the Claude mobile app (signed into his account). To attach a session that started before the toggle: run `/remote-control` in it. The local machine must stay awake/open (same limit as §6.9). With `bypassPermissions` ON, routine prompts are gone; the rare remaining ones (catastrophic patterns, protected paths) Kyle can now approve from his phone.
+
+**★ STANDING RULE (BOTH sessions — Claude Old AND Claude New; ESCALATION model, Kyle 2026-06-16) — when you END a turn BLOCKED needing Kyle's response/decision/approval to proceed, do NOT notify immediately — escalate only if he stays silent ~10 min** (if he's at the keyboard he'll see the ask and answer; the notification is only to pull him in when he's away). Both push AND the messaging channel verified reaching his phone 2026-06-16. **Mechanism (Discord path since cutover #333):** (1) end the turn with the clear ask (visible instantly if present); (2) arm a one-shot background timer — `run_in_background` Bash `sleep 600` that, on completion, posts the one-liner to Discord `#general` via `cc-send --notify --sender "OLD Claude"` (the `--notify` @-mentions Kyle so it pushes to his phone; body `STILL NEED YOU: <ask>`); when that timer's completion re-invokes the session, ALSO fire `PushNotification` (the tool can't be called from inside the bash timer). (3) On Kyle's NEXT turn, FIRST `TaskStop` the pending blocked-notify timer so it never fires after he's already answered — **use the task_id the `run_in_background` call returned when you armed it (note it then); do NOT try to find it via `TaskList`, which lists only TaskCreate todo items, not Monitor/background-bash tasks (same gotcha corrected in §6.9 layer-3).** Net: notification fires ONLY if Kyle hasn't responded in ~10 min. Genuine blocks/decisions only, NOT routine progress. (Hard permission prompts FREEZE the session so it can't self-arm the timer — those rely on the app's own notification + Remote Control + bypass-makes-them-rare; flag to Kyle if one ever traps a session.)
+
+**★ LANGSTON-FLAGGED APPROVALS → relay to Kyle (Kyle directive 2026-06-16).** When Langston flags something that needs KYLE's approval (not just CC's), the CC session that sees it surfaces it to Kyle as a plain Discord `#general` post via `cc-send --notify --sender "OLD Claude"` (`Langston flags <X> — needs your approval: <plain ask>`) + a `PushNotification`. Kyle approves in `#general`; CC carries it out. This is the agreed path because Langston's own bridge doesn't push to Kyle's phone and Langston has no Remote-Control channel.
+<!-- /P5-MOVED id=P5-52 -->

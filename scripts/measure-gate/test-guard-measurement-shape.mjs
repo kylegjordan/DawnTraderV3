@@ -190,7 +190,7 @@ function extractCommands(path, label) {
     for (const m of line.matchAll(/`([^`]*due-alerts\.py[^`]*)`/g)) {
       out.push({ site: at, cmd: m[1].trim() }); hit = true;
     }
-    // ⛔ FENCED BLOCKS. `CLAUDE.md:279` — the §6.6 mandated inbox read — lives inside a ```bash
+    // ⛔ FENCED BLOCKS. `CLAUDE.md` §6.6 — the mandated inbox read — lives inside a ```bash
     // fence, NOT backticks, so the pattern above never saw it. A home written as a fence was
     // invisible to a fixture whose whole point is that a reworded home gets picked up.
     // Reader-found.

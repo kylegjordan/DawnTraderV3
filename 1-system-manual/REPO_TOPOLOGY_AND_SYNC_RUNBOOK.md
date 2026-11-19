@@ -128,3 +128,53 @@ Separate clones dissolved the race the board was built for (**#557**, one sessio
 
 **What is NOT solved, stated so nobody assumes otherwise:** there is **no documented way to PURGE already-loaded rules** from a running session. Compaction re-injects the new copy but does not delete the old, so a session briefly holds both. Only `/clear` truly purges, and that ends the conversation. And **whether a session actually re-read after being told is not observable from outside** — it happens inside the session's reasoning. Any claim that sessions are "now following the new rules" is a comfortable fiction; the honest proxy is "the file was current and the session was told."
 
+---
+
+## Moved from CLAUDE.md — B-TOKEN-ECONOMY P5 (2026-11-19)
+
+Verbatim passages moved out of the always-loaded rules file to cut what every session re-reads. Each block id is the pointer `CLAUDE.md` carries in its place. `scripts/crew-tooling/move-ledger-check.mjs` proves each block is here once, unchanged, and gone from `CLAUDE.md` (ledger: `Claude Comms and Packages/Change Lists/B_TOKEN_ECONOMY_MOVE_LEDGER.json`).
+
+<!-- P5-MOVED id=P5-30 -->
+### P5-30 — moved from CLAUDE.md, under "7.1 Storage & sync workflow — THE canonical flow (🔒 SET IN STONE — Kyle 2026-07-23, supers"
+
+**★ GOOGLE DRIVE IS NOT A GIT REMOTE AND MUST NEVER BE ONE.** Git's own FAQ forbids repos on cloud-sync. Measured here: a bare repo on `G:` reported **SUCCESS while holding no pack file at all**. Same root cause as #542 (path-limited-commit segfault; zero #542 recurrences REPORTED by any session since 2026-07-23 — an absence-of-reported-failure record, not per-commit proof of the form’s use (dated measurement + instrument reach: history doc §5.25)) and #1098, formerly #567 (~99%-destroyed `node_modules`).
+<!-- /P5-MOVED id=P5-30 -->
+
+<!-- P5-MOVED id=P5-31 -->
+### P5-31 — moved from CLAUDE.md, under "7.1 Storage & sync workflow — THE canonical flow (🔒 SET IN STONE — Kyle 2026-07-23, supers"
+
+**Backups — two, both gated by REPRODUCTION:** (1) **Helsinki bare mirror** `/srv/dawntrader-backup.git` (langston-owned, push-DISABLED, self-pulling from GitHub every 15 min, doubles as Langston's whole-tree-search corpus); (2) **Google Drive archive** — ONE `git bundle` at `G:\My Drive\Dawn Trader\DawnTraderV3-backup.bundle`, nightly 03:00, same name/path always overwritten (no versions to track; **cadence settled nightly, #576 CLOSED**).
+- **★★ THE GATE IS REPRODUCTION, NOT COMPARISON.** Comparing refs proves the pointers agree and nothing about whether objects exist — **that check certified an EMPTY backup four times.** PASS is earned only by cloning FROM the backup and matching a known path's object hash against source.
+- **★ A backup is a SEPARATE REMOTE, never a second push-URL on `origin`** — a dead backup leg **blocks the normal push outright.** Backups must never be able to stop work.
+<!-- /P5-MOVED id=P5-31 -->
+
+<!-- P5-MOVED id=P5-32 -->
+### P5-32 — moved from CLAUDE.md, under "7.1 Storage & sync workflow — THE canonical flow (🔒 SET IN STONE — Kyle 2026-07-23, supers"
+
+**★ WHO MOVES WHAT (summary; full map in the runbook):** clone→review branch = **the session that did the work**. Review branch→Helsinki (15 min), →Drive archive (nightly) = **automatic, self-pulling**. Review branch→**staging** and →**`main`** = **the session that owns the batch, deliberately manual** (a deploy restarts live trading; `main` advances only at batch close after verification + Langston + Kyle's acknowledgement). **`main` is force-push- and delete-protected.**
+- **★ "Someone else pushed" is announced** — `dt-push-notice.sh` (Helsinki, every 2 min) posts ONE line naming all sessions when the branch head moves. **Deliberately minimal by Kyle's instruction: the sha and nothing else.** ⚠️ **Do NOT narrate push notices to Kyle** (§5 rule 28).
+  ⛔ **SINCE 2026-08-18 (#694) THE ROUTINE NOTICE STILL POSTS BUT NO LONGER WAKES YOU — do not rely on it reaching you mid-task.** The wake filter suppresses **only** the sha-only body; you learn the branch moved at your next `git fetch`, which §7.1’s gate already forces before any push. ★ **THE ESCALATED VARIANT — the "THE RULES CHANGED IN THIS PUSH — PULL AND RELOAD NOW" one — STILL WAKES, and that is deliberate: the fetch gate fires at your NEXT PUSH, which may be hours out, while that line exists to reach you MID-TASK.** *(Both variants ship under the same `--sender "Push notice"`, so the suppression is CONTENT-keyed and FAILS SAFE: anything that is not exactly the routine sentence — including a reworded future escalation — is DELIVERED.)*
+- **★ The uncommitted-work nag was DELIBERATELY NOT BUILT** (Kyle): it fires mid-edit and tells someone what they already know; noisy alerts get ignored. The fortnight-scale case is covered by **sync-gate check 4**. Do not re-propose without a new failure that check 4 misses.
+<!-- /P5-MOVED id=P5-32 -->
+
+<!-- P5-MOVED id=P5-33 -->
+### P5-33 — moved from CLAUDE.md, under "7.1 Storage & sync workflow — THE canonical flow (🔒 SET IN STONE — Kyle 2026-07-23, supers"
+
+**★ NOTHING CARRIES TO AN INDEPENDENT CLONE** — git identity (global is empty; the first commit outright FAILS without it), remotes, `http.postBuffer` 500 MB, untracked local config (`.claude/launch.json`). `node_modules` are per-clone, never shared.
+
+**★ LANGSTON READS OFF THE REVIEW BRANCH — no working copy at all.** Single file = `dt-review show <sha> <path>` (every object re-hashed); search = `dt-review grep @<sha>` (stored bytes, not re-hashed); both pull from GitHub FIRST. Raw GitHub works only until the repo goes private. **Full detail: `1-system-manual/LANGSTON_ARCHITECTURE.md` §6.** Never `/mnt/gdrive`.
+
+**`C:\dev` is RETIRED** (deleted 2026-07-24; stashes archived at `root@204.168.141.77:/root/backups/dev-bench-stashes-2026-07-23/`). **The old Google Drive working folder is RETIRED** (push URL disabled, marker file at its root, moved by Kyle to `Frozen Jan - July 2026 REPO/`).
+<!-- /P5-MOVED id=P5-33 -->
+
+<!-- P5-MOVED id=P5-58 -->
+### P5-58 — moved from CLAUDE.md, under "7. Infrastructure Reference"
+
+- **Staging server:** Hetzner CPX22 at `188.245.193.8` (Falkenstein), Ubuntu 24.04. App runs as `dawntrader` under `deploy` user via PM2. **TLS edge (B-SEC-HARDEN #353, 2026-07-13): Caddy on :80/:443 terminates HTTPS (auto Let's Encrypt cert for `188.245.193.8.sslip.io`, auto-renew) and reverse-proxies to nginx on `127.0.0.1:8080`** (nginx keeps WS upgrade + rate limiting + the X-Forwarded-Proto allowlist map → app :5000). SSH is key-only (password auth off); ufw active (deny-in / allow-out / 22,80,443). Rollback: stop caddy + nginx `listen 8080`→`80`.
+<!-- /P5-MOVED id=P5-58 -->
+
+<!-- P5-MOVED id=P5-59 -->
+### P5-59 — moved from CLAUDE.md, under "7. Infrastructure Reference"
+
+- **Staging URL:** **canonical = `https://188.245.193.8.sslip.io`** (HTTPS, clean padlock; B-SEC-HARDEN #353). The bare **`http://188.245.193.8` now 302-REDIRECTS to the HTTPS host** (Kyle 2026-07-13 — plain HTTP could still serve the login form = a cleartext-password path; the redirect closes it, no unencrypted login possible). Browsers/Claude-in-Chrome follow the redirect transparently, so §9.3 UI verification + login flows keep working — just land on HTTPS. **Authenticated shell reads use the server-held crew login through `dt-api`; no password belongs in this file or in a session.**
+<!-- /P5-MOVED id=P5-59 -->

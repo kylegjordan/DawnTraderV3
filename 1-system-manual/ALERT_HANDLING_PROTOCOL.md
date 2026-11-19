@@ -82,3 +82,15 @@
 - An alert silently dropped because no CC was looking → the push re-surface + Kyle escalation replace reliance on the pull-based per-turn check.
 - **⚠️ REPORTING AN ACK THAT NEVER LANDED — `ack`/`resolve` REQUIRE THE FULL UUID; A SHORT ID RETURNS `Alert <id> not found` AND CHANGES NOTHING.** *(Added 2026-07-31 after this bit TWO of the three sessions within one hour: CC-C on `b68902c7`, CC-A on `157e758c` — who then posted "ACKED by cc-a" in an escalation and had to correct it in the open.)* The failure is nasty because **the command exits without an obvious error and the alert stays `active`** — so the session reports the loop closed while the dispatcher will keep re-surfacing it. ⇒ **ALWAYS pass the full `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`** (get it from the alert row, not the heartbeat summary, which prints the short form), **and VERIFY BY RE-READING THE ROW — `state` + `acknowledged_by` — NEVER from the exit code.** Same discipline as `resolve`, which additionally no-ops without `--evidence <sha>`.
 - **Claiming a state change you have not observed** is the general form of the above: **`ack`, `resolve` and "the alert is handled" are all CLAIMS ABOUT A ROW, and the row is cheap to read.** State it after you have read it back, not after you have run the command.
+
+---
+
+## Moved from CLAUDE.md — B-TOKEN-ECONOMY P5 (2026-11-19)
+
+Verbatim passages moved out of the always-loaded rules file to cut what every session re-reads. Each block id is the pointer `CLAUDE.md` carries in its place. `scripts/crew-tooling/move-ledger-check.mjs` proves each block is here once, unchanged, and gone from `CLAUDE.md` (ledger: `Claude Comms and Packages/Change Lists/B_TOKEN_ECONOMY_MOVE_LEDGER.json`).
+
+<!-- P5-MOVED id=P5-55 -->
+### P5-55 — moved from CLAUDE.md, under "10.5 System Alerts per-turn check (Kyle directive 2026-05-17 — MANDATORY)"
+
+**★ Post-diagnosis handling (B-ALERT-PROTOCOL #340, 2026-06-23):** the per-turn check above is the PULL side (read + surface). What happens AFTER an alert is diagnosed — who owns the follow-through, the ack=owned / resolve=fixed discipline, the per-class action table, and the no-silent-drop re-surface closure guarantee — is the definitive process in **`1-system-manual/ALERT_HANDLING_PROTOCOL.md`**. Short version: Langston's triage ends with `[[ALERT id=.. owner=<CC-A|CC-B|Kyle> action=".."]]` → the wake routes to the owner → owner `ack --by` (claims — ⚠️ but an EVENT-WAIT alert is routed, not acked: step 3 above; the protocol's step 4 says so too since 2026-09-29 — `#646`'s code leg, `#638`, stays CC-B's) → does the work → `resolve --by` (the ONLY thing that stops the dispatcher re-surfacing it on a widening back-off + escalating to Kyle).
+<!-- /P5-MOVED id=P5-55 -->

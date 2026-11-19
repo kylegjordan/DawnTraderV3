@@ -577,3 +577,186 @@ authoring turn, and it is also a second witness for §7.1 step 0.
 **What changed:** two paragraphs added to §9.4, each quoting Kyle's 2026-10-19 message verbatim (relayed to the channel by NEW Claude, msg `1561634871691190323`): (1) *no new batch without Kyle's agreed list* — what a session settles with Langston is a PROPOSAL for Kyle's list, not a slot; folding into agreed work, adding to an agreed batch and withdrawing need no new slot; (2) *the main Dashboard and the AI pages are off-limits* unless the work is breaking paper-mode trading or the VTS. Mechanics item (4) gained the clause that for a new batch or plan row, what CC and Langston decide is the proposal Kyle slots.
 
 **Why it landed in this batch:** Langston's rules file was being trimmed and versioned here, and his copy already carried the 10-19 rule; his Step-4 part 2b review required the CC side to say the same thing, so the two rule files could not disagree about who may slot work. **Why it was recorded late:** this entry is mandatory in the same turn as the `CLAUDE.md` change and was missed on 2026-11-05; found at Step 10 (2026-11-14) by reading the batch's own commit list.
+
+---
+
+## Moved from CLAUDE.md — B-TOKEN-ECONOMY P5 (2026-11-19)
+
+Verbatim passages moved out of the always-loaded rules file to cut what every session re-reads. Each block id is the pointer `CLAUDE.md` carries in its place. `scripts/crew-tooling/move-ledger-check.mjs` proves each block is here once, unchanged, and gone from `CLAUDE.md` (ledger: `Claude Comms and Packages/Change Lists/B_TOKEN_ECONOMY_MOVE_LEDGER.json`).
+
+<!-- P5-MOVED id=P5-01 -->
+### P5-01 — moved from CLAUDE.md, under "0.a ⛔⛔ THE WORKFLOW — **ELEVEN STEPS. READ THE STEP'S FILE BEFORE YOU DO THE STEP. EVERY T"
+
+⚠️ **THIS TABLE IS ADDRESSES. IT TELLS YOU WHERE EACH STEP IS WRITTEN DOWN; IT HAS NEVER TOLD YOU WHICH STEP YOU ARE ON — and your own memory file, which DOES claim to say that, auto-loads FIRST.** ★ **MEASURED (Infra Claude’s `B-TOKEN-WATCH` skip, `#754`): a session skipped Step 2 with EVERY rule file and ALL ELEVEN step skills loaded. Nothing was missing.** What beat them was a prose to-do **they had written themselves**: *"scope → Langston Step-1; then build."*
+⇒ ★★ **THAT IS 1 → 3 WITH 2 SILENTLY ABSENT. `1 → 3` IS VISIBLY WRONG; "THEN BUILD" IS NOT.** **Numbers have a successor; prose does not, so an omission in prose reads as a smooth sentence.**
+⚠️ **HONEST LIMIT, STATED RATHER THAN GLOSSED (Langston, and Kyle accepted the residual): THIS BUYS LEGIBILITY, NOT ENFORCEMENT. A session can write `STEP: 2` and still not do step 2, and NOTHING COMPARES THE FIELD TO REALITY.** ★ **It is kept because it is free and it makes the ONE failure we have actually observed visible at a glance.** ⛔⛔ **AND THE FIELD IS A NAVIGATION AID, NEVER AN ATTESTATION — NO REVIEWER, LANGSTON INCLUDED, MAY CITE `STEP: N` AS EVIDENCE THAT STEP N HAPPENED (Langston’s rider, 2026-08-28).** ★ **The honest limit above STATES the limit; it does not FORBID the citation, and `#546` is exactly the gap between those two — an unenforced value wearing a measured value’s clothes.**
+★ **WHY IT WORKS ANYWAY, and this is the reason it ships without a reconciler: the failure is SELF-READ, NOT OTHER-READ.** The session wrote its own prose to-do and then followed it. **The field is read by the same session that wrote it, and `1 → 3` being visibly wrong TO ITS OWN AUTHOR is the entire mechanism.** ⇒ **with the citation prohibited, the residual is bounded to the one reader it cannot fool.**
+*(A checker-side reconciler was designed and DELIBERATELY NOT BUILT — Kyle 2026-08-28: not worth overhauling a live tool for a rare event. `#754` holds the design, and the weekly mistake pass now carries a recurrence tripwire for it.)*
+<!-- /P5-MOVED id=P5-01 -->
+
+<!-- P5-MOVED id=P5-02 -->
+### P5-02 — moved from CLAUDE.md, under "0.a ⛔⛔ THE WORKFLOW — **ELEVEN STEPS. READ THE STEP'S FILE BEFORE YOU DO THE STEP. EVERY T"
+
+★★ **THIS TABLE IS THE INDEX, AND IT IS THE *PRIMARY* TRIGGER (Kyle's design, 2026-08-21).** It auto-loads with this file on every start and every compaction, so a session always knows the eleven steps exist and where each one is written down. ⇒ **rules file → READ THE STEP FILE.** ★ **That route is an ordinary file read and needs NO skill machinery at all**, so the primary leg does NOT depend on skill auto-invocation — the mechanism that is measured-unreliable.
+★ **THE BACKUP TRIGGER: each step file is ALSO A SKILL** (its own folder, its own `SKILL.md`), so the model may pull the right step in on its own. **Eleven independent triggers, not one** — that is the whole reason they are skills rather than plain documents. ⚠️ **The backup leg is a COIN FLIP and is never relied on** (five-plus open Anthropic issues; worst for skills overlapping trained behaviour, which is every step here). ⚠️ **A new skill registers only at a session START** — the backup leg is not live in a session that began before it was built.
+<!-- /P5-MOVED id=P5-02 -->
+
+<!-- P5-MOVED id=P5-03 -->
+### P5-03 — moved from CLAUDE.md, under "0.a ⛔⛔ THE WORKFLOW — **ELEVEN STEPS. READ THE STEP'S FILE BEFORE YOU DO THE STEP. EVERY T"
+
+⛔ **AND NEVER PUT `“: ”` (COLON-SPACE) INSIDE A DESCRIPTION VALUE — IT SILENTLY BREAKS THE SKILL.** The frontmatter is YAML, so an unquoted value containing a colon-space is ambiguous; the parser drops the description and the app **falls back to the file’s first heading**. ⚠️ **MEASURED 2026-08-21:** `workflow-05-ci` and `workflow-07-verify-cc` both lost their descriptions this way — the two whose text read “branch head: TypeScript Check…” and “change works: PM2 logs…”. **NOTHING ERRORED. The files were valid, the frontmatter looked right, and the only symptom was the skill listing showing a heading where a description belonged** — which also silently disarms that skill’s auto-invocation trigger, the entire reason it is a skill. **Use a dash or a comma instead, and after editing any description CHECK THE SKILL LISTING rather than the file.**
+<!-- /P5-MOVED id=P5-03 -->
+
+<!-- P5-MOVED id=P5-05 -->
+### P5-05 — moved from CLAUDE.md, under "1. Identity & Persona"
+
+Role, communication style, the plain-language mandate, the two-paragraph default, canonical terminology, the step-report shape, and the problem-solving disposition all live there now. **The expertise blurb was CUT, not moved** — it was a FACT list (it enumerated a strategy count), and facts drift while rules do not; that same enumeration went stale in Langston's own always-loaded copy, which B-RULES-1a caught asserting 18 strategies against the SSOT's 19.
+<!-- /P5-MOVED id=P5-05 -->
+
+<!-- P5-MOVED id=P5-06 -->
+### P5-06 — moved from CLAUDE.md, under "2. *(REMOVED 2026-08-21 — the workflow lives in §0.a + the eleven step skills)*"
+
+⚠️ **THIS HEADING IS A FORWARDING ADDRESS, NOT A SECOND COPY. It is kept because `§2` is cited 136 times across 107 files** — mostly frozen batch completion reports, which are historical records and are NOT rewritten. Deleting the heading outright would silently break every one of those pointers, which is the same absent-as-valid failure the citation was meant to prevent. **A citation to "§2 step 7" now means the step-7 skill.**
+★ **The two governance rules that lived in §2's preamble were NOT step detail and did NOT move to a step** — batch/phase NAMING and the CHANGE-CLASS declaration bind every commit and every scope, not one step, so demoting them to a file that loads only at step 1 would be a real demotion. **They are relocated intact to §3 below** (Langston's standing condition: a single-homed rule may not be dropped or demoted without a named replacement landing in the same commit).
+<!-- /P5-MOVED id=P5-06 -->
+
+<!-- P5-MOVED id=P5-07 -->
+### P5-07 — moved from CLAUDE.md, under "3. Batch Identity, Governance Documents & Memory Rules *(renamed 2026-08-23)*"
+
+> ⚠️ **RENAMED FOR THE SAME REASON AS §9, AND IN THE SAME COMMIT.** It read *"Governance Tiers & Mandatory Documents"* — but the tier LISTS moved into `workflow-10-governance` today, and what remains is three things that are NOT tiers: **§3.0 batch naming + change-class** (fires when a batch is CREATED) and **§3.1/§3.2 the memory-file rules** (fire at SESSION START). **The number is unchanged, so every `§3.x` citation still resolves.**
+<!-- /P5-MOVED id=P5-07 -->
+
+<!-- P5-MOVED id=P5-08 -->
+### P5-08 — moved from CLAUDE.md, under "3.0 BATCH IDENTITY — NAMING + CHANGE-CLASS *(relocated intact from the removed §2 preamble"
+
+★ **THE INDEPENDENT DETECTOR IS THE GOVERNANCE CHECKER, not the completion report** (which the skipping session writes itself): `scripts/governance-checker/` runs ON STAGING, reads at `origin/migration/aws-supabase`, grades the doc-set against the DECLARED change-class from its own machine-readable table (`DOCS`, `CLASS_DOCSET` and `REQUIRED_IF` in `scripts/governance-checker/config.mjs`), and **raises a system alert on a miss.** ⚠️ **That table is why the cut is safe — the enumeration already had two homes and only the config enforced anything.**
+⛔ **BUT DO NOT CITE THE CHECKER AS COVERAGE FOR WHAT IT CANNOT SEE (Langston, 2026-08-23, re-derived at the ref): its `DOCS` table has NO entry for `CLAUDE.md`, `CONDUCT.md` or `MEMORY.md`.** It detects a skipped governance DOC. **It is blind to four sessions colliding in shared PROSE** — that residual is still detection-by-Monday-review only. *(Full ruling + the three detectors + the staleness precedent: history doc §3-enumeration-cut.)*
+<!-- /P5-MOVED id=P5-08 -->
+
+<!-- P5-MOVED id=P5-12 -->
+### P5-12 — moved from CLAUDE.md, under "4. Canonical File Locations (post-reorganization 2026-04-14)"
+
+**CLAUDE.md canonical location = repo ROOT `./CLAUDE.md` ONLY (Kyle directive 2026-06-15).** Claude Code auto-loads BOTH `./CLAUDE.md` AND `./.claude/CLAUDE.md` if present and CONCATENATES them (doubling tokens) — the two are interchangeable alternatives per the official docs, NOT a pair meant to coexist. A stale untracked `./.claude/CLAUDE.md` duplicate was removed 2026-06-15. **Do NOT recreate `./.claude/CLAUDE.md`** — keep the root file as the sole source. (Contrast: the MEMORY.md two-file pattern in §3.1 IS intentional — its truth file lives OUTSIDE the repo in the user cache, so the in-repo `.claude/memory/MEMORY.md` mirror is a real git backup. That reasoning does not apply to CLAUDE.md, which is fully in-repo either way.)
+<!-- /P5-MOVED id=P5-12 -->
+
+<!-- P5-MOVED id=P5-13 -->
+### P5-13 — moved from CLAUDE.md, under "4. Canonical File Locations (post-reorganization 2026-04-14)"
+
+**★ RUNBOOKS — depth moved OUT of this file per #564 (*operative→`CLAUDE.md`, depth→runbooks*), nothing deleted:** `REPO_TOPOLOGY_AND_SYNC_RUNBOOK.md` (§7.1's conductor map, measured evidence, and the preserved 2026-06-01 incident record) · `COMMS_BRIDGE_RUNBOOK.md` (§8.2's ordered bridge diagnostics) · `CLAUDE_CODE_PERMISSION_PROMPT_RUNBOOK.md` · `CLAUDE_CODE_SESSION_TRANSCRIPT_TRIM_RUNBOOK.md`. **★ THE PLACEMENT RULE, now standing (Langston-ruled, #564): this file holds the OPERATIVE statement — what to do, what not to do, the decision. Diagnostic depth, evidence chains, version histories and repair procedures go to a named runbook, referenced by a pointer of a few lines.** It auto-loads for **every CC session at start AND on every compaction, across all three sessions**, so everything in it is paid for repeatedly. ⛔ **It does NOT auto-load for Langston** — his context carries his OWN `CLAUDE.md` and an auto-memory index; this file is absent and he fetches it on demand. ★ **#564's conclusion STANDS on the CC-side cost alone.** ⚠️ **But his side is NOT free — his own always-loaded file is a large artifact in its own right. Two SEPARATE problems, separate fixes.** *(Dated measurements: history doc §5.30 — deliberately NOT inline, because a figure measuring THIS file goes stale on the next write to it. **LIVE measurement now exists (B-RULES-1a OBJ-1): every session start appends its loaded-set bytes to `~/.claude/instructions-loaded.jsonl` — read the instrument, never quote a stored figure.**)* ⚠️ **This is NOT a licence to trim rules — Kyle ruled NO-TRIM (#339). Nothing is deleted or made unfindable; only its supporting evidence relocates.**
+<!-- /P5-MOVED id=P5-13 -->
+
+<!-- P5-MOVED id=P5-14 -->
+### P5-14 — moved from CLAUDE.md, under "4. Canonical File Locations (post-reorganization 2026-04-14)"
+
+**★ `1-system-manual/LANGSTON_ARCHITECTURE.md` — HOW THE REVIEWER IS BUILT (Kyle-requested 2026-07-24).** Host, runtime + model, auth (⏳ token rotates by 2027-04), his auto-loading files, how he is invoked + the address gate, **how he reads code (off the review branch, no working copy)**, what he can and cannot touch, rollback snapshots, known limits, and a dated change log. **LIVING — update when his BUILD changes** (model, runtime, invocation, read path, auth, files), never for per-batch review activity; record what it was BEFORE and why it changed. Complements `BUILD_METHOD_PLAYBOOK.md` (portable/role-based) — this one is the concrete instance.
+
+**★ `1-system-manual/BUILD_METHOD_PLAYBOOK.md` — THE PORTABLE DESCRIPTION OF HOW WE BUILD (Kyle-requested 2026-07-24).** The cast (human decider / implementation agents / independent reviewer / automated checkers), the physical setup, the batch process, the document set, the comms fabric, **the rules that earn their keep — each with the incident that produced it** — the anti-patterns, a **build ORDER** (what is load-bearing in hour one vs what should wait), and what we'd do differently. **Written to be lifted onto a DIFFERENT project from scratch**, so it is deliberately role-based rather than DawnTrader-specific. **This file is DESCRIPTIVE, not authoritative** — `CLAUDE.md` and the docs above remain the binding rules for THIS project; the playbook is what you hand someone starting a new one. Update it when the METHOD changes (a new role, a changed gate, a rule that earned its place), not when this project's state changes.
+<!-- /P5-MOVED id=P5-14 -->
+
+<!-- P5-MOVED id=P5-15 -->
+### P5-15 — moved from CLAUDE.md, under "4. Canonical File Locations (post-reorganization 2026-04-14)"
+
+**What does NOT exist anymore:** `DawnTraderV3/Reports/` (renamed); `DawnTraderV3/Claude Comms and Packages/Reports/` (contents promoted); `G:/My Drive/Dawn Trader/Claude Comms and Packages/` (Drive root, deleted); `G:/My Drive/Dawn Trader/DT_Clone_Repo/Claude Comms and Packages/` (clone-repo level, deleted). Only ONE `Claude Comms and Packages/` exists — inside `DawnTraderV3/`. Do not create duplicates.
+<!-- /P5-MOVED id=P5-15 -->
+
+<!-- P5-MOVED id=P5-17 -->
+### P5-17 — moved from CLAUDE.md, under "5. Critical Rules (Non-Negotiable Invariants)"
+
+    ⚠️ **MOVED AND DELIBERATELY STRIPPED OF ITS COUNTS AND ENUMERATIONS.** The DISTINCTIONS are conduct — you mis-speak them unprompted, with no moment at which you would think to check. The COUNTS were not: **rules do not drift, facts do.** B-RULES-1a caught this very taxonomy asserting 18 strategies against the SSOT's 19, with one missing entirely, inside an always-loaded file. **Current state and counts are read from the SSOT and the System Manual, never from a rules file.**
+<!-- /P5-MOVED id=P5-17 -->
+
+<!-- P5-MOVED id=P5-19 -->
+### P5-19 — moved from CLAUDE.md, under "5. Critical Rules (Non-Negotiable Invariants)"
+
+    ⚠️ **This line read *"STAGED, NOT DELETED"* and named `_pending-skills/bug-investigation-SOURCE.md` until 2026-08-29. The skill was built from that file and the file deleted — and this pointer was left aimed at it for one commit, in the always-loaded file. Caught by Kyle, not by my own verification, which had checked that the SKILL existed and never that the OLD pointer had been retired.**
+<!-- /P5-MOVED id=P5-19 -->
+
+<!-- P5-MOVED id=P5-20 -->
+### P5-20 — moved from CLAUDE.md, under "5. Critical Rules (Non-Negotiable Invariants)"
+
+25.c **★ EXPLICIT PATHS PROTECT YOU FROM THE WRONG *FILE*, NOT THE WRONG *CONTENT* — SO READ THE STAGED HUNK, NOT THE FILENAME (crew-adopted 2026-07-28; CC-B measured, Langston-ruled).** On a shared branch where three sessions write into the SAME governance docs, **the path is ALWAYS right — which is precisely why the explicit-path habit is the one that cannot catch this.** **MEASURED:** CC-B's pull was blocked by a STAGED `RUNNING_ISSUES.md` holding **CC-A's #598 + #582 annotation — not CC-B's content**; the prescribed `--name-only` check confirmed the path and **showed nothing wrong**, so a routine `git add <path>` + commit would have **published another session's work under the wrong name**, possibly duplicating entries already arriving via origin. ⇒ **A `git status` entry you do not remember staging is a SIGNAL, not noise — check WHOSE content it is before committing.** ⚠️ **RECOVERY: `stash` → `pull` → confirm it arrived from origin — and KEEP THE STASH UNTIL THE CAUSE IS ESTABLISHED, not merely until the content is proven safe.** (CC-B dropped it after proving nothing was lost, which destroyed the only artifact carrying HOW it got staged; the mechanism is now unreconstructable. Recovering the work and diagnosing the incident are two different jobs — do not collapse them.) **Topology was cleared separately and is NOT implicated:** `.git` a real directory, `--show-toplevel` correct, and every reflog pull `Fast-forward` ⇒ no merge, so no merge-staging; §7.1 clone isolation holds. Same failure family as `grep -c`, as reading a worktree instead of a ref, and as a LAG-gap blind to a trailing silence: **A MATCHING NAME IS NOT A MATCHING THING.**
+<!-- /P5-MOVED id=P5-20 -->
+
+<!-- P5-MOVED id=P5-21 -->
+### P5-21 — moved from CLAUDE.md, under "5. Critical Rules (Non-Negotiable Invariants)"
+
+25.a **✅ THE CREW COORDINATION BOARD — RETIRED 2026-08-23** (Langston ruling, Kyle-delegated). **The deciding number was not low usage but THREE CLAIMS MADE, ZERO EVER RELEASED** — a protocol nobody completes, so its empty state was never EARNED. The race it was built for became structurally impossible at one-clone-per-session (#557), and the one real collision (`RUNNING_ISSUES.md`) has a structural fix in the #702 number blocks. ⛔ **DO NOT RE-PROPOSE WITHOUT A NEW FAILURE THE NUMBER BLOCKS DO NOT COVER.**
+    ⚠️ **RESIDUAL, NAMED NOT CONCEDED: `CLAUDE.md`, `CONDUCT.md`, shared `MEMORY.md`** — four sessions edit the same prose regions, blocks cannot apply, and a semantic collision merges cleanly. Detection exists (`fresh-rules.mjs` + the Monday review); prevention does not. **Code removal + the residual’s structural fix: `B-CREW-BOARD-REMOVAL`, CC-A (gated on Kyle; placed after live in `PRE_LIVE_SPRINT.md`).** *(Full ruling, blast radius and restore path: `DELETED_COMPONENTS_LOG.md`.)*
+<!-- /P5-MOVED id=P5-21 -->
+
+<!-- P5-MOVED id=P5-22 -->
+### P5-22 — moved from CLAUDE.md, under "5. Critical Rules (Non-Negotiable Invariants)"
+
+    ⚠️ **MIRROR — NOT THE AUTHORITATIVE COPY. The reviewer obligation below is Langston's OWN standing rule and it already lives, verbatim, in HIS auto-loaded file; edit it THERE first.** *(Step-4 correction: my original reason — "it binds Langston and he does not load `CONDUCT.md`" — was wrong in a load-bearing way. **He does not load the repo `CLAUDE.md` either**, so this copy never reaches him by loading; it reaches him only when he goes and reads it. It is kept because CC benefits from seeing the bar it is graded against — and it has ALREADY drifted from his copy in emphasis and casing, which is the #641 two-copies shape. Treat any divergence as this copy being stale.)* *"A measurement with no stated object and population is not a finding — it is a claim, and I rule it unevidenced. For any number load-bearing on the decision I am being asked to make, I either re-derive it myself or I bounce it. `RULED ON REPORTED FACT` stays as a tag, but it is **disqualifying for a PROCEED on the leg it covers**, not a disclaimer I can attach to one. And for every piece of negative evidence: ask what the instrument's reach is before accepting its silence."*
+<!-- /P5-MOVED id=P5-22 -->
+
+<!-- P5-MOVED id=P5-34 -->
+### P5-34 — moved from CLAUDE.md, under "7.1 Storage & sync workflow — THE canonical flow (🔒 SET IN STONE — Kyle 2026-07-23, supers"
+
+**The crew coordination board — what it is FOR now.** Separate clones dissolved the race it was built for (#557 — structurally impossible now, not merely unlikely), and git's push rejection is harder than its advisory lock. **What remains: git cannot warn two sessions IN ADVANCE that they are about to work the same file** — it only discovers that at pull time, and the dangerous version merges cleanly while being semantically wrong. So **claim shared paths before editing** (`crew claim <path…> --note "<batch id>"`, release when done), treat it as a notice board, and **do not treat it as a lock** (§5 rule 25.b).
+<!-- /P5-MOVED id=P5-34 -->
+
+<!-- P5-MOVED id=P5-37 -->
+### P5-37 — moved from CLAUDE.md, under "9. Investigation, Findings & Reporting Discipline *(renamed 2026-08-23 — Kyle)*"
+
+> ⚠️ **RENAMED, AND THE OLD NAME WAS ACTIVELY MISLEADING.** It read *"System Impact Map & System Manual Discipline"*, which centres the whole section on two documents — but only the opening rules are about those. **Everything else here is how you INVESTIGATE and how you REPORT what you find:** §9.1 declaring scaffolding that is not yet functional · §9.2 surfacing any number that has changed · §9.3 what *"verified on staging"* is allowed to mean · §9.4 giving every "fix it later" a placed home · §9.5 how to audit a subsystem without missing the second mechanism. **A session looking for the investigation rules would not have looked here, and that is a governance failure of exactly the kind §9.5 exists to catch — in the index rather than in the code.**
+> ★ **THE SECTION NUMBER IS UNCHANGED ON PURPOSE.** MEASURED before renaming: **237 inbound citations use `§9`** (overwhelmingly `§9.3`, `§9.4`, `§9.5`) and only **3** cite the old title text. Renumbering would have broken all 237; renaming breaks 3, which are corrected in this same commit.
+<!-- /P5-MOVED id=P5-37 -->
+
+<!-- P5-MOVED id=P5-38 -->
+### P5-38 — moved from CLAUDE.md, under "9.4 THE FIND IS THE TRIGGER — EVERY OUT-OF-SCOPE FINDING GETS A DECLARED DISPOSITION, IN T"
+
+⛔⛔ **#5 EXISTS BECAUSE REMOVING THE JUDGEMENT GATE CREATED THE NEED FOR IT (Langston, 2026-08-27).** The rule now fires on things that turn out not to be findings — **and dispositions 1-4 ALL COMMIT WORK.** ★ **A rule whose only exits commit work, firing on inputs that sometimes warrant none, pressures you to manufacture a batch or quietly not fire it — which is this rule’s own diagnosis, one turn later.**
+<!-- /P5-MOVED id=P5-38 -->
+
+<!-- P5-MOVED id=P5-39 -->
+### P5-39 — moved from CLAUDE.md, under "9.4 THE FIND IS THE TRIGGER — EVERY OUT-OF-SCOPE FINDING GETS A DECLARED DISPOSITION, IN T"
+
+⚠️ **THE FAILURE THIS KILLS, measured 2026-08-26: a session named the batch, minted an issue number, declared it "locked", correctly refused a due date — AND NEVER PUT IT ANYWHERE IN THE PLAN.** Every ceremony of homing was performed and **the item still had no place**, so it is invisible to anyone reading the plan to find out what happens next. **Naming is not placing.**
+<!-- /P5-MOVED id=P5-39 -->
+
+<!-- P5-MOVED id=P5-40 -->
+### P5-40 — moved from CLAUDE.md, under "10.5 System Alerts per-turn check (Kyle directive 2026-05-17 — MANDATORY)"
+
+**Why mandatory:** sessions can be days/weeks apart; whoever's at the keyboard when a scheduled check fires is the one who picks it up. Telegram messages don't get reliably read (too much technical CC↔Langston chatter). Per-turn check ensures alerts get surfaced. See history doc §10.5 for full rationale. **Failure to perform on every turn is a process violation** — not session-start-only; alerts can fire between turns of a long session.
+
+**Queue contents:** scheduled verifications (e.g., 14-day soak verification), one-off reminders, recurring health checks, breakage triggers. Dispatcher cron on staging promotes scheduled events to active when `triggers_at` arrives. See `Claude Comms and Packages/Scope Files/B_NEW_40_SCOPE.md` §2.8 for architecture.
+<!-- /P5-MOVED id=P5-40 -->
+
+<!-- P5-MOVED id=P5-43 -->
+### P5-43 — moved from CLAUDE.md, under "0.a ⛔⛔ THE WORKFLOW — **ELEVEN STEPS. READ THE STEP'S FILE BEFORE YOU DO THE STEP. EVERY T"
+
+⛔⛔ **NOT EVERY CHANGE IS A BATCH — AND THE FAST PATH IS *NOT* AN UNREVIEWED PATH.** An urgent live break runs the **HOTFIX PATH: `.claude/skills/workflow-hotfix/SKILL.md`** — the eleven steps miniaturised into one, **and Langston still reviews it BEFORE it reaches staging** (Kyle 2026-08-21). ⚠️ **BUILT 2026-08-21 BECAUSE IT DID NOT EXIST: "hotfix" appeared 256 times across the governance corpus and EVERY occurrence was a usage — there was no definition, no qualifying test and no steps**, so the fast path was whatever the session in a hurry decided it was. **Read the qualifying test BEFORE declaring one; if in doubt it is a batch.** ★ It is also the missing half of **rule 23** — which orders a "mini-cycle through Langston" and never said what one is.
+<!-- /P5-MOVED id=P5-43 -->
+
+<!-- P5-MOVED id=P5-45 -->
+### P5-45 — moved from CLAUDE.md, under "3.0 BATCH IDENTITY — NAMING + CHANGE-CLASS *(relocated intact from the removed §2 preamble"
+
+> **Batch & phase NAMING convention (Kyle directive 2026-06-17 — B-GOV; the governance-checker parses this, so it is now a governed rule):** Phases = `Phase NN` (e.g. Phase 19). Batches = the phase-scoped form `P<phase>-B<n>` (e.g. `P19-B6`); **sub-batches** append a dotted suffix (`P19-B6.5a`); **letter-named** standalone batches use `B-<NAME>` (e.g. `B-NAMES`, `B-GOV`); the historical `B-NEW-NN` form stays valid. **Every code/governance commit for a batch carries its batch-id at the START of the commit subject** (e.g. `P19-B6 Step-3 ...`) so the checker can attribute it. **★ Do NOT put a CLOSED or not-yet-existent batch-id token ANYWHERE in a follow-up commit subject you are only REFERENCING (CC-A + Langston, 2026-06-25 — RUNNING_ISSUES #350).** The checker's `extractBatchId` matches a batch-id pattern ANYWHERE in the subject (not just the leading token — confirmed live: a mid-subject `B-GOV-4` reference fired 8 false missing-doc alerts), and grades it as a fresh batch-needing-docs. So for a follow-up that is NOT a fresh close of that batch (issue-homing, governance-ledger, soak-run), use a plain descriptor subject (`Governance ledger: …`) and reference any issue with `#NNN` or the batch-id in the BODY, not the subject. Lead with the ACTIVE batch-id only when the commit genuinely IS that batch's work. (Interim convention until B-GOV-4 lands the parser fix per #350 — which is now more urgent: it floods 8 alerts per stray reference.) **Exempt** (no batch tag needed): pure-housekeeping commits touching ONLY MEMORY.md, CLAUDE.md, or `Cross-Session Briefs/` — they are not code/governance pushes.
+<!-- /P5-MOVED id=P5-45 -->
+
+<!-- P5-MOVED id=P5-47 -->
+### P5-47 — moved from CLAUDE.md, under "5. Critical Rules (Non-Negotiable Invariants)"
+
+22. **GOVERNED-READ / NO-FALSE-ABSENCE.** The standing rule → `CONDUCT.md` section 10 (*an asserted absence needs presence-evidence; a failed read must produce a REFUSAL, not a recollection*).
+    **STAYS HERE — the MECHANICAL part, because it is a fact about a hook, not a behaviour:** `.claude/hooks/guard-governed-read.mjs` (wired in `.claude/settings.local.json`) BLOCKS exactly ONE shape — a git object read (`git show|cat-file|ls-tree`) combined with stderr suppression — and is **FAIL-OPEN** (any parse problem exits 0), so **its silence is NOT evidence of compliance with the standing rule.** `.claude/hooks/session-reminder.mjs` re-injects the rule every start/resume/compaction. Hooks load at session start — a freshly-added hook is live from the NEXT session.
+<!-- /P5-MOVED id=P5-47 -->
+
+<!-- P5-MOVED id=P5-53 -->
+### P5-53 — moved from CLAUDE.md, under "9. Investigation, Findings & Reporting Discipline *(renamed 2026-08-23 — Kyle)*"
+
+**Both maps are SELF-DOCUMENTING — read/maintain per their own top-of-file header (Kyle directive 2026-06-15; substance lives in-doc where it's used, NOT duplicated in this always-loaded file).** `SYSTEM_IMPACT_MAP.md` opens with How-to-Use + a Table of Contents + the **"Cross-Cutting Runtime State, Singletons & Liveness Registry"** (read it before any change touching mode / engines / shared in-memory state); per-batch history is archived at the BOTTOM. `SYSTEM_MANUAL.md` opens with a "How to read & maintain" note + Table of Contents (Chapters 1–12 + Part VI Appendices). **Maintenance convention for both:** write new architecture INTO the relevant Layer/Chapter and update the Table of Contents — do NOT append dated sections at the tail; per-batch notes go in the bottom archive / Part VI, and a still-core note folds up into its Layer/Chapter.
+<!-- /P5-MOVED id=P5-53 -->
+
+<!-- P5-MOVED id=P5-54 -->
+### P5-54 — moved from CLAUDE.md, under "9.4 THE FIND IS THE TRIGGER — EVERY OUT-OF-SCOPE FINDING GETS A DECLARED DISPOSITION, IN T"
+
+⛔⛔ **A HOME IS A NAME AND A PLACE IN THE QUEUE — NEVER A CALENDAR DATE. DO NOT PUT A DUE DATE ON A BATCH (Kyle directive 2026-08-25).** His words: *"Who knows what we're gonna be doing on September fifth?"* **Batches are SLOTTED into the current batch/task list where they make the most sense; they are not booked against a day.** A date on a batch is a **fake commitment** — nothing enforces it, the queue in front of it moves, and it expires into a stale record that reads as a missed deadline rather than as work that was correctly re-ordered.
+★ **THE ONE THING A DATE IS FOR, and it is the reason the mechanism exists at all: a period whose LENGTH is the point** — an observation window, a soak, a test period, a data-collection run. *"+48h gate"*, *"14-day soak"*, *"collect 30 days"*. **There the days ARE the content**, so the date is a measurement parameter, not a promise. `RUNNING_ISSUES` #87's *"+48h gate"* is the correct shape; **`B-GATE-GUARD` due 2026-09-05 was not.**
+<!-- /P5-MOVED id=P5-54 -->
+
+<!-- P5-MOVED id=P5-57 -->
+### P5-57 — moved from CLAUDE.md, under "6.5 CC → Langston (AI-to-AI delivery) — Discord native"
+
+> **🗄 The legacy Telegram SSH-deliver apparatus is ARCHIVED, not on standby** — the bridges were stopped and their unit files removed (#348). Reverting is a restore-from-archive job, not a switch flip. `1-system-manual/_archive/TELEGRAM_COMMS_APPARATUS_ARCHIVED_2026-07-01.md`.
+<!-- /P5-MOVED id=P5-57 -->

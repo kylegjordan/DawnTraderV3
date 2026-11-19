@@ -278,6 +278,10 @@
           {
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR/scripts/crew-tooling/warn-dedupe.mjs\" --reset"
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/crew-tooling/claude-md-cap.mjs\""
           }
         ]
       }
