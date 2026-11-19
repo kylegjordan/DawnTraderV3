@@ -63,6 +63,12 @@ The backbone is sound and should stay. Four gaps are worth fixing:
 
 **R2. A supporting census script, with its limits stated.** (Completeness, correctness.) The strongest change.
 - **What it is and is not (Kyle, 2026-11-19).** It is a script that searches and lists. It does no reasoning, and it replaces nothing. The code read, the runtime and database read, the System Impact Map, the System Manual, the ledger search and the provenance read all stay mandatory and unchanged. It hands the session a list of places to check and cross-checks the hand census. The session does the thinking.
+- **It builds on the code-search tool we already have; it does not replace it (provenance, 2026-11-19).**
+  - B-INSTRUMENTS-OVER-RULES (CC-A, closed 10-02) installed a language-server code search, `dt-typescript-lsp`. It answers "who calls this" from the compiler's own symbol graph: 65 exact references where text search gave 25 files, 15 of them prose (`SEARCH_SURFACES.md`).
+  - After the #1038 load fix (09-11) it works. Its pre-registered usage test still FAILED: zero calls by CC-B, CC-C and Infra over 14-day windows (`B_INSTRUMENTS_OVER_RULES_USAGE_MEASURE.md`).
+  - No step skill tells a session to use it. The lesson: a tool that is not written into the step is not used.
+  - So the census uses the language server for code references and adds only what it cannot see: schedulers, timers and start paths, database readers, and systemd, cron and PM2 starts. Step 2 then names the tools, and R0 records their output.
+- **Out of scope here:** search over governance prose (1,944 documents). `SEARCH_SURFACES.md` calls it "the real gap" and deliberately left it open: the misses there were paraphrase, not matching. It stays open.
 - **When it runs.** Step 2, alongside the hand census. Optionally a quick run at Step 1 to help bound the scope.
 - **Its output is a lead, never a verdict.** A hit is a place to read. A clean result is never evidence that nothing else is affected, the same standing as a clean helper result. Where it disagrees with the System Impact Map, the gap is a finding: either the map is stale or the script missed something.
 - **Its limits are investigated before it is used.** The pilot on closed batches measures what it finds, what it misses and what the hand audit missed. It produces a written list of blind spots, and the reliance written into the Step 2 skill is set from that list, not assumed. No batch depends on it until then.
