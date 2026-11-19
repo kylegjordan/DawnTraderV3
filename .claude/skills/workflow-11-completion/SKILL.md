@@ -85,6 +85,10 @@ Report to Kyle in the `CONDUCT.md` §6 format, move the board card, and **update
 
 ---
 
+## ◇ DRAFT — B-WORKFLOW-IMPROVE (non-blocking until the OBJ-9 pilot; any part becomes a gate only by the reviewer's recorded ruling)
+- Each objective is reported **YES / NO / PARTIAL / CLOSED-UNPROVEN**; the last carries owner, home, closing condition and failure condition.
+- Run the ledger checker on the batch ledger at the ref and quote its result line. During the draft period it is reported, not gated on. The batch ledger: `scripts/crew-tooling/ledger-schema.json`, checked by `node scripts/crew-tooling/ledger-validate.mjs <ledger.json>`.
+
 ## THE ORIGINAL RULES-FILE TEXT, PRESERVED VERBATIM
 > This is exactly what `CLAUDE.md` §2 held for this step before §2 was removed on 2026-08-21. It is kept word-for-word so the move loses nothing: the summary above is a derivation, and a derivation is not the rule. Where the two differ, **this block is authoritative.**
 

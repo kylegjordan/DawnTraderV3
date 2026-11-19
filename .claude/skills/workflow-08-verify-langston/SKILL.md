@@ -23,6 +23,10 @@ Card stays in **`Verification`**; set **Blocked on = Langston** for his second p
 
 ---
 
+## ◇ DRAFT — B-WORKFLOW-IMPROVE (non-blocking until the OBJ-9 pilot; any part becomes a gate only by the reviewer's recorded ruling)
+- **Two legs, each recorded.** (1) **Re-derive:** the reviewer re-runs the Step-7 proof at the ref with his own instrument. (2) **Challenge:** he tries one way the claim could be wrong that Step 7 did not test: a second path, a failed read treated as empty, or a meaning mismatch.
+- Each leg goes in the ledger's `step8_challenge` with actor, ref, instrument and result. A leg ruled on reported fact is recorded `unproven`, never `pass`. The batch ledger: `scripts/crew-tooling/ledger-schema.json`, checked by `node scripts/crew-tooling/ledger-validate.mjs <ledger.json>`.
+
 ## THE ORIGINAL RULES-FILE TEXT, PRESERVED VERBATIM
 > This is exactly what `CLAUDE.md` §2 held for this step before §2 was removed on 2026-08-21. It is kept word-for-word so the move loses nothing: the summary above is a derivation, and a derivation is not the rule. Where the two differ, **this block is authoritative.**
 

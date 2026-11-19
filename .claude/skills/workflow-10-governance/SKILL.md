@@ -263,6 +263,9 @@ Move the card to **`Governance`**.
 
 ---
 
+## ◇ DRAFT — B-WORKFLOW-IMPROVE (non-blocking until the OBJ-9 pilot; any part becomes a gate only by the reviewer's recorded ruling)
+- **CLOSED-UNPROVEN objectives get a home like any §9.4 finding:** a placed row in the active plan and a `RUNNING_ISSUES` entry naming owner, closing and failure condition. When the Step-11 artifact is a progress report, the declared `open` row in `GOVERNANCE_EXCEPTIONS.md` applies as before.
+
 ## THE ORIGINAL RULES-FILE TEXT, PRESERVED VERBATIM
 > This is exactly what `CLAUDE.md` §2 held for this step before §2 was removed on 2026-08-21. It is kept word-for-word so the move loses nothing: the summary above is a derivation, and a derivation is not the rule. Where the two differ, **this block is authoritative.**
 

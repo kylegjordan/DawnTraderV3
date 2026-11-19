@@ -45,6 +45,10 @@ For every service/module/function/route the batch touches, **record its ORIGINAL
 
 ---
 
+## ◇ DRAFT — B-WORKFLOW-IMPROVE (non-blocking until the OBJ-9 pilot; any part becomes a gate only by the reviewer's recorded ruling)
+- **Proof record per objective.** Each numbered objective carries a PROOF line written now, before any data: the instrument that will show it done, where that instrument runs, and its PASS and FAIL conditions. The batch ledger: `scripts/crew-tooling/ledger-schema.json`, checked by `node scripts/crew-tooling/ledger-validate.mjs <ledger.json>`.
+- **Criterion change control.** A PASS or FAIL condition changed after data arrives is a scope amendment: write PREVIOUSLY / NOW / REASON, and the reviewer rules on it before the new condition is graded.
+
 ## THE ORIGINAL RULES-FILE TEXT, PRESERVED VERBATIM
 > This is exactly what `CLAUDE.md` §2 held for this step before §2 was removed on 2026-08-21. It is kept word-for-word so the move loses nothing: the summary above is a derivation, and a derivation is not the rule. Where the two differ, **this block is authoritative.**
 

@@ -26,6 +26,9 @@ Card stays in **`Verification`** while you iterate. **Do not move it backwards**
 
 ---
 
+## ◇ DRAFT — B-WORKFLOW-IMPROVE (non-blocking until the OBJ-9 pilot; any part becomes a gate only by the reviewer's recorded ruling)
+- **CLOSED-UNPROVEN** formalizes the open item above. An objective whose proof cannot run inside the batch (it waits on an event, a quantity, or the other crew) takes status `closed-unproven`, with owner, placed home, closing condition and failure condition. It is never recorded `done`; the checker rejects done-while-unproven. The batch ledger: `scripts/crew-tooling/ledger-schema.json`, checked by `node scripts/crew-tooling/ledger-validate.mjs <ledger.json>`.
+
 ## THE ORIGINAL RULES-FILE TEXT, PRESERVED VERBATIM
 > This is exactly what `CLAUDE.md` §2 held for this step before §2 was removed on 2026-08-21. It is kept word-for-word so the move loses nothing: the summary above is a derivation, and a derivation is not the rule. Where the two differ, **this block is authoritative.**
 
