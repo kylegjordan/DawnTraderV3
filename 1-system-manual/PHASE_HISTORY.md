@@ -1536,3 +1536,7 @@ The xStock feed's stall watchdog no longer false-fires at the Sunday reopen: on 
 ### 2026-11-08 — B-DB-SIZE-RELIEF (CC-A, sprint stage 00 row 5c; Kyle KD-60) — 🟨 IN OBSERVATION (Langston Step 8 CONFIRMED 2026-11-15; record `Batch Completion/B_DB_SIZE_RELIEF_PROGRESS_REPORT.md`)
 
 **The database stops growing in a lump at every month-end, and the Data Archive panel stops lying.** The signal-evaluation archive keeps 15 days hot instead of 30, freeing about 20 GB. Six tables move from monthly to daily partitions at December 1, so their oldest data leaves a day at a time instead of 17.5 GB at once. The panel now says how far back it can see, and shows labelled estimates where an exact count took over a minute. The December cutover is in place; whether the sweep and the month-end shrink behave as designed is read after it.
+
+### 2026-11-19 — B-TOKEN-ECONOMY (PM Claude, sprint stage 0 row 1; Kyle KD-103) — 🟨 IN OBSERVATION (Langston Step 8 PASS with conditions 2026-11-19; record `Batch Completion/B_TOKEN_ECONOMY_PROGRESS_REPORT.md`)
+
+Each Claude session now costs less per turn: a larger memory window that compacts later, cheaper helper agents, a rules file cut by about 37% with every moved passage proved present at its new home, and repeat warnings shown once. The shorter alert list runs in shadow until it has 50 checked samples. Crew rollout and the Codex trial wait for the crew to resume.

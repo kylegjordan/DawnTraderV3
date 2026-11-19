@@ -195,8 +195,8 @@ jobs:
         if: ${{ !cancelled() }}
         run: node scripts/governance-checker/heartbeat-check.test.mjs
 
-      # B-TOKEN-ECONOMY P5: CLAUDE.md size cap and the move ledger. WARN-ONLY
-      # until Langston rules on blocking: --ci prints ::warning:: and exits 0.
+      # B-TOKEN-ECONOMY P5: CLAUDE.md size cap (WARN-ONLY: --ci prints ::warning:: and
+      # exits 0) and the move ledger (BLOCKING since Step 4, Langston 2026-11-19: no --ci).
       # The self-tests do fail the step, since a broken checker is not a warning.
       - name: CLAUDE.md size cap (warn-only) and move ledger (blocking)
         if: ${{ !cancelled() }}
