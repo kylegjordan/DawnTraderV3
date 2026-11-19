@@ -76,7 +76,7 @@
 
 - **USAGE 87% @ ~18:23Z 11-16:** all four AT SAFE STOP (OLD 6a67e252e, combined deploy after 21:00Z only if room; Infra clean, birth-cap unattended; NEW 20:30Z PFC read or re-run next US session; ANALYST d2c30001a, timed reads 11-17/18/21/23). At 90% run pm-usage-stop (guard cron 6b575bdd).
 
-- **B-TOKEN-ECONOMY + B-WORKFLOW-IMPROVE (KD-103, PM owns+implements; KD-102 widens 5b B-CONVERSATION-INDEX to gov docs+commits):** whole design @8cd8d360a (pm/reviews/2026-11-19_CREW_EFFICIENCY_AND_WORKFLOW_DESIGN.md) sent to Coltrane 1572772570988548250 for approval; implement only what he approves; must work for Claude AND Codex. Coltrane ON (not in stop list; leave on). Plan rows: stage 0 (PM Claude) 1-2.
+- **B-TOKEN-ECONOMY + B-WORKFLOW-IMPROVE (KD-103, PM owns+builds; KD-102 widens 5b):** STEP: 1 of 11 passed (Langston, one direct langston-call 11-19 14:08Z, bridge left OFF per Kyle; verdicts `Langston Design Asks/B_TOKEN_ECONOMY_B_WORKFLOW_IMPROVE_STEP1_VERDICTS.md`); scopes r2 @5aa251e7a. NEXT STEP: 2 of 11 (audit+plan) for both; each later gate needs Langston (Coltrane refuses gates in CLAUDE mode). Board cards in Scope. Coltrane ON.
 
 # OPEN
 - Archived 2026-11-04 · stale-local-session-ids → `1-system-manual/pm/archive/memory/2026-11.md`
