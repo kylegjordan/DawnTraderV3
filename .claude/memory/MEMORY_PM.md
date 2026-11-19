@@ -76,7 +76,7 @@
 
 - **USAGE 87% @ ~18:23Z 11-16:** all four AT SAFE STOP (OLD 6a67e252e, combined deploy after 21:00Z only if room; Infra clean, birth-cap unattended; NEW 20:30Z PFC read or re-run next US session; ANALYST d2c30001a, timed reads 11-17/18/21/23). At 90% run pm-usage-stop (guard cron 6b575bdd).
 
-- **B-TOKEN-ECONOMY (11-18):** proposal r4 @49dba0a73, Coltrane PROCEED WITH CONDITIONS (all 6 folded). Kyle: A-D ok, pacer no, cheap models = helpers only. Coltrane turned ON 11-18 on Kyle's word (not in stop list; leave on). Workflow review prelim @aa14c2114 (pm/reviews/2026-11-19_...), sent to Coltrane (msg 1572750419170693174), awaiting him + Kyle. Kyle said run at 92%.
+- **B-TOKEN-ECONOMY + B-WORKFLOW-IMPROVE (KD-103, PM owns+implements; KD-102 widens 5b B-CONVERSATION-INDEX to gov docs+commits):** whole design @8cd8d360a (pm/reviews/2026-11-19_CREW_EFFICIENCY_AND_WORKFLOW_DESIGN.md) sent to Coltrane 1572772570988548250 for approval; implement only what he approves; must work for Claude AND Codex. Coltrane ON (not in stop list; leave on). Plan rows: stage 0 (PM Claude) 1-2.
 
 # OPEN
 - Archived 2026-11-04 · stale-local-session-ids → `1-system-manual/pm/archive/memory/2026-11.md`
