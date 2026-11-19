@@ -1,7 +1,7 @@
 # B-TOKEN-ECONOMY — PRE-IMPLEMENTATION AUDIT AND IMPLEMENTATION PLAN
 
 change-class: non_architecture · owner: PM Claude (KD-103) · routine reviewer: Langston (CLAUDE mode, generation 3) · scope: `B_TOKEN_ECONOMY_SCOPE.md` r2 @ `5aa251e7a`
-STEP: 2 of 11 · NEXT STEP: 3 of 11 (after Langston clears this document)
+STEP: 2 of 11 (gate passed with conditions, r2) · NEXT STEP: 3 of 11
 
 ## PREVIOUSLY STATED vs NOW (read first)
 - **PREVIOUSLY STATED:** "Map the PM clone in `alert-split.mjs`" (scope OBJ-6). **NOW:** the PM clone stays unmapped and keeps the full list. **REASON:** PM's role file obliges it to chase every governance-overdue alert across the crew (`PM_CLAUDE_RULES.md` line 15). Narrowing PM to "its own" alerts would hide the alerts it exists to chase. The delta (A3) makes the full list cheap.
@@ -63,7 +63,7 @@ STEP: 2 of 11 · NEXT STEP: 3 of 11 (after Langston clears this document)
 - `check-reviewer-siblings.mjs:29`, `dt-backup-sync.sh:59` and `dt-review_tests.sh` match its name.
 - No code found that parses its headings or line numbers. This is an absence claim, sent to a fresh reader (record below).
 - **Citations:** 787 lines across 304 tracked `.md` files cite "CLAUDE.md §". Every section heading therefore stays in place as a forwarding address, the same rule used when §2 and §9.5 moved.
-- `AGENTS.md` line 26 states "~118 KB", but the file measures 122,263 B. It is swept (scope r2 condition 5).
+- `AGENTS.md:25` states "~118 KB", but the file measures 122,263 B. It is swept (scope r2 condition 5).
 
 **A5b — one content reader found by the fresh reader, re-derived at the ref.**
 - `scripts/measure-gate/test-guard-measurement-shape.mjs` (lines ~180-240) takes CLAUDE.md, `.claude/memory/MEMORY.md` and `.claude/settings.local.json` as "homes". It extracts every mandated alert or inbox read by regex: backticked `tail`/`cat` of system-alerts, cc-discord-inbox or cc-wake; backticked `due-alerts.py`; fenced `ssh|tail|cat` lines; and allowlist `"Bash(...)"` entries.
@@ -114,7 +114,7 @@ None is auto-loaded, so moving text into them adds no per-turn cost.
 | P2 | OBJ-2 | Nothing new; the file reaches each clone at pull | A1 | At resume, `get_usage(session_id)` per session shows `autoCompactsAtPercent` about 25; the first compaction per session repeats P1's checks |
 | P3 | OBJ-3 | Codex: `model_auto_compact_token_limit` in a project `.codex/config.toml` if honoured, else in `~/.codex/config.toml` | A9 | On the first Codex session after build, observe the effective limit and its scope. **Waits for a Codex session;** if none happens before close, OBJ-3 closes CLOSED-UNPROVEN with that home |
 | P4 | OBJ-4 | `settings.local.json` `env.CLAUDE_CODE_SUBAGENT_MODEL = "sonnet"` (no FORCE, so a requested model still wins); `.claude/agents/Explore.md` (`model: haiku`, read-only tools; docs: a project agent named Explore overrides the built-in); `availableModels` = Opus 5.5, Sonnet, Haiku; two lines in CLAUDE.md beside the delegation guidance. Codex `[agents]` roles with the P3 canary | A1, A8 | Four controls read from each subagent transcript's assistant `model`: default gives sonnet, explicit haiku gives haiku, requested Opus 5.5 gives opus-5-5, a model above the list gives a fallback (docs: a fallback, unnamed). Positive control: the earlier sonnet helpers in this transcript |
-| P5 | OBJ-5 | CLAUDE.md edited down to ≤ 78,000 B. Move depth to A6's destinations; keep every heading and the operative rules (Coltrane r4 condition 3); §8 becomes a pointer; sweep stated-size pointers (`AGENTS.md:26`). `Change Lists/B_TOKEN_ECONOMY_MOVE_LEDGER.json` (passage hash, origin heading, destination path) checked by `scripts/crew-tooling/move-ledger-check.mjs` (each passage present at its destination, absent from CLAUDE.md). `Change Lists/B_TOKEN_ECONOMY_REACHABILITY.md` (each kept or moved rule: Claude path, Codex path). Size control: `scripts/crew-tooling/claude-md-cap.mjs` run at session start (Claude) and as a CI step (both crews), **warn-only until Langston rules on blocking** (the B-WORKFLOW-IMPROVE ground rule, applied here) | A5, A6, A7, A9 | `test-guard-measurement-shape.mjs` passes M0 for all three homes; the move-ledger check passes and fails on a seeded missing passage; the cap check fails on a scratch copy at 78,001 B; the duplicate audit (`move-ledger-check --dupes`) finds no passage in two homes; `fresh-rules` announces the change |
+| P5 | OBJ-5 | CLAUDE.md edited down to ≤ 78,000 B. Move depth to A6's destinations; keep every heading and the operative rules (Coltrane r4 condition 3); §8 becomes a pointer; sweep stated-size pointers (`AGENTS.md:25`). `Change Lists/B_TOKEN_ECONOMY_MOVE_LEDGER.json` (passage hash, origin heading, destination path) checked by `scripts/crew-tooling/move-ledger-check.mjs` (each passage present at its destination, absent from CLAUDE.md). `Change Lists/B_TOKEN_ECONOMY_REACHABILITY.md` (each kept or moved rule: Claude path, Codex path). Size control: `scripts/crew-tooling/claude-md-cap.mjs` run at session start (Claude) and as a CI step (both crews), **warn-only until Langston rules on blocking** (the B-WORKFLOW-IMPROVE ground rule, applied here) | A5, A6, A7, A9 | `test-guard-measurement-shape.mjs` passes M0 for all three homes; the move-ledger check passes and fails on a seeded missing passage; the cap check fails on a scratch copy at 78,001 B; the duplicate audit (`move-ledger-check --dupes`) finds no passage in two homes; `fresh-rules` announces the change |
 | P6 | OBJ-6 | `scripts/crew-tooling/alert-delta.mjs` (state keyed by `session_id`, under `~/.claude/cc-wake-state/`); `inject-due-alerts.mjs` reads stdin `session_id`. A SessionStart marker (start, resume or compact) resets the session to the full list. Delta semantics: new, owner, severity, due state, resolved or gone, plus a count line telling zero, unchanged and check-failed apart. The baseline advances only after a complete successful read. **Shipped in shadow:** it logs the delta it would inject while still injecting the full list, for 50 prompts or 3 days, then switches if every shadow delta matches a recomputed diff. Codex keeps the full manual read | A3 | Seed a new alert (shows once, then counted as unchanged); an unchanged queue shows "unchanged N", never silence; a forced filter failure shows "check failed"; `test-alert-split.mjs` stays green |
 | P7 | OBJ-7 | Extend `guard-result-shape`'s dedupe pattern (sha256 of `session_id` plus warning kind) to `guard-measurement-shape` and `guard-stale-fetch`, and to `guard-result-shape`'s other legs. The SessionStart compact marker clears the keys, so the first warning after a compaction shows. **Sinks are still written on every event** (A4, the selftest depends on them) | A4 | An identical repeat is suppressed; a different kind shows; after the compact marker it shows again; `hook-selftest` still reports running |
 | P8 | OBJ-9 | Text edits to `pm-usage-stop`, `pm-codex-usage-stop`, `pm-transition-to-codex` and `pm-transition-to-claude`: name the settings and the smoke check | A1, A9 | Each names them at the ref |
@@ -149,3 +149,24 @@ None is auto-loaded, so moving text into them adds no per-turn cost.
 
 ## Fresh-reader record
 REVIEWER: claim-only · "nothing in code depends on CLAUDE.md's internal structure; only its name is matched" (A5) · verdict: HIT — `test-guard-measurement-shape.mjs` reads CLAUDE.md content (M0) · re-derived y (A5b, at the ref, with its caller census). The original A5 absence claim is withdrawn and replaced by A5b. Server-side readers on Helsinki and staging were not searched; `dt-push-notice.sh:182` matches the name only.
+
+## r2 — Langston's Step-2 conditions (2026-11-19 14:30Z, at `0b4bb0a8d`; verbatim in `Langston Design Asks/B_TOKEN_ECONOMY_B_WORKFLOW_IMPROVE_STEP1_VERDICTS.md`), all accepted
+1. **The size pointer is at `AGENTS.md:25`.** That line reads: ⚠️ `CLAUDE.md` is large (~118 KB). It is corrected above and in the scope.
+2. **The P5 move ledger also sweeps pinned line citations.** At the ref there are **101** `CLAUDE.md:<line>` citations (Langston's count). The live one is `.claude/skills/workflow-10-governance/SKILL.md:205` (pins `CLAUDE.md:108`), plus three in `test-guard-measurement-shape.mjs`. Each is re-pointed to a heading, or to the new line at the post-slim ref. The ledger lists every citation with its old and new target.
+3. **Entry points, censused at Step 3 before P6 and P7 are built.**
+   - The six registered hook events in `.claude/settings.local.json` are SessionStart, UserPromptSubmit, InstructionsLoaded, PreToolUse, PostToolUse and **PreCompact** (→ `dt_archive_trigger.py precompact`).
+   - **HYPOTHESIS, not yet established:** "SessionStart carries a compact source". The registration matcher is `startup|resume|compact`, but no line of ours implements it. P6 and P7 will use whichever event is shown to fire once per compaction, PreCompact or SessionStart(compact), tested on the canary's real compaction.
+   - **The deletes leg:** P5 deletes CLAUDE.md content. Its state-read census is A5 plus A5b plus condition 2. P6 and P7 delete no state, because sinks are kept and dedupe keys only expire.
+4. **The canary is mechanical.**
+   1. Apply the P1 settings in the PM clone's working tree, uncommitted. This is intentional local config under §7.1 check 3, and only PM sees it.
+   2. Run the canary.
+   3. Commit and push only after the canary verdict.
+
+   That restores scope OBJ-1 (PM only) and OBJ-2 (rollout by push) as written. The "crew is stopped" reasoning is withdrawn as the safeguard.
+5. **The mandated read P5 keeps is named:** the §10.5 by-hand `ssh root@188.245.193.8 'python3 -' < scripts/due-alerts.py` line in CLAUDE.md. The §6.6 inbox read also stays.
+6. **Controls or tags at Step 3 for:**
+   - **A8** "no Claude weekly-percent series": a grep with a positive control (the Codex readings it does find).
+   - **A1's precedence chain:** observed in the canary (the project-local value wins over user).
+   - **A2's `autoCompactsAtPercent` 97:** re-read and recorded with the session id and time.
+
+   Until then each stays tagged RULED ON REPORTED FACT.
