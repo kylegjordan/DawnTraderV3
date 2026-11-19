@@ -91,6 +91,40 @@
 
 **Read-4 cause established — the missing crypto paper Net Expectancy archive rows are working-as-designed after `B-CLASS-LEG-FILL-MODE`, not a silent SQE/archive failure.** Exact deployed ref `097306d1a91d5bb0dfc9cc9d376ec84887861aeb`, deployed `2026-10-15T16:29:18Z`: the fill-policy overlay first refuses a crypto `maker_only` choice unless adjusted maker Net Expectancy is positive (`maker-taker-decision.ts:209-220` at that ref), and the orchestrator returns before constructing or running the SQE input (`signal-orchestrator.ts:1097-1106`; SQE begins at `:1143-1166`). Every value that does reach the SQE is therefore already positive; the SQE's Net Expectancy failure requires that same value to be non-positive (`signal_quality_evaluator.ts:355-364`), so that failure is unreachable on this path. Before the deploy, read 3's registered positive control found 2,075 vwap_bounce crypto paper Net Expectancy rejections; after it, the retained archive scan found **24,683,796 crypto paper archive rows from 2026-10-27 onward, including 6,087 SQE rows, and 0 Net Expectancy reasons**. The log control above proves the replacement refusal is active for vwap_bounce itself. **DISPOSITION: established at read 5; no defect and no new work.**
 
+**WEEKLY READ 6, 2026-11-19 23:25:16Z UTC (alert `f3dca179`, due 11-18 12:00Z; taken ~35 h late because of Kyle's usage stop 11-16 19:40Z → 11-19 23:00Z).**
+- **Queries:** read 5's form, in one repeatable-read snapshot via `dt-sql` (KD-96, the sanctioned read). `dt-sql` is read-only by construction, so the read-only `SET` was removed.
+- **Cells:** split at the reset; mode = paper.
+- **Shares of opens:** closed + still open since the reset.
+- **Reject census:** since read 5 (`2026-11-11 12:43:38Z`), non-VTS, numbers in reasons collapsed, no LIMIT.
+- **Positive control for the census:** four of the five cells return rows, so the instrument reaches the archive.
+- ⚠️ **Not a 7-day sample:** this window is **8.4 days** long, and it includes the 8c real-price switch-on for crypto (KD-91, 2026-11-16 09:45:01Z). Crypto cells after that instant are 8c-affected and are not separated here.
+
+| setting | before the reset (deploy → 10-06) | since the reset (10-06 → 11-19) | where its signals stop (since read 5) |
+|---|---|---|---|
+| strong_bull_trend crypto, reach 6.5 | 28 closed (27 filled), 10 winners, average −1.23 %, net −$52.26 | **113 closed (88 filled), 24 winners, average −1.76 %, net −$64.59**; 5 still open | 3,772 admitted; 1,878 duplicate pair; 732 RTB price shadow; 44 friction-coverage shadows; 10 regime weight; 3 + 3 retired by the RTB price check (target / stop) |
+| strong_bull_trend xStock, reach 6.5 + min_rr 1.95 | 0 | **122 closed (109 filled), 12 winners, average −1.00 %, net −$34.12**; 4 still open | 507 admitted; 438 RTB price shadow; 88 friction-coverage shadows; 19 duplicate pair; 11 + 2 retired by the RTB price check (stop / target); 2 regime weight; 1 entry window; 1 entry-fill stop |
+| vwap_pullback crypto, min_rr 1.95 | 0 | 2 closed (2 filled), 1 winner, average +1.30 %, net −$0.16 | 32 admitted; 29 duplicate pair; 1 RTB price shadow; 1 friction-coverage shadow |
+| vwap_bounce crypto, min_rr 1.95 | 0 | 0 | 0 archived rows. It still stops before the SQE on `maker_not_positive`, as established at read 5. |
+| vwap_pullback xStock, reach 6.0 | 1 closed (1 filled), −1.14 %, net −$1.92 | **379 closed (334 filled), 62 winners, average −0.93 %, net −$114.41**; 1 still open | 346 admitted; 173 RTB price shadow; 68 friction-coverage shadows; 3 stop distance at fill; 3 retired by the RTB price check (stop); 2 duplicate pair; 1 entry-fill stop; 1 entry window |
+
+**PREVIOUSLY STATED (read 5, 11-11):**
+- strong_bull_trend crypto since the reset: 55 filled, 14 winners, −3.38 %, −$72.45;
+- strong_bull_trend xStock: 27 filled, 3 winners, −1.22 %, −$12.18;
+- vwap_pullback crypto: 1 filled, −$2.63;
+- vwap_pullback xStock: 273 filled, 54 winners, −0.92 %, −$99.12.
+
+**NOW:**
+- strong_bull_trend crypto: 88 filled, 24 winners, −1.76 %, −$64.59;
+- strong_bull_trend xStock: 109 filled, 12 winners, −1.00 %, −$34.12;
+- vwap_pullback crypto: 2 filled, −$0.16;
+- vwap_pullback xStock: 334 filled, 62 winners, −0.93 %, −$114.41.
+
+**REASON:** 8.4 more days of trading. The 33 strong_bull_trend crypto trades filled since read 5 netted about +$7.86 between them, lifting the cell's average from −3.38 % to −1.76 %. The 82 strong_bull_trend xStock trades filled since read 5 netted about −$21.94.
+
+**Shares of opens since the reset:**
+- strong_bull_trend: **118 of 164 crypto opens (72.0 %)** (read 5: 72 of 100, 72.0 %);
+- vwap_pullback: **380 of 914 xStock opens (41.6 %)** (read 5: 322 of 652, 49.4 %).
+
 ### (c) Objectives
 | objective | result | evidence |
 |---|---|---|
