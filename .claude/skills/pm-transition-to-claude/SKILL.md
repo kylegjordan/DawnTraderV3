@@ -31,3 +31,15 @@ Do not issue the order until every clone reads 0 behind / 0 ahead, the handover 
 ## 3. Completion
 
 Complete only when: the switch reads CLAUDE; Langston reads active/enabled; no outgoing receipt is missing; Kyle's one message has started PM Claude; PM Claude has visibly confirmed that each existing building Claude session picked up the correct batch and step, or has named the single unavailable session Kyle must open; every clone is synced; all five outside notes copies match the pushed repo blobs by hash and byte size; the handover sheet and PM block are pushed; and all open Coltrane reviews have a Langston dispatch. Report one plain-language completion line to Kyle with only an unavailable session, if any.
+
+## Token-economy settings and their smoke check (B-TOKEN-ECONOMY OBJ-9)
+**Part of completion: every returning Claude session passes the smoke check below.** It is a restarted session by definition, so a `contextWindow` of 1,000,000 means it did not pull before starting.
+
+**What the repo carries (Claude only; reaches each clone at pull, applies only after that session restarts — canary Obs 1-2, `Claude Comms and Packages/Change Lists/B_TOKEN_ECONOMY_CANARY.md`):**
+- `.claude/settings.local.json`: `autoCompactWindow: 250000` and `idleCompaction: false` (a 250k window, compaction near 87% of it).
+- `.claude/agents/Explore.md`: Explore helpers run on Haiku. `.claude/agents/general-purpose.md`: default helpers on Sonnet — **only once it is committed**; until then it exists in PM's clone alone.
+- Hooks: `alert-delta.mjs` (shadow mode; the full alert list is still injected), `warn-dedupe.mjs` (each warning kind once per session), `claude-md-cap.mjs` (silent while `CLAUDE.md` is under 78,000 B).
+
+**Smoke check, per Claude session after its restart:** `get_usage(session_id)` shows `contextWindow` 250,000, and from any clone `node scripts/crew-tooling/claude-md-cap.mjs --report` and `node scripts/crew-tooling/move-ledger-check.mjs --dupes` both report OK. **A session still showing 1,000,000 has not restarted since the pull: name it to Kyle; never work around it.**
+
+**Codex reads none of these files.** It reaches the same rules through `AGENTS.md`, which sends it to `CLAUDE.md`, whose pointers name every moved passage's home; the two checks run in CI for both crews. Whether a Codex setting can mirror the 250k window is the P3 Codex canary, not yet run (its config is per user, `~/.codex/config.toml`).

@@ -32,3 +32,15 @@ This is the Codex-side equivalent of PM Claude's stop duty, not a copy of its me
 3. Resume only the Scheduled task ids recorded as paused by this stop, and read each back ACTIVE.
 4. Send the resume instruction directly to each existing Codex chat, then verify its reply and that it pulled and read its own POSITION block. A message accepted while another turn is active waits and is not proof of action. Ask Kyle to open a chat only if that chat no longer exists or no direct start/resume control has been proven for it.
 5. Add the resume time and readbacks to the stop block. Do not issue `crew-switch start` unless Kyle separately asked for a crew transition.
+
+## Token-economy settings and their smoke check (B-TOKEN-ECONOMY OBJ-9)
+**A Codex allowance stop or resume changes none of these.** At a Codex resume, run only the two repo checks below from a Codex clone; the Claude settings are left exactly as they are.
+
+**What the repo carries (Claude only; reaches each clone at pull, applies only after that session restarts — canary Obs 1-2, `Claude Comms and Packages/Change Lists/B_TOKEN_ECONOMY_CANARY.md`):**
+- `.claude/settings.local.json`: `autoCompactWindow: 250000` and `idleCompaction: false` (a 250k window, compaction near 87% of it).
+- `.claude/agents/Explore.md`: Explore helpers run on Haiku. `.claude/agents/general-purpose.md`: default helpers on Sonnet — **only once it is committed**; until then it exists in PM's clone alone.
+- Hooks: `alert-delta.mjs` (shadow mode; the full alert list is still injected), `warn-dedupe.mjs` (each warning kind once per session), `claude-md-cap.mjs` (silent while `CLAUDE.md` is under 78,000 B).
+
+**Smoke check, per Claude session after its restart:** `get_usage(session_id)` shows `contextWindow` 250,000, and from any clone `node scripts/crew-tooling/claude-md-cap.mjs --report` and `node scripts/crew-tooling/move-ledger-check.mjs --dupes` both report OK. **A session still showing 1,000,000 has not restarted since the pull: name it to Kyle; never work around it.**
+
+**Codex reads none of these files.** It reaches the same rules through `AGENTS.md`, which sends it to `CLAUDE.md`, whose pointers name every moved passage's home; the two checks run in CI for both crews. Whether a Codex setting can mirror the 250k window is the P3 Codex canary, not yet run (its config is per user, `~/.codex/config.toml`).

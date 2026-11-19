@@ -27,3 +27,15 @@ When the crew is returning from Codex, first read the codex-to-claude handover s
 - Nothing here stops Kyle's own use or another project's.
 - Coltrane runs on ChatGPT, not Claude, and is never switched off.
 - A session that was mid-turn when the stop arrived may spend a little more finishing it.
+
+## Token-economy settings and their smoke check (B-TOKEN-ECONOMY OBJ-9)
+**At a stop, touch none of these: they cost nothing while sessions are stopped.** At resume, after each session re-arms its watcher, run the smoke check below on it; a resumed session is a restarted one, so this is when the settings first bite.
+
+**What the repo carries (Claude only; reaches each clone at pull, applies only after that session restarts — canary Obs 1-2, `Claude Comms and Packages/Change Lists/B_TOKEN_ECONOMY_CANARY.md`):**
+- `.claude/settings.local.json`: `autoCompactWindow: 250000` and `idleCompaction: false` (a 250k window, compaction near 87% of it).
+- `.claude/agents/Explore.md`: Explore helpers run on Haiku. `.claude/agents/general-purpose.md`: default helpers on Sonnet — **only once it is committed**; until then it exists in PM's clone alone.
+- Hooks: `alert-delta.mjs` (shadow mode; the full alert list is still injected), `warn-dedupe.mjs` (each warning kind once per session), `claude-md-cap.mjs` (silent while `CLAUDE.md` is under 78,000 B).
+
+**Smoke check, per Claude session after its restart:** `get_usage(session_id)` shows `contextWindow` 250,000, and from any clone `node scripts/crew-tooling/claude-md-cap.mjs --report` and `node scripts/crew-tooling/move-ledger-check.mjs --dupes` both report OK. **A session still showing 1,000,000 has not restarted since the pull: name it to Kyle; never work around it.**
+
+**Codex reads none of these files.** It reaches the same rules through `AGENTS.md`, which sends it to `CLAUDE.md`, whose pointers name every moved passage's home; the two checks run in CI for both crews. Whether a Codex setting can mirror the 250k window is the P3 Codex canary, not yet run (its config is per user, `~/.codex/config.toml`).
