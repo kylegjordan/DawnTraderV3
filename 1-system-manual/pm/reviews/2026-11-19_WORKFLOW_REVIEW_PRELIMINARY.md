@@ -117,7 +117,18 @@ The reviewer tries to falsify the proof. If either leg cannot be done, the objec
   - A supporting list, never a verdict.
   - Its limits are studied before anyone relies on it: work that never touched a file, decisions recorded only in chat, and commits without a batch id.
   - Proven by replaying known misses: #174, missed for seven weeks because the search was by symptom; the shadowed-gates finding whose code comment cited a three-day-old approved decision; and the database-warning decision re-asked after KD-60.
-- **Not recommended first: a meaning-based index (embeddings).** It is another matcher, with the same first-plausible-hit failure, plus infrastructure to run and keep fresh. Reconsider only if the pilot shows the component list leaves real misses.
+- **Second leg: reuse Kyle's existing search-index method, by widening a batch already placed (Kyle, 2026-11-19).**
+  - **The method is proven twice in Kyle's other systems.** The Command Center (`C:\CommandCenter\docs\INDEX_PLAN.md`, `SEARCH_FIX_PLAN.md`) was "built in the same steps as the Insightra QMS platform":
+    - extract text;
+    - a keyword index (SQLite full-text) and 200-word passages;
+    - meaning vectors from a small local multilingual model (e5-small class), with no per-item model cost;
+    - hybrid ranking, a coverage line on every answer, and every result linking to its original;
+    - a test set of real questions with known answers, scored before and after each change.
+  - **B-CONVERSATION-INDEX (KD-83/KD-88, Infra, pre-sprint) is already placed to apply this method to crew conversations** (`Langston Design Asks/B_CONVERSATION_INDEX_INPUTS.md`). It covers the limit noted above, decisions recorded only in chat.
+  - **The recommendation: one engine, more sources.** Add the governance documents (64 MB) and commit messages to that same index, rather than building a second one. Ours is a small corpus next to the Command Center's millions of passages, so it needs no server resize.
+  - **Honest measure from the Command Center.** On its 16-question test set, accuracy was the same with and without meaning vectors (15 of 16, then 16 of 16 once a test artifact was fixed). Its own rule follows from that: keep the meaning layer only if the test set shows it helps. Here the test set is our known misses, scored keyword-only against keyword plus meaning.
+  - **Same standing as the rest of R5.** The index produces the shortlist; the session still reads whole and cites accepted and rejected lines. Meaning search addresses paraphrase; it does not fix stopping at the first plausible hit, which only the whole read does.
+  - **A placement change.** Widening B-CONVERSATION-INDEX's sources changes an agreed batch, so it is Kyle's call, after a slot check.
 
 **Also:**
 - **Tests:** each load-bearing objective maps to named tests in R0, with one representative red mutant each.
