@@ -198,13 +198,13 @@ jobs:
       # B-TOKEN-ECONOMY P5: CLAUDE.md size cap and the move ledger. WARN-ONLY
       # until Langston rules on blocking: --ci prints ::warning:: and exits 0.
       # The self-tests do fail the step, since a broken checker is not a warning.
-      - name: CLAUDE.md size cap and move ledger (warn-only)
+      - name: CLAUDE.md size cap (warn-only) and move ledger (blocking)
         if: ${{ !cancelled() }}
         run: |
           node scripts/crew-tooling/claude-md-cap.mjs --self-test
           node scripts/crew-tooling/move-ledger-check.mjs --self-test
           node scripts/crew-tooling/claude-md-cap.mjs --ci --report
-          node scripts/crew-tooling/move-ledger-check.mjs --ci --dupes
+          node scripts/crew-tooling/move-ledger-check.mjs --dupes
 
       # B-PLAN-CURRENCY-CHECK P43 (P30/Q33 form): the weekly census's rule
       # fixtures, pure over text (no git, no network, no files). Its own step

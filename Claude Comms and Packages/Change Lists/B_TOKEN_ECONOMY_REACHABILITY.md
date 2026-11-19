@@ -44,12 +44,12 @@ Every heading (44 before, 44 after), every hard rule's operative sentence, the �
 ## How we know nothing was lost
 
 - `node scripts/crew-tooling/move-ledger-check.mjs --dupes` — every passage is at its destination exactly once, byte-identical to what left (sha256), gone from `CLAUDE.md`, its pointer id still in `CLAUDE.md`, and found in no second home. `--self-test` proves it fails on a missing passage, an edited one, one put back, and a lost pointer.
-- `node scripts/crew-tooling/claude-md-cap.mjs --report` — the size against the 78,000 B cap. Runs at every Claude session start (silent under the cap) and in CI for both crews (warn-only until Langston rules on blocking).
+- `node scripts/crew-tooling/claude-md-cap.mjs --report` — the size against the 78,000 B cap. Runs at every Claude session start (silent under the cap) and in CI for both crews, warn-only (Langston, Step 4: a size gate that blocks honest work teaches the crew to route around it). The `move-ledger-check --dupes` line is BLOCKING in CI from Step 4.
 - `scripts/measure-gate/test-guard-measurement-shape.mjs` M0 — still finds the mandated commands in all three homes (`CLAUDE.md`, `MEMORY.md`, `settings.local.json`).
 
 ## Line-number citations
 
-107 `CLAUDE.md:<line>` citations exist in the repo. Two were live (a skill and a test) and now cite the section by name. The other 105 sit in frozen records (issue entries, plan rows, completion reports) and are **mapped in the ledger, not rewritten**: each one resolves against `CLAUDE.md` as of the commit that wrote it, and the ledger shows where the pre-P5 line now lives.
+109 `CLAUDE.md:<line>` citations exist in the repo (corrected at Step 4, Langston: the earlier 107 was the frozen count relabelled as the total). Two were live (a skill and a test) and now cite the section by name. The other 107, at 95 distinct sites, sit in frozen records (issue entries, plan rows, completion reports) and are **mapped in the ledger, not rewritten**: each one resolves against `CLAUDE.md` as of the commit that wrote it, and the ledger shows where the pre-P5 line now lives.
 
 ## Flagged for Langston at Step 4
 

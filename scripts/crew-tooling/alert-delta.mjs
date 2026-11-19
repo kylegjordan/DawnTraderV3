@@ -18,16 +18,24 @@
 //     is PASS over >= 50 prompts or >= 3 days AND Langston has reviewed the log. Switching is a separate commit.
 // FAIL-OPEN: every function here swallows its own errors; a state problem means "full list", never silence.
 // Codex has no hooks; it keeps the full manual read (pre-audit PREVIOUSLY/NOW block 2).
-import { readFileSync, writeFileSync, appendFileSync, mkdirSync, renameSync } from 'node:fs';
+import { readFileSync, writeFileSync, appendFileSync, mkdirSync, renameSync, statSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
-export const VERSION = 'alert-delta 1.0 (B-TOKEN-ECONOMY P6, shadow)';
+export const VERSION = 'alert-delta 1.1 (B-TOKEN-ECONOMY P6, shadow)';
 const BASE = () => process.env.ALERT_DELTA_DIR || join(homedir(), '.claude', 'cc-wake-state', 'alert-delta'); // env: tests only
 const SHADOW_LOG = () => process.env.ALERT_DELTA_LOG || join(homedir(), '.claude', 'alert-delta-shadow.jsonl');
 const SAFE_ID = /^[A-Za-z0-9_-]{1,80}$/;
+// Step-4 defect 3 (Langston): the shadow log is bounded. Past LOG_MAX_BYTES it rotates to `<log>.1` (one kept);
+// --verify reads `.1` then the live file.
+const LOG_MAX_BYTES = 5 * 1024 * 1024;
+function appendLog(line, enc) {
+  const f = SHADOW_LOG();
+  try { if (statSync(f).size > LOG_MAX_BYTES) renameSync(f, f + '.1'); } catch { /* no log yet */ }
+  appendFileSync(f, line, enc);
+}
 
 // alerts: [{id, sev, title}] (complete due set); owners: the wake filter's owner record or null.
 export function currentSet(alerts, owners) {
@@ -102,7 +110,7 @@ export function shadowStep({ sessionId, alias, ok, why, alerts, owners, visible 
     const st = loadState(sessionId) || {};
     const ts = new Date().toISOString();
     if (!ok) {
-      appendFileSync(SHADOW_LOG(), JSON.stringify({ ts, v: VERSION, session_id: sessionId, alias, status: 'check_failed', why,
+      appendLog(JSON.stringify({ ts, v: VERSION, session_id: sessionId, alias, status: 'check_failed', why,
         would_inject: `ALERT CHECK COULD NOT RUN (${why}) — not "no alerts"; baseline kept.` }) + '\n', 'utf8');
       return;
     }
@@ -110,7 +118,7 @@ export function shadowStep({ sessionId, alias, ok, why, alerts, owners, visible 
     const prev = st.reset || !st.baseline ? null : st.baseline;
     const d = computeDelta(prev, cur);
     const text = renderDelta(d, cur, prev, visible ? new Set(visible) : null);
-    appendFileSync(SHADOW_LOG(), JSON.stringify({ ts, v: VERSION, session_id: sessionId, alias, status: 'ok',
+    appendLog(JSON.stringify({ ts, v: VERSION, session_id: sessionId, alias, status: 'ok',
       prev_kind: st.reset ? `reset:${st.reset_source || '?'}` : (st.baseline ? 'baseline' : 'none'),
       prev_hash: prev ? hashSet(prev) : null, cur, delta: d, would_inject: text ?? 'FULL LIST' }) + '\n', 'utf8');
     saveState(sessionId, { baseline: cur, reset: false, updated_at: ts, v: VERSION }); // advances only here
@@ -127,24 +135,44 @@ function reset() {
   saveState(j.session_id, { ...st, reset: true, reset_source: String(j.source || 'unknown'), reset_at: new Date().toISOString() });
 }
 
+// Step-4 defects 1+2 (Langston): sufficiency counts VERIFIED DELTAS (rows that recompute a delta), not OK prompts,
+// and there is no days leg (a quiet session measures nothing). Only PASS exits 0: FAIL 1, unreadable 2, NOT YET 3.
+export function verdictOf(counts, mismatches, minDeltas) {
+  if (mismatches) return { verdict: `FAIL (${mismatches} mismatches)`, code: 1 };
+  if (counts.delta < minDeltas) return { verdict: `NOT YET (${counts.delta} of ${minDeltas} verified deltas)`, code: 3 };
+  return { verdict: `PASS (${counts.delta} verified deltas, 0 mismatches)`, code: 0 };
+}
+
 // Recompute each logged delta: for a 'baseline' row the previous OK row of the same session must hash to
 // prev_hash, and computeDelta(prevRow.cur, row.cur) must equal the logged delta.
 function verify(argv) {
-  const minPrompts = Number((argv.find((a) => a.startsWith('--min-prompts=')) || '=50').split('=')[1]);
-  const minDays = Number((argv.find((a) => a.startsWith('--min-days=')) || '=3').split('=')[1]);
-  let rows = [];
-  try { rows = readFileSync(SHADOW_LOG(), 'utf8').split(/\r?\n/).filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return { bad: l.slice(0, 80) }; } }); }
-  catch (e) { console.log(`VERIFY: cannot read ${SHADOW_LOG()} (${e.code}) — NOT a pass`); process.exit(2); }
-  const last = {}, bad = [], counts = { ok: 0, check_failed: 0, full: 0, delta: 0, unparsed: 0 };
+  const minDeltas = Number((argv.find((a) => a.startsWith('--min-deltas=')) || '=50').split('=')[1]);
+  const files = [SHADOW_LOG() + '.1', SHADOW_LOG()].filter((f) => existsSync(f));
+  if (!files.length) { console.log(`VERIFY: cannot read ${SHADOW_LOG()} (no log) — NOT a pass`); process.exit(2); }
+  const rotated = files.length === 2;
+  const rows = [];
+  try {
+    for (const [i, f] of files.entries()) {
+      for (const l of readFileSync(f, 'utf8').split(/\r?\n/).filter(Boolean)) {
+        let r; try { r = JSON.parse(l); } catch { r = { bad: l.slice(0, 80) }; }
+        r._oldest = rotated && i === 0;
+        rows.push(r);
+      }
+    }
+  } catch (e) { console.log(`VERIFY: cannot read the log (${e.code}) — NOT a pass`); process.exit(2); }
+  const last = {}, bad = [], counts = { ok: 0, check_failed: 0, full: 0, delta: 0, unanchored: 0, unparsed: 0 };
   for (const r of rows) {
     if (r.bad) { counts.unparsed += 1; bad.push(`unparsed: ${r.bad}`); continue; }
     if (r.status === 'check_failed') { counts.check_failed += 1; continue; }
     counts.ok += 1;
     if (r.prev_kind === 'baseline') {
-      counts.delta += 1;
       const p = last[r.session_id];
-      if (!p) bad.push(`${r.ts} ${r.session_id}: baseline row with no earlier OK row in the log`);
+      // Limit, stated: in the rotated-out file a session's first baseline row may have its predecessor in a file
+      // already dropped, so it is counted 'unanchored' (neither a mismatch nor a verified delta).
+      if (!p && r._oldest) counts.unanchored += 1;
+      else if (!p) bad.push(`${r.ts} ${r.session_id}: baseline row with no earlier OK row in the log`);
       else {
+        counts.delta += 1;
         if (hashSet(p.cur) !== r.prev_hash) bad.push(`${r.ts} ${r.session_id}: prev_hash does not match the previous OK row`);
         const re = computeDelta(p.cur, r.cur);
         if (JSON.stringify(re) !== JSON.stringify(r.delta)) bad.push(`${r.ts} ${r.session_id}: recomputed delta differs`);
@@ -154,13 +182,12 @@ function verify(argv) {
   }
   const ts = rows.filter((r) => r.ts).map((r) => Date.parse(r.ts));
   const days = ts.length ? (Math.max(...ts) - Math.min(...ts)) / 86400000 : 0;
-  const enough = counts.ok >= minPrompts || days >= minDays;
-  console.log(JSON.stringify({ v: VERSION, log: SHADOW_LOG(), rows: rows.length, counts, sessions: Object.keys(last).length,
+  console.log(JSON.stringify({ v: VERSION, logs: files, rows: rows.length, counts, sessions: Object.keys(last).length,
     span_days: Number(days.toFixed(2)), mismatches: bad.length }, null, 1));
   for (const b of bad.slice(0, 20)) console.log(`MISMATCH ${b}`);
-  const verdict = bad.length ? 'FAIL' : enough ? 'PASS' : `NOT YET (need ${minPrompts} OK prompts or ${minDays} days)`;
+  const { verdict, code } = verdictOf(counts, bad.length, minDeltas);
   console.log(`VERDICT: ${verdict}`);
-  process.exit(bad.length ? 1 : 0);
+  process.exit(code);
 }
 
 function selfTest() {
@@ -183,6 +210,10 @@ function selfTest() {
   const hid = renderDelta(n, B, A, new Set(['a1']));
   checks.push(['hidden new is counted, not listed', /1 of the new or changed/.test(hid) && !/NEW .*a3/.test(hid)]);
   checks.push(['unsafe session id refused', statePath('../x') === null]);
+  eq('zero verified deltas is NOT YET, exit 3', verdictOf({ ok: 1, delta: 0 }, 0, 50).code, 3);
+  eq('OK prompts without deltas do not pass', verdictOf({ ok: 500, delta: 49 }, 0, 50).code, 3);
+  eq('enough verified deltas pass, exit 0', verdictOf({ ok: 60, delta: 50 }, 0, 50).code, 0);
+  eq('any mismatch fails, exit 1', verdictOf({ ok: 60, delta: 60 }, 1, 50).code, 1);
   for (const [name, ok] of checks) console.log(`${ok ? 'PASS' : 'FAIL'} ${name}`);
   const failed = checks.filter(([, ok]) => !ok).length;
   console.log(`${checks.length - failed}/${checks.length} passed`);
@@ -200,5 +231,5 @@ if (isMain) {
   if (argv.includes('--reset')) { try { reset(); } catch { /* fail-open */ } process.exit(0); }
   if (argv.includes('--verify')) verify(argv);
   else if (argv.includes('--self-test')) selfTest();
-  else { console.log(`${VERSION}\nusage: --reset (SessionStart, stdin) | --verify [--min-prompts=50] [--min-days=3] | --self-test`); process.exit(0); }
+  else { console.log(`${VERSION}\nusage: --reset (SessionStart, stdin) | --verify [--min-deltas=50] | --self-test`); process.exit(0); }
 }
