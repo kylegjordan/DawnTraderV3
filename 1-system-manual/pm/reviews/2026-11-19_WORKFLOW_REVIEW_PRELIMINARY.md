@@ -68,7 +68,7 @@ The backbone is sound and should stay. Four gaps are worth fixing:
   - After the #1038 load fix (09-11) it works. Its pre-registered usage test still FAILED: zero calls by CC-B, CC-C and Infra over 14-day windows (`B_INSTRUMENTS_OVER_RULES_USAGE_MEASURE.md`).
   - No step skill tells a session to use it. The lesson: a tool that is not written into the step is not used.
   - So the census uses the language server for code references and adds only what it cannot see: schedulers, timers and start paths, database readers, and systemd, cron and PM2 starts. Step 2 then names the tools, and R0 records their output.
-- **Out of scope here:** search over governance prose (1,944 documents). `SEARCH_SURFACES.md` calls it "the real gap" and deliberately left it open: the misses there were paraphrase, not matching. It stays open.
+- **Governance prose** (1,944 documents) is treated separately in R5.
 - **When it runs.** Step 2, alongside the hand census. Optionally a quick run at Step 1 to help bound the scope.
 - **Its output is a lead, never a verdict.** A hit is a place to read. A clean result is never evidence that nothing else is affected, the same standing as a clean helper result. Where it disagrees with the System Impact Map, the gap is a finding: either the map is stale or the script missed something.
 - **Its limits are investigated before it is used.** The pilot on closed batches measures what it finds, what it misses and what the hand audit missed. It produces a written list of blind spots, and the reliance written into the Step 2 skill is set from that list, not assumed. No batch depends on it until then.
@@ -98,6 +98,26 @@ The backbone is sound and should stay. Four gaps are worth fixing:
 2. **Run an orthogonal challenge** aimed at wrong-object, alternate-path or failure-state risk, and state what would turn it red.
 
 The reviewer tries to falsify the proof. If either leg cannot be done, the objective stays unproven.
+
+**R5. Close the governance-history gap with a per-component history list, then a whole read.** (Completeness, intent.) Added at Kyle's request, 2026-11-19.
+- **The problem, as measured in `SEARCH_SURFACES.md` §2.**
+  - Searches of the 1,944 governance documents miss for two reasons: the same idea written in different words, and stopping at the first plausible line.
+  - Four of six past fixes were better word-matchers, and all failed.
+  - The one method that never failed is reading the destination end to end and citing the line rejected beside the line accepted. It does not scale to 1,944 files.
+  - The catalog left this open for a Langston approach round; it does not show a ruling.
+- **The fix: stop searching by words, and look things up by the component.**
+  - Every commit subject already starts with its batch id (CLAUDE.md 3.0), and every commit names the files it touched.
+  - From that, a script can build, for each source file, its full history: every batch that touched it, following renames (the `active-*` family renamed on 07-03), with links to those batches' scope, audit and completion reports.
+  - It adds every `RUNNING_ISSUES` entry, KD decision and `DELETED_COMPONENTS_LOG` row that cites the file or its symbols.
+  - Paraphrase stops mattering, because the lookup key is the file, not the words.
+- **Then read the shortlist whole.**
+  - At Step 1 and Step 2 the session reads those documents end to end, using Langston's method: cite the line accepted and the line rejected.
+  - For a long list, helpers each read part and return cited lines. A helper reads for meaning, which a matcher cannot. Its hits are leads, re-read by the session.
+- **Same standing as R2.**
+  - A supporting list, never a verdict.
+  - Its limits are studied before anyone relies on it: work that never touched a file, decisions recorded only in chat, and commits without a batch id.
+  - Proven by replaying known misses: #174, missed for seven weeks because the search was by symptom; the shadowed-gates finding whose code comment cited a three-day-old approved decision; and the database-warning decision re-asked after KD-60.
+- **Not recommended first: a meaning-based index (embeddings).** It is another matcher, with the same first-plausible-hit failure, plus infrastructure to run and keep fresh. Reconsider only if the pilot shows the component list leaves real misses.
 
 **Also:**
 - **Tests:** each load-bearing objective maps to named tests in R0, with one representative red mutant each.
