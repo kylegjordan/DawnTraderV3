@@ -69,3 +69,23 @@ Instrument: the real hook against the live staging queue (41 due, 3,466 ids), se
 A first run reported "18 changed" at row 3: the test script read the state file in the Windows default encoding and corrupted titles containing a dash. All 18 changes were in `title`; with UTF-8 the result is 0 changed. A harness fault, not a code fault.
 
 **Switch gate (pre-audit P6):** at least 50 real prompts or 3 days in the shadow log, `--verify` reports PASS, then Langston reviews; the switch to injecting the delta is a separate commit. The `--reset` registration loads at the next session start (settings load at start).
+
+## Observation 4 — P7 warning dedupe (2026-11-19 ~16:00Z)
+Built: `scripts/crew-tooling/warn-dedupe.mjs`. The three warn-only guards (`guard-measurement-shape`, `guard-stale-fetch`, and `guard-result-shape`'s rare legs) now show each warning KIND once per session; a second `SessionStart` (`startup|resume|compact`) hook runs `warn-dedupe.mjs --reset`, so the first warning after a start or compaction shows again. **Sinks are still written on every event** (the hook self-test reads them). Each guard loads the helper fail-open: if it cannot load, every warning shows. No blocking guard is touched. `guard-result-shape`'s cap-bound leg keeps its own per-command dedupe file. State: one file per session under `~/.claude/cc-wake-state/warn-dedupe/`, files of sessions idle for 7 days swept at reset.
+
+Instrument: the real hooks run as child processes with synthetic stdin; state in a scratch folder (`WARN_DEDUPE_DIR`).
+
+| # | control | observed | verdict |
+|---|---|---|---|
+| 1 | first `truncation-is-not-population` | shown | PASS |
+| 2 | same kind, different command | nothing shown | PASS |
+| 3 | new kind plus the old kind | only `count-from-search` shown | PASS |
+| 4 | reset (as at compaction), then the first kind | shown again | PASS |
+| 5 | `guard-stale-fetch`, twice, reset, again | shown, nothing, shown | PASS |
+| 6 | `guard-result-shape` `html-not-json`, twice, reset, again | shown, nothing, shown | PASS |
+| 7 | test-suite mode (`GUARD_SYNTHETIC=1`, no `WARN_DEDUPE_DIR`) | never dedupes, writes no state | PASS |
+| 8 | sinks | measurement-shape sink rows still written for every event | PASS |
+
+`warn-dedupe.mjs --self-test` 10/10 (includes: no session id, an unsafe id and a corrupt state file all SHOW). `test-guard-measurement-shape` 75 PASS 0 FAIL; `test-guard-result-shape` and `test-hook-selftest`: results in the commit message.
+
+**For Langston at Step 4:** `guard-result-shape`'s 2026-09-02 ruling gave the rare legs the full warning every time. P7 (approved at Step 2) dedupes them per session per leg. The saving there is small (rare legs are ~0.04% of its fires); the reason to keep it is one consistent rule across the three warn-only hooks. If he prefers the rare legs to keep firing every time, it is a two-line revert in that file.

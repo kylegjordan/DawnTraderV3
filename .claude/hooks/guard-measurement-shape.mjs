@@ -297,6 +297,12 @@ const SHAPES = [
   },
 ];
 
+// B-TOKEN-ECONOMY P7: per-session warning dedupe (TEXT only; the sink above is still written every time).
+// Fail-open: if the helper cannot load, every warning shows.
+let WD = null;
+try { WD = await import(new URL('../../scripts/crew-tooling/warn-dedupe.mjs', import.meta.url)); } catch { WD = null; }
+const wdUnseen = (sid, kinds) => { try { return WD ? WD.unseen(sid, kinds) : kinds; } catch { return kinds; } };
+
 function main() {
   let raw = '';
   try { raw = readFileSync(0, 'utf8'); }
@@ -333,13 +339,16 @@ function main() {
   });
 
   if (!hits.length) return;
+  const showIds = new Set(wdUnseen(payload && payload.session_id, hits.map((h) => h.id)));
+  const shown = hits.filter((h) => showIds.has(h.id));
+  if (!shown.length) return;
   const text =
     // ⚠️ SCOPED TO THIS HOOK. r2 said "nothing was blocked", which is a claim about the whole
     // PreToolUse decision — and a SIBLING hook is registered on the same Bash matcher that CAN
     // exit non-zero. This file can only speak for itself. Reader-found.
     'MEASUREMENT-SHAPE WARNING (rule 29 — THIS hook is warn-only and did not block; it cannot speak for other hooks):\n' +
-    hits.map((h) => '• ' + h.id + ': ' + h.say).join('\n') +
-    '\nIf the reading is not about to become a claim, ignore this.';
+    shown.map((h) => '• ' + h.id + ': ' + h.say).join('\n') +
+    '\nIf the reading is not about to become a claim, ignore this. ' + ((WD && WD.NOTE) || '');
   try {
     process.stdout.write(JSON.stringify({
       hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext: text },

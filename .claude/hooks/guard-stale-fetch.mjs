@@ -45,6 +45,12 @@ function note(row) {
   } catch { /* never affects the session */ }
 }
 
+// B-TOKEN-ECONOMY P7: per-session warning dedupe (TEXT only; the sink above is still written every time).
+// Fail-open: if the helper cannot load, every warning shows.
+let WD = null;
+try { WD = await import(new URL('../../scripts/crew-tooling/warn-dedupe.mjs', import.meta.url)); } catch { WD = null; }
+const wdUnseen = (sid, kinds) => { try { return WD ? WD.unseen(sid, kinds) : kinds; } catch { return kinds; } };
+
 function main() {
   let payload;
   try { payload = JSON.parse(readFileSync(0, 'utf8')); }
@@ -115,6 +121,7 @@ function main() {
   const fired = ageMin > THRESHOLD_MIN;
   note({ decided: true, fired, age_min: ageMin === Infinity ? 'never' : Math.round(ageMin) });
   if (!fired) return;
+  if (!wdUnseen(payload && payload.session_id, ['stale-fetch']).length) return;
 
   const ageTxt = ageMin === Infinity ? 'NEVER been fetched in this clone' : `last fetched ~${Math.round(ageMin)} min ago`;
   try {
@@ -124,7 +131,7 @@ function main() {
         additionalContext:
           `STALE-FETCH WARNING (§7.1 step 0, warn-only — nothing was blocked): origin was ${ageTxt}. ` +
           `origin/<branch> is a LOCAL CACHED POINTER — without a fresh fetch, "behind 0" can be reported while genuinely behind ` +
-          `(measured 2026-07-24: behind 0 before fetch, behind 3 after). Run git fetch origin before trusting any compare against origin.`,
+          `(measured 2026-07-24: behind 0 before fetch, behind 3 after). Run git fetch origin before trusting any compare against origin. ` + ((WD && WD.NOTE) || ''),
       },
     }));
   } catch { /* fail-open */ }

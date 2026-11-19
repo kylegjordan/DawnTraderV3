@@ -223,6 +223,12 @@ function shapes(cmd, stdout) {
   return hits;
 }
 
+// B-TOKEN-ECONOMY P7: per-session warning dedupe (TEXT only; the sink above is still written every time).
+// Fail-open: if the helper cannot load, every warning shows.
+let WD = null;
+try { WD = await import(new URL('../../scripts/crew-tooling/warn-dedupe.mjs', import.meta.url)); } catch { WD = null; }
+const wdUnseen = (sid, kinds) => { try { return WD ? WD.unseen(sid, kinds) : kinds; } catch { return kinds; } };
+
 function main() {
   let payload;
   try { payload = JSON.parse(readFileSync(0, 'utf8')); }
@@ -253,7 +259,11 @@ function main() {
   // gets ONE TERSE LINE, deduplicated per session and per pipeline (a state file keyed by
   // session_id); the other three legs get the full warning every time. Rates are reported per
   // leg, never in aggregate — a 3.00 % headline concealed a 99.96 / 0.04 split.
-  const rare = hits.filter(([leg]) => leg !== 'cap-bound');
+  // P7 (B-TOKEN-ECONOMY, approved at Step 2): the rare legs now show once per session per leg,
+  // until the next compaction. The 09-02 two-channel split above stands; cap-bound keeps its own file.
+  const rareAll = hits.filter(([leg]) => leg !== 'cap-bound');
+  const rareShow = new Set(rareAll.length ? wdUnseen(payload.session_id, rareAll.map(([leg]) => leg)) : []);
+  const rare = rareAll.filter(([leg]) => rareShow.has(leg));
   const capHit = hits.find(([leg]) => leg === 'cap-bound');
   let capLine = '';
   if (capHit) {
@@ -277,7 +287,7 @@ function main() {
   const text = rare.length
     ? 'RESULT-SHAPE WARNING (rule 29 — warn-only, after the fact; this hook cannot speak for what it does not list):\n' +
       rare.map(([leg, why]) => `• ${leg}: ${why}`).join('\n') + (capLine ? '\n• ' + capLine : '') +
-      '\nThis result could not have answered the request as asked — re-run against the object before it becomes a claim.'
+      '\nThis result could not have answered the request as asked — re-run against the object before it becomes a claim. ' + ((WD && WD.NOTE) || '')
     : capLine;
   try {
     process.stdout.write(JSON.stringify({
