@@ -76,7 +76,7 @@
 
 - **USAGE 87% @ ~18:23Z 11-16:** all four AT SAFE STOP (OLD 6a67e252e, combined deploy after 21:00Z only if room; Infra clean, birth-cap unattended; NEW 20:30Z PFC read or re-run next US session; ANALYST d2c30001a, timed reads 11-17/18/21/23). At 90% run pm-usage-stop (guard cron 6b575bdd).
 
-- **B-TOKEN-ECONOMY + B-WORKFLOW-IMPROVE (KD-103, PM owns+builds; KD-102 widens 5b):** BOTH STEP: 2 of 11 passed with conditions (Langston, one direct langston-call each, bridge left OFF per Kyle 11-19); verdicts `Langston Design Asks/B_TOKEN_ECONOMY_B_WORKFLOW_IMPROVE_STEP1_VERDICTS.md`; pre-audits r2 @338e83412. NEXT STEP: 3 of 11 — TOKEN first (P0 baseline, P1 canary applied locally, committed only after its verdict); WORKFLOW Step 3 after TOKEN's P5 slim. Each gate = one direct Langston call (Coltrane refuses gates in CLAUDE mode). Coltrane ON.
+- **B-TOKEN-ECONOMY STEP: 3 of 11 (building; Kyle 11-19: build ONE batch, then gauge usage; ~97-98% = maybe stop).** P0 baseline DONE @2392829c0 (Change Lists/B_TOKEN_ECONOMY_BASELINE.md). P1 CANARY RUNNING: `.claude/settings.local.json` has autoCompactWindow 250000 + idleCompaction false applied LOCALLY, UNCOMMITTED (commit only after the canary verdict, Langston Step-2 cond 4). After the compaction, check: get_usage autoCompactsAtPercent ~25 (was 97); CONDUCT 4/4 + reminder loaded; instructions-loaded.jsonl has a compact event; this line restated; alert line on next prompt; dup-uuid check. Then P4 helpers, P6 alert delta (shadow), P7 warning dedupe, P5 CLAUDE.md slim, P8 skills. B-WORKFLOW-IMPROVE Step 2 passed; its build waits. Gates: one direct Langston call each, bridge OFF.
 
 # OPEN
 - Archived 2026-11-04 · stale-local-session-ids → `1-system-manual/pm/archive/memory/2026-11.md`
