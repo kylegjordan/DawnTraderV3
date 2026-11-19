@@ -114,3 +114,13 @@ Each runs the full eleven-step workflow. Langston or Coltrane reviews at the gra
 4. Does the order hold? Anything missing?
 
 Verdict form: PROCEED / PROCEED WITH CONDITIONS / REVISE, with numbered conditions.
+
+## 6. Coltrane's verdict (2026-11-19 01:40Z, at 8cd8d360a): PROCEED WITH CONDITIONS. All six accepted and binding on both batches.
+He confirmed the shared CLI is the right instrument for code search: an MCP bridge would add a crew-specific transport without improving reproducibility.
+1. **Reachability is proved, not claimed.** Codex auto-loads only `AGENTS.md`; `CONDUCT.md`, `CLAUDE.md` and the step skills are explicit reads. Keep a crew-by-rule manifest, and canary-test loading at start, after compaction and at the point of action. Audit for duplicates before claiming one copy of each rule.
+2. **Pin the code-search CLI.** Fix the TypeScript service version, the project root and config discovery, the output schema and the exit codes. Record the tool version, invocation, unresolved surfaces and output at the graded ref. Prove it with a positive control and a red mutation. Its results stay leads, never completeness claims.
+3. **Every Codex setting is unproved until the Codex canary observes it.** That covers the effective configuration and served model, config scope and precedence, the exact compaction threshold, the role model key, silent fallback, continuity and rollback. One canary per crew proves the mechanism only. Every session and folder gets a rollout smoke check, because project-level configuration may differ.
+4. **The full alert path stays until the shared delta script is independently green.** Codex has no hooks today, so "run by hand after compaction" needs a canary showing the instruction reappears and runs after a real auto-compaction. If that fails, keep the full manual read, or wait for a Windows-proven hook.
+5. **Artifacts record the role and the actual actor,** plus the trusted crew mode and generation, the graded ref and a timestamp. The live crew mode selects the reviewer. A mode boundary invalidates an in-flight review; completed gates stay usable with their recorded provenance.
+   - **For these two batches, Kyle named "Langston or Coltrane" (KD-103), so Coltrane reviews while Langston is off.** This is recorded as Kyle's direction for these batches, not as discretion.
+6. **The R1, R4 and Step 9/11 edits land as draft and non-blocking.** They become gates only when the closed-batch pilot supports activation.
