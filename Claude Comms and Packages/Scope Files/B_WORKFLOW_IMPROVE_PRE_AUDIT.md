@@ -1,12 +1,13 @@
 # B-WORKFLOW-IMPROVE — PRE-IMPLEMENTATION AUDIT AND IMPLEMENTATION PLAN
 
 change-class: non_architecture · owner: PM Claude (KD-103) · routine reviewer: Langston (CLAUDE mode, generation 3) · scope: `B_WORKFLOW_IMPROVE_SCOPE.md` r2 @ `5aa251e7a`
-STEP: 2 of 11 · NEXT STEP: 3 of 11 (after Langston clears this document)
+STEP: 2 of 11 (gate passed with conditions, r2) · NEXT STEP: 3 of 11
+record: author/actor = PM Claude (session 994e6488); crew mode CLAUDE gen 3; r1 graded at `4df022e9a` (2026-11-19T14:38Z); r2 written 2026-11-19 after Langston's verdict
 
 ## PREVIOUSLY STATED vs NOW (read first)
 - **PREVIOUSLY STATED (review r7, scope OBJ-2):** "Step 9 says every objective green; Step 11 allows NO / PARTIAL", a contradiction.
   **NOW:** the contradiction is narrower than stated, and B1 sets it out.
-  **REASON:** `workflow-09-iterate/SKILL.md:8` "Ends when: every scope objective is green", but `:12` already allows an open item with a named owner, a placed home, and a closing and failure condition. `workflow-11-completion/SKILL.md:27` and `workflow-10-governance/SKILL.md:88-93` allow YES / NO / PARTIAL. CLOSED-UNPROVEN formalizes the `:12` residual; it is not a new concept.
+  **REASON:** `workflow-09-iterate/SKILL.md:8` "Ends when: every scope objective is green", but `:11` already allows an open item with a named owner, a placed home, and a closing and failure condition. `workflow-11-completion/SKILL.md:27` allows YES / NO / PARTIAL (also at `:91`). CLOSED-UNPROVEN formalizes the `:12` residual; it is not a new concept.
 - **PREVIOUSLY STATED:** "a small wrapper around the TypeScript language service" (scope OBJ-4).
   **NOW:** it is built on the repo's own pinned `typescript` 5.6.3 (`package.json:143`, lock `:9589-9590`), not on the laptop's global language server.
   **REASON:** `typescript-language-server` exists only globally on the laptop (B2). A repo-pinned compiler is the only version both crews and CI share.
@@ -81,7 +82,7 @@ STEP: 2 of 11 · NEXT STEP: 3 of 11 (after Langston clears this document)
 - **`workflow-hotfix`** has the census (L44) and the ledger search (L49-50) but no six sources and no fresh reader. Under the shared contract it inherits the fresh-reader rule for load-bearing claims, and a proportionate proof record (one line per fix).
 
 **B7 — the close-out source.**
-- **The class matrix** is in `workflow-10` (about L107-123, 16 rows, cells marked `REQUIRED`, `judged` or `N/A` with grading tags R, c or —). It is derived from `config.mjs` `DOCS`, `CLASS_DOCSET`, `REQUIRED_IF` and `LEDGER_ROWS`.
+- **The class matrix** is in `workflow-10` (`:106-122`, 17 rows, cells marked `REQUIRED`, `judged` or `N/A` with grading tags R, c or —). It is derived from `config.mjs` `DOCS`, `CLASS_DOCSET`, `REQUIRED_IF` and `LEDGER_ROWS`.
 - **The generator imports those tables; it does not copy them.** One source, so the matrix and the generator cannot drift apart.
 - **What the diff alone misses:** an omitted update, because the diff is silent. The generator therefore also takes the Step-2 census and R0, as Coltrane required.
 
@@ -108,7 +109,7 @@ STEP: 2 of 11 · NEXT STEP: 3 of 11 (after Langston clears this document)
 |---|---|---|---|---|
 | Q0 | OBJ-9 prerequisite | **UNAUDITED until done: the first Step-3 task.** Confirm or substitute the four pilot targets per B8's criteria, recording each one's introducing commit (`git log -S` / blame on the defect line) and its batch documents | B8 | A table of the four targets, each with its ref, batch and documents, committed before any replay |
 | Q1 | OBJ-1 | `scripts/crew-tooling/ledger-schema.json` + `ledger-validate.mjs`. Fields: objective, intent, components, entry points, readers (with meaning, missing/error/stale, concurrency), plan item, diff, tests, Step-7 proof, Step-8 challenge, status, actor, role, crew mode and generation, ref, time, tool versions and outputs, "missed earlier, found at step N" | B1 | Passes a sample; fails three seeded defects (missing link, missing actor, done-while-unproven) |
-| Q2 | OBJ-2, OBJ-3 | DRAFT text: the proof record in `workflow-01`; CLOSED-UNPROVEN in `workflow-09`, `-10` and `-11` (formalizing `09:12`); the two-legged Step 8 in `workflow-08`; criterion change control. Each marked "DRAFT — non-blocking until the pilot" | B1 | The text at the ref; Q1 rejects done-while-unproven |
+| Q2 | OBJ-2, OBJ-3 | DRAFT text: the proof record in `workflow-01`; CLOSED-UNPROVEN in `workflow-09`, `-10` and `-11` (formalizing `09:11`); the two-legged Step 8 in `workflow-08`; criterion change control. Each marked "DRAFT — non-blocking until the pilot" | B1 | The text at the ref; Q1 rejects done-while-unproven |
 | Q3 | OBJ-4 | `scripts/crew-tooling/code-refs.mjs`: the TypeScript 5.6.3 LanguageService, root tsconfig plus test files, server tsconfig for `server/**`. JSON output (tool and TS version, tsconfig, symbol, refs, unresolved). Exit codes: 0 found, 1 none, 2 error | B2 | At `e16767ef7`, `toCanonical` gives 65 refs in 10 files (or the difference explained). A scratch copy with an added call gives 66; renamed gives 0; runs the same from a Codex session |
 | Q4 | OBJ-5 | `scripts/crew-tooling/census.mjs`: code-refs; an entry-point inventory (B3's bootstrap files, `setInterval`, cron registry, `ecosystem.config.cjs`, `comms-infra` systemd units) filtered to the target; drizzle references (type-aware) and raw-SQL table hits (text, labelled). Always prints the unresolved-surfaces list and the searched population | B3 | Known positives: `trading-bootstrap.ts` reached from `server/index.ts:633`; one cron registry entry; one raw-SQL reader |
 | Q5 | OBJ-6 | `scripts/crew-tooling/history.mjs <path\|symbol>`: `git log --follow` (former names collected); batch ids from subjects; unattributed commits listed apart; links to the batches' scope, audit and completion files; `RUNNING_ISSUES`, `DECISIONS` and `DELETED_COMPONENTS_LOG` rows citing the file or any former name | B4 | #174's file `server/services/ml-calibration.ts` surfaces its #174 entry and the 2026-07-28 decision; `active-execution-engine.ts` reaches `cb8ee0942` |
@@ -116,7 +117,7 @@ STEP: 2 of 11 · NEXT STEP: 3 of 11 (after Langston clears this document)
 | Q7 | OBJ-8 | Step 1, Step 2, the hotfix and the §9.5 trigger in `CLAUDE.md` name the four aids and their standing (leads, never verdicts). `AGENTS.md` §2 lists the shared contract and the CLIs. These edits land after B-TOKEN-ECONOMY's P5 | B9 | `Change Lists/B_WORKFLOW_IMPROVE_REACHABILITY.md`; canary once per crew (a Claude session and a Codex session each reach each instruction at its point of action) |
 | Q8 | OBJ-9 | The pilot: Q3-Q6 run on Q0's four batches; per batch, what the aids found, what they missed, what the hand audit missed; the blind-spot list; reliance written into Step 2; any gate switched on only by the reviewer's recorded ruling | B8 | `Change Lists/B_WORKFLOW_IMPROVE_PILOT.md` |
 | Q9 | OBJ-10 | `server/tests/unit/enum-parity.test.ts`: each `pgEnum` in `shared/schema.ts` against `pg_enum` in the CI database, both directions, with a named list of historical values. A separate `ci.yml` step with `continue-on-error: true`, outside the required result. Test-only; Langston ruled PM may build it | B5 | Reports #1063's `pattern_type` drift today (live positive control); a seeded matching enum passes |
-| Q10 | OBJ-11 | The shared contract `1-system-manual/WORKFLOW_SHARED_CONTRACT.md` (the fresh-reader rule once, the board's repeated paragraphs, the stateless-reviewer note). Reconcile, then archive the A blocks to `1-system-manual/_archive/WORKFLOW_SKILL_ORIGINAL_TEXT.md`. Each skill keeps its step-specific board line and `02`'s L94 sub-heading. `bug-investigation` points to the contract; `workflow-hotfix` names what it inherits | B6 | `Change Lists/B_WORKFLOW_IMPROVE_MOVE_LEDGER.json` checked by the B-TOKEN-ECONOMY move-ledger script (one tool for both batches); a reconciliation table per A block; bytes before and after |
+| Q10 | OBJ-11 | The shared contract `1-system-manual/WORKFLOW_SHARED_CONTRACT.md` (the fresh-reader rule once, the board's repeated paragraphs, the stateless-reviewer note). Reconcile, then archive the A blocks to `1-system-manual/_archive/WORKFLOW_SKILL_ORIGINAL_TEXT.md`. Each skill keeps its step-specific board line; `02`'s L94 standing-approval sub-heading moves into the contract (r2 minor). `bug-investigation` points to the contract; `workflow-hotfix` names what it inherits | B6 | `Change Lists/B_WORKFLOW_IMPROVE_MOVE_LEDGER.json` checked by the B-TOKEN-ECONOMY move-ledger script (one tool for both batches); a reconciliation table per A block; bytes before and after |
 | Q11 | OBJ-12 | Once row 5b delivers: Steps 1 and 2 and §9.5 name the index CLI; a known-miss test, keyword-only versus keyword plus meaning. If 5b has not delivered at close, CLOSED-UNPROVEN with its home | (dependency) | The index runs from both crews; the test set is scored |
 
 **Order:**
@@ -161,3 +162,23 @@ STEP: 2 of 11 · NEXT STEP: 3 of 11 (after Langston clears this document)
   - B8's target status.
 
   These go to Langston's Step-2 read as stated.
+
+## r2 — Langston's Step-2 conditions (2026-11-19 14:41Z, at `4df022e9a`; verbatim in `Langston Design Asks/B_TOKEN_ECONOMY_B_WORKFLOW_IMPROVE_STEP1_VERDICTS.md`), all accepted
+1. **Q9's live positive control is withdrawn as stated.**
+   - At the ref, `pattern_type` is at `shared/schema.ts:140`, not `:111`.
+   - Its comment says "ABCD made storable by migration 2026-10-02-b-pattern-enum-drift-abcd.sql". So #1063's drift is likely closed in a migrated database, and B5's "reports it today" is unevidenced.
+   - **Step 3, before building Q9:** run `db:migrate` against a scratch database and compare each `pgEnum` with `pg_enum`.
+   - **If a live drift exists,** it is the control.
+   - **If none exists,** the control is a seeded mismatch: a test-only enum declared in code and absent from the database, which must turn the check red. A second seeded control runs in the reverse direction.
+   - The CLOSED or OPEN state of #1063 is re-read at the ref and reported, not assumed.
+2. **The Step-10 half of the contradiction is dropped.** `workflow-10-governance/SKILL.md` has zero occurrences of PARTIAL. The citation is removed above, and only `workflow-11:27` and `:91` are cited.
+3. **The `workflow-09` residual is at `:11`,** which reads: open item with a named owner, a placed home, and a closing and failure condition. Corrected above.
+4. **The class matrix is `workflow-10-governance/SKILL.md:106-122`, 17 rows.** Corrected above. Q6 reproduces exactly that object, and its proof compares row by row.
+5. **Q10 gains a deletion census over the citing corpora.**
+   - Before any block moves, every pinned skill-line citation in `1-system-manual/` and `Claude Comms and Packages/` (`workflow-NN:<line>`, `bug-investigation:<line>`) is enumerated.
+   - Each is re-pointed to a heading, or to its new line at the post-move ref, and recorded in the Q10 move ledger with old and new targets.
+   - B1's no-code-reader claim stands for code only. Its population (`scripts`, `.claude/hooks`, `.github`, `server`) is stated as excluding the doc corpora.
+   - The same failure caused conditions 2-4. All three are re-read from the ref with the line text beside the number.
+6. **The batch's own ground rule applies to its documents.** The header now records actor, crew mode and generation, graded ref and time. Every later artifact of this batch carries the same fields.
+
+**Minor, answered:** `workflow-02:94`'s sub-heading grants standing approval to spawn fresh readers "at ANY point in the workflow". It therefore moves to the shared contract with the rest of the fresh-reader rule, not kept in 02 only. Q10 is amended accordingly.

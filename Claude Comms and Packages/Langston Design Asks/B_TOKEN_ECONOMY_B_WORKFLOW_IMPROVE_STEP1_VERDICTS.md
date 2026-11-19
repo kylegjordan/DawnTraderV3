@@ -83,3 +83,32 @@ The document holds. Six sources present and each says what was read; source 6 co
 **RULED ON REPORTED FACT:** A2's `get_usage` reading; A8's transcript marker counts and the 11-05 method; A1/A9's external-doc claims, `idleCompaction` (already flagged UNCONFIRMED) and the Codex project-config question. A5's citation census re-derives at **789 lines / 305 `.md` files** against the stated 787/304 — directionally confirmed, not exact.
 
 Stopping here.
+
+---
+
+# Langston Step-2 verdict: B-WORKFLOW-IMPROVE
+
+Record: role = routine reviewer; actor = Langston via one direct `langston-call` invocation, bridge OFF (Kyle 11-19); crew mode CLAUDE gen 3; graded ref `4df022e9a`; run 2026-11-19T14:38:10Z to 14:41:46Z. Verbatim:
+
+Read at `4df022e9a` (`dt-review`, content exact, on `migration/aws-supabase`). Scratch dir only; no triage, no posts, no memory writes.
+
+## B-WORKFLOW-IMPROVE — Step 2 gate: **PROCEED WITH CONDITIONS**
+
+The document holds structurally. Six sources present, each saying what was read, source 6 dispositioned with a dated reason. Every plan item Q0–Q11 back-references a finding (Q11's is `(dependency)`, acceptable). Q0 carries the **UNAUDITED** flag where the pilot targets are genuinely unconfirmed, with substitution criteria. The PREVIOUSLY STATED / NOW block reverses four scope positions with reasons. The NOT RE-READ list is four honest items. All six of my Step-1 conditions are discharged — including gradability, which I re-derived: `scripts/` is a `CODE_PREFIXES` path at `scripts/governance-checker/config.mjs:102`, and all CLIs land under `scripts/crew-tooling/` (B10, `:102`).
+
+**Conditions**
+
+1. **Q9's live positive control is contradicted at the ref.** B5 (`:68`) says `shared/schema.ts:111` declares six `pattern_type` values and the database holds five. At the ref `:111` is a **blank line**; the enum is `shared/schema.ts:140`, and its own inline comment reads *"ABCD made storable by migration 2026-10-02-b-pattern-enum-drift-abcd.sql"*. If that migration ran, the check is green on day one and OBJ-10's proof (`:118` "Reports #1063's `pattern_type` drift today") has **no** positive control. Re-derive against the CI database after `db:migrate` before building; if the drift is closed, name another live one or seed it. (DB side not re-derived — tagged below.)
+2. **`workflow-10-governance/SKILL.md:88-93` does not say what B1 cites it for** (`:9`). Measured: zero occurrences of `PARTIAL` anywhere in that file; `:88-93` is the three-places ledger-posting rule. Positive control: the same search returns `workflow-11-completion/SKILL.md:27` and `:91`. The Step-10 half of the contradiction claim is unevidenced — drop it or cite the real line.
+3. **`workflow-09-iterate/SKILL.md:12` is `:11`.** The open-item residual (named owner, placed home, closing and failure condition) is at `:11`; `:12` is blank. Cited twice (`:9`, `:111` "formalizing `09:12`"). Correct from the ref with the line's text beside the number.
+4. **The class matrix is `workflow-10-governance/SKILL.md:106-122`, 17 rows** — B7 (`:84`) says "about L107-123, 16 rows". Q6's generator is built to reproduce that exact object; fix the citation and the count.
+5. **Q10 has no deletion census, and B1's population cannot provide one.** B1 (`:34`) searched `scripts`, `.claude/hooks`, `.github`, `server` — which structurally excludes the two corpora where every pinned skill-line citation lives. Measured at the ref: pins into `workflow-01:23`/`:56`, `workflow-02:93-128`, `workflow-05:11`, `workflow-06:12`/`:56`, `workflow-07:88`, `workflow-10:107-117`/`:119`/`:124`/`:126`/`:130`/`:140`/`:141`/`:144`/`:205`/`:217`/`:221`, `workflow-11:87`, `bug-investigation:24-53`/`:49` — all in `1-system-manual/` and `Claude Comms and Packages/`. Removing 14,789 B from 11 files moves all of them. This is my B-TOKEN-ECONOMY condition 2 one file over; the Q10 move ledger (`:119`) sweeps pinned line citations, not only block headings. Conditions 2–4 above are that failure already live in this document.
+6. **Apply the batch's own ground rule to the batch.** Scope `:33` requires every artifact to record role **and actual actor**, crew mode and generation, the graded ref, and a timestamp. The header (`:3-4`) gives owner, reviewer and generation — no actor, no timestamp, no ref for the audit itself.
+
+Minor, no condition: B6 (`:79`) calls `workflow-02:94` "pre-audit-specific", but that sub-heading's own text grants standing approval "at ANY point in the workflow". Say why it stays in 02 only.
+
+**Re-derived by me at `4df022e9a`:** `config.mjs:102`, `CLASS_DOCSET` 135-154, `REQUIRED_IF` 162-164, `LEDGER_ROWS` 178; `package.json:143` typescript 5.6.3; `SEARCH_SURFACES.md:31` population and `:39` 65 refs / 10 files at `e16767ef7`; `AGENTS.md:22`/`:24`; `workflow-09:8`; `workflow-11:27`; `ci.yml` 44/95/263 node 20; `server/index.ts:633` → `trading-bootstrap`; `workflow-02:94`; `schema.ts:140`.
+
+**RULED ON REPORTED FACT:** B4's commit-attribution percentages; B6's byte table; B3's `.start(`/`setInterval`/raw-SQL counts; B8's target statuses and the 11-18 evidence pass; B5's CI Postgres service lines and the live-database enum state; KD-103 and Coltrane's conditions.
+
+Stopping here.
