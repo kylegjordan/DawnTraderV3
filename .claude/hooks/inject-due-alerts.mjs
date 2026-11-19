@@ -32,6 +32,17 @@ import { fileURLToPath } from 'node:url';
 import { basename } from 'node:path';
 import { splitAlerts, capBuckets, lostRoutings, lostReport, CLONE_TO_ALIAS, CHURN_HOURS } from './alert-split.mjs';
 
+// B-TOKEN-ECONOMY P6 (OBJ-6), SHADOW: the shared delta script LOGS what it would inject; this hook still injects the
+// full list. Loaded dynamically so a missing or broken script can never stop the full list (fail-open).
+let AD = null;
+try { AD = await import(new URL('../../scripts/crew-tooling/alert-delta.mjs', import.meta.url)); } catch { AD = null; }
+let SESSION_ID = null;
+try { SESSION_ID = JSON.parse(readFileSync(0, 'utf8') || '{}').session_id || null; } catch { SESSION_ID = null; }
+function shadow(args) {
+  if (!AD || !SESSION_ID) return;
+  try { AD.shadowStep({ sessionId: SESSION_ID, ...args }); } catch { /* shadow only */ }
+}
+
 const HOST = process.env.DT_ALERT_HOST || 'root@188.245.193.8';
 const TIMEOUT_MS = 3000;
 
@@ -168,6 +179,7 @@ function main() {
     const why = r && r.error ? (r.error.code === 'ETIMEDOUT' || /ETIMEDOUT|timed out/i.test(String(r.error.message)) ? 'timeout' : String(r.error.code || r.error.message))
       : r && r.status !== 0 ? `ssh exit ${r.status}` : 'no COUNT line from the remote filter';
     note({ decided: false, reason: 'unreachable', why, ms });
+    shadow({ alias, ok: false, why });
     emit(`⚠️ ALERT CHECK COULD NOT RUN (${why}, ${ms}ms). This is NOT "no alerts" — it is "not checked". ` +
          `Do the §10.5 check by hand this turn: read the WHOLE alerts file filtered for active+unacked+due, never a tail (#980).` + (lostText ? `\n${lostText}` : ''));
     return;
@@ -178,6 +190,7 @@ function main() {
   // Genuine "no alerts" — the COUNT line proves the filter ran. It is SAID, not left silent
   // (B-GOV-REPORTING r6): §10.5 treats hook silence as "did not run", so zero must be visible.
   if (!alerts.length) {
+    shadow({ alias, ok: true, alerts: [], owners, visible: null });
     emit(`§10.5: 0 due alerts (whole file, ${total} ids; ${ms}ms) — the filter ran.` + (lostText ? `\n${lostText}` : ''));
     return;
   }
@@ -191,6 +204,9 @@ function main() {
   const CLOSE = 'ack only what you own; resolve only when fixed — with the FULL id: the CLI no-ops on a prefix.';
 
   const s = splitAlerts(parsed, owners, alias);
+  // Shadow: the delta runs over the COMPLETE due set (the cap is display only); a narrowed session would be shown
+  // changes only for the alerts it is shown today (its own, unrouted, critical) and a count for the rest.
+  shadow({ alias, ok: true, alerts: parsed, owners, visible: s.narrowed ? [...s.mine, ...s.unrouted, ...s.critical].map((a) => a.id) : null });
   if (!s.narrowed) {
     const why = readWhy || s.why;
     note({ decided: true, due: Number(due), total_ids: Number(total), ms, narrowed: false, why });

@@ -270,6 +270,10 @@
           {
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/log-instructions-loaded.mjs\""
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/crew-tooling/alert-delta.mjs\" --reset"
           }
         ]
       }

@@ -48,3 +48,24 @@ Same session id (994e6488); one compaction at the restart (`instructions-loaded.
 `idleCompaction: false` has no observable at this point; it is recorded as set, not as proved.
 
 **Verdict:** the compaction cap (P1) and the `Explore` override (P4) pass and are committed. The default-helper leg fails by the `env` route. **Replacement, same objective (OBJ-4), proven mechanism:** a project agent named `general-purpose` with `model: sonnet`, the route 7d showed works. It is applied locally, uncommitted, and needs one more restart to observe (check: a no-model `general-purpose` call serves `claude-sonnet-5-5`). This changes the mechanism Langston approved at Step 2, so it goes to him at Step 4 with this log.
+
+## Observation 3 — P6 alert-delta, shadow controls (2026-11-19 ~15:36Z)
+Built: `scripts/crew-tooling/alert-delta.mjs` (shadow only). `inject-due-alerts.mjs` calls it after every read and logs what it WOULD inject to `~/.claude/alert-delta-shadow.jsonl`; **the injected text is unchanged — every session still gets the full list.** A `SessionStart` (`startup|resume|compact`) hook runs `--reset`, so the first prompt after a start or compaction is always the full list (Step-2 condition 3: `SessionStart` source `compact` was observed at 15:23:01Z, Observation 2 #3). Codex sessions are untouched and keep the full manual read.
+
+Instrument: the real hook against the live staging queue (41 due, 3,466 ids), session id `canary-p6b`, state and log in a scratch folder (`ALERT_DELTA_DIR`, `ALERT_DELTA_LOG`).
+
+| # | control | shadow log row | verdict |
+|---|---|---|---|
+| 1 | reset, then first prompt | `reset:compact`, FULL LIST | PASS |
+| 2 | same queue | "41 due, UNCHANGED (41 unchanged)" — never silence | PASS |
+| 3 | positive control: one id removed from the saved baseline | 1 new, 0 changed, 40 unchanged; the NEW line names it | PASS |
+| 4 | next prompt | UNCHANGED again (the new alert is shown once) | PASS |
+| 5 | forced failure (unreachable host) | `check_failed`, "ALERT CHECK COULD NOT RUN … not 'no alerts'; baseline kept"; state file hash unchanged | PASS |
+| 6 | next prompt after the failure | UNCHANGED (baseline survived the failure) | PASS |
+| 7 | `--reset` again | FULL LIST | PASS |
+| 8 | `--verify` (recomputes every delta from the previous OK row) | exactly ONE mismatch: row 3, the row whose baseline was edited by hand | PASS as a positive control for the verifier: it catches a baseline that does not match the logged history |
+
+`--self-test` 10/10; `scripts/analysis/test-alert-split.mjs` 42 passed, 0 failed.
+A first run reported "18 changed" at row 3: the test script read the state file in the Windows default encoding and corrupted titles containing a dash. All 18 changes were in `title`; with UTF-8 the result is 0 changed. A harness fault, not a code fault.
+
+**Switch gate (pre-audit P6):** at least 50 real prompts or 3 days in the shadow log, `--verify` reports PASS, then Langston reviews; the switch to injecting the delta is a separate commit. The `--reset` registration loads at the next session start (settings load at start).
