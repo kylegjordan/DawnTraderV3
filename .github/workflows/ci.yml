@@ -118,6 +118,17 @@ jobs:
           # feed isn't actually polled during tests.
           COINGECKO_API_TIER: demo
 
+      # B-WORKFLOW-IMPROVE OBJ-10 (Q9): pgEnum declarations against pg_enum in this migrated database, both
+      # directions. Advisory: continue-on-error keeps it OUTSIDE the required result (Langston, Step-2 r2).
+      # A red here is a finding to read in the log, never a reason to merge past a red required step.
+      - name: Enum parity (advisory, not required)
+        continue-on-error: true
+        run: npx vitest run --config vitest.enum-parity.config.ts --reporter=verbose
+        env:
+          NODE_ENV: test
+          DATABASE_URL: postgresql://test:test@localhost:5432/test
+          COINGECKO_API_TIER: demo
+
       - name: Access-hardening tool tests
         run: |
           python3 comms-infra/crew-switch/test_crew_switch.py
