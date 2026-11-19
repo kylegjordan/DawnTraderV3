@@ -130,6 +130,17 @@ The reviewer tries to falsify the proof. If either leg cannot be done, the objec
   - **Same standing as the rest of R5.** The index produces the shortlist; the session still reads whole and cites accepted and rejected lines. Meaning search addresses paraphrase; it does not fix stopping at the first plausible hit, which only the whole read does.
   - **A placement change.** Widening B-CONVERSATION-INDEX's sources changes an agreed batch, so it is Kyle's call, after a slot check.
 
+**Where the search aids are used (R2 + R5, confirmed with Kyle 2026-11-19).** The same aids apply at Step 1 (provenance), Step 2 (audit), the hotfix blast-radius check, and any audit or architectural dispute outside a batch. The out-of-batch case is covered by the always-loaded §9.5 trigger in CLAUDE.md, so that trigger names them too.
+
+| aid | searches | used by |
+|---|---|---|
+| Code-search tool (language server) | code: who calls, defines or uses what | the session, and the census script |
+| Census script | what the code-search tool cannot see: schedulers, start paths, database readers, server jobs | the session runs it |
+| Per-component history list | every batch, issue, decision and deletion tied to a file, from commit history | the session |
+| Search index (B-CONVERSATION-INDEX, widened) | governance and historical documents, commit messages, crew conversations | the session |
+
+All four are leads. The mandatory reads stay: code, logs, database, the System Impact Map, the System Manual, and each shortlisted document read in full.
+
 **Also:**
 - **Tests:** each load-bearing objective maps to named tests in R0, with one representative red mutant each.
 - **Hotfix:** keeps its structure and inherits the proof record and census in proportion. It is the highest-pressure path and should not sit outside the safeguards.
