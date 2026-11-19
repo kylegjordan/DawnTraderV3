@@ -1,0 +1,266 @@
+{
+ "tool": "token-baseline 1.0 (B-TOKEN-ECONOMY P0)",
+ "window": [
+  "2026-11-13T11:44:00Z",
+  "2026-11-16T19:45:00Z"
+ ],
+ "population": {
+  "CC-A": {
+   "folder": "C:\\Users\\kyleg/.claude/projects\\C--DawnTraderV3-old",
+   "main_files": 67,
+   "subagent_files": 144,
+   "lines_read": 208165,
+   "unparsed_lines": 0
+  },
+  "CC-B": {
+   "folder": "C:\\Users\\kyleg/.claude/projects\\C--DawnTraderV3-new",
+   "main_files": 11,
+   "subagent_files": 71,
+   "lines_read": 240874,
+   "unparsed_lines": 0
+  },
+  "CC-C": {
+   "folder": "C:\\Users\\kyleg/.claude/projects\\C--DawnTraderV3-analyst",
+   "main_files": 25,
+   "subagent_files": 176,
+   "lines_read": 287648,
+   "unparsed_lines": 0
+  },
+  "CC-INFRA": {
+   "folder": "C:\\Users\\kyleg/.claude/projects\\C--DawnTraderV3-infra",
+   "main_files": 11,
+   "subagent_files": 44,
+   "lines_read": 177613,
+   "unparsed_lines": 0
+  },
+  "CC-PM": {
+   "folder": "C:\\Users\\kyleg/.claude/projects\\C--DawnTraderV3-pm",
+   "main_files": 1,
+   "subagent_files": 60,
+   "lines_read": 44237,
+   "unparsed_lines": 0
+  }
+ },
+ "sessions": {
+  "CC-A": {
+   "main": {
+    "turns": 2672,
+    "tokens": {
+     "input": 5378,
+     "cache_creation": 8588026,
+     "cache_read": 1327442896,
+     "output": 1980454
+    },
+    "total_tokens": 1338016754,
+    "median_context": 458160.0,
+    "p90_context": 831025,
+    "turns_by_model": {
+     "claude-sonnet-5-5": 33,
+     "claude-opus-5-5": 2639
+    },
+    "active_hours": 59
+   },
+   "helpers": {
+    "turns": 0,
+    "tokens": {
+     "input": 0,
+     "cache_creation": 0,
+     "cache_read": 0,
+     "output": 0
+    },
+    "total_tokens": 0,
+    "median_context": null,
+    "p90_context": null,
+    "turns_by_model": {},
+    "active_hours": 0
+   },
+   "compaction_markers": {
+    "compact_boundary": 13,
+    "isCompactSummary": 13
+   },
+   "agent_calls_by_requested_model": {}
+  },
+  "CC-B": {
+   "main": {
+    "turns": 1419,
+    "tokens": {
+     "input": 2854,
+     "cache_creation": 6632521,
+     "cache_read": 529590937,
+     "output": 1006109
+    },
+    "total_tokens": 537232421,
+    "median_context": 345006,
+    "p90_context": 583877,
+    "turns_by_model": {
+     "claude-opus-5-5": 1419
+    },
+    "active_hours": 47
+   },
+   "helpers": {
+    "turns": 81,
+    "tokens": {
+     "input": 162,
+     "cache_creation": 339349,
+     "cache_read": 9899358,
+     "output": 61930
+    },
+    "total_tokens": 10300799,
+    "median_context": 141704,
+    "p90_context": 174792,
+    "turns_by_model": {
+     "claude-opus-5-5": 81
+    },
+    "active_hours": 2
+   },
+   "compaction_markers": {
+    "compact_boundary": 12,
+    "isCompactSummary": 12
+   },
+   "agent_calls_by_requested_model": {
+    "default": 2
+   }
+  },
+  "CC-C": {
+   "main": {
+    "turns": 1487,
+    "tokens": {
+     "input": 2990,
+     "cache_creation": 6402108,
+     "cache_read": 505340742,
+     "output": 885528
+    },
+    "total_tokens": 512631368,
+    "median_context": 321386,
+    "p90_context": 493966,
+    "turns_by_model": {
+     "claude-opus-5-5": 1482,
+     "claude-sonnet-5-5": 5
+    },
+    "active_hours": 43
+   },
+   "helpers": {
+    "turns": 0,
+    "tokens": {
+     "input": 0,
+     "cache_creation": 0,
+     "cache_read": 0,
+     "output": 0
+    },
+    "total_tokens": 0,
+    "median_context": null,
+    "p90_context": null,
+    "turns_by_model": {},
+    "active_hours": 0
+   },
+   "compaction_markers": {
+    "compact_boundary": 12,
+    "isCompactSummary": 12
+   },
+   "agent_calls_by_requested_model": {}
+  },
+  "CC-INFRA": {
+   "main": {
+    "turns": 3463,
+    "tokens": {
+     "input": 6958,
+     "cache_creation": 9743528,
+     "cache_read": 1830999341,
+     "output": 3199954
+    },
+    "total_tokens": 1843949781,
+    "median_context": 504013,
+    "p90_context": 851060,
+    "turns_by_model": {
+     "claude-opus-5-5": 3463
+    },
+    "active_hours": 67
+   },
+   "helpers": {
+    "turns": 9,
+    "tokens": {
+     "input": 18,
+     "cache_creation": 135804,
+     "cache_read": 993533,
+     "output": 4994
+    },
+    "total_tokens": 1134349,
+    "median_context": 124234,
+    "p90_context": 135626,
+    "turns_by_model": {
+     "claude-opus-5-5": 9
+    },
+    "active_hours": 1
+   },
+   "compaction_markers": {
+    "compact_boundary": 13,
+    "isCompactSummary": 13
+   },
+   "agent_calls_by_requested_model": {
+    "default": 1
+   }
+  },
+  "CC-PM": {
+   "main": {
+    "turns": 1368,
+    "tokens": {
+     "input": 2752,
+     "cache_creation": 2662020,
+     "cache_read": 800497266,
+     "output": 492587
+    },
+    "total_tokens": 803654625,
+    "median_context": 600834.5,
+    "p90_context": 874299,
+    "turns_by_model": {
+     "claude-opus-5-5": 1368
+    },
+    "active_hours": 79
+   },
+   "helpers": {
+    "turns": 61,
+    "tokens": {
+     "input": 122,
+     "cache_creation": 1478326,
+     "cache_read": 5170868,
+     "output": 28291
+    },
+    "total_tokens": 6677607,
+    "median_context": 105957,
+    "p90_context": 118225,
+    "turns_by_model": {
+     "claude-sonnet-5-5": 61
+    },
+    "active_hours": 10
+   },
+   "compaction_markers": {
+    "compact_boundary": 2,
+    "isCompactSummary": 2
+   },
+   "agent_calls_by_requested_model": {
+    "sonnet": 13
+   }
+  }
+ },
+ "method": "turns de-duplicated by message.id; context = input+cache_creation+cache_read; <synthetic> excluded; window on entry timestamp (UTC ISO compare)",
+ "active_crew_hours": 73,
+ "building_tokens_per_active_crew_hour": 58126924.2739726,
+ "always_loaded_bytes": {
+  "CC-B": {
+   "events": 13,
+   "median": 195558
+  },
+  "CC-A": {
+   "events": 17,
+   "median": 195613
+  },
+  "CC-C": {
+   "events": 15,
+   "median": 195992
+  },
+  "UNMAPPED": {
+   "events": 16,
+   "median": 171532.0
+  }
+ }
+}
