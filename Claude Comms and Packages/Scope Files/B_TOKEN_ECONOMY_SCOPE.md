@@ -2,7 +2,7 @@
 
 change-class: non_architecture
 owner: PM Claude (KD-103; crew tooling only, no trading code) · reviewer for this batch: Coltrane (Kyle named "Langston or Coltrane" in KD-103; Langston is off for usage) · plan row: `SPRINT_TO_LIVE_PLAN.md` stage 0 (PM Claude) order 1
-STEP: 1 of 11 · NEXT STEP: 2 of 11
+STEP: 1 of 11 (gate passed with conditions, r2) · NEXT STEP: 2 of 11
 
 ## Intent (Kyle's words, KD-103 and 11-17/11-18)
 - 11-17: "I want you to... propose a system that allows us to manage this as automatically as possible. I'd like to be involved in it as little as possible."
@@ -98,7 +98,7 @@ Each objective carries its proof: what is observed, the instrument, and the pass
 - Blocks, changed violations, failures and the first warning after compaction always show.
 - **Proof:** a repeat of an identical warning is suppressed; a block still shows; the first warning after a compaction shows.
 
-**OBJ-8 — Open-batch nag cadence: settled with Coltrane at this step** (see Finding 1).
+**OBJ-8 — DROPPED (Langston Step-1 ruling, condition 1).** The cadence lives in `computeResurfaceStale` (`server/services/system-alerts.ts:785-802`), keyed by state and severity only, so a per-key cadence is app code, outside KD-103. The want is written as a rider on `#1074` item (v). OBJ-6 already stops an unchanged alert from repeating in each prompt.
 
 **OBJ-9 — Handover carries the settings.**
 - `pm-usage-stop`, `pm-codex-usage-stop`, `pm-transition-to-codex` and `pm-transition-to-claude` name the new settings and checks.
@@ -152,7 +152,7 @@ Corpora searched: `BATCH_CATALOG.md`, `RUNNING_ISSUES.md`, the completion report
 
 The alternative is to drop OBJ-8 and leave the whole thing to #1074 after live.
 
-DISPOSITION: decision required by the reviewer, on #1074 (a technical overlap; the group decides).
+DISPOSITION: no work here — withdrawn, citing Langston's Step-1 ruling (`Langston Design Asks/B_TOKEN_ECONOMY_B_WORKFLOW_IMPROVE_STEP1_VERDICTS.md`); rider added to #1074.
 
 ## Governance applicable (Step 10, judged now, confirmed then)
 - `BATCH_CATALOG`, `PHASE_HISTORY`, `SYSTEM_IMPACT_MAP` (Hook Layer and Loading Estate content), `CLAUDE.md`, `AGENTS.md`, the four handover skills, `SEARCH_SURFACES.md` (only if the helper rule touches it), `RUNNING_ISSUES` (#1074 cross-reference), and the memory files.
@@ -163,3 +163,10 @@ DISPOSITION: decision required by the reviewer, on #1074 (a technical overlap; t
 - **A moved rule becomes unreachable for Codex.** Guarded by the OBJ-5 reachability manifest.
 - **Helpers silently run a different model.** Guarded by the OBJ-4 served-model controls.
 - **The alert delta hides an alert.** Guarded by the full-path fallback, the controls, and the baseline advancing only after a complete read.
+
+## r2 — Langston's Step-1 conditions (2026-11-19, at `72bd37a4a`; verdict file `Langston Design Asks/B_TOKEN_ECONOMY_B_WORKFLOW_IMPROVE_STEP1_VERDICTS.md`), all accepted
+1. **OBJ-8 is dropped and a rider is written on #1074** (above).
+2. **The batch is gradable by the governance checker.** OBJ-6's shared delta script lands under `scripts/crew-tooling/`, a `CODE_PREFIXES` path (`scripts/governance-checker/config.mjs:102`), so the checker enforces the batch. Step 2 names every file and prefix. If nothing lands under a code prefix, the Step-10 ledger is the sole control, and the scope will say so.
+3. **The class is confirmed `non_architecture`.** Both System Impact Map sections (Hook Layer, Loading Estate) are required-by-judgement in the Step-10 ledger; neither may take N/A.
+4. **The OBJ-0 baseline excludes the usage stop.** The baseline window is 2026-11-09 23:26Z (crew resumed on Claude) to 2026-11-16 19:45Z (usage stop). The denominator is active crew-hours, meaning hours with at least one building session working. The stop period is reported separately and never mixed in.
+5. **The OBJ-5 move ledger sweeps stated-size pointers.** For example, `AGENTS.md` line 26 says CLAUDE.md is "~118 KB" when it measures 122,263 B. Such pointers are replaced with a named read of the live size, never a figure.

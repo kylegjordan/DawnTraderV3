@@ -2,7 +2,7 @@
 
 change-class: non_architecture
 owner: PM Claude (KD-103; crew tooling only, no trading code) · reviewer for this batch: Coltrane (KD-103; Langston is off for usage) · plan row: `SPRINT_TO_LIVE_PLAN.md` stage 0 (PM Claude) order 2, after B-TOKEN-ECONOMY
-STEP: 1 of 11 · NEXT STEP: 2 of 11
+STEP: 1 of 11 (gate passed with conditions, r2) · NEXT STEP: 2 of 11
 
 ## Intent (Kyle's words, 11-18 and KD-103)
 11-18:
@@ -163,3 +163,11 @@ Corpora searched: `BATCH_CATALOG.md`, `RUNNING_ISSUES.md`, the completion report
 - **A tool's clean output read as completeness:** every output prints its blind spots and population.
 - **A Codex session not reaching the new text:** guarded by the OBJ-8 manifest and canary.
 - **Process weight:** OBJ-7 and OBJ-11 remove more repetition than R0 and R1 add. The pilot measures it.
+
+## r2 — Langston's Step-1 conditions (2026-11-19, at `72bd37a4a`; verdict file `Langston Design Asks/B_TOKEN_ECONOMY_B_WORKFLOW_IMPROVE_STEP1_VERDICTS.md`), all accepted
+1. **OBJ-4's positive control is pinned to `e16767ef7`,** the population `SEARCH_SURFACES.md:31` states. At the build ref, the expected count is re-derived before it is used as a control.
+2. **The pilot replays closed batch audits, not issue states.** For each escape, Step 2 names the closed batch whose audit is replayed and the ref where the escape happened. #903 and #691 are closed; #1063 and #1160 are still open, so their replay targets are the batches that let them through.
+3. **OBJ-11 also covers `.claude/skills/bug-investigation/SKILL.md`,** which holds a fifth fresh-reader copy. It also says what `workflow-hotfix`, which carries none of the three blocks, inherits from the shared contract. Both go in the move ledger.
+4. **The batch is gradable.** The OBJ-4, OBJ-5 and OBJ-6 CLIs land under `scripts/crew-tooling/`, a `CODE_PREFIXES` path (`scripts/governance-checker/config.mjs:102`). Step 2 names every file.
+5. **OBJ-10 ships non-blocking:** warn-only, or outside the required CI jobs. It stays that way until Kyle rules whether a PM-authored test may block a trading deploy. Langston ruled that PM may build it, because it is not trading code.
+6. **OBJ-12 cannot be marked done by proxy.** If row 5b has not delivered at close, OBJ-12 closes CLOSED-UNPROVEN with its home named.
