@@ -66,9 +66,9 @@
 
 - Archived 2026-11-16 · nudge-11-16-1131z → `1-system-manual/pm/archive/memory/2026-11.md`
 
-- **11-16 ~12:35Z Kyle (b785d8714):** KD-96 DB query tool NOW, interrupts birth-cap (Infra told; flag if ~11-19 at risk); KD-97 #705 retry fix now by OLD (told; out of NEW row 119); KD-98 sessions may verify KD rows in PM transcript (rules 6a). Backblaze key still needs his yes in OLD chat.
+- Archived 2026-11-16 · kd-96-db-tool-recorded → `1-system-manual/pm/archive/memory/2026-11.md`
 
-- **11-16 ~17:30Z Kyle:** KD-100 3 DB security items YES (869c3c3ed; OLD TLS fold into POOL-GUARD, cert DOWNLOADED by Kyle 11-16 ~18:57 local: C:SERSKYLEGDOWNLOADSPROD-CA-2021.CRT (OLD TOLD); Infra role->helper-retire); KD-101 B-DB-MAP Infra before live after role, before helper-retire (564884387; PM ruled on Kyle delegation). Backblaze key DONE 12:57Z (OLD). USAGE: KD-99 90% line (cron 6b575bdd). CERT DOWNLOADED by Kyle ~18:57 local: Downloads/prod-ca-2021.crt (OLD told).
+- Archived 2026-11-16 · kd-100-db-security-recorded → `1-system-manual/pm/archive/memory/2026-11.md`
 
 - **Small-items bundle +1 (ANALYST 11-16 ~16Z):** Settings "config snapshot" view 500s (route calls removed storage.getPortfolioBalance; repoint vs remove undecided). Not paper/VTS. Bundle ids in archive 2026-11: small-items-bundle-1/2-pending-kyle.
 
