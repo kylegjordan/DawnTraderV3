@@ -290,3 +290,12 @@ Read at **2026-11-16T14:45:15.323Z** (`observedAt`), pre-registered START 14:45Z
 - **Process identity:** `git rev-parse HEAD` = `dist/BUILD_SHA` = `8fac86e5e33e34415a1ab21f309d3ffaf7275ac7`; pm2 `restart_time` 708; `pm_uptime` 1794809290932 = 2026-11-16T06:08:10.932Z; status online.
 - **What PASS needs at END (20:30Z, r18):** the same `processPid` 1153725, `processUptimeSeconds` strictly greater than 31024.39, and `evaluations.xstock_spot.count` greater than 2, with `lastAt` quoted. A pid change voids the pair.
 - **Note, no claim made:** the xStock count of 2 at START is from the 09:34Z pre-market window. The US session opened at 14:30Z, so evaluations in the session are what END reads.
+
+## r20 — the C-1 pair is void, then re-registered (2026-11-19 23:10Z, CC-B)
+
+- **The 2026-11-16 END read was not taken.** Kyle's usage stop (19:40Z) cancelled the 20:30Z timer. The r19 START therefore stands alone, and the pair is **void**: no PASS and no FAIL is claimed.
+- **Re-registered for the 2026-11-20 US session:**
+  - START 14:45Z and END 20:30Z, the same pid, the same instrument and the same PASS criteria as r18;
+  - reminder alerts `a1aac794-5bf4-4fc7-a7f1-9f7502f3914c` (START) and `e69ceba9-6fd7-4b69-be4c-3c60f3fe2727` (END);
+  - DEPLOY_WINDOWS amends to `until_event`, `expected_by` (2026-11-20T21:00Z) and `review_by` (2026-11-21T12:00Z).
+- **A restart between START and END voids the pair again,** and it is then re-run in the next session in the same way.
