@@ -1,0 +1,30 @@
+{
+  "$comment": "B-WORKFLOW-IMPROVE OBJ-1 (Q1). One traceability ledger per batch: objective -> intent -> components -> entry points -> readers -> plan item -> diff -> tests -> Step-7 proof -> Step-8 challenge -> status. DRAFT, non-blocking until the OBJ-9 pilot. Checked by ledger-validate.mjs, which reads the required-field lists below; this file is the single statement of them.",
+  "version": "1.0-draft",
+  "top_level_required": ["batch", "change_class", "actor", "role", "crew_mode", "generation", "ref", "time", "objectives"],
+  "change_classes": ["architecture", "non_architecture", "sub_batch", "hotfix"],
+  "crew_modes": ["CLAUDE", "CODEX"],
+  "objective_required": ["id", "intent", "plan_item", "status"],
+  "objective_fields": {
+    "id": "scope objective id, e.g. OBJ-3",
+    "intent": "what Kyle means by done for this objective, in one sentence",
+    "components": "array of component names (System Impact Map names)",
+    "entry_points": "array of entry points that reach the change (census output)",
+    "readers": "array of reader objects, each with reader_required fields",
+    "plan_item": "pre-audit implementation-plan item id, e.g. Q3",
+    "diff": "array of {path, ref} the objective changed",
+    "tests": "array of {name, ref, result}",
+    "step7_proof": "proof object (first pass)",
+    "step8_challenge": "proof object (reviewer second pass)",
+    "status": "one of statuses",
+    "unproven": "required when status is closed-unproven: object with unproven_required fields",
+    "missed_earlier": "array of {what, found_at_step} - what an earlier step missed and which step found it",
+    "tool_runs": "array of {tool, version, output_ref}"
+  },
+  "reader_required": ["name", "meaning", "on_missing", "on_error", "on_stale", "concurrency"],
+  "statuses": ["open", "done", "closed-unproven", "withdrawn"],
+  "proof_required": ["actor", "ref", "instrument", "result"],
+  "proof_results": ["pass", "fail", "unproven"],
+  "unproven_required": ["owner", "home", "closing_condition", "failure_condition"],
+  "withdrawn_required": ["citation"]
+}
