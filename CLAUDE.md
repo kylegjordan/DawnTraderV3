@@ -53,7 +53,7 @@ Role, style, plain language, canonical terms, the step-report shape and problem-
 
 ## 2. *(REMOVED 2026-08-21 — the workflow lives in §0.a + the eleven step skills)*
 
-⛔ **§2 held the long-form eleven-step workflow. Kyle removed it COMPLETELY: "there shouldn't be a second set of references to it."** Every step's full text moved, VERBATIM, into that step's own skill — see the §0.a table for the addresses. **Do NOT restate a step here.**
+⛔ **§2 held the long-form eleven-step workflow. Kyle removed it COMPLETELY: "there shouldn't be a second set of references to it."** Every step's full text moved, VERBATIM, into that step's own skill — see the §0.a table for the addresses; on 2026-11-20 those verbatim blocks were archived to `1-system-manual/_archive/WORKFLOW_SKILL_ORIGINAL_TEXT.md` and each skill's summary now carries the rules (B-WORKFLOW-IMPROVE Q10). **Do NOT restate a step here.**
 **This heading is a forwarding address — `§2` is cited across frozen reports, so a citation to "§2 step N" means the step-N skill.** Batch naming and the change-class declaration moved intact to §3.0. *(`CLAUDE_MD_RULE_HISTORY.md` · `P5-06`)*
 
 ---

@@ -13,13 +13,12 @@ description: STEP 8 ONLY of the DawnTrader batch workflow - Langston's independe
 
 ## ⛔ WHAT MAKES HIS PASS WORTH ANYTHING IS THAT HE CAN RE-DERIVE IT
 Give him the ref, the object, the population, and the exact commands you ran. **A number he cannot re-derive he will tag `RULED ON REPORTED FACT` — and that is DISQUALIFYING for a PROCEED on the leg it covers, not a caveat he can attach to one.**
-⚠️ **He is STATELESS per-invoke and may be mid-review with another session.** **Do not read a slow reply as agreement**, and never carry a conclusion from his prior turn into a new dispatch without restating it in full.
+⚠️ **He is STATELESS per-invoke and may be mid-review with another session.** **Do not read a slow reply as agreement**, and never carry a conclusion from his prior turn into a new dispatch without restating it in full. *(`1-system-manual/WORKFLOW_SHARED_CONTRACT.md` §3.)*
 
 
 ## ☑ THE DELIVERY BOARD — MOVE THE CARD WHEN THE WORK MOVES
 Card stays in **`Verification`**; set **Blocked on = Langston** for his second pass.
-★ **LANGSTON SETS THE `Review` FIELD; THE SESSION MOVES THE CARD.** *(Kyle’s wording, 2026-08-24.)* ⛔ **His approval is NOT the move** — he sets `Review = Approved`, then YOU move it and update `Blocked on`. If approval also moved the card the board would freeze every time he is mid-review, at FOUR gates per batch.
-⚠️ **NOTHING AUTOMATES THIS.** An un-updated board is a **confidently wrong second record, which is worse than no board** — and the whole point is that Kyle can see who is doing what without asking. ⛔ **The card holds STATUS, OWNER, ORDER and the description — NOTHING ELSE.** Every finding, citation and verdict stays in the repo and the card LINKS to it. Board: https://github.com/users/kylegjordan/projects/1 · full protocol: `1-system-manual/DELIVERY_BOARD_PROTOCOL.md`.
+★ **The board rules every step shares — Langston sets `Review`, the session moves the card, nothing automates it, and the card holds status, owner, order and the description only — are in `1-system-manual/WORKFLOW_SHARED_CONTRACT.md` §2 (`WI-B1`).** Board: https://github.com/users/kylegjordan/projects/1 · full protocol: `1-system-manual/DELIVERY_BOARD_PROTOCOL.md`.
 
 ---
 
@@ -27,7 +26,5 @@ Card stays in **`Verification`**; set **Blocked on = Langston** for his second p
 - **Two legs, each recorded.** (1) **Re-derive:** the reviewer re-runs the Step-7 proof at the ref with his own instrument. (2) **Challenge:** he tries one way the claim could be wrong that Step 7 did not test: a second path, a failed read treated as empty, or a meaning mismatch.
 - Each leg goes in the ledger's `step8_challenge` with actor, ref, instrument and result. A leg ruled on reported fact is recorded `unproven`, never `pass`. The batch ledger: `scripts/crew-tooling/ledger-schema.json`, checked by `node scripts/crew-tooling/ledger-validate.mjs <ledger.json>`.
 
-## THE ORIGINAL RULES-FILE TEXT, PRESERVED VERBATIM
-> This is exactly what `CLAUDE.md` §2 held for this step before §2 was removed on 2026-08-21. It is kept word-for-word so the move loses nothing: the summary above is a derivation, and a derivation is not the rule. Where the two differ, **this block is authoritative.**
-
-8. **Second-Pass Verification (Langston)** — Independent UI + evidence verification. Mandatory.
+## THE ORIGINAL RULES-FILE TEXT — ARCHIVED (`WI-A08`)
+The word-for-word `CLAUDE.md` §2 text for this step is archived, unchanged, at `1-system-manual/_archive/WORKFLOW_SKILL_ORIGINAL_TEXT.md` (`WI-A08`; B-WORKFLOW-IMPROVE Q10, 2026-11-20). **Every rule in it is carried by the summary above;** the archive keeps the origin cases, dates and issue numbers. Read it when a rule's history matters.

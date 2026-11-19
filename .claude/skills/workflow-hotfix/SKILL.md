@@ -37,6 +37,8 @@ description: HOTFIX ONLY - the abbreviated DawnTrader workflow for an urgent bre
 ### PATH A — the defect was ALREADY a finding in a completed or just-completed audit
 **CITE IT.** Name the audit, the batch, the issue number, the report section. **That audit work is done and is NOT repeated.** ⇒ go straight to §2.3.
 
+★ **A HOTFIX INHERITS THE SHARED CONTRACT** (`1-system-manual/WORKFLOW_SHARED_CONTRACT.md`): **§1** — a fresh reader for any load-bearing cause or absence the fix rests on, one pass, before Langston; **§3** — Langston is stateless, so the gate dispatch carries its own context.
+
 ### PATH B — the error just turned up on its own
 ⛔ **A BLAST-RADIUS AUDIT IS MANDATORY, AND IT EXISTS TO ANSWER ONE QUESTION: *am I looking at the whole problem, or at one visible symptom of a bigger one?*** (Kyle's framing, and the reason this path may not be skipped.) **A symptom fixed in isolation hides its cause and buys silence, not health.**
 Answer these explicitly, **in writing**, before proposing any fix:

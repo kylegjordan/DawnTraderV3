@@ -38,6 +38,7 @@ description: BUG INVESTIGATION ONLY - what to do when you think you have found a
 ⛔ **LEAVE THE ONE-LINE RECORD where the finding lands:** **`REVIEWER: <object handed | claim-only> · <question> · <verdict> · re-derived y/n`** — **without a denominator the bar can never rise above "one run."**
 
 ## ⛔⛔ ONE PASS, ON LOAD-BEARING CLAIMS ONLY — AND IT RUNS *BEFORE* LANGSTON, NEVER INSTEAD OF HIM (Kyle, 2026-09-30, `B-TOKEN-BURN-CUT` OBJ-4)
+★ **The same one-pass rule, as every step skill shares it, is held in `1-system-manual/WORKFLOW_SHARED_CONTRACT.md` §1. This section keeps its investigation wording, which is authoritative for an investigation; where the two differ, this one governs here.**
 ★ **THIS REPLACES THE ITERATE-TO-CONSENSUS LOOP (Kyle 2026-08-27 and 2026-08-31), ON COST.** Measured 2026-09-29/30: helper agents cost $1,524 at list rates in two days, against $2-30 a day per session before, and reader rounds were a large part of it (`B_TOKEN_BURN_CUT_PRE_AUDIT.md` §0, D4).
 - **WHICH CLAIMS: only one that would change WHAT GETS BUILT** — a mechanism, a cause, an absence, or a number a decision rests on. A wording, a count that changes no decision, a cosmetic slip: no reader.
 - **YOU DECIDE BEFORE PUBLISHING, NOT AFTER — and any load-bearing claim you did NOT route to a reader ships labelled `NOT RE-READ`** in the dispatch, scope or report, so Langston can see which is which. ⛔ **The label is what stops "load-bearing" from being a gate that certifies itself** (Langston, 2026-09-30).

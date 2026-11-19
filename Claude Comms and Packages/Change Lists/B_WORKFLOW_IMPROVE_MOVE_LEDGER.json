@@ -1,0 +1,160 @@
+{
+ "version": 1,
+ "marker": "WI-MOVED",
+ "note": "B-WORKFLOW-IMPROVE OBJ-11 (Q10), PM Claude, 2026-11-20. Passages taken from ref eb12f019b (LF). WI-F1/WI-B1/WI-S1: text that stood word for word in several step skills, now held once in the shared contract; WI-A01..A11: each skill's verbatim CLAUDE.md §2 block, archived. Checked by move-ledger-check.mjs --ledger <this file> --dupes.",
+ "moves": [
+  {
+   "id": "WI-F1",
+   "origin_heading": "### ★ AND FOR A LOAD-BEARING CLAIM, DO NOT SIMULATE STATELESSNESS — PRODUCE IT",
+   "sources": [
+    ".claude/skills/workflow-02-audit-and-plan/SKILL.md",
+    ".claude/skills/workflow-04-code-review/SKILL.md",
+    ".claude/skills/workflow-07-verify-cc/SKILL.md",
+    ".claude/skills/workflow-11-completion/SKILL.md"
+   ],
+   "destination": "1-system-manual/WORKFLOW_SHARED_CONTRACT.md",
+   "sha256": "4d0af19fb22424f613284d0d206d841d850f32769cd7cad74c059fbe25107fe2",
+   "bytes": 6179
+  },
+  {
+   "id": "WI-B1",
+   "origin_heading": "## ☑ THE DELIVERY BOARD (the two shared lines)",
+   "sources": [
+    ".claude/skills/workflow-01-scope/SKILL.md",
+    ".claude/skills/workflow-02-audit-and-plan/SKILL.md",
+    ".claude/skills/workflow-03-implementation/SKILL.md",
+    ".claude/skills/workflow-04-code-review/SKILL.md",
+    ".claude/skills/workflow-05-ci/SKILL.md",
+    ".claude/skills/workflow-06-deploy/SKILL.md",
+    ".claude/skills/workflow-07-verify-cc/SKILL.md",
+    ".claude/skills/workflow-08-verify-langston/SKILL.md",
+    ".claude/skills/workflow-09-iterate/SKILL.md",
+    ".claude/skills/workflow-10-governance/SKILL.md",
+    ".claude/skills/workflow-11-completion/SKILL.md"
+   ],
+   "destination": "1-system-manual/WORKFLOW_SHARED_CONTRACT.md",
+   "sha256": "99f948037fc48f4cb271556e8acd4897d8922538a38723d8215bfa3a8ddf5786",
+   "bytes": 810
+  },
+  {
+   "id": "WI-S1",
+   "origin_heading": "## ⛔ HE IS STATELESS PER-INVOKE",
+   "sources": [
+    ".claude/skills/workflow-04-code-review/SKILL.md"
+   ],
+   "destination": "1-system-manual/WORKFLOW_SHARED_CONTRACT.md",
+   "sha256": "713a08ffa9b6f7435a82438066c158c0d5fefe3695fb100128fa3bc4f148e22c",
+   "bytes": 200
+  },
+  {
+   "id": "WI-A01",
+   "origin_heading": "THE ORIGINAL RULES-FILE TEXT, PRESERVED VERBATIM",
+   "sources": [
+    ".claude/skills/workflow-01-scope/SKILL.md"
+   ],
+   "destination": "1-system-manual/_archive/WORKFLOW_SKILL_ORIGINAL_TEXT.md",
+   "sha256": "bf5c107d70cd14084017dd17a40fdfd72de75f267dfcbfc95cdbc0e28232c603",
+   "bytes": 5173
+  },
+  {
+   "id": "WI-A02",
+   "origin_heading": "THE ORIGINAL RULES-FILE TEXT, PRESERVED VERBATIM",
+   "sources": [
+    ".claude/skills/workflow-02-audit-and-plan/SKILL.md"
+   ],
+   "destination": "1-system-manual/_archive/WORKFLOW_SKILL_ORIGINAL_TEXT.md",
+   "sha256": "33a126b8888966c2139577ddad45641dd97bb0af64aeba0bee0dbc8aef2b4856",
+   "bytes": 1417
+  },
+  {
+   "id": "WI-A03",
+   "origin_heading": "THE ORIGINAL RULES-FILE TEXT, PRESERVED VERBATIM",
+   "sources": [
+    ".claude/skills/workflow-03-implementation/SKILL.md"
+   ],
+   "destination": "1-system-manual/_archive/WORKFLOW_SKILL_ORIGINAL_TEXT.md",
+   "sha256": "4c8c61f30bfb8cc4cc0c5f8b34865fbfb397dfc5301d85e08aa7ee3de6a9bd84",
+   "bytes": 477
+  },
+  {
+   "id": "WI-A04",
+   "origin_heading": "THE ORIGINAL RULES-FILE TEXT, PRESERVED VERBATIM",
+   "sources": [
+    ".claude/skills/workflow-04-code-review/SKILL.md"
+   ],
+   "destination": "1-system-manual/_archive/WORKFLOW_SKILL_ORIGINAL_TEXT.md",
+   "sha256": "1d2f895b888f1932b1ca83960297d49021a23df270e4075af6aa6724a5b214f5",
+   "bytes": 1015
+  },
+  {
+   "id": "WI-A05",
+   "origin_heading": "THE ORIGINAL RULES-FILE TEXT, PRESERVED VERBATIM",
+   "sources": [
+    ".claude/skills/workflow-05-ci/SKILL.md"
+   ],
+   "destination": "1-system-manual/_archive/WORKFLOW_SKILL_ORIGINAL_TEXT.md",
+   "sha256": "346788b66f696852801ba9e5afa6643c49dc205f9a48f773a3fee1123c8e5e02",
+   "bytes": 490
+  },
+  {
+   "id": "WI-A06",
+   "origin_heading": "THE ORIGINAL RULES-FILE TEXT, PRESERVED VERBATIM",
+   "sources": [
+    ".claude/skills/workflow-06-deploy/SKILL.md"
+   ],
+   "destination": "1-system-manual/_archive/WORKFLOW_SKILL_ORIGINAL_TEXT.md",
+   "sha256": "05633f415a841a24b1e20c41ee1fed0467b6af58f83cd586dda6bc39497902bb",
+   "bytes": 887
+  },
+  {
+   "id": "WI-A07",
+   "origin_heading": "THE ORIGINAL RULES-FILE TEXT, PRESERVED VERBATIM",
+   "sources": [
+    ".claude/skills/workflow-07-verify-cc/SKILL.md"
+   ],
+   "destination": "1-system-manual/_archive/WORKFLOW_SKILL_ORIGINAL_TEXT.md",
+   "sha256": "aa7c01c9b2372bb2da702f02cdb8e32f0265226ab600cd11b3f8382c82c11768",
+   "bytes": 467
+  },
+  {
+   "id": "WI-A08",
+   "origin_heading": "THE ORIGINAL RULES-FILE TEXT, PRESERVED VERBATIM",
+   "sources": [
+    ".claude/skills/workflow-08-verify-langston/SKILL.md"
+   ],
+   "destination": "1-system-manual/_archive/WORKFLOW_SKILL_ORIGINAL_TEXT.md",
+   "sha256": "20d179081f974ca43934f108813c97e8bd4865622774a0a2e884b7e1686ab40e",
+   "bytes": 422
+  },
+  {
+   "id": "WI-A09",
+   "origin_heading": "THE ORIGINAL RULES-FILE TEXT, PRESERVED VERBATIM",
+   "sources": [
+    ".claude/skills/workflow-09-iterate/SKILL.md"
+   ],
+   "destination": "1-system-manual/_archive/WORKFLOW_SKILL_ORIGINAL_TEXT.md",
+   "sha256": "d54583ceebff42c5151d428d534ca937ef0ece4f42d962155931bb5a0dfc922e",
+   "bytes": 456
+  },
+  {
+   "id": "WI-A10",
+   "origin_heading": "THE ORIGINAL RULES-FILE TEXT, PRESERVED VERBATIM",
+   "sources": [
+    ".claude/skills/workflow-10-governance/SKILL.md"
+   ],
+   "destination": "1-system-manual/_archive/WORKFLOW_SKILL_ORIGINAL_TEXT.md",
+   "sha256": "fefedf87285ceefb100d01d9e2c0b7d137941b711c34e8bbbbdb3e23a059a569",
+   "bytes": 3204
+  },
+  {
+   "id": "WI-A11",
+   "origin_heading": "THE ORIGINAL RULES-FILE TEXT, PRESERVED VERBATIM",
+   "sources": [
+    ".claude/skills/workflow-11-completion/SKILL.md"
+   ],
+   "destination": "1-system-manual/_archive/WORKFLOW_SKILL_ORIGINAL_TEXT.md",
+   "sha256": "ae0177f36558bafb09fa7efc539685ff5f2fd526578f400656139bd9c391b762",
+   "bytes": 765
+  }
+ ]
+}

@@ -216,6 +216,8 @@ jobs:
           node scripts/crew-tooling/move-ledger-check.mjs --self-test
           node scripts/crew-tooling/claude-md-cap.mjs --ci --report
           node scripts/crew-tooling/move-ledger-check.mjs --dupes
+          # B-WORKFLOW-IMPROVE Q10: the step-skill -> shared-contract / archive moves, same blocking rule.
+          node scripts/crew-tooling/move-ledger-check.mjs --ledger "Claude Comms and Packages/Change Lists/B_WORKFLOW_IMPROVE_MOVE_LEDGER.json" --dupes
 
       # B-PLAN-CURRENCY-CHECK P43 (P30/Q33 form): the weekly census's rule
       # fixtures, pure over text (no git, no network, no files). Its own step
