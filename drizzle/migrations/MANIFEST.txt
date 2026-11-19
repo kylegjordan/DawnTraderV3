@@ -257,4 +257,3 @@
 2026-11-14-b-disk-file-tiering-cold-retry.sql
 2026-11-14-b-disk-file-tiering-cold-audit.sql
 2026-11-14-b-disk-file-tiering-cold-key-step1.sql
-2026-11-16-b-disk-file-tiering-liveness-ceiling-arm2.sql

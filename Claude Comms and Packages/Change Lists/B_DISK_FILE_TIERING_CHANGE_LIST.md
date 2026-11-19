@@ -663,3 +663,10 @@ Tests: 3b 73/73; tsc 324 = 324.
 - ⇒ the `daysFromUploadingToHiding: 1` leg, labelled HYPOTHESIS at plan r3, is now MEASURED on one object.
 - **Alert `7ef416cb` (`cold-meter-liveness-ceiling`, minted 11-17 04:10Z at 3 > 2):** step 4's two extra objects, exactly as Langston's point-2 review predicted; the arm-2 ceiling migration (`bfb2df1fe`) was never deployed (no deploy ran before the stop). Resolved with this record.
 - **Next:** 3d step 5 (delete the wide key `…0001`, confirm it no longer authorizes, shred `/root/b2-wide-key.retired`); the arm-2 ceiling migration is now moot.
+
+### 3d step 4c — the arm-2 ceiling migration WITHDRAWN before any deploy applied it (2026-11-19 23:35Z, CC-A)
+- **State at the object:** `dt-sql` on `_migrations` returns no `liveness-ceiling` row (the only `%liveness%` row is the 06-26 price-liveness seed) — it was never applied; no deploy ran between its approval (`bfb2df1fe`) and the window's end.
+- **Why withdraw rather than let it ride the next deploy:** its window is over (both arms PASS, step 4b), so applying it now would raise `cold_meter_liveness_max_versions` 2 -> 3 (and `_proof/` with it, C-2) with no window to justify it, and need a revert migration of its own at step 5 — two schema events for a value that should simply stay 2. Its own header anticipated this: *"If no deploy lands before the window ends, the ceiling stayed at 2 and that is what step 5 says."*
+- **Change:** `git rm` of the migration and its rollback; its one `MANIFEST.txt` line (260) removed; no other reference outside this change list (`git grep`). The ceiling stays at 2, as recorded. Git history (`05a139535`, `bfb2df1fe`) is the archive.
+- **DEPLOY_WINDOWS:** the `B-DISK-FILE-TIERING` row closed (`completed`).
+- **Next:** 3d step 5 (delete the wide key `…0001`, confirm it fails, shred the retired file; the rotator flag-before-lock fix).
