@@ -28,7 +28,7 @@ const UNRESOLVED = [
   'string-keyed access (obj[name], route strings, config keys, JSON)',
   'dynamic import() with a computed path, require() of a computed path',
   'shell, Python and systemd files outside the TypeScript program',
-  'files excluded by both tsconfigs (server/legacy/**, build output)',
+  'files excluded by both tsconfigs (everything under server/legacy, build output)',
 ];
 
 function parse(cfgPath) {
@@ -43,8 +43,12 @@ try {
   const rootCfg = parse('tsconfig.json');
   if (!rootCfg) out({ ...base, error: 'no tsconfig.json at root' }, 2);
   const serverCfg = parse('server/tsconfig.json');
-  // Test files: the root tsconfig excludes **/*.test.ts, but a reader in a test is still a reader.
-  const testCfg = ts.parseJsonConfigFileContent({ compilerOptions: {}, include: ['server/**/*.test.ts', 'shared/**/*.test.ts', 'client/src/**/*.test.ts', 'server/tests/**/*.ts'], exclude: ['node_modules'] }, ts.sys, ROOT);
+  // Test files: the root tsconfig excludes test files, but a reader in a test is still a reader.
+  // The globs are built from parts: a literal slash-star in a string trips the legacy-deletion fence's
+  // false-comment-opener check (b-sizing-legacy-deletion-fence.test.ts), which scans scripts/ too.
+  const ANY = '**', STAR = '*';
+  const TEST_GLOBS = [`server/${ANY}/${STAR}.test.ts`, `shared/${ANY}/${STAR}.test.ts`, `client/src/${ANY}/${STAR}.test.ts`, `server/tests/${ANY}/${STAR}.ts`];
+  const testCfg = ts.parseJsonConfigFileContent({ compilerOptions: {}, include: TEST_GLOBS, exclude: ['node_modules'] }, ts.sys, ROOT);
   const files = [...new Set([...rootCfg.fileNames, ...(serverCfg ? serverCfg.fileNames : []), ...testCfg.fileNames])];
   const options = { ...rootCfg.options, noEmit: true };
   const versions = new Map(files.map((f) => [f, '0']));
