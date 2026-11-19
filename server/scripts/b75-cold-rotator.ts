@@ -524,6 +524,11 @@ async function runColdRotatorCliBody(): Promise<void> {
   // The age bound applies only to a holder on ANOTHER host (a same-host holder is judged by its live pid and that
   // pid's start time). 2 x the run deadline: the deadline is checked BETWEEN candidates, so a live run may outlast it
   // by its last candidate's full envelope (pre-audit term list); 2x leaves that envelope 20 h (Langston, item 2 C-1).
+  // 3d step 5 (alert 930168e2, Langston 1571882987669422203): the CLI flags are validated BEFORE the lock is taken.
+  // parseIntFlag exits on a bad value, and an exit inside the locked region skips the finally below, leaving the lock
+  // for the next run to "take over" and page as a dead holder (`--limit 0`, 2026-11-16).
+  const argv = process.argv.slice(2);
+  const { limitOverride } = applyColdRotatorCliOverrides(cfg, argv);
   const lock = acquireRotatorLock(ROTATOR_LOCK_PATH, undefined, 2 * cfg.runDeadlineMs);
   if (lock.kind === 'held') {
     console.error(`[B75 rotator] REFUSED — the rotator lock is held: ${lock.holder}`);
@@ -532,25 +537,26 @@ async function runColdRotatorCliBody(): Promise<void> {
   }
   if (lock.kind === 'taken_over') {
     console.error(`[B75 rotator] TOOK OVER a dead or stale holder's lock: ${lock.holder}`);
-    await pageRotatorLock('taken_over', `The cold rotator lock ${ROTATOR_LOCK_PATH} was left by a dead process, or one older than the run deadline (${lock.holder}); this run took it over. The previous run crashed or was killed.`);
+    await pageRotatorLock('taken_over', `The cold rotator lock ${ROTATOR_LOCK_PATH} was left by a dead process, or one older than the run deadline (${lock.holder}); this run took it over. The previous run did not release its lock: it crashed, was killed, or exited early.`);
   }
   // Langston 3b Step 4 C-1: process.exit inside the try would skip this finally (Node runs no pending finally through
   // exit), leaving the lock for next month to "take over" and page a crash that never happened. The body RETURNS its
   // exit code; the lock is released; only then does the process exit.
   let code = 0;
   try {
-    code = await runColdRotatorBodyLocked(cfg, startedAt);
+    code = await runColdRotatorBodyLocked(cfg, startedAt, limitOverride);
   } finally {
     releaseRotatorLock(ROTATOR_LOCK_PATH);
   }
   if (code !== 0) process.exit(code);
 }
 
-async function runColdRotatorBodyLocked(cfg: ColdRotatorConfig, startedAt: Date): Promise<number> {
-
-  // B-STORAGE-HARDEN OBJ-1: optional CLI overrides (bounded/controlled rotation).
-  const argv = process.argv.slice(2);
-  const { limitOverride } = applyColdRotatorCliOverrides(cfg, argv);
+async function runColdRotatorBodyLocked(
+  cfg: ColdRotatorConfig,
+  startedAt: Date,
+  // B-STORAGE-HARDEN OBJ-1: optional CLI overrides (bounded/controlled rotation), parsed before the lock (3d step 5).
+  limitOverride: number | null,
+): Promise<number> {
 
   const storage = getStorageClient();
   const coldConfigured = storage.isColdConfigured();

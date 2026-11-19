@@ -16,6 +16,7 @@ import { deferredFromRotatorLog } from '../../services/archival-run-check';
 import {
   ColdUploadFailed,
   acquireRotatorLock,
+  applyColdRotatorCliOverrides,
   releaseRotatorLock,
   type RotatorLock,
   runColdRotationCandidates,
@@ -344,7 +345,23 @@ describe('3b — the rotator lock: refuse a live holder, take over a dead one, n
     const body = src.slice(start, end > 0 ? end : undefined).split(/\r?\n(?=\/\*\*|export |async function |function )/)[0];
     expect(body).toMatch(/return failed > 0 \? 1 : 0;/);
     expect(body).not.toMatch(/process\.exit\(/);
-    expect(src).toMatch(/code = await runColdRotatorBodyLocked\(cfg, startedAt\);[\s\S]*?releaseRotatorLock\(ROTATOR_LOCK_PATH\);[\s\S]*?if \(code !== 0\) process\.exit\(code\);/);
+    expect(src).toMatch(/code = await runColdRotatorBodyLocked\(cfg, startedAt, limitOverride\);[\s\S]*?releaseRotatorLock\(ROTATOR_LOCK_PATH\);[\s\S]*?if \(code !== 0\) process\.exit\(code\);/);
+    // 3d step 5 (alert 930168e2): no flag parsing inside the locked body — parseIntFlag exits on a bad value
+    expect(body).not.toMatch(/applyColdRotatorCliOverrides\(|parseIntFlag\(/);
+  });
+  it('a refused flag (`--limit 0`) exits BEFORE the lock is taken, so it leaves no lock behind (3d step 5, alert 930168e2)', () => {
+    // the refusal itself: `--limit 0` exits 1 (the 2026-11-16 case)
+    const exits: number[] = [];
+    const cfg = { warmRetentionDays: 30, perTableWarmRetentionDays: new Map() } as unknown as Parameters<typeof applyColdRotatorCliOverrides>[0];
+    applyColdRotatorCliOverrides(cfg, ['--limit', '0'], { error: () => {}, exit: (c) => { exits.push(c); } });
+    expect(exits).toEqual([1]);
+    // ...and it runs before the lock: in the CLI body the validation precedes acquireRotatorLock
+    const src = read('server/scripts/b75-cold-rotator.ts');
+    const cli = src.slice(src.indexOf('async function runColdRotatorCliBody('), src.indexOf('async function runColdRotatorBodyLocked('));
+    const parsedAt = cli.indexOf('applyColdRotatorCliOverrides(cfg, argv)');
+    const lockedAt = cli.indexOf('acquireRotatorLock(ROTATOR_LOCK_PATH');
+    expect(parsedAt).toBeGreaterThan(0);
+    expect(lockedAt).toBeGreaterThan(parsedAt);
   });
   it('a holder on ANOTHER host is held, never taken over', () => {
     const f = path.join(tmp(), 'lock');
