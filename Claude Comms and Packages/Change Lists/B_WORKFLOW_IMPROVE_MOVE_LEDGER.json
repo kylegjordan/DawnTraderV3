@@ -156,5 +156,177 @@
    "sha256": "ae0177f36558bafb09fa7efc539685ff5f2fd526578f400656139bd9c391b762",
    "bytes": 765
   }
- ]
+ ],
+ "citations": {
+  "note": "skill-cites.mjs census at the pre-move ref origin/migration/aws-supabase (b75aeba60): 87 citations in 20 files; --check at the Q10 commit ddcf8be55: 31 point at different text. All 31 sit in frozen records (closed scopes, pre-audits, change lists, verdicts) and are mapped, not rewritten: a citation resolves against the skill AS OF the commit that wrote it. moved: the 13 whose pre-move text this move relocated, each with where that text now lives (0 not found). pre_existing: 20 that already cited a blank or rule line at the pre-move ref, so this move did not cause them. Not covered (stated by the tool): citations by heading or prose, skill names outside its patterns, corpora outside 1-system-manual/ and Claude Comms and Packages/.",
+  "moved": [
+   {
+    "site": "Claude Comms and Packages/Change Lists/B_TOKEN_ECONOMY_MOVE_LEDGER.json:449",
+    "cites": "workflow-10-governance:205",
+    "pre_q10_text_now_at": "workflow-10-governance:205 (same line, text extended by the Q10 fold)"
+   },
+   {
+    "site": "Claude Comms and Packages/Langston Design Asks/B_TOKEN_ECONOMY_B_WORKFLOW_IMPROVE_STEP1_VERDICTS.md:71",
+    "cites": "workflow-10-governance:205",
+    "pre_q10_text_now_at": "workflow-10-governance:205 (same line, text extended by the Q10 fold)"
+   },
+   {
+    "site": "Claude Comms and Packages/Langston Design Asks/B_TOKEN_ECONOMY_B_WORKFLOW_IMPROVE_STEP1_VERDICTS.md:108",
+    "cites": "workflow-02-audit-and-plan:94",
+    "pre_q10_text_now_at": "WORKFLOW_SHARED_CONTRACT.md WI-F1"
+   },
+   {
+    "site": "Claude Comms and Packages/Langston Design Asks/B_TOKEN_ECONOMY_B_WORKFLOW_IMPROVE_STEP1_VERDICTS.md:110",
+    "cites": "workflow-02-audit-and-plan:94",
+    "pre_q10_text_now_at": "WORKFLOW_SHARED_CONTRACT.md WI-F1"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_CLAUDEMD_SLIM_SCOPE.md:64",
+    "cites": "workflow-01-scope:57",
+    "pre_q10_text_now_at": "_archive/WORKFLOW_SKILL_ORIGINAL_TEXT.md WI-A01"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_CREDENTIALS_PRIVATE_REPO_PRE_AUDIT.md:366",
+    "cites": "workflow-05-ci:19",
+    "pre_q10_text_now_at": "workflow-05-ci:20"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_CREDENTIALS_PRIVATE_REPO_PRE_AUDIT.md:835",
+    "cites": "workflow-05-ci:15",
+    "pre_q10_text_now_at": "workflow-05-ci:16"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_CREDENTIALS_PRIVATE_REPO_PRE_AUDIT.md:861",
+    "cites": "workflow-05-ci:15",
+    "pre_q10_text_now_at": "workflow-05-ci:16"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_CREDENTIALS_PRIVATE_REPO_PRE_AUDIT.md:897",
+    "cites": "workflow-05-ci:19",
+    "pre_q10_text_now_at": "workflow-05-ci:20"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_PLAN_CURRENCY_CHECK_PRE_AUDIT.md:781",
+    "cites": "workflow-05-ci:42",
+    "pre_q10_text_now_at": "_archive/WORKFLOW_SKILL_ORIGINAL_TEXT.md WI-A05"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_TOKEN_ECONOMY_PRE_AUDIT.md:155",
+    "cites": "workflow-10-governance:205",
+    "pre_q10_text_now_at": "workflow-10-governance:205 (same line, text extended by the Q10 fold)"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_WORKFLOW_IMPROVE_PRE_AUDIT.md:80",
+    "cites": "workflow-02-audit-and-plan:94",
+    "pre_q10_text_now_at": "WORKFLOW_SHARED_CONTRACT.md WI-F1"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_WORKFLOW_IMPROVE_PRE_AUDIT.md:184",
+    "cites": "workflow-02-audit-and-plan:94",
+    "pre_q10_text_now_at": "WORKFLOW_SHARED_CONTRACT.md WI-F1"
+   }
+  ],
+  "pre_existing": [
+   {
+    "site": "1-system-manual/EXIT_PATH_MACHINERY_AUDIT_2026-08-30.md:199",
+    "cites": "workflow-01-scope:23",
+    "note": "cited a blank or rule line at the pre-move ref: already stale before Q10"
+   },
+   {
+    "site": "1-system-manual/EXIT_PATH_MACHINERY_AUDIT_2026-08-30.md:199",
+    "cites": "workflow-01-scope:56",
+    "note": "cited a blank or rule line at the pre-move ref: already stale before Q10"
+   },
+   {
+    "site": "1-system-manual/PHASE_19_PLAN.md:83",
+    "cites": "workflow-01-scope:23",
+    "note": "cited a blank or rule line at the pre-move ref: already stale before Q10"
+   },
+   {
+    "site": "1-system-manual/PHASE_19_PLAN.md:83",
+    "cites": "workflow-01-scope:56",
+    "note": "cited a blank or rule line at the pre-move ref: already stale before Q10"
+   },
+   {
+    "site": "1-system-manual/RUNNING_ISSUES.md:1784",
+    "cites": "workflow-01-scope:23",
+    "note": "cited a blank or rule line at the pre-move ref: already stale before Q10"
+   },
+   {
+    "site": "1-system-manual/RUNNING_ISSUES.md:1784",
+    "cites": "workflow-01-scope:56",
+    "note": "cited a blank or rule line at the pre-move ref: already stale before Q10"
+   },
+   {
+    "site": "Claude Comms and Packages/Change Lists/B_DB_READ_TOOL_CHANGE_LIST.md:8",
+    "cites": "workflow-07-verify-cc:92",
+    "note": "cited a blank or rule line at the pre-move ref: already stale before Q10"
+   },
+   {
+    "site": "Claude Comms and Packages/Change Lists/B_GOV_REPORTING_REVIEWER_ROUNDS_r6.md:48",
+    "cites": "bug-investigation:49",
+    "note": "cited a blank or rule line at the pre-move ref: already stale before Q10"
+   },
+   {
+    "site": "Claude Comms and Packages/Change Lists/B_GOV_REPORTING_REVIEWER_ROUNDS_r6.md:52",
+    "cites": "bug-investigation:47",
+    "note": "cited a blank or rule line at the pre-move ref: already stale before Q10"
+   },
+   {
+    "site": "Claude Comms and Packages/Change Lists/B_GOV_REPORTING_REVIEWER_ROUNDS_r6.md:53",
+    "cites": "bug-investigation:49",
+    "note": "cited a blank or rule line at the pre-move ref: already stale before Q10"
+   },
+   {
+    "site": "Claude Comms and Packages/Langston Design Asks/B_TOKEN_ECONOMY_B_WORKFLOW_IMPROVE_STEP1_VERDICTS.md:102",
+    "cites": "workflow-11-completion:91",
+    "note": "cited a blank or rule line at the pre-move ref: already stale before Q10"
+   },
+   {
+    "site": "Claude Comms and Packages/Langston Design Asks/B_TOKEN_ECONOMY_B_WORKFLOW_IMPROVE_STEP1_VERDICTS.md:105",
+    "cites": "workflow-01-scope:23",
+    "note": "cited a blank or rule line at the pre-move ref: already stale before Q10"
+   },
+   {
+    "site": "Claude Comms and Packages/Langston Design Asks/B_TOKEN_ECONOMY_B_WORKFLOW_IMPROVE_STEP1_VERDICTS.md:105",
+    "cites": "workflow-07-verify-cc:88",
+    "note": "cited a blank or rule line at the pre-move ref: already stale before Q10"
+   },
+   {
+    "site": "Claude Comms and Packages/Langston Design Asks/B_TOKEN_ECONOMY_B_WORKFLOW_IMPROVE_STEP1_VERDICTS.md:105",
+    "cites": "workflow-11-completion:87",
+    "note": "cited a blank or rule line at the pre-move ref: already stale before Q10"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_CLAUDEMD_SLIM_SCOPE.md:63",
+    "cites": "workflow-01-scope:56",
+    "note": "cited a blank or rule line at the pre-move ref: already stale before Q10"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_DB_READ_TOOL_PRE_AUDIT.md:58",
+    "cites": "workflow-07-verify-cc:92",
+    "note": "cited a blank or rule line at the pre-move ref: already stale before Q10"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_DEPLOY_ACTOR_ALLOWLIST_PRE_AUDIT.md:117",
+    "cites": "workflow-06-deploy:56",
+    "note": "cited a blank or rule line at the pre-move ref: already stale before Q10"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_TOKEN_BURN_CUT_PRE_AUDIT.md:53",
+    "cites": "workflow-07-verify-cc:88",
+    "note": "cited a blank or rule line at the pre-move ref: already stale before Q10"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_TOKEN_BURN_CUT_PRE_AUDIT.md:53",
+    "cites": "workflow-11-completion:87",
+    "note": "cited a blank or rule line at the pre-move ref: already stale before Q10"
+   },
+   {
+    "site": "Claude Comms and Packages/Scope Files/B_WORKFLOW_IMPROVE_PRE_AUDIT.md:174",
+    "cites": "workflow-11-completion:91",
+    "note": "cited a blank or rule line at the pre-move ref: already stale before Q10"
+   }
+  ]
+ }
 }
