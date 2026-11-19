@@ -300,5 +300,7 @@
       }
     ]
   },
-  "defaultMode": "bypassPermissions"
+  "defaultMode": "bypassPermissions",
+  "autoCompactWindow": 250000,
+  "idleCompaction": false
 }
