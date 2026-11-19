@@ -118,6 +118,7 @@ Kyle confirmed: **Fable 5 is part of the Max plan again, up to 50% of the weekly
 | Scheduled tasks / routines | IN USE | This very task; daily model check. |
 | Background Monitors / tasks | IN USE | The CC wake watcher + study runners. |
 | Sub-agents (Explore / claude-code-guide / general-purpose) | IN USE | Used for codebase surveys + Claude Code doc lookups. |
+| Built-in agent overridden by name (`.claude/agents/Explore.md` model haiku; `.claude/agents/general-purpose.md` model sonnet) | ADOPTED 2026-11-19 (B-TOKEN-ECONOMY OBJ-4) | **Undocumented behaviour: a version bump can drop it silently and default helpers go back to the main model.** The settings route `CLAUDE_CODE_SUBAGENT_MODEL` did NOT take effect in the desktop app (canary Obs 2), which is why this one is used. **Re-check on every Claude Code version change:** spawn `general-purpose` with no `model`, then read the API-returned `message.model` in its transcript (`~/.claude/projects/<slug>/<session>/subagents/agent-<id>.jsonl`), not its self-report. Positive control 2026-11-19 21:4xZ: `message.model` = `claude-sonnet-5-5` while the parent ran `claude-opus-5-5`. If it reads the main model, the override was dropped: surface it to Kyle. |
 | MCP servers (Telegram bridge pattern, Chrome, etc.) | IN USE | |
 | Hooks | KNOWN, not used | Evaluated; the bypassPermissions structural fix was preferred over per-event hooks. |
 | Workflows (multi-agent orchestration) | KNOWN | Opt-in only; high token cost. Not standing-on. |
