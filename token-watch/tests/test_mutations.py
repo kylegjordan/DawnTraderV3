@@ -148,6 +148,9 @@ try:
           "if this passes, the headroom clause is doing nothing")
     check("★ births are STILL allowed at the reserve boundary",
           budget.allowed("birth", T))
+    check("★ a follow-up that COSTS credits is refused by the reserve clause, with the account not full",
+          not budget.allowed("follow_up", T) and budget.spent_total(T) < config.MONTHLY_CREDIT_CAP,
+          (budget.spent_total(T), budget.shed_now(T)))
     shutil.rmtree(mut_root, ignore_errors=True)
 finally:
     config.CREDITS["follow_up"] = original

@@ -210,6 +210,17 @@ check("liquidity SHEDS once its carve is exhausted", not budget.allowed("liquidi
 check("★ BIRTHS STILL ALLOWED while liquidity sheds", budget.allowed("birth", T0),
       "births are never shed — a sampled birth record destroys the base rate")
 check("shed_now reports liquidity, in order", budget.shed_now(T0) == ["liquidity"], budget.shed_now(T0))
+# Injection 1b - liquidity spent PAST the reserve headroom, as in November 2026 (35,771 spent before AMENDMENT 18 cut the
+# headroom to 7,000). The follow-up costs 0 credits, so it cannot eat the reserve and must keep running while the
+# account has room (B-TOKEN-WATCH-BIRTH-CAP Step 9; it shed for a month before this).
+budget.inject_spend("liquidity", 31_000, T0)
+check("POSITIVE CONTROL: non-birth spend is past the headroom",
+      budget.spent_by("liquidity", T0) > budget.MONTHLY_CREDIT_CAP - budget.BIRTHS_RESERVED - budget.SWITCH_RESERVED,
+      budget.spent_by("liquidity", T0))
+check("POSITIVE CONTROL: the account still has room", budget.spent_total(T0) < budget.MONTHLY_CREDIT_CAP, budget.spent_total(T0))
+check("★ the FREE follow-up is still allowed when other legs' spend is past the headroom",
+      budget.allowed("follow_up", T0), budget.shed_now(T0))
+check("... and only liquidity sheds", budget.shed_now(T0) == ["liquidity"], budget.shed_now(T0))
 
 # Injection 2 — drive TOTAL spend past the whole monthly cap.
 budget.inject_spend("birth", MONTHLY_CREDIT_CAP, T0)

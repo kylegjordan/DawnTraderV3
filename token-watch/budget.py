@@ -517,7 +517,12 @@ def allowed(kind: str, now: datetime | None = None) -> bool:
                 and non_birth < headroom
                 and remaining > 0)
     if kind == "follow_up":
-        return non_birth < headroom and remaining > 0
+        # ⛔ BOUND (a) GUARDS THE RESERVE AGAINST THIS LEG'S OWN SPEND, so it binds only while the leg costs credits.
+        #    A free leg cannot eat the reserve, and gating it on OTHER legs' past spend shed it for a month: on
+        #    2026-11-16 AMENDMENT 18 cut the headroom to 7,000 after 35,771 liquidity credits were already spent, so the
+        #    follow-up (0 credits) shed from ~10:53Z with 321,024 credits left - against AMENDMENT 18's own "the follow-up
+        #    is not expected to shed in November". Bound (b) is unchanged: no room left sheds it (P14).
+        return (CREDITS["follow_up"] == 0 or non_birth < headroom) and remaining > 0
 
     # ⛔ NO SILENT TAIL. A kind that is neither never-shed nor explicitly
     #    budgeted must FAIL LOUD rather than default to allowed — the previous
