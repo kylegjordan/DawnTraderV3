@@ -3,47 +3,13 @@
 > Per-session notebook (cap 10 KB; rules file + this ≤ 18 KB). Rules: `1-system-manual/PM_CLAUDE_RULES.md`. Startup prompt: `Claude Comms and Packages/PM_CLAUDE_STARTUP_PROMPT.md`. Clone: `C:\DawnTraderV3-pm`. Records: `1-system-manual/pm/` (DECISIONS.md, reviews/).
 
 # ▶▶ CURRENT POSITION — READ FIRST
+- **KYLE 11-19 ~20:30Z (laptop clock = his time, UTC+1): keep building step by step while weekly <98%. At 98%: wait for 22:00Z (his 11pm), then one more step, stop just before 100% (extra usage is ON - never run into it). If stopped: set a wake for 23:00Z (his midnight = weekly reset); on waking, resume the crew per pm-usage-stop Resume (re-enable 4 tasks, crew-switch langston on, wake OLD/NEW/ANALYST/INFRA to re-arm + continue), then carry on with my batches (B-TOKEN-ECONOMY Steps 4-11, then B-WORKFLOW-IMPROVE).** P8 @6bfb3613d (4 PM skills name settings + smoke check). P9 read in progress.
 - **USAGE STOP SENT 2026-11-16 ~19:45Z at 87% (Kyle: "If all are at a safe stopping point, then let's just stop for now.").** PAUSED (restore exactly this on resume): sessions OLD/NEW/ANALYST/INFRA told stop (OLD combined deploy NOT started; NEW 20:30Z read cancelled, re-run next US session); `crew-switch langston off` (bridge inactive/disabled, alert lane off; Coltrane already off); scheduled tasks disabled: wake-watcher-heartbeat, daily-claude-currency-check, freshness-log-review, transcript-bloat-check (cashflow-workbench-gardening NOT touched, other project); PM guard cron 6b575bdd deleted; PM wake watcher not re-armed. Resume only on Kyle word: re-enable those 4 tasks, crew-switch langston on, sessions re-arm watchers, recreate guard cron (90% line text, KD-99), re-arm PM watcher. Reset 11-19 23:00Z. Kyle deciding: wait / ChatGPT switch / ChatGPT upgrade.
 - Archived 2026-11-16 · kd85-88-decided → `1-system-manual/pm/archive/memory/2026-11.md`
 - **11-16 ~09:35Z Kyle (e0c304cc5):** KD-91 8c ON (DONE 09:45:01Z, first-week read alert c15fb88d 11-23 10:00Z; first real-price open gets Chrome check); KD-92 PM approvals bind crew (rule 6a; access keys/accounts/passwords/money still need his yes in acting chat - Backblaze key still needs his yes in OLD chat); KD-93 urgent ban root-cause NOW (Infra lead + OLD + Langston; incl. self-unban via mgmt API = Kyle token proposal); KD-94 two DB-outage items to NEW before live; KD-95 cron-stop design (ANALYST+Langston) + restart procedure (Infra+Langston+PM) delegated. STILL PENDING KYLE: Backblaze key yes in OLD chat; Infra index cost figures + Langston/Coltrane chats yes/no; transcript trims at next restart; small-items bundle.
-- Archived 2026-11-16 · kyle-0130z-kd89-90 → `1-system-manual/pm/archive/memory/2026-11.md`
-- Archived 2026-11-16 · kyle-2320z-2026-11-15 → `1-system-manual/pm/archive/memory/2026-11.md`
-- Archived 2026-11-16 · kd81-84-decided-2026-11-15 → `1-system-manual/pm/archive/memory/2026-11.md`
-- Archived 2026-11-16 · kyle-questions-2026-11-15 → `1-system-manual/pm/archive/memory/2026-11.md`
-- Archived 2026-11-16 · now-2026-11-15-1500 → `1-system-manual/pm/archive/memory/2026-11.md`
-- Archived 2026-11-14 · claude-return-2026-11-13 → `1-system-manual/pm/archive/memory/2026-11.md`
-- Archived 2026-11-14 · state-2026-11-13-kd76-kd77-deploys → `1-system-manual/pm/archive/memory/2026-11.md`
-- Archived 2026-11-15 · now-2026-11-14 → `1-system-manual/pm/archive/memory/2026-11.md`
-- Archived 2026-11-15 · guard-log-2026-11-14 → `1-system-manual/pm/archive/memory/2026-11.md`
-- Archived 2026-11-14 · friday-window-kd74-kd75 → `1-system-manual/pm/archive/memory/2026-11.md`
+- Archived 2026-11-19 · pointer-group-b → `1-system-manual/pm/archive/memory/2026-11.md`
 - **DESKTOP COMPUTER USE DISABLE TEST — ACTIVE, DO NOT RESTORE WITHOUT KYLE (2026-11-12):** Both desktop Computer Use plugins remain disabled; `notify = []` and `SKY_CUA_NATIVE_PIPE_DIRECTORY = ""`; Browser and Chrome remain enabled. The Codex desktop host relaunched its Swift helper despite those settings. Kyle directed PM to leave the app running, leave the plugins disabled, and stop trying to kill the helper while the test continues. Non-UI work continues and staging checks are browser-scoped only. Exact restoration material: `C:\Users\kyleg\.codex\config.toml.computer-use-test-20261112T012821Z.restore.txt`.
-- Archived 2026-11-12 · kd67-resolved-nudges-2026-11-12 → `1-system-manual/pm/archive/memory/2026-11.md`
-- Archived 2026-11-12 · kd67-init-alert-6ced8e12 → `1-system-manual/pm/archive/memory/2026-11.md`
-- Archived 2026-11-12 · kd67-alert-routes-2026-11-12 → `1-system-manual/pm/archive/memory/2026-11.md`
-- Archived 2026-11-12 · kd67-init-alert-63b1a778 → `1-system-manual/pm/archive/memory/2026-11.md`
-- Archived 2026-11-12 · kd67-init-alert-9683dfa8 → `1-system-manual/pm/archive/memory/2026-11.md`
-- Archived 2026-11-12 · kd67-init-alert-11656b30 → `1-system-manual/pm/archive/memory/2026-11.md`
-- Archived 2026-11-12 · codex-usage-stop-kd71-2026-11-12 → `1-system-manual/pm/archive/memory/2026-11.md`
-- Archived 2026-11-12 · kd67-analyst-memory-zero-20261112 → `1-system-manual/pm/archive/memory/2026-11.md`
-- Archived 2026-11-12 · kd73-claude-return-handover → `1-system-manual/pm/archive/memory/2026-11.md`
-- Archived 2026-11-11 · kd67-old-governance-alerts-2026-11-11 → `1-system-manual/pm/archive/memory/2026-11.md`
-- Archived 2026-11-11 · archive-pointers-2026-11-a → `1-system-manual/pm/archive/memory/2026-11.md`
-- Archived 2026-11-11 · kd67-new-browser-handoff-2026-11-11 → `1-system-manual/pm/archive/memory/2026-11.md`
-- Archived 2026-11-11 · kd67-alert-routes-2026-11-11-evening → `1-system-manual/pm/archive/memory/2026-11.md`
-- Archived 2026-11-11 · kd67-alert-routes-1124-cleared → `1-system-manual/pm/archive/memory/2026-11.md`
-- Archived 2026-11-10 · old-weekly-alert-nudge-2026w46 → `1-system-manual/pm/archive/memory/2026-11.md`
-- Archived 2026-11-11 · archive-pointers-2026-11-b → `1-system-manual/pm/archive/memory/2026-11.md`
-- Archived 2026-11-09 · completed-pm-build-record → `1-system-manual/pm/archive/memory/2026-11.md`
-- Archived 2026-11-09 · codex-takeover-2026-11-09 → `1-system-manual/pm/archive/memory/2026-11.md`
-- Archived 2026-11-06 · stale-pm-planning-notes → `1-system-manual/pm/archive/memory/2026-11.md`
-- Archived 2026-11-16 · small-items-bundle-1-pending-kyle → `1-system-manual/pm/archive/memory/2026-11.md`
-- Archived 2026-11-16 · small-items-bundle-2-pending-kyle → `1-system-manual/pm/archive/memory/2026-11.md`
-- Archived 2026-11-11 · staging-signin-cleared → `1-system-manual/pm/archive/memory/2026-11.md`
-- Archived 2026-11-16 · aprjul-archive-ask-superseded-kd83 → `1-system-manual/pm/archive/memory/2026-11.md`
-- Archived 2026-11-07 · completed-joint-deploy-and-restart-alert → `1-system-manual/pm/archive/memory/2026-11.md`
-- Archived 2026-11-16 · bootrace-ask-decided-kd82 → `1-system-manual/pm/archive/memory/2026-11.md`
-- Archived 2026-11-16 · 8c-dark-coming-superseded → `1-system-manual/pm/archive/memory/2026-11.md`
-- Archived 2026-11-08 · historical-guard-and-pm-setup → `1-system-manual/pm/archive/memory/2026-11.md`
+- Archived 2026-11-19 · pointer-group-a → `1-system-manual/pm/archive/memory/2026-11.md`
 - **Pushing:** CI idle check as its own call; commit and push in SEPARATE calls.
 
 - Archived 2026-11-04 · done-today-2026-11-04 → `1-system-manual/pm/archive/memory/2026-11.md`

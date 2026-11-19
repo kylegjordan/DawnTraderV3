@@ -89,3 +89,17 @@ Instrument: the real hooks run as child processes with synthetic stdin; state in
 `warn-dedupe.mjs --self-test` 10/10 (includes: no session id, an unsafe id and a corrupt state file all SHOW). `test-guard-measurement-shape` 75 PASS 0 FAIL; `test-guard-result-shape` and `test-hook-selftest`: results in the commit message.
 
 **For Langston at Step 4:** `guard-result-shape`'s 2026-09-02 ruling gave the rare legs the full warning every time. P7 (approved at Step 2) dedupes them per session per leg. The saving there is small (rare legs are ~0.04% of its fires); the reason to keep it is one consistent rule across the three warn-only hooks. If he prefers the rare legs to keep firing every time, it is a two-line revert in that file.
+
+## Observation 5 — P9 read after P5 and P8 (2026-11-19 ~20:40Z)
+
+Instrument: `token-baseline.py` (the P0 instrument), window 2026-11-19 15:25Z to 20:35Z.
+
+| what | object and population | reading | status against the leg-B criterion (median ≤ 152,000 B per start) |
+|---|---|---|---|
+| `CLAUDE.md` size | the blob at `198e6ddcb`, LF bytes | 77,480 B (was 122,263 at `8c1cebbc4`), −44,783 B | **measured**: under the 78,000 B cap |
+| always-loaded bytes per start | `instructions-loaded.jsonl`, this window | UNMAPPED (PM) median 148,042 B, n 3 | **not yet a P5 reading**: all three loads predate the P5 commit. The first post-P5 load is the next compaction or restart |
+| expected per-start drop | P0 medians (CC-A/B/C ~195.6k; unmapped 171.5k) minus 44,783 | ~150.8k mapped, ~126.7k unmapped | **calculation, not a measurement**; confirm at the first post-P5 loads of each session |
+| building tokens per active crew-hour | building sessions, this window | not meaningful: the four building sessions are stopped (usage stop since 11-16); only PM ran | leg A's 20-crew-hour read waits for the crew's resume |
+| move ledger and cap checks | repo at `198e6ddcb` and in CI run 44567580494 | ledger OK (55 moves, one home each); cap 77,480/78,000 | **measured** |
+
+P8 (`6bfb3613d`) is text only: the four PM handover skills name the settings and the smoke check (OBJ-9 proof: each names them at the ref).
