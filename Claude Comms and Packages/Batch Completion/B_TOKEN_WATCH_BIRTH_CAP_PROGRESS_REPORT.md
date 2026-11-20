@@ -1,9 +1,9 @@
 # B-TOKEN-WATCH-BIRTH-CAP — PROGRESS REPORT
 
-## OPEN — waiting on OBJ-2's 7-day hour band (capped days 11-17 → 11-23, readable after 2026-11-24 00:00Z) and OBJ-5's follow-up read (criterion below needs Langston's ruling first), then a decision on both
+## OPEN — waiting on OBJ-2's 7-day hour band (capped days 11-17 → 11-23, readable after 2026-11-24 00:00Z) and OBJ-5's follow-up read (criterion registered as AMENDMENT 18 rider 3; window runs to 2026-11-27 00:00Z), then a decision on both
 
 > Batch `B-TOKEN-WATCH-BIRTH-CAP` · issue `#1247` · owner Infra Claude · Kyle decision KD-90 · plan row `SPRINT_TO_LIVE_PLAN.md` 5a · change-class `non_architecture` (scope header).
-> Window shape: a **set period** — 7 complete capped days for OBJ-2; OBJ-5's window is proposed in §5.
+> Window shape: a **set period** — 7 complete capped days for OBJ-2; OBJ-5's window is registered in §5 (AMENDMENT 18 rider 3): from the rider's commit to 2026-11-27 00:00Z.
 > When the reads are in AND a decision has been taken on them, this file is renamed to `B_TOKEN_WATCH_BIRTH_CAP_COMPLETION_REPORT.md` (`workflow-10-governance`).
 > Step-by-step evidence: `Claude Comms and Packages/Change Lists/B_TOKEN_WATCH_BIRTH_CAP_CHANGE_LIST.md` §9-§9e. This report points at it rather than copying it.
 
@@ -41,7 +41,7 @@ The batch built a controller, `token-watch/birthcap.py` (units `token-watch-birt
 | OBJ-2 | scheduled by time; births per hour of day within the pre-registered band | **OPEN** | AMENDMENT 18 criterion, quoted in §4. Days 11-17 → 11-23; readable after 11-24 00:00Z |
 | OBJ-3 | the credit cap is a backstop | **MET live** | 11-16 truncated at the first enabled tick (12,095 recorded ≥ allowance 10,493.7) |
 | OBJ-4 | every switch state checked, both directions | **MET in tests; arm (i) live** | suite 142 passed, every mutant killed (change list §9e). The read-back (arm i) runs on every switch: all six 11-20 switches `ok:true` with the echo matching. Arms (ii)-(iv) and the window alarms have **never fired live**, so their silence is not evidence they work |
-| OBJ-5 | everything already tracked keeps being tracked | **OPEN — criterion needs a ruling** | §5 |
+| OBJ-5 | everything already tracked keeps being tracked | **OPEN — criterion registered (rider 3)** | §5; window to 11-27 00:00Z |
 | OBJ-6 | pre-registration amendment before the first capped birth | **MET** | `9fc98626e` (before the 10:37:20Z switch-on), rider `06df4bee5`, rider 2 |
 | OBJ-7 | Kyle's purpose in `B_TOKEN_WATCH_SCOPE.md` §1 | **MET** | `b86ea91fd` |
 | OBJ-8 | exact switch timestamps persisted; the log reproduces each day's on-time fraction | **OPEN — read with OBJ-2** | the log exists and every 11-20 row carries requested and responded times; the reproduction of a day's on-time fraction is computed at the OBJ-2 read |
@@ -54,26 +54,27 @@ The batch built a controller, `token-watch/birthcap.py` (units `token-watch-birt
 
 Reference: `Scope Files/B_TOKEN_WATCH_BIRTH_CAP_OBJ2_REFERENCE.json` (63 uncapped days, 2,423,615 rows, hour-share spread 0.49 pp). Days 11-17 → 11-23. OBJ-8 is read in the same pass: the switch log must reproduce each day's on-time fraction, and a missing entry fails the weight computation loudly.
 
-## 5. OBJ-5 — the follow-up read, and why its baseline needs a ruling before it is read
+## 5. OBJ-5 — the follow-up read (criterion registered: AMENDMENT 18 rider 3)
 
-The scope's verification is *"follow-up counts against a pre-cap baseline window of equal length"*; the pre-audit (:113) set that baseline as *"the 7 days before switch-on"*. **That window does not exist in usable form:**
-- the follow-up sweep was only switched back on 11-15 15:12Z (`B-TOKEN-WATCH-FOLLOWUP-MEMORY` P10), so the 7 days before the 11-16 switch-on hold one partial day;
-- from 11-16 ~10:53Z to the `cde88cc02` install (11-20 00:03:59Z) the free follow-up was shed by a defect and observed nothing (change list §9c).
+The scope's verification was *"follow-up counts against a pre-cap baseline window of equal length"*, with the baseline set at pre-audit :113 as *"the 7 days before switch-on"*. That window is not usable: the follow-up sweep only came back 11-15 15:12Z (`B-TOKEN-WATCH-FOLLOWUP-MEMORY` P10), and from 11-16 ~10:53Z to the `cde88cc02` install (11-20 00:03:59Z) a defect shed the free follow-up (change list §9c).
 
-**The only window that is pre-cap AND not shed:** the eight follow-up runs from 11-15 16:59Z to 11-16 10:52Z (follow-up journal, `follow-up {'due': …, 'observed': …}` lines).
+My first proposal (observed ÷ due against the 8 runs of 11-15 16:59Z → 11-16 10:52Z, PASS within 5 pp) was **sent back by Langston and is withdrawn** (`1573438420871676050`): `due` re-counts an entry every time it is requeued, so that ratio measures bucket timing rather than coverage; a 5 pp band would have passed loss the cap caused; and I had already read the post-install data, so it could not be a pre-registration.
 
-**PROPOSED criterion (for Langston's ruling — NOT yet registered):**
-- **Metric:** observed ÷ due checkpoints, summed over runs. A ratio, because the cap lowers the number of new coins by design, so raw counts must fall.
-- **Baseline:** the eight runs above.
-- **Comparison:** every follow-up run from 11-20 00:03:59Z to the 11-27 cycle end.
-- **PASS:** the comparison ratio is no more than 5 percentage points below the baseline. **FAIL:** lower than that, unless the shortfall is shown to be the DexScreener pacer's own saturation (C-8: a drop can be inherited, not caused), which needs the shed counts split by reason.
+**Registered criterion, quoted in full in `Scope Files/B_TOKEN_WATCH_PRE_REGISTRATION.md`, AMENDMENT 18 rider 3:**
+- **Unit:** distinct (mint, checkpoint-age) obligations that came due in the window, each at its terminal state in the observation rows. Denominator = observed + shed + abandoned; requeued entries are on neither side.
+- **Scored cohort:** mints created before the 11-16 10:37:20Z switch-on.
+- **PASS:** zero cohort obligations shed for our own budget (reason `follow_up`) and zero `abandoned`. A vendor rate-limit shed (`follow_up rate-limited`) is counted and published but does not fail. No baseline comparator.
+- **Window:** forward-only from the commit that landed rider 3, to 2026-11-27 00:00Z.
+- **Counted from observation rows, never from the journal's `shed` total**, which also counts the liquidity leg's always-on shed (13,664 of them in the first 18 h after the install, against 0 checkpoint sheds).
 
-⚠️ **Disclosed so the criterion can be judged for data-mining:** before writing this proposal I tabulated both windows. Baseline: 8 runs, due 216,530, observed 166,186, **76.7 %**. First 18 h after the install (16 runs, 02:11Z → 19:24Z on 11-20): due 91,020, observed 58,665, **64.5 %**. That would FAIL the proposed bar. Two confounds stand out and are **NOT RE-READ**: the baseline runs include the catch-up after P10's switch-on, and the post-install runs include the backlog the shed left behind. Langston may prefer a different baseline or metric. **This is the item to settle before the read, not after.**
+**Langston's two burdens, both met in rider 3:** (a) the observation files are never pruned and reach back to 08-31; a real `follow_up` shed row from the defect window is quoted as the positive control. (b) catch-up reads the oldest buckets first and drops nothing. ⚠️ The `abandoned` leg has no positive control in the record (no `error` or `abandoned` row has ever been written), so its zero rests on the write path.
+
+**Pre-registration-era, scoring nothing:** the full 18 h after the install is published in rider 3 (every journal key, and the row-level partition: 0 checkpoint sheds, 0 abandoned). The 8 baseline runs stay as context only.
 
 ## 6. What is unproven
 
 - **OBJ-2 and OBJ-8** — the 7-day read (§4).
-- **OBJ-5** — criterion and read (§5).
+- **OBJ-5** — the read (§5, rider 3), over the window to 11-27 00:00Z. The `abandoned` leg's zero has no positive control in the record.
 - **The window alarms in live use.** No `divergent`, `frozen`, `backwards`, `reset` or cumulative page has fired live. The first `reset` chance is the 11-27 cycle boundary.
 - **The `adopt` path** — not taken live (§2).
 - **Hour 15Z on 11-20:** 7 vendor events with 0 births just after the 14:58:20Z OFF, probably late-counted deliveries from the closing window. **NOT RE-READ.**
