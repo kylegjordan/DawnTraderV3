@@ -134,6 +134,11 @@ export function orphanVersions(versions: B2ListedVersion[], claimedPaths: Set<st
  * The NAME is kept deliberately (Langston's 3d Step-4 answer, CHANGE_LIST "keep residueDeleteSet"): it is what the
  * set was built to be, the change list and the DELETED_COMPONENTS_LOG entry cite it by this name, and the rule-18 fence
  * forbids the delete CALL shapes (b2_delete_file_version, deleteCold*), not the word.
+ * A needs_download row's wrong-size versions are in it too: their size alone excludes them from the row, whichever
+ * candidate wins, so they agree with the per-row RESIDUE line that prints them (Langston's 3d C-2 rider PROCEED, find b).
+ * Computed from the PLAN, before any download: a needs_download row's SHA-256 losers are decided only under --apply,
+ * after this set prints, so they show as per-row RESIDUE in that run and reach the set through the bound-name sibling
+ * path in a run after the bind.
  */
 export function residueDeleteSet(
   versions: B2ListedVersion[],
@@ -146,6 +151,7 @@ export function residueDeleteSet(
   for (const v of orphanVersions(versions, claimedPaths, ownPrefixes)) out.set(v.fileId, v);
   for (const d of decisions) {
     if (d.kind === 'bind') for (const v of d.residue) out.set(v.fileId, v);
+    if (d.kind === 'needs_download') for (const v of d.wrongSize) out.set(v.fileId, v);
   }
   // a bound row's name is claimed, so its OTHER versions reach here only through the decisions; a row bound in an
   // earlier run has no decision, so its siblings are found directly: same name, not the bound id
@@ -207,6 +213,17 @@ function untrustedStamp(unparseable: string[]): string {
  */
 export function residueReportLine(name: string, x: B2ListedVersion, why: string, unparseable: string[]): string {
   return `[B75 cold-bind] ${name}: RESIDUE (${why}) id=${x.fileId} bytes=${x.contentLength} uploaded=${new Date(x.uploadTimestamp).toISOString()}${untrustedStamp(unparseable)}`;
+}
+
+/**
+ * Pure: why a needs_download candidate that was not bound is residue. Only a candidate actually downloaded and hashed can
+ * have lost to the winner; the download loop stops at the first match, so a later candidate was never compared
+ * (Langston's 3d C-2 rider PROCEED, find a: the old line claimed a comparison nobody ran). Exported for tests.
+ */
+export function candidateResidueWhy(x: B2ListedVersion, compared: ReadonlySet<string>): string {
+  return compared.has(x.fileId)
+    ? 'lost the SHA-256 comparison, not bound'
+    : 'not downloaded, an earlier candidate matched first, not bound';
 }
 
 /** Pure: stored VERSIONS (uploads only — hide markers are not versions) outside the archive namespaces, counted by
@@ -282,18 +299,20 @@ async function main(): Promise<void> {
         const bytes = d.candidates.reduce((s, v) => s + Number(v.contentLength), 0);
         console.log(`[B75 cold-bind] ${name}: ${d.candidates.length} version(s) without one agreed SHA-1 — choosing by SHA-256 needs ${bytes} bytes of B2 download`);
         if (!apply) continue;
+        const compared = new Set<string>();
         const dir = fs.mkdtempSync(path.join(os.homedir(), '.b75-cold-bind-'));
         fs.chmodSync(dir, 0o700);
         try {
           for (const v of d.candidates) {
             const dl = await storage.downloadColdFileById(v.fileId, path.join(dir, 'v.gz'), { expectedBytes: Number(v.contentLength), limits });
+            compared.add(v.fileId);
             if (dl.checksum === d.row.checksum) { version = v; break; }
           }
         } finally {
           fs.rmSync(dir, { recursive: true, force: true });
         }
         if (!version) { failures++; console.error(`[B75 cold-bind] ${name}: REFUSED — no version's SHA-256 equals the manifest's`); continue; }
-        for (const x of d.candidates) if (x !== version) residueLine(x, 'lost the SHA-256 comparison, not bound');
+        for (const x of d.candidates) if (x !== version) residueLine(x, candidateResidueWhy(x, compared));
       }
       if (!version) continue;
       const p = coldPathOf(d.row.storage_uri)!;

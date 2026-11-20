@@ -501,7 +501,7 @@ describe('3b item 2 — Langston r3 carries', () => {
 });
 
 // ── 3b item 3: bind the pre-3a cold rows to exact versions; the inventory; the exclusive takeover ────────────────────
-import { COLD_NON_ARCHIVE_PREFIXES, coldPathOf, orphanVersions, otherOwnerCounts, ownColdPrefixes, planColdBindings, residueDeleteSet, coldReportLines, residueReportLine, unparseableColdUris, type UnboundColdRow } from '../../scripts/b75-cold-bind';
+import { COLD_NON_ARCHIVE_PREFIXES, coldPathOf, orphanVersions, otherOwnerCounts, ownColdPrefixes, planColdBindings, residueDeleteSet, coldReportLines, residueReportLine, candidateResidueWhy, unparseableColdUris, type UnboundColdRow } from '../../scripts/b75-cold-bind';
 import type { B2ListedVersion } from '../../services/data-archive/storage-client';
 
 const ROW: UnboundColdRow = { id: 'r1', source_table: 'context_bridge_log', partition_label: '2026-01', storage_uri: 'b2://dt-archive-cold/context_bridge_log/2026-01.jsonl.gz', bytes_compressed: 13901237, checksum: 'sha256-x' };
@@ -722,6 +722,13 @@ describe('3b item 4 — the residue delete set: our orphans and non-chosen versi
     const decisions = planColdBindings([ROW], vs2);
     expect(residueDeleteSet(vs2, claimed, own, decisions, new Set()).map((v) => v.fileId)).toEqual(['p10']);
   });
+  it("C-2 rider find b: a needs_download row's WRONG-SIZE versions are in the set, agreeing with the per-row RESIDUE line", () => {
+    const vs3 = [ver('a', { contentSha1: 'aa' }), ver('b', { contentSha1: 'bb' }), ver('w', { contentLength: 9 })];
+    const decisions = planColdBindings([ROW], vs3);
+    expect(decisions[0]).toMatchObject({ kind: 'needs_download', wrongSize: [{ fileId: 'w' }] });
+    // exact set: the wrong-size version in, both undecided candidates out
+    expect(residueDeleteSet(vs3, claimed, own, decisions, new Set()).map((v) => v.fileId)).toEqual(['w']);
+  });
   it('3d close (rule 18): no deleter of cold data remains in our code — the residue set is reported, never deleted', () => {
     const bind = read('server/scripts/b75-cold-bind.ts');
     const sc = read('server/services/data-archive/storage-client.ts');
@@ -778,5 +785,19 @@ describe('3b item 4 — the residue delete set: our orphans and non-chosen versi
     expect(bind.split('[B75 cold-bind] RESIDUE-SET ').length - 1).toBe(1);
     expect(bind.split(': RESIDUE (').length - 1).toBe(1);
     expect(body).toMatch(/if \(unparseable\.length > 0\) process\.exitCode = 1;/);
+    // C-2 rider find a: only a candidate actually downloaded and hashed "lost the SHA-256 comparison"
+    expect(candidateResidueWhy(v('c1'), new Set(['c1']))).toBe('lost the SHA-256 comparison, not bound');
+    expect(candidateResidueWhy(v('c2'), new Set(['c1']))).toBe('not downloaded, an earlier candidate matched first, not bound');
+    expect(bind.split('lost the SHA-256 comparison').length - 1).toBe(1); // the helper's literal only, no second emitter
+    expect(body).toContain('residueLine(x, candidateResidueWhy(x, compared));');
+    // the record is taken per download, AFTER it returns and BEFORE the match test, inside the candidate loop
+    const loopAt = body.indexOf('for (const v of d.candidates) {');
+    const dlAt = body.indexOf('await storage.downloadColdFileById(v.fileId', loopAt);
+    const addAt = body.indexOf('compared.add(v.fileId);', loopAt);
+    const matchAt = body.indexOf('if (dl.checksum === d.row.checksum) { version = v; break; }', loopAt);
+    expect(loopAt).toBeGreaterThan(0);
+    expect(dlAt).toBeGreaterThan(loopAt);
+    expect(addAt).toBeGreaterThan(dlAt);
+    expect(matchAt).toBeGreaterThan(addAt);
   });
 });
