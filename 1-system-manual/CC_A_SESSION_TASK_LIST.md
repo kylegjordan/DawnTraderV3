@@ -1,4 +1,4 @@
-# CC-A (OLD Claude) — SESSION TASK LIST — plain language, as of 2026-09-29
+# CC-A (OLD Claude) — SESSION TASK LIST — plain language, as of 2026-11-20
 
 > 📁 **Lives in `1-system-manual/` since 2026-09-11** (moved from `Scope Files/` — `B-TASK-LIST-SLOT` P3; the convention is written in `workflow-10-governance`'s Tier-1 task-list row).
 
@@ -15,8 +15,8 @@
 
 | # | item | status | decision |
 |---|---|---|---|
-| 1 | `B-DB-POOL-GUARD` (`#1239`, absorbs `#1062`) — guard the app's 10 shared database connections | IN FLIGHT, Step 7 (2026-11-13: increments 1-3b and P5 live; the weekday qd-probe leg done, the archival-scheduler leg withdrawn — `02830e875`; only the UI leg is left, held on row 119 / `#1037`) | KD-2 order 3 |
-| 2 | `B-DISK-FILE-TIERING` (`#1233`) with the price-feed debug-log trim (`#1240`) folded in | IN FLIGHT (2026-11-14): AP-7 (amendment 2) deployed `9591ba8c2` and Step 7 plants 9/9; amendment 4 increment 3a Step-4 PROCEED, deploy next (PM slot); then 3b-3d and amendment 3 | KD-2 order 5 |
+| 1 | `B-DB-POOL-GUARD` (`#1239`, absorbs `#1062`) — guard the app's 10 shared database connections | IN FLIGHT. Increments 1-3b and P5 live; UI leg held on row 119 / `#1037`. **r4 = B-DB-APP-TLS (KD-100):** T-P1 (the unencrypted-connection page) live 2026-11-20 at `ecbdf882e`, Step 8 PROCEED; next T-P2 boot check + T-P3 switch to verify-full in one window, then T-P5 | KD-2 order 3, KD-100 |
+| 2 | `B-DISK-FILE-TIERING` (`#1233`) with the price-feed debug-log trim (`#1240`) folded in | IN FLIGHT, 3d step 5 (2026-11-20): narrow key live, lifecycle proof PASS on both arms; rotator fix `dee8a01e4` at Langston Step 4; wide-key delete awaits Kyle; then the rule-18 removal and Step 10 | KD-2 order 5 |
 | 3 | `B-STATUS-BOARD` (`#1227`) — RETIRED under Kyle's KD-35 (the phone board is not kept) | ✅ CLOSED 2026-11-13 (Step 11 CONFIRMED by Langston; report `Claude Comms and Packages/Batch Completion/B_STATUS_BOARD_COMPLETION_REPORT.md`) | already agreed |
 | 4 | `#527` — the xStock VTS records carry their cost split (fee, slippage, spread) | ✅ CLOSED 2026-11-05: already done 2026-07-17, measured complete since 2026-09-03 | KD-13 |
 | 5 | Roadmap `25-9` — start collecting xStock pair-correlation data (collection only) | QUEUED, before live, after items 1-2 | KD-14 |
@@ -28,6 +28,7 @@
 | 10 | `B-SYMBOL-CLASS-IDENTITY` (row 19, `#1024`): a ticker shared by a coin and an xStock becomes two instruments; closes with KD-25 (both may be open at once in one mode) | QUEUED, after item 9 | KD-26, KD-25 |
 | 11 | `#441` — the weekly xStock opportunity-loss watch, built by me as an item of ANALYST's `B-XSTOCK-SESSION-FRESHNESS` (row 3b.f-c); `B-XSTOCK-FRESHNESS-MONITOR` closes into it | ACKED 2026-11-06; build order is CC-C's batch, to the round-4 consensus in `pm/decisions/2026-11-05_xstock-freshness-condition.md` | KD-48 |
 | 12 | The cold-archive key: the staging app holds an account-wide Backblaze key; replace it with a bucket-restricted key that cannot delete, and take the wide key off the server | folded into `B-DISK-FILE-TIERING` OBJ-3 (the cold-path rewrite), per `pm/decisions/2026-11-06_cold-archive-daily-chunk-plan.md` §6 | KD-32 |
+| 13 | `B-ARCHIVE-NETWORK-RETRY` (`#705`): the price recorders keep a batch when the database refuses or cannot be reached, and alert when an overflowing buffer drops rows | Step 11 — live 2026-11-20 at `ecbdf882e`, Langston Step 8 PROCEED; report `Batch Completion/B_ARCHIVE_NETWORK_RETRY_COMPLETION_REPORT.md` in review | KD-97 (plan §0a CC-A item 3) |
 | 13 | `B-DB-SIZE-RELIEF` (sprint stage 00, order 5c): A1 signal_eval_archive hot window 30 -> 15 days; A2 the two monthly tables onto daily partitions; A2 now covers six tables and absorbs #688 (scope r3) | IN OBSERVATION from 2026-11-15 (Steps 1-9 done; Langston Step 8 CONFIRMED the panel's browser leg; fold r2 live `84eeb168e`). Waits on the 2026-12-01 cutover and the first month-end after it, per the progress report. Step 7's row-119 wait is DISCHARGED (am.5 attempt 2 PASSED) | KD-60 |
 | ? | `#914` (row 126) | open with Kyle via PM Claude | pending |
 
