@@ -58,3 +58,26 @@ All bar-availability unit files, the writer fence, the p4c guard, the actor allo
 - **Window:** start 2026-11-09T00:05Z; eight complete UTC days 11-10..11-17; seven sessions for the five required; read carrier event-wait alert `3306c5c3-70d7-44c8-8e6f-44bb728417e8` at 2026-11-18T00:15Z, before that day's 02:15Z retention sweep.
 - **Deploy:** in the 2026-11-07 joint deploy, migration 4 of 4 in MANIFEST order.
 
+## C6 - the capacity gate completes (CC-C, 2026-11-20; code `96f646fc0`) - for the Step-4 diff review
+**(i) DECLARED CHANGE-CLASS:** `architecture` (scope header, unchanged).
+**(ii) DOC SET FOR `architecture`, row by row:** scope - present (`Scope Files/B_XSTOCK_BAR_AVAILABILITY_SCOPE.md`); pre-audit - present (`Scope Files/B_XSTOCK_BAR_AVAILABILITY_PRE_AUDIT.md`, sections "C6 design r7", "C6 design r8", "C6 r8 RULED + the cap measurement"); completion report - absent (batch open at Step 9; written at Step 11); `BATCH_CATALOG`, `PHASE_HISTORY`, `SYSTEM_MANUAL`, `SYSTEM_IMPACT_MAP` - absent for C6, owed at this increment's Step 10 (the gate's read shape and the new module are SIM-scope; the System Manual names the gate's checks, which C6 does not change).
+**(iii) STEP-2 REFERENCE:** C6 design r8, as ruled by Langston 2026-11-20 (Discord `1573155741743841472` for C6-1..5, `1573158726125490348` for the spilling option and the cap), recorded in the pre-audit at `6f6afb91a`.
+
+**Files (4):** `server/scripts/b-xstock-bar-availability-gate-read.ts` (NEW, the chunked reader); `server/scripts/b-xstock-bar-availability-capacity-gate.ts` (MODIFIED: wiring, budget, verdict state, exit codes, scope predicates); `server/tests/unit/b-xstock-bar-availability-gate-read.test.ts` (NEW); `server/tests/integration/b-xstock-bar-availability-gate-read.test.ts` (NEW, real PostgreSQL).
+
+**Load-bearing pieces (read these first):**
+- `planGradedChunks(windowStart, observedAt)` - whole UTC days from the start, a leading partial chunk if the start is not midnight, and a trailing partial chunk ending exactly at `observedAt`; no empty chunk at an exact midnight (C6-4).
+- `budgetedQuery` - `SET LOCAL statement_timeout = min(cap, remaining)` re-issued before every statement; below 1 s remaining it does not start; `57014` and `55P03` become `InconclusiveRead`, anything else stays fatal (C6-3).
+- `POPULATION_CHUNK_SQL` / `POPULATION_EXACTNESS_SQL` - links admitted in the chunk LEFT JOIN events bounded to `arrived_at` in `[chunk - 1 h, end + 1 h)`; ids not found (WITH multiplicity) go to one `unnest($1::uuid[])` unbounded lookup; above 1% of the chunk's links the run is inconclusive and the lookup is not run (C6-5).
+- `UNLINKED_CHUNK_SQL` / `UNLINKED_RECHECK_SQL` - candidates from completions bounded to the chunk, re-checked against `completed_at < observedAt` with no lower bound (C6-5).
+- `IDENTITY_REVISION_SQL`, `IDENTITY_VISIBLE_SEQ_SQL` (whole-table, the EVENT rows), restricted to window-linked ids by `IDENTITY_*_LINKED_SQL`; **plus `IDENTITY_LINK_SQL`, an id linked by two completions** - not in r8: the single-shot joined such an id's one event row twice and failed `immutableIdentities`, and the event-row scans cannot see it, so it is added (window-only, measured 4.50 s for 8 days' completions). `reconstructDistinctCounts` subtracts all three, plus null seqs.
+- `readSessionsChunked` - session bounds once, then one statement per session with the bounded join UNION ALL the population leg's out-of-bound ids.
+- Gate: `GATE_EXIT = { pass: 0, fatal: 1, fail: 2, inconclusive: 3 }`; `verdict.state`; the inconclusive JSON is written in the catch before exit; `SET LOCAL lock_timeout` after BEGIN; every data statement through `budgetedQuery` (fenced); the four `module_constants` lookups read `asset_class='*' AND exchange='*' AND strategy='*' AND regime='*'` (carried item (a)).
+
+**Tests:** unit 16 (chunk plan incl. the partial trailing day, budget arithmetic, 57014/55P03 vs fatal, exactness batching and the 1% cap, identity reconstruction incl. the link case, source fences); integration 3 (real PostgreSQL, a random far-future Monday week: chunked == the pre-C6 single-shot SQL copied verbatim, on a fixture with an out-of-bound arrival, an unlinked event and a partial trailing day; then a duplicate EVENT ROW across two partitions fails identity in both). tsc baseline 324 = 324.
+
+**Judgement calls to attack:**
+1. **The duplicate-link statement** (not in r8) - is it the right object, and is window-only right for it (the single-shot's join is window-only on the link side)?
+2. **Reconstructed distinct counts are exact only without duplicates** - with any duplicate they are guaranteed lower (fail), not equal to the single-shot's number. I judged the boolean the load-bearing output.
+3. **Exit code 2 for FAIL** - the script used to exit 0 on FAIL; nothing consumes the code yet (R7 will).
+4. **The session leg passes the WHOLE out-of-bound id list to every session** (expected empty or tiny; capped by the population leg's 1%).
