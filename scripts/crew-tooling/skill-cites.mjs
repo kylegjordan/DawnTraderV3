@@ -19,7 +19,9 @@ const fail = (m) => { console.error(`ERROR: ${m}`); process.exit(2); };
 const git = (...a) => execFileSync('git', a, { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
 const REF = opt('--ref') || 'origin/migration/aws-supabase';
 const CORPORA = many('--corpus').length ? many('--corpus') : ['1-system-manual/', 'Claude Comms and Packages/'];
-try { git('rev-parse', '--verify', '--quiet', `${REF}^{commit}`); } catch { fail(`ref ${REF} does not resolve`); }
+// Every ref read is printed with its resolved sha: a ref NAME is whatever this clone last fetched, and no fetch is done here.
+const shaOf = (r) => { try { return git('rev-parse', '--verify', '--quiet', `${r}^{commit}`).trim(); } catch { fail(`ref ${r} does not resolve`); } };
+const REF_SHA = shaOf(REF);
 
 const SKILLS = git('ls-tree', '--name-only', `${REF}:.claude/skills`).split('\n').filter((s) => /^(workflow-|bug-investigation)/.test(s));
 // A citation names a skill by its full directory name or its short `workflow-NN` form.
@@ -47,7 +49,10 @@ function census(ref) {
     const [, file, line, text] = m;
     for (const f of text.matchAll(FIRST)) {
       const dir = skillDir(f[1]);
-      const push = (n) => out.push({ file, line: Number(line), skill: f[1], skill_dir: dir, cited_line: Number(n), cited_text: dir ? skillLine(ref, dir, Number(n)) ?? null : null });
+      // cite_state keeps the three null causes apart: no such skill, SKILL.md unreadable at the ref, line past its end.
+      const push = (n) => { const got = dir ? skillLine(ref, dir, Number(n)) : null;
+        out.push({ file, line: Number(line), skill: f[1], skill_dir: dir, cited_line: Number(n), cited_text: got ?? null,
+          cite_state: !dir ? 'no_skill' : got === undefined ? 'skill_unreadable' : got === null ? 'past_end' : 'ok' }); };
       push(f[2]);
       let rest = text.slice(f.index + f[0].length), c;
       while ((c = rest.match(CONT))) { push(c[1]); rest = rest.slice(c.index + c[0].length); }
@@ -59,24 +64,31 @@ function census(ref) {
 if (args.includes('--check')) {
   const before = JSON.parse(readFileSync(opt('--check'), 'utf8'));
   const at = opt('--at'); if (!at) fail('--check needs --at <post-move ref>');
-  const stale = [];
+  const stale = [], appeared = [];
   const now = census(at);
+  const key = (c) => `${c.file}\u0000${c.skill}\u0000${c.cited_line}`;
+  const beforeKeys = new Map(before.citations.map((b) => [key(b), b])), nowKeys = new Set(now.map(key));
   for (const c of now) {
-    const old = before.citations.find((b) => b.file === c.file && b.skill === c.skill && b.cited_line === c.cited_line);
-    if (old && old.cited_text !== c.cited_text) stale.push({ ...c, was: old.cited_text });
+    const old = beforeKeys.get(key(c));
+    if (!old) appeared.push(c); else if (old.cited_text !== c.cited_text) stale.push({ ...c, was: old.cited_text });
   }
-  console.log(`CHECK ${before.ref} -> ${at}: ${now.length} citations at ${at}; ${stale.length} now point at different text`);
+  // Langston Step-4 gate 2 C-4: a citation present before and absent after (file archived, or rewritten past the
+  // patterns) matched nothing in the old loop and was silently uncounted. It is its own bucket now.
+  const disappeared = before.citations.filter((b) => !nowKeys.has(key(b)));
+  console.log(`CHECK ${before.ref}${before.ref_sha ? ` (${before.ref_sha.slice(0, 12)})` : ''} -> ${at} (${shaOf(at).slice(0, 12)}; no fetch performed): ${before.citations.length} citations before, ${now.length} after; ${stale.length} now point at different text; ${disappeared.length} DISAPPEARED; ${appeared.length} new`);
   for (const s of stale) console.log(`  ${s.file}:${s.line} ${s.skill}:${s.cited_line}\n    was: ${String(s.was).slice(0, 110)}\n    now: ${String(s.cited_text).slice(0, 110)}`);
-  process.exit(stale.length ? 1 : 0);
+  for (const d of disappeared) console.log(`  DISAPPEARED ${d.file}:${d.line} ${d.skill}:${d.cited_line}
+    was: ${String(d.cited_text).slice(0, 110)}`);
+  process.exit(stale.length || disappeared.length ? 1 : 0);
 }
 
 const cites = census(REF);
-const result = { tool: 'skill-cites.mjs', tool_version: '1.0', ref: REF, corpora: CORPORA, skills: SKILLS,
-  counts: { citations: cites.length, files: new Set(cites.map((c) => c.file)).size, unresolved_skill: cites.filter((c) => !c.skill_dir).length, past_end: cites.filter((c) => c.skill_dir && c.cited_text === null).length },
+const result = { tool: 'skill-cites.mjs', tool_version: '1.1', ref: REF, ref_sha: REF_SHA, fetched: false, corpora: CORPORA, skills: SKILLS,
+  counts: { citations: cites.length, files: new Set(cites.map((c) => c.file)).size, unresolved_skill: cites.filter((c) => !c.skill_dir).length, past_end: cites.filter((c) => c.cite_state === 'past_end').length, skill_unreadable: cites.filter((c) => c.cite_state === 'skill_unreadable').length },
   citations: cites,
   not_covered: ['citations by heading or prose, with no line number', 'skill names outside workflow-*, workflow-hotfix, bug-investigation', 'corpora not passed (default: 1-system-manual/ and Claude Comms and Packages/)'] };
 if (args.includes('--json')) { console.log(JSON.stringify(result, null, 2)); process.exit(cites.length ? 0 : 1); }
-console.log(`SKILL CITATIONS at ${REF} in ${CORPORA.join(', ')}: ${result.counts.citations} citations in ${result.counts.files} files; ${result.counts.unresolved_skill} name no existing skill; ${result.counts.past_end} cite a line past the skill's end`);
+console.log(`SKILL CITATIONS at ${REF} (${REF_SHA.slice(0, 12)}; no fetch performed) in ${CORPORA.join(', ')}: ${result.counts.citations} citations in ${result.counts.files} files; ${result.counts.unresolved_skill} name no existing skill; ${result.counts.past_end} cite a line past the skill's end; ${result.counts.skill_unreadable} name a skill whose SKILL.md is unreadable at the ref`);
 const by = new Map(); for (const c of cites) by.set(c.skill_dir || c.skill, (by.get(c.skill_dir || c.skill) || 0) + 1);
 for (const [k, n] of [...by].sort((a, b) => b[1] - a[1])) console.log(`  ${String(n).padStart(3)}  ${k}`);
 console.log(`not covered: ${result.not_covered.join('; ')}`);

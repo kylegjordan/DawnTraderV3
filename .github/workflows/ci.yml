@@ -122,6 +122,9 @@ jobs:
       # directions. Advisory: continue-on-error keeps it OUTSIDE the required result (Langston, Step-2 r2).
       # A red here is a finding to read in the log, never a reason to merge past a red required step.
       - name: Enum parity (advisory, not required)
+        # Langston Step-4 gate 2 C-2: without this guard the step is SKIPPED whenever the Test Suite step
+        # before it fails (measured: run 44663698365), so the advisory signal vanishes on exactly the red runs.
+        if: ${{ !cancelled() }}
         continue-on-error: true
         run: npx vitest run --config vitest.enum-parity.config.ts --reporter=verbose
         env:

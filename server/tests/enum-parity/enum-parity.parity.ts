@@ -7,8 +7,11 @@ import * as schema from '../../../shared/schema';
 // CI database, in both directions.
 //  - code -> database: a type or value the code declares that the database does not hold. A write of that
 //    value fails at runtime (the #1063 class: pattern_type).
-//  - database -> code: a value the database holds that the code does not declare. A read of that value
-//    fails type checks downstream, or the value was meant to be retired. Postgres cannot drop an enum value,
+//  - database -> code: a value the database holds, IN A TYPE THE CODE DECLARES, that the code does not
+//    declare. A read of that value fails type checks downstream, or the value was meant to be retired.
+//    NOT COVERED: an enum type the database holds that the code does not declare at all - compare() loops
+//    the code's types only (Langston Step-4 gate 2 O-1: 11 of 84 database enum types on staging; carried
+//    to gate 4). Postgres cannot drop an enum value,
 //    so a value retired on purpose is listed in HISTORICAL_VALUES with its reason, and only there.
 // Runs in its own ci.yml step with continue-on-error, OUTSIDE the required result (Langston, Step-2 r2
 // condition 1). The file is named *.parity.ts so the main vitest include (server/**/*.test.ts) does not

@@ -110,3 +110,22 @@ Pointers to it: `workflow-02:51` (provenance read), `:60` (census), `workflow-01
 - The pilot's helper claims were re-checked by PM at the ref (listed in the pilot record).
 - The reachability canary was a fresh sonnet reader with no context.
 - NOT RE-READ by a fresh reader: this change list's own figures; PM re-derived each from the commits.
+
+## Gate 2 — ruled PROCEED with five conditions (Langston, at `57a8bf75e`); applied in one commit
+| item | file | what changed | proof | review path |
+|---|---|---|---|---|
+| C-1 | `history.mjs` 1.2, `skill-cites.mjs` 1.1, `closeout.mjs` | each prints the resolved sha beside the ref name and "no fetch performed"; JSON carries `ref_sha` / `base_sha`+`head_sha` and `fetched: false` | runs below print the sha | Step 8 |
+| C-2 | `ci.yml` | `if: ${{ !cancelled() }}` on "Enum parity (advisory, not required)", so a red Test Suite no longer skips it | YAML parses; the effect shows on the next red-suite run only | Step 8 |
+| C-3 | `closeout.mjs` | imports `CHANGE_CLASS_MARKER` from `config.mjs` instead of a copied regex; scope selection mirrors `checker.mjs` `readDeclaredClass` (first SCOPE file in sorted order that carries the marker, else the first) | B-GOV-2 now reads UNDECLARED, same as the checker (its `**change-class:**` bold breaks the marker); B-TOKEN-WATCH picks `B_TOKEN_WATCH_BIRTH_CAP_SCOPE.md`, the checker's same over-inclusion; B-PRICE-AGE-TRUTH architecture; this batch non_architecture | **diff to Langston** |
+| C-4 | `skill-cites.mjs` | `--check` keys each citation on file + skill + cited line and adds `DISAPPEARED` (in before, not after) and `appeared`; exit 1 on stale or disappeared | `b75aeba60 -> ddcf8be55`: 87 before, 87 after, 31 point at different text, 0 DISAPPEARED, 0 new (the 31 holds); positive control: a planted citation removed reports 1 DISAPPEARED | **diff to Langston** |
+| C-5 | `code-refs.mjs`, `census.mjs` | the two fixed cannot-see lines now name JavaScript (.mjs/.js/.cjs, mostly `scripts/`) and the TypeScript outside both includes (`scripts/` about 40 files, then `docs/`, `e2e/`, `tests/`, `types/`, `chaplet/`, `diagnostics/`, root configs); census states that leg 2 does walk .mjs | measured by `git ls-files` at the ref | Step 8 |
+| O-1 | `enum-parity.parity.ts` | header narrowed: database-only values are compared only inside types the code declares; database-only TYPES are not covered (11 of 84 on staging), carried to gate 4 | header text | Step 8 |
+
+**Fold-ins (no conditions):**
+- `census.mjs` 1.1 `--path`: exits 1 when no start file reaches the file (was: always 0 on the file's own presence). Controls: `server/services/active-portfolio-manager.ts` exit 0; `scripts/crew-tooling/census.mjs` (nothing imports it) exit 1. `--path` and `--table` now print fixed cannot-see lines instead of none.
+- `skill-cites.mjs`: `cite_state` splits `past_end` from `skill_unreadable` (22 past end, 0 unreadable at `fa12a2f96`).
+- `ledger-validate.mjs`: `objectives: {}` now fails `bad-type` (was VALID, "undefined objectives"); new self-test case, 10/10.
+- `move-ledger-check.mjs`: a leftover that was re-spaced or re-wrapped now fails ("still in ... (re-spaced or re-wrapped)"), compared with whitespace collapsed; new self-test case, 9/9. **The sources-less fallback is already exercised:** the default ledger (`B_TOKEN_ECONOMY_MOVE_LEDGER.json`) has 55 moves, none with `sources`, and is what the first six self-test cases and CI's first move-ledger line run.
+- `history.mjs`: three `not_covered` entries (phase-scoped sub-batch ids such as P19-B8.5l; ledger rows matched by basename; former names proven for one rename only).
+
+Carried to gate 4: the undeclared database enum types; the checker's own marker missing five `**Batch:** … **change-class: …**` lines (nothing mis-graded).

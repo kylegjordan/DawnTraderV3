@@ -24,7 +24,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '..', '..');
 const cfg = await import(pathToFileURL(join(ROOT, 'scripts/governance-checker/config.mjs')).href);
-const { DOCS, CLASS_DOCSET, REQUIRED_IF, LEDGER_ROWS, PLAN_LINE, batchIdToFileRegex } = cfg;
+const { DOCS, CLASS_DOCSET, REQUIRED_IF, LEDGER_ROWS, PLAN_LINE, batchIdToFileRegex, CHANGE_CLASS_MARKER } = cfg;
 
 const args = process.argv.slice(2);
 const opt = (k) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : undefined; };
@@ -103,18 +103,23 @@ let cls = opt('--class');
 let classSource = cls ? '--class' : null;
 const batchId = opt('--batch');
 const base = opt('--base'); const head = opt('--head') || (batchId ? 'origin/migration/aws-supabase' : null);
-let changed = null, deleted = [], headFiles = null;
+let changed = null, deleted = [], headFiles = null, baseSha = null, headSha = null;
 if (batchId) {
   if (!base) fail('--batch needs --base (the commit before the batch began)');
-  try { git('rev-parse', '--verify', '--quiet', `${base}^{commit}`); git('rev-parse', '--verify', '--quiet', `${head}^{commit}`); } catch { fail(`--base ${base} or --head ${head} does not resolve`); }
+  // The resolved shas are kept and printed: a ref NAME is whatever this clone last fetched, and no fetch is done here.
+  try { baseSha = git('rev-parse', '--verify', '--quiet', `${base}^{commit}`).trim(); headSha = git('rev-parse', '--verify', '--quiet', `${head}^{commit}`).trim(); } catch { fail(`--base ${base} or --head ${head} does not resolve`); }
   const ns = git('diff', '--name-status', '--no-renames', base, head).split('\n').filter(Boolean).map((l) => l.split('\t'));
   changed = new Set(ns.map(([, p]) => p)); deleted = ns.filter(([s]) => s === 'D').map(([, p]) => p);
   headFiles = git('ls-tree', '-r', '--name-only', head).split('\n').filter(Boolean);
-  // The declared class, read from the scope header as the checker reads it; undeclared -> the default class, flagged.
+  // The declared class, read from the scope header with the checker's own marker (imported, never copied); undeclared -> the default class, flagged.
   const re = batchIdToFileRegex(batchId);
-  const scope = headFiles.find((f) => f.startsWith(`${DOCS.scope.dir}/`) && DOCS.scope.match.test(f.split('/').pop()) && !DOCS.pre_audit.match.test(f.split('/').pop()) && re.test(f.split('/').pop()));
-  const m = scope ? git('show', `${head}:${scope}`).match(/change-class:\s*`?([a-z_]+)/i) : null;
-  const declared = m && CLASSES.includes(m[1]) ? m[1] : null;
+  // Scope selection follows the checker's readDeclaredClass (checker.mjs:570-585): names carrying the batch-id and
+  // SCOPE, sorted, the first whose text holds the marker. That loop is MIRRORED here because the checker's version
+  // reads at its own fetched ref, not at --head; the marker itself is imported.
+  const cands = headFiles.filter((f) => f.startsWith(`${DOCS.scope.dir}/`) && re.test(f.split('/').pop()) && /SCOPE/i.test(f.split('/').pop())).map((f) => f.split('/').pop()).sort();
+  let scope = cands.length ? `${DOCS.scope.dir}/${cands[0]}` : null, m = null;
+  for (const n of cands) { const hit = git('show', `${head}:${DOCS.scope.dir}/${n}`).match(CHANGE_CLASS_MARKER); if (hit) { scope = `${DOCS.scope.dir}/${n}`; m = hit; break; } }
+  const declared = m && CLASSES.includes(m[1].toLowerCase()) ? m[1].toLowerCase() : null;
   if (cls && declared && cls !== declared) console.log(`WARNING: --class ${cls} differs from the scope's declared class ${declared} (${scope}); grading --class as asked`);
   if (!cls) { cls = declared || cfg.DEFAULT_CLASS; classSource = declared ? `declared in ${scope}` : `UNDECLARED${scope ? ` in ${scope}` : ' (no scope file)'} - graded as the default class, as the checker does`; }
 }
@@ -155,10 +160,10 @@ function verdict(key, c) {
 
 const matrix = ROWS.map(([key, label]) => { const c = cell(cls, key, batchId); return { key, label, ...c, verdict: verdict(key, c) }; });
 const missing = matrix.filter((m) => m.verdict?.state === 'MISSING').length;
-const out = { tool: 'closeout.mjs', tool_version: '1.0', class: cls, class_source: classSource, batch: batchId || null, base: base || null, head, source: 'scripts/governance-checker/config.mjs (imported) + OVERLAY', rows: matrix, missing,
+const out = { tool: 'closeout.mjs', tool_version: '1.0', class: cls, class_source: classSource, batch: batchId || null, base: base || null, head, base_sha: baseSha, head_sha: headSha, fetched: false, source: 'scripts/governance-checker/config.mjs (imported) + OVERLAY', rows: matrix, missing,
   not_covered: ['whether an UPDATED entry says the right thing (content, not presence)', 'local-state rows (memory, task lists) - the author attests', 'a judged row the diff gives no hint for'] };
 if (args.includes('--json')) { console.log(JSON.stringify(out, null, 2)); process.exit(missing ? 1 : 0); }
-console.log(`CHANGE-CLASS: ${cls} (${classSource})${batchId ? `   batch ${batchId}, ${base}..${head}` : ''}`);
+console.log(`CHANGE-CLASS: ${cls} (${classSource})${batchId ? `   batch ${batchId}, ${base} (${baseSha.slice(0, 12)})..${head} (${headSha.slice(0, 12)}); no fetch performed, refs as this clone last fetched them` : ''}`);
 console.log('| document | requirement · checker | verdict | evidence |');
 console.log('|---|---|---|---|');
 for (const m of matrix) console.log(`| ${m.label} | ${m.req} · ${m.tag}${m.src ? ` (${m.src})` : ''} | ${m.verdict ? m.verdict.state : '-'} | ${m.verdict ? m.verdict.evidence + (m.verdict.hint?.length ? `; hint: ${m.verdict.hint.join('; ')}` : '') : ''} |`);

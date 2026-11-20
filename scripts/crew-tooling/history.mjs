@@ -30,7 +30,9 @@ if (sym) {
   target = o.declaration.file;
 }
 if (!target) fail('usage: history.mjs <path | --symbol NAME> [--ref <git ref>] [--json]');
-try { git('rev-parse', '--verify', '--quiet', `${REF}^{commit}`); } catch { fail(`ref ${REF} does not resolve`); }
+// The resolved sha is kept and printed: the ref NAME is whatever this clone last fetched, and no fetch is done here.
+let REF_SHA;
+try { REF_SHA = git('rev-parse', '--verify', '--quiet', `${REF}^{commit}`).trim(); } catch { fail(`ref ${REF} does not resolve`); }
 
 // 1. Commits through renames.
 const SEP = '\u001f';
@@ -93,15 +95,18 @@ const ledgers = [
 ];
 
 const result = {
-  tool: 'history.mjs', tool_version: '1.1', ref: REF, target, former_names: [...names].filter((n) => n !== target),
+  tool: 'history.mjs', tool_version: '1.2', ref: REF, ref_sha: REF_SHA, fetched: false, target, former_names: [...names].filter((n) => n !== target),
   counts: { commits: commits.length, attributed: commits.filter((c) => c.batch).length, unattributed: commits.filter((c) => !c.batch).length, batches: batches.length },
   batches: batches.map((id) => ({ id, commits: commits.filter((c) => c.batch === id).map((c) => c.sha), documents: docsFor(id) })),
   unattributed: commits.filter((c) => !c.batch),
   ledgers,
-  not_covered: ['batch-ids only in commit bodies', 'issues citing the component by prose name, not file name', 'history before the first commit of the path'],
+  not_covered: ['batch-ids only in commit bodies', 'issues citing the component by prose name, not file name', 'history before the first commit of the path',
+    'phase-scoped sub-batch ids (e.g. P19-B8.5l): the parent-document fallback matches only B<number> ids',
+    'ledger rows are matched by BASENAME, so a duplicated basename (index.ts, types.ts, friction.ts and others) cites every file of that name',
+    'former names are proven by one rename (paper-portfolio-manager.ts); multi-hop renames are not tested'],
 };
 if (asJson) { console.log(JSON.stringify(result, null, 2)); process.exit(0); }
-console.log(`HISTORY ${target} at ${REF}: ${result.counts.commits} commits, ${result.counts.attributed} attributed to ${batches.length} batches, ${result.counts.unattributed} unattributed`);
+console.log(`HISTORY ${target} at ${REF} (${REF_SHA.slice(0, 12)}; no fetch performed): ${result.counts.commits} commits, ${result.counts.attributed} attributed to ${batches.length} batches, ${result.counts.unattributed} unattributed`);
 if (result.former_names.length) console.log(`former names: ${result.former_names.join(', ')}`);
 for (const b of result.batches) console.log(`  ${b.id}  [${b.commits.join(' ')}]  docs: ${b.documents.length ? b.documents.map((d) => d.startsWith('parent ') ? d.replace(/: .*\//, ': ') : basename(d)).join(', ') : 'NONE FOUND'}`);
 console.log(`unattributed (${result.unattributed.length}):`);

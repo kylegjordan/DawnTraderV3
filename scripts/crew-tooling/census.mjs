@@ -158,21 +158,31 @@ const population = {
   systemd_unit_files: unitFiles.length,
   raw_sql_files_scanned: table ? serverSrc.length + tracked.filter((f) => /^(scripts|comms-infra)\//.test(f) && /\.(ts|mjs|js|py|sh|sql)$/.test(f)).length : null,
 };
+// Langston Step-4 gate 2 fold-in: with no --symbol there is no code-refs run, so its blind spots are stated here
+// rather than dropped. Leg 2 (the import graph) DOES walk .mjs/.js/.cjs and every tracked root, so the TypeScript-only
+// lines are not inherited for it.
+const NO_SYMBOL_BLIND = [
+  'type-aware uses: --path and --table run no language-server search, so readers of the target are seen only as import edges (leg 2) or raw text (--table)',
+  'string-keyed access (obj[name], route strings, config keys, JSON)',
+  'shell, Python and systemd files are read for entry-point lines only, never as importers',
+];
 const unresolved = [
-  ...(refs ? refs.unresolved_surfaces : []),
+  ...(refs ? refs.unresolved_surfaces : NO_SYMBOL_BLIND),
   'import() with a computed path, and require() of a computed path (no edge in the reach graph)',
   'routes reached by HTTP string (an API path is reach by request, not by import)',
   'systemd units and cron on a host but not in this repo; PM2 runs dist/ build output, mapped back to server/index.ts by assumption',
   'entry points not using .start / setInterval / cron.schedule / cron.createTask / cronRegistry.register (setTimeout chains, event listeners, queue consumers)',
 ];
 const result = {
-  tool: 'census.mjs', tool_version: '1.0', root: ROOT, target: { symbol: symbol || null, file: symFile || null, path: pathTarget || null, table: table || null },
+  tool: 'census.mjs', tool_version: '1.1', root: ROOT, target: { symbol: symbol || null, file: symFile || null, path: pathTarget || null, table: table || null },
   declaration: refs ? refs.declaration : null,
   counts: { uses: refs ? refs.counts.uses : null, files_using: targetFiles.size, reached: reach.filter((r) => r.from).length, not_reached: reach.filter((r) => !r.from).length, entry_points: epHits.length + pm2Hits.length + unitHits.length, raw_sql_lines: rawSql ? rawSql.hits.length : null, raw_sql_lines_with_keyword: rawSql ? rawSql.hits.filter((h) => h.sql_on_line).length : null },
   table: tableInfo, reach, entry_points: { app: epHits, pm2: pm2Hits, systemd: unitHits }, raw_sql: rawSql,
   population, unresolved_surfaces: unresolved,
 };
-const found = (refs && refs.counts.uses) || epHits.length || pm2Hits.length || unitHits.length || (rawSql && rawSql.hits.length) || pathTarget;
+// --path: the file always exists, so 'found' means it is reached from a start file or named by an entry point;
+// a file nothing reaches exits 1 (it used to exit 0 on its own presence - Langston Step-4 gate 2 fold-in).
+const found = (refs && refs.counts.uses) || epHits.length || pm2Hits.length || unitHits.length || (rawSql && rawSql.hits.length) || (pathTarget && reach.some((r) => r.from));
 if (asJson) { console.log(JSON.stringify(result, null, 2)); process.exit(found ? 0 : 1); }
 
 const c = result.counts;

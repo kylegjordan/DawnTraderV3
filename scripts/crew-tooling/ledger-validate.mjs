@@ -60,6 +60,8 @@ export function validate(ledger, S) {
     }
   });
   if (Array.isArray(ledger.objectives) && objs.length === 0) add('missing-field', '$.objectives', 'objectives is empty');
+  // Langston Step-4 gate 2 fold-in: {} (or any non-array) used to pass with zero objectives checked.
+  else if (ledger.objectives !== undefined && !Array.isArray(ledger.objectives)) add('bad-type', '$.objectives', 'objectives must be an array');
   return defects;
 }
 
@@ -95,6 +97,7 @@ function selfTest(S) {
     ['seeded done-while-unproven (no Step-8)', (l) => { delete l.objectives[0].step8_challenge; }, 'done-while-unproven'],
     ['closed-unproven without a home', (l) => { delete l.objectives[1].unproven.home; }, 'missing-field'],
     ['reader without stale behaviour', (l) => { delete l.objectives[0].readers[0].on_stale; }, 'missing-field'],
+    ['objectives given as an object, not an array', (l) => { l.objectives = {}; }, 'bad-type'],
   ];
   for (const [name, mutate, want] of seeded) {
     const l = sample(); mutate(l);

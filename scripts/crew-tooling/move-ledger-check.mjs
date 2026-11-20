@@ -42,6 +42,8 @@ function countOf(hay, needle) {
   return n;
 }
 
+const flat = (s) => s.replace(/\s+/g, ' ').trim();
+
 export function check(root, { dupes = false, ledgerPath = LEDGER } = {}) {
   const fails = [];
   let ledger;
@@ -63,7 +65,10 @@ export function check(root, { dupes = false, ledgerPath = LEDGER } = {}) {
     const passage = blocks[0][1];
     if (sha(passage) !== m.sha256) fails.push(`${m.id}: passage changed (hash mismatch) in ${m.destination}`);
     for (const src of srcsOf(m)) {
+      // Langston Step-4 gate 2 fold-in: an exact substring missed a leftover that was re-wrapped or re-spaced,
+      // so the check also compares with every whitespace run collapsed to one space.
       if (dest(src).includes(passage)) fails.push(`${m.id}: passage is still in ${src}`);
+      else if (flat(dest(src)).includes(flat(passage))) fails.push(`${m.id}: passage is still in ${src} (re-spaced or re-wrapped)`);
       if (!dest(src).includes(m.id)) fails.push(`${m.id}: ${src} lost its pointer`);
     }
     passages.push([m, passage]);
@@ -102,6 +107,12 @@ function selfTest(root) {
     const c = join(tmp, ledger.source || 'CLAUDE.md'); writeFileSync(c, read(c) + '\n' + passage + '\n');
     const r = check(tmp, { dupes: true });
     t('a passage put BACK into CLAUDE.md fails (and --dupes sees two homes)', !r.ok && r.fails.some((f) => f.includes('still in CLAUDE.md')) && r.fails.some((f) => f.includes('found 2 times'))); }
+  fresh();
+  { const re = new RegExp(`<!-- P5-MOVED id=${esc(m.id)} -->\\n### [^\\n]*\\n\\n([\\s\\S]*?)\\n<!-- /P5-MOVED`);
+    const passage = read(join(tmp, m.destination)).match(re)[1].replace(/ /g, '  ');
+    const c = join(tmp, ledger.source || 'CLAUDE.md'); writeFileSync(c, read(c) + '\n' + passage + '\n');
+    const r = check(tmp);
+    t('a RE-SPACED passage put back into CLAUDE.md fails', !r.ok && r.fails.some((f) => f.includes('re-spaced or re-wrapped'))); }
   fresh();
   { const c = join(tmp, ledger.source || 'CLAUDE.md'); writeFileSync(c, read(c).split(m.id).join('P5-XX'));
     t('a lost pointer fails', !check(tmp).ok); }

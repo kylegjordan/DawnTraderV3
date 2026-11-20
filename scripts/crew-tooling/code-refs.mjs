@@ -27,8 +27,9 @@ const UNRESOLVED = [
   'raw SQL strings (table and column names in sql`...` or text queries)',
   'string-keyed access (obj[name], route strings, config keys, JSON)',
   'dynamic import() with a computed path, require() of a computed path',
-  'shell, Python and systemd files outside the TypeScript program',
-  'files excluded by both tsconfigs (everything under server/legacy, build output)',
+  // Langston Step-4 gate 2 C-5: the largest unseen surface was unnamed. These two lines name it; the reader quotes them.
+  'JavaScript (.mjs/.js/.cjs) anywhere, and shell, Python and systemd files: none is in either TypeScript program. scripts/ holds most of the JavaScript, including the crew tooling itself',
+  'TypeScript outside both tsconfig includes (client/src, shared, server): scripts/ is the largest (about 40 files), then docs/, e2e/, tests/, types/, chaplet/, diagnostics/ and the root config files (drizzle, vite, vitest, playwright, tailwind); and server/legacy and build output, excluded',
 ];
 
 function parse(cfgPath) {
