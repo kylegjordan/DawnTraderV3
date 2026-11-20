@@ -56,6 +56,8 @@ MUTATIONS = [
     ("a failed run counts as a success for the floor", replace('f[1] in ("nightly", "precompact") and f[2] == "0"', 'f[1] in ("nightly", "precompact")')),
     ("DETACHED_PROCESS re-introduced (the 2026-11-20 window bug)", replace(
         'getattr(subprocess, "CREATE_NO_WINDOW", 0)\n', 'getattr(subprocess, "CREATE_NO_WINDOW", 0) | 0x00000008\n')),
+    ("DETACHED_PROCESS re-introduced by name, the natural form (Langston, ebb4a7db7)", replace(
+        'getattr(subprocess, "CREATE_NO_WINDOW", 0)\n', 'getattr(subprocess, "CREATE_NO_WINDOW", 0) | getattr(subprocess, "DETACHED_PROCESS", 0)\n')),
     ("the hidden console dropped", replace(
         ' | getattr(subprocess, "CREATE_NO_WINDOW", 0)\n', "\n")),
     ("the real Popen not handed SPAWN_FLAGS", replace("creationflags=SPAWN_FLAGS,", "creationflags=0x00000208,")),
@@ -100,5 +102,5 @@ for name, mut in MUTATIONS:
     crashed += verdict == "crashed"
     caught += rc != 0
     print("%-8s %s" % (verdict, name))
-print("\n%d/%d caught (%d of them by a crash rather than an assertion)" % (caught, len(MUTATIONS), crashed))
+print("\n%d/%d caught (%d of them by a crash rather than an assertion) - platform %s" % (caught, len(MUTATIONS), crashed, sys.platform))
 sys.exit(0 if caught == len(MUTATIONS) and crashed == 0 else 1)
