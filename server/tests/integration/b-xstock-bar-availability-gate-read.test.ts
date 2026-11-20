@@ -2,8 +2,8 @@
  * B-XSTOCK-BAR-AVAILABILITY Step 9 C6 (design r8, Langston-ruled 2026-11-20) - real PostgreSQL
  * proof that the CHUNKED gate read equals the gate's original SINGLE-SHOT read.
  *
- * The oracle queries below are the pre-C6 production SQL, copied verbatim (population,
- * unlinked, sessions). The fixture covers what Langston named:
+ * The oracle queries below are the pre-C6 production SQL (population, unlinked, sessions), minus
+ * the lag percentiles and two session text columns no check reads. The fixture covers what Langston named:
  *  - two whole UTC days and a PARTIAL trailing day ending at observedAt (C6-4);
  *  - a linked event arriving OUTSIDE its chunk's arrived_at bound, found by the exactness
  *    pass (C6-5);
@@ -93,7 +93,7 @@ async function insertFlush(admittedAt: Date, revisionIds: string[]): Promise<voi
   );
 }
 
-// ── The pre-C6 single-shot production SQL, verbatim (the oracle) ───────────────────────────
+// ── The pre-C6 single-shot production SQL (the oracle), minus the lag percentiles and two session text columns ──
 const ORACLE_POPULATION_SQL = `WITH admitted AS (
          SELECT flush_id
          FROM xstock_bar_projection_flush_admission
@@ -280,6 +280,17 @@ describe(TAG, () => {
       expect(r.sessions[i].symbols).toBe(Number(o.symbols));
       expect(r.sessions[i].max_event_gap_seconds).toBe(o.max_event_gap_seconds === null ? null : Number(o.max_event_gap_seconds));
     });
+  });
+
+  it('an id linked by TWO completions fails identity in both reads (IDENTITY_LINK_SQL; production has none, Langston 11-20)', async (ctx) => {
+    if (!dbReachable || !isTestDb) ctx.skip();
+    // A second flush on day 1 names ids[0] again: one event row, two links.
+    await insertFlush(at(11 * HOUR), [ids[0]]);
+    const r = await readBoth();
+    expect(Number(r.oracle.distinct_revision_ids)).toBeLessThan(Number(r.oracle.revision_events));
+    expect(r.distinct.distinctRevisionIds).toBeLessThan(r.chunked.revisionEvents);
+    expect(r.distinct.distinctVisibleSeqs === r.chunked.revisionEvents)
+      .toBe(Number(r.oracle.distinct_visible_seqs) === Number(r.oracle.revision_events));
   });
 
   it('a duplicate EVENT ROW across two partitions fails identity exactly where the single-shot does', async (ctx) => {

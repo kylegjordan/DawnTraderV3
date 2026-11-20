@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
-  EXACTNESS_CAP_FRACTION,
+  EXACTNESS_MAX_IDS,
   GATE_READ_BUDGET,
   InconclusiveRead,
   asInconclusive,
@@ -134,12 +134,21 @@ describe('C6-5 the exactness pass - batched, and capped', () => {
     expect(read.outOfBoundIds).toEqual(['u1']);
     expect([...read.symbols].sort()).toEqual(['A/USD', 'B/USD']);
   });
-  it(`above ${EXACTNESS_CAP_FRACTION * 100}% of a chunk's links the run is INCONCLUSIVE instead of grinding`, async () => {
-    const unfound = Array.from({ length: 11 }, (_, i) => `u${i}`);
-    const client = fakeClient((text) => (text.startsWith('SET LOCAL') ? { rows: [] } : { rows: [row(1_000, unfound)] }));
-    await expect(readPopulationChunked(client, budgetAt(10 * 60_000), window[0], window[1]))
-      .rejects.toBeInstanceOf(InconclusiveRead);
+  it(`above ${EXACTNESS_MAX_IDS} unfound ids in a chunk the run is INCONCLUSIVE, worded as undetermined`, async () => {
+    const unfound = Array.from({ length: EXACTNESS_MAX_IDS + 1 }, (_, i) => `u${i}`);
+    const client = fakeClient((text) => (text.startsWith('SET LOCAL') ? { rows: [] } : { rows: [row(900_000, unfound)] }));
+    const run = readPopulationChunked(client, budgetAt(10 * 60_000), window[0], window[1]);
+    await expect(run).rejects.toBeInstanceOf(InconclusiveRead);
+    await expect(run).rejects.toThrow(/out-of-bound or absent - not determined/);
     expect(client.calls.some((c) => c.text.includes('unnest($1::uuid[])'))).toBe(false);
+  });
+  it('window-wide lag min/max merge across chunks; per-chunk elapsed is recorded', async () => {
+    const client = fakeClient((text) => (text.startsWith('SET LOCAL') ? { rows: [] } : { rows: [row(10, [])] }));
+    const two = await readPopulationChunked(client, budgetAt(10 * 60_000),
+      new Date('2026-11-23T00:00:00Z'), new Date('2026-11-25T00:00:00Z'));
+    expect(two.lagMinMs).toBe(1);
+    expect(two.lagMaxMs).toBe(4);
+    expect(two.perDay.every((d) => typeof d.elapsedMs === 'number')).toBe(true);
   });
 });
 
@@ -187,9 +196,11 @@ describe('C6 source fences on the gate script', () => {
     expect(gate).toMatch(/error instanceof InconclusiveRead[\s\S]{0,700}state: 'inconclusive'[\s\S]{0,400}GATE_EXIT\.inconclusive/);
     expect(gate).toContain("state: verdict.pass ? 'pass' : 'fail'");
   });
-  it('carried item (a): every module_constants lookup in the gate reads the wildcard scope', () => {
-    const lookups = gate.match(/WHERE module_name='(database_monitor|xstock_bar_availability)'[\s\S]{0,160}?LIMIT 1/g) ?? [];
-    expect(lookups).toHaveLength(4);
-    for (const lookup of lookups) expect(lookup).toContain('${WILDCARD_SCOPE_SQL}');
+  it('carried item (a): EVERY module_constants lookup in the gate carries a scope predicate (counted, not named)', () => {
+    const lookups = gate.split('FROM module_constants').slice(1).map((after) => after.slice(0, after.indexOf('LIMIT 1')));
+    expect(lookups.length).toBeGreaterThanOrEqual(5);
+    for (const lookup of lookups) {
+      expect(lookup.includes('${WILDCARD_SCOPE_SQL}') || lookup.includes('${DATA_LIFECYCLE_SCOPE_SQL}')).toBe(true);
+    }
   });
 });

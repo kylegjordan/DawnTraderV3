@@ -12,7 +12,9 @@
  * The command prints one JSON evidence object whose `verdict.state` is `pass`, `fail` or
  * `inconclusive`, and exits 0 / 2 / 3 respectively (1 = a fatal error before any verdict).
  * `inconclusive` means a statement was cancelled by the time budget or a lock timeout: the
- * gate's inputs are never built from a partial read, so it can never pass on one. It never
+ * gate's inputs are never built from a partial read, so it can never pass on one. Exit 1 (a
+ * fatal error: bad arguments, an unreadable governed row, an unexpected database error) writes
+ * no verdict JSON; a caller that grades a stored verdict must treat exit 1 as no verdict. It never
  * changes database or application state and cannot authorize the later consumer switch by
  * itself; Coltrane must independently verify the resulting evidence.
  */
@@ -408,7 +410,11 @@ async function main(): Promise<void> {
   const buildIdentity = await readBuildIdentity(args.gradedRef);
   const budget = startBudget();
   const startedAt = Date.now();
-  const client = new Client({ connectionString: process.env.DATABASE_URL });
+  // Named so pg_stat_activity names the holder of this long REPEATABLE READ snapshot (Langston C6 condition 1).
+  const client = new Client({
+    connectionString: process.env.DATABASE_URL,
+    application_name: 'xstock-bar-availability-capacity-gate',
+  });
   await client.connect();
   await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
   try {
@@ -473,6 +479,8 @@ async function main(): Promise<void> {
       negative_certificate_lags: populationRead.negativeCertificateLags,
       null_visible_seq_rows: populationRead.nullVisibleSeqRows,
       bound_misses_resolved_by_exactness_pass: populationRead.boundMisses,
+      lag_min_ms: populationRead.lagMinMs,
+      lag_max_ms: populationRead.lagMaxMs,
       // Reported per UTC day, NOT merged: a per-day percentile is not the window's.
       certificate_lag_ms_per_utc_day: populationRead.perDay,
     };
@@ -757,6 +765,7 @@ async function main(): Promise<void> {
         batch: 'B-XSTOCK-BAR-AVAILABILITY',
         phase: 'P14-capacity-quality-gate',
         gradedRef: args.gradedRef,
+        observedAt: new Date().toISOString(),
         readElapsedMs: Date.now() - startedAt,
         verdict: { state: 'inconclusive', pass: false, leg: error.leg, reason: error.reason },
       }, null, 2)}\n`);

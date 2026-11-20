@@ -15,7 +15,8 @@
  *  - Event lookups are bounded to `arrived_at` in [chunk - 1 h, chunk end + 1 h) so run-time
  *    partition pruning applies. Any linked id NOT found inside the bound gets ONE batched
  *    unbounded lookup (`= ANY($1::uuid[])`), so missing/found counts stay exact. Above
- *    EXACTNESS_CAP_FRACTION of a chunk's links the run is INCONCLUSIVE instead of grinding.
+ *    EXACTNESS_MAX_IDS ids in one chunk the run is INCONCLUSIVE instead of grinding (the cap prices
+ *    the lookup's cost; it does not decide what the unfound ids are).
  *  - Unlinked events: completions bounded to the chunk, then every candidate re-checked against
  *    the gate's original population, `completed_at < observedAt` with NO lower bound.
  *  - Identity (cross-partition duplicates): ONE whole-table statement per key over the EVENT
@@ -50,8 +51,13 @@ export const GATE_READ_BUDGET = {
 export const EVENT_BOUND_SLACK_MS = 3_600_000;
 /** Completion bound after a chunk for the unlinked leg's first pass. */
 export const COMPLETION_BOUND_AFTER_MS = 7_200_000;
-/** Above this share of a chunk's links needing the unbounded lookup, the run is INCONCLUSIVE. */
-export const EXACTNESS_CAP_FRACTION = 0.01;
+/**
+ * Above this many ids needing the unbounded lookup in one chunk, the run is INCONCLUSIVE rather than
+ * grinding. It caps the lookup's COST (Langston C6 Step-4 condition 5): below it, unfound ids are
+ * looked up and classified exactly (found out of bound, or genuinely missing - a real gate failure).
+ * Measured bound misses: 0 of 926,329 / 920,873 / 1,401 on three real days (2026-11-20).
+ */
+export const EXACTNESS_MAX_IDS = 10_000;
 
 export class InconclusiveRead extends Error {
   constructor(readonly leg: string, readonly reason: string) {
@@ -202,6 +208,8 @@ export interface PopulationDay {
   partial: boolean;
   expectedRevisionLinks: number;
   boundMisses: number;
+  /** Wall time of this chunk's statements, so the budget runway is readable from one run. */
+  elapsedMs: number;
   lagMinMs: number | null;
   lagP50Ms: number | null;
   lagP95Ms: number | null;
@@ -223,6 +231,9 @@ export interface PopulationRead {
   /** Linked ids found only by the unbounded lookup, for the session leg's exact join. */
   outOfBoundIds: string[];
   boundMisses: number;
+  /** Window-wide certificate lag min/max: mergeable across chunks (percentiles are not, so they stay per day). */
+  lagMinMs: number | null;
+  lagMaxMs: number | null;
   perDay: PopulationDay[];
 }
 
@@ -252,11 +263,12 @@ export async function readPopulationChunked(
     expectedRevisionLinks: 0, revisionEvents: 0, missingLinkedRevisionEvents: 0, nullVisibleSeqRows: 0,
     symbols: new Set(), appliedWinners: 0, rejectedOlderArrivals: 0, repeatedPayloadAttempts: 0,
     pendingCertificates: 0, unhealthyCertificates: 0, negativeCertificateLags: 0,
-    outOfBoundIds: [], boundMisses: 0, perDay: [],
+    outOfBoundIds: [], boundMisses: 0, lagMinMs: null, lagMaxMs: null, perDay: [],
   };
   const outOfBound = new Set<string>();
   for (const chunk of planGradedChunks(windowStart, observedAt)) {
     const leg = `population ${iso(chunk.start)}`;
+    const chunkStartedMs = budget.now();
     const row = (await budgetedQuery(client, budget, GATE_READ_BUDGET.chunkCapMs, leg, POPULATION_CHUNK_SQL, [
       chunk.start, chunk.end,
       new Date(chunk.start.getTime() - EVENT_BOUND_SLACK_MS),
@@ -267,9 +279,10 @@ export async function readPopulationChunked(
     read.expectedRevisionLinks += links;
     addEventAggregates(read, row);
     if (unfound.length > 0) {
-      if (unfound.length > Math.max(1, Math.floor(links * EXACTNESS_CAP_FRACTION))) {
+      if (unfound.length > EXACTNESS_MAX_IDS) {
         throw new InconclusiveRead(`${leg} exactness`,
-          `${unfound.length} of ${links} links fell outside the bound (cap ${EXACTNESS_CAP_FRACTION * 100}%)`);
+          `${unfound.length} of ${links} links not found inside the bound (out-of-bound or absent - not `
+          + `determined); the unbounded lookup is capped at ${EXACTNESS_MAX_IDS} ids per chunk`);
       }
       const exact = (await budgetedQuery(client, budget, GATE_READ_BUDGET.chunkCapMs, `${leg} exactness`,
         POPULATION_EXACTNESS_SQL, [unfound])).rows[0] as Record<string, unknown>;
@@ -278,9 +291,13 @@ export async function readPopulationChunked(
       for (const id of idList(exact.found_ids)) outOfBound.add(id);
     }
     read.boundMisses += unfound.length;
+    const chunkMin = nullableNumber(row.lag_min_ms);
+    const chunkMax = nullableNumber(row.lag_max_ms);
+    if (chunkMin !== null) read.lagMinMs = read.lagMinMs === null ? chunkMin : Math.min(read.lagMinMs, chunkMin);
+    if (chunkMax !== null) read.lagMaxMs = read.lagMaxMs === null ? chunkMax : Math.max(read.lagMaxMs, chunkMax);
     read.perDay.push({
       chunkStart: iso(chunk.start), chunkEnd: iso(chunk.end), partial: chunk.partial,
-      expectedRevisionLinks: links, boundMisses: unfound.length,
+      expectedRevisionLinks: links, boundMisses: unfound.length, elapsedMs: budget.now() - chunkStartedMs,
       lagMinMs: nullableNumber(row.lag_min_ms), lagP50Ms: nullableNumber(row.lag_p50_ms),
       lagP95Ms: nullableNumber(row.lag_p95_ms), lagMaxMs: nullableNumber(row.lag_max_ms),
     });
@@ -336,9 +353,10 @@ export async function readUnlinkedChunked(
     const candidates = idList(row.candidate_ids);
     read.eventsScanned += events;
     if (candidates.length > 0) {
-      if (candidates.length > Math.max(1, Math.floor(events * EXACTNESS_CAP_FRACTION))) {
+      if (candidates.length > EXACTNESS_MAX_IDS) {
         throw new InconclusiveRead(`${leg} recheck`,
-          `${candidates.length} of ${events} events unlinked inside the bound (cap ${EXACTNESS_CAP_FRACTION * 100}%)`);
+          `${candidates.length} of ${events} events not linked by a completion inside the bound (linked `
+          + `earlier or genuinely unlinked - not determined); the re-check is capped at ${EXACTNESS_MAX_IDS} ids per chunk`);
       }
       const recheck = (await budgetedQuery(client, budget, GATE_READ_BUDGET.chunkCapMs, `${leg} recheck`,
         UNLINKED_RECHECK_SQL, [candidates, observedAt])).rows[0] as Record<string, unknown>;

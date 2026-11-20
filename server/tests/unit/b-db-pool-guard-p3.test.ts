@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync } from 'fs';
-import { basename, join } from 'path';
+import { join, relative, sep } from 'path';
 
 // B-DB-POOL-GUARD P3 (#1239, increment 3): the app pool's server-side bounds and their ORDER.
 // Source-read on purpose: importing server/db.ts builds the live pool. What this pins: the app pool's values
@@ -62,22 +62,24 @@ describe('B-DB-POOL-GUARD P3 — the pool bounds', () => {
     // construction; each one is named here with its reason, and asserted below to stay off the pool.
     // - the B-XSTOCK-BAR-AVAILABILITY capacity gate reader (C6, Langston-ruled 2026-11-20): a read-only
     //   CLI whose statements take min(cap, remaining budget), caps 120-300 s, on the gate's own Client.
+    // Keyed on the server-relative path (a basename would exempt any same-named file).
+    const SERVER = join(__dirname, '../..');
     const DEDICATED_CLIENT_SITES = new Map([
-      ['b-xstock-bar-availability-gate-read.ts', 'scripts/b-xstock-bar-availability-capacity-gate.ts'],
+      ['scripts/b-xstock-bar-availability-gate-read.ts', 'scripts/b-xstock-bar-availability-capacity-gate.ts'],
     ]);
+    const rel = (f: string) => relative(SERVER, f).split(sep).join('/');
     let sites = 0;
     let dedicated = 0;
     for (const f of files) {
       const src = readFileSync(f, 'utf8');
-      const base = basename(f);
       for (const m of src.matchAll(/SET LOCAL statement_timeout = \$\{([A-Za-z0-9_]+)\}/g)) {
-        const caller = DEDICATED_CLIENT_SITES.get(base);
+        const caller = DEDICATED_CLIENT_SITES.get(rel(f));
         if (caller) {
           // Off the pool: the site never imports the app pool, and its caller builds its own Client.
           expect(src, `${f} must not import the app pool`).not.toMatch(/from ['"][./]*db(\.js)?['"]/);
           const callerSrc = readFileSync(join(__dirname, '../..', caller), 'utf8');
           expect(callerSrc, `${caller} must not import the app pool`).not.toMatch(/from ['"][./]*db(\.js)?['"]/);
-          expect(callerSrc).toMatch(/new Client\(\{ connectionString: process\.env\.DATABASE_URL \}\)/);
+          expect(callerSrc).toMatch(/new Client\(\{\s*connectionString: process\.env\.DATABASE_URL[,\s]/);
           dedicated++;
           continue;
         }
@@ -86,6 +88,16 @@ describe('B-DB-POOL-GUARD P3 — the pool bounds', () => {
       }
     }
     expect(dedicated).toBe(DEDICATED_CLIENT_SITES.size);
+    // Importer census (Langston C6 condition 2): the dedicated-client module takes ANY client, so every
+    // non-test importer of it must be exactly its named caller - a new importer could hand it a pool client.
+    for (const [site, caller] of DEDICATED_CLIENT_SITES) {
+      const module = site.replace(/^.*\//, '').replace(/\.ts$/, '');
+      const importers = files
+        .filter((f) => rel(f) !== site && readFileSync(f, 'utf8').includes(`/${module}.js'`))
+        .map(rel)
+        .sort();
+      expect(importers, `importers of ${site}`).toEqual([caller]);
+    }
     // Control: the two known sites (xstock-bar-availability 20 s, drift-dashboard-aggregator 4 s) were found.
     expect(sites).toBeGreaterThanOrEqual(2);
   });
