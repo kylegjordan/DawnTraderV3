@@ -1,5 +1,7 @@
 # B-ARCHIVE-NETWORK-RETRY — COMPLETION REPORT (CC-A / OLD Claude, 2026-11-20)
 
+✅ **CLOSED 2026-11-20 — Langston Step 11 CONFIRMED 2026-11-20 (Discord `1573136535203614823`).** Two cells corrected at his confirm: the shared `MEMORY.md` verdict and the before → after size of his loaded set.
+
 change-class: non_architecture · Kyle KD-97 (2026-11-16) · plan `SPRINT_TO_LIVE_PLAN.md` §0a CC-A item 3 · issue `#705` (the 2026-11-16 item)
 
 ## ⚠️ LEFT OPEN — stated first
@@ -41,13 +43,13 @@ CHANGE-CLASS: non_architecture
 | T1 | `PHASE_HISTORY.md` | ✅ | 2026-11-20 entry in plain language |
 | T1 | `SPRINT_TO_LIVE_PLAN.md` §0a CC-A item 3 | ✅ | status → Step 11, live sha, Step 8 ref, report link |
 | T1 | `PHASE_19_PLAN.md` | N/A | no row there |
-| T1 | shared `MEMORY.md` + `MEMORY_CC_A.md` | ✅ mine / N/A shared | mine: position block; shared: no new cross-session truth (the routing rule lives in SIM §2.6b and `#705`), and the file sits at 24,544 B of 24,576 |
+| T1 | shared `MEMORY.md` + `MEMORY_CC_A.md` | ✅ mine / REVIEWED, NO LINE ADDED shared | mine: position block. Shared: read at the ref and judged — it carries the general event-wait rule and no per-key routing (0 occurrences of `RESOLVE-ONLY`/`never ack`/`owner CC-`), a per-key line would be a new content class 32 B from its 24,576 B cap, and the routing rule lives in SIM §2.6b and `#705` (Langston, Step 11: decision upheld, cell corrected from N/A) |
 | T1 | the batch `SCOPE` | ✅ | r2, Step 1 |
 | T1 | the batch `PRE_AUDIT` | ✅ | r2, Step 2 |
 | T1 | `COMPLETION_REPORT` | ✅ | this file |
 | T1 | the `Observation` column | N/A | no observation window: the unexercised path is an event (the next real refusal), not a period |
 | T1 | the four session task lists | ✅ mine (item 13 added; items 1-2 refreshed) / N/A ×3 — not mine | |
-| T1 | Langston's `MEMORY.md` | ✅ | one line in through `langston-memory-write`, my B-DB-SIZE-RELIEF line shortened in the same write; loaded set 143,796 B vs ceiling 143,856 |
+| T1 | Langston's `MEMORY.md` | ✅ | one line in through `langston-memory-write`, my B-DB-SIZE-RELIEF line shortened in the same write; loaded set 143,846 → 143,796 B (−50) vs ceiling 143,856 (writer archive record 00:23:33Z) |
 | T2 | `SYSTEM_MANUAL.md` | N/A | writer retry mechanics only; no strategy, signal, regime, filter or math change |
 | T2 | `SYSTEM_IMPACT_MAP.md` | ✅ | §2.6b (network family, shed alert, routing rule, cover and memory) at Step 3, marked live; registry entry for the two alert latches and the ticker in-flight set |
 | T2 | `RUNNING_ISSUES.md` | ✅ | `#705`: the 2026-11-16 item fixed, the entry stays open for `#1032` and the late-arrival item |
