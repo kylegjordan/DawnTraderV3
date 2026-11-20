@@ -470,6 +470,14 @@ BIRTHCAP_FAILED_OFF_RATE_SHARE = 0.25
 BIRTHCAP_SNAP_OPEN_S = 120             # an hourly vendor snapshot later than this into its hour is partial: not compared
 BIRTHCAP_DIVERGENCE_MIN = 200        # vendor-vs-census ratio computed only above this hourly delta
 BIRTHCAP_DIVERGENCE_SHARE = 0.10
+# The vendor-vs-census compare runs on each ON WINDOW, from a usage snapshot taken just before the ON switch to one taken
+# after the OFF once the census has been quiet for a full minute: both ends are quiescent, so the delivery lag has
+# nowhere to land (Langston, 2026-11-20, Discord 1573176718766637057). The hourly rows stay as the record and drive the
+# replan; they no longer page a divergence (4 false pages in 72 h, all hour-edge splits on partly-on hours).
+BIRTHCAP_WINDOW_QUIET_MAX_S = 900    # an OFF never followed by a quiet minute (a failed OFF) is compared anyway at this age
+BIRTHCAP_WINDOWS_KEEP_S = 72 * 3600  # compared-window rows kept for the cumulative leg and as forensic record
+BIRTHCAP_CUMULATIVE_MIN = 2_000      # the cumulative leg is judged only above this many expected credits
+BIRTHCAP_CUMULATIVE_OVER_SHARE = 0.03  # vendor ABOVE the census by more than this share, summed over the kept windows
 BIRTHCAP_PHASE_STEP = 0.618          # daily phase rotation, as a fraction of a block
 
 # ⛔ THE BREAKER (Langston blocker 4): a lost applied-state file plus a minute

@@ -80,6 +80,7 @@ class Vendor:
         self.active, self.remaining, self.cycle, self.echo_ok = active, remaining, cycle, echo_ok
         self.puts, self.gets, self.usage_calls = [], 0, 0
         self.webhooks, self.rpc = 0, 0
+        self.put_credits = 0                           # credits each PUT adds to the webhook meter
 
     def usage(self):
         self.usage_calls += 1
@@ -88,6 +89,7 @@ class Vendor:
 
     def put(self, wid, body):
         self.puts.append(body)
+        self.webhooks += self.put_credits
         if self.echo_ok:
             self.active = body["active"]
         return {"active": self.active, "authHeader": "set", "webhookURL": body["webhookURL"],
@@ -370,7 +372,11 @@ check("vendor = census births: no divergence page", not any(p["dedupe_key"].star
 add_births([h0 + timedelta(hours=1, minutes=5, seconds=i) for i in range(300)])
 v.webhooks, v.rpc = 1300 + 600, 500 + 400                      # vendor charged 600 for 300 births, and 400 RPC
 r = tick(v, h0 + timedelta(hours=2))
-check("vendor charged 2x the census births: divergence page", any(p["dedupe_key"].startswith("birthcap-divergence") for p in r["pages"]), r["pages"])
+check("vendor charged 2x the census births in ONE hour: NO hourly divergence page (the page moved to the ON-window compare)",
+      not any(p["dedupe_key"].startswith("birthcap-divergence") for p in r["pages"]), r["pages"])
+hrow = store.load_state(birthcap.STATE, {}).get("hours", {}).get("2026-11-28T04", {})
+check("... but the hour row records it: verdict divergent, share 0.5, paged False (a dirty row != never evaluated)",
+      hrow.get("verdict") == "divergent" and hrow.get("share") == 0.5 and hrow.get("paged") is False, hrow)
 check("RPC spend above a zero allowance: overrun page and a replan",
       any(p["dedupe_key"].startswith("birthcap-rpc-overrun") for p in r["pages"]) and store.load_state(birthcap.STATE, {}).get("replan"), r["pages"])
 
@@ -378,15 +384,32 @@ store.save_state(birthcap.STATE, dict(store.load_state(birthcap.STATE, {}), repl
 add_births([h0 + timedelta(hours=2, minutes=5, seconds=i) for i in range(300)])
 v.webhooks = 1900 + 600                                        # 2x again, and NO rpc this hour: only the divergence can replan
 r = tick(v, h0 + timedelta(hours=3))
-check("a webhook divergence alone sets replan (the webhook leg is the births budget)",
+check("a webhook divergence alone sets replan, IMMEDIATELY and with its reason (the webhook leg is the births budget)",
       not any(p["dedupe_key"].startswith("birthcap-rpc-overrun") for p in r["pages"])
-      and store.load_state(birthcap.STATE, {}).get("replan") is True, r["pages"])
+      and store.load_state(birthcap.STATE, {}).get("replan") == "divergence-hour:2026-11-28T05", r["pages"])
+r = tick(v, h0 + timedelta(hours=3, minutes=1))
+rp = store.load_state(birthcap.STATE, {}).get("replans", [])
+hb = store.load_state(birthcap.STATE, {}).get("hours", {})
+check("the replan is RECORDED with its reason and the allowance before and after (Langston condition 1)",
+      rp and rp[-1]["reason"] == "divergence-hour:2026-11-28T05" and "allowance_before" in rp[-1] and "allowance_after" in rp[-1], rp[-1:])
 h0 = h0 + timedelta(hours=1)
 store.save_state(birthcap.STATE, dict(store.load_state(birthcap.STATE, {}), replan=False))
 v.webhooks = 2500                                              # the vendor counter freezes while the census records 300
 add_births([h0 + timedelta(hours=2, minutes=5, seconds=i) for i in range(300)])
 r = tick(v, h0 + timedelta(hours=3))
-check("a frozen vendor counter (vendor +0, census +300) pages a divergence", any(p["dedupe_key"].startswith("birthcap-divergence") for p in r["pages"]), r["pages"])
+check("a frozen vendor counter (vendor +0, census +300) pages under its OWN key, not as a divergence (condition 4)",
+      any(p["dedupe_key"].startswith("birthcap-vendor-meter-frozen-") for p in r["pages"])
+      and not any(p["dedupe_key"].startswith("birthcap-divergence") for p in r["pages"]), r["pages"])
+reset(); enable(); v = Vendor()
+store.save_state(birthcap.STATE, {"applied": "on", "plan": dict(full, always_on=True)})
+v.webhooks, v.rpc = 1000, 0
+tick(v, h0)
+add_births([h0 + timedelta(minutes=5, seconds=i) for i in range(300)])
+v.webhooks = 1000 + 150                                        # the vendor bills HALF the census: under-billing is tested too
+tick(v, h0 + timedelta(hours=1))
+hrow = store.load_state(birthcap.STATE, {}).get("hours", {}).get(h0.strftime("%Y-%m-%dT%H"), {})
+check("an hour the vendor UNDER-bills (150 for 300) is divergent too (the gate's base is the larger side)",
+      hrow.get("verdict") == "divergent" and hrow.get("share") == 0.5, hrow)
 reset(); enable(); v = Vendor()
 store.save_state(birthcap.STATE, {"applied": "on", "plan": dict(full, always_on=True)})
 v.webhooks, v.rpc = 1000, 500
@@ -409,10 +432,142 @@ check("a mid-hour first snapshot is NOT compared (no false divergence, no false 
 add_births([h1.replace(hour=11, minute=5) + timedelta(seconds=i) for i in range(300)])
 v.webhooks = 5148 + 600                                        # the next, WHOLE hour is compared again (2x: pages)
 r = tick(v, h1.replace(hour=12, minute=0, second=20))
-check("the next whole hour is compared again", any(p["dedupe_key"].startswith("birthcap-divergence") for p in r["pages"]), r["pages"])
+check("the next whole hour is compared again (its row carries a verdict)",
+      store.load_state(birthcap.STATE, {}).get("hours", {}).get("2026-11-28T11", {}).get("verdict") == "divergent",
+      store.load_state(birthcap.STATE, {}).get("hours", {}))
 unit = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "systemd", "token-watch-birthcap.service")).read()
 tasks = int(re.search(r"^TasksMax=(\d+)", unit, re.M).group(1))
 check("the unit's TasksMax leaves room for the node mint (measured minimum 48; 32 aborted rc 134)", tasks >= 48, tasks)
+
+print("== 10b. the ON-window compare (Langston, 2026-11-20): the divergence page, the frozen meter, the cumulative leg")
+W_ON = next(T0 + timedelta(minutes=m) for m in range(1, 1440)
+            if birthcap.desired(T0 + timedelta(minutes=m), full) == "on"
+            and birthcap.desired(T0 + timedelta(minutes=m - 1), full) == "off")
+W_OFF = next(W_ON + timedelta(minutes=m) for m in range(1, 1440) if birthcap.desired(W_ON + timedelta(minutes=m), full) == "off")
+
+
+def window_run(vendor_extra=0, births_n=300, tail=(), late=(), close_after=timedelta(minutes=3), pre=None):
+    """One planned ON window through the production tick: ON switch, births inside it, OFF switch, then the close.
+    The meter moves by births + the two switches' credits (+ vendor_extra). Returns the last tick's result and state."""
+    reset(); enable(); v = Vendor(active=False); v.put_credits = 100; v.webhooks = 50_000
+    store.save_state(birthcap.STATE, dict({"applied": "off", "plan": full}, **(pre or {})))
+    tick(v, W_ON)
+    add_births([W_ON + timedelta(seconds=30 + i * 10) for i in range(births_n)])
+    v.webhooks += births_n + vendor_extra
+    tick(v, W_OFF)
+    add_births([W_OFF + t for t in tail] + [W_OFF + t for t in late])
+    v.webhooks += len(tail) + len(late)
+    r = tick(v, W_OFF + timedelta(seconds=60))
+    st1 = store.load_state(birthcap.STATE, {})
+    r2 = tick(v, W_OFF + close_after)
+    return r, st1, r2, store.load_state(birthcap.STATE, {}), v
+
+
+r, st1, r2, st2, v = window_run()
+check("the ON switch opened a window at a snapshot taken BEFORE its own 100 credits", (st1.get("window") or {}).get("web") == 50_000,
+      st1.get("window"))
+check("the window is NOT compared before the OFF + 120 s proof time", not st1.get("windows_checked"), st1.get("windows_checked"))
+row = (st2.get("windows_checked") or [{}])[-1]
+check("a clean window closes after a quiet minute: vendor = births + both switches, verdict ok, no page",
+      row.get("verdict") == "ok" and row.get("vendor_webhooks") == 500 and row.get("births") == 300
+      and row.get("switch_credits") == 200 and not any(p["dedupe_key"].startswith("birthcap-divergence") for p in r2["pages"]), row)
+check("the closed window is gone from state (the next ON opens a fresh one)", "window" not in st2, st2.get("window"))
+r, st1, r2, st2, v = window_run(tail=[timedelta(seconds=20), timedelta(seconds=45)])
+row = (st2.get("windows_checked") or [{}])[-1]
+check("an in-flight tail inside the grace is counted on both sides: clean", row.get("verdict") == "ok" and row.get("births") == 302, row)
+r, st1, r2, st2, v = window_run(vendor_extra=300)
+pg = r["pages"] + r2["pages"]
+check("vendor charged 2x the births across a WHOLE window: a divergence page for that window (here compared when the replan's"
+      " schedule switched straight back ON, end 'reopened')",
+      any(p["dedupe_key"].startswith("birthcap-divergence-" + W_ON.strftime("%Y%m%dT%H%M%S")) for p in pg)
+      and any(w.get("verdict") == "divergent" and w.get("opened_at") == W_ON.isoformat() for w in st2.get("windows_checked", [])),
+      (pg, st2.get("windows_checked")))
+reset(); enable(); v = Vendor(active=False); v.put_credits = 0; v.webhooks = 50_000
+store.save_state(birthcap.STATE, {"applied": "off", "plan": full})
+tick(v, W_ON)
+add_births([W_ON + timedelta(seconds=30 + i * 10) for i in range(300)])
+tick(v, W_OFF)
+r2 = tick(v, W_OFF + timedelta(minutes=3))
+check("a meter that never moved across a window pages FROZEN under its own key, not as a divergence",
+      any(p["dedupe_key"].startswith("birthcap-vendor-meter-frozen-window-") for p in r2["pages"])
+      and not any(p["dedupe_key"].startswith("birthcap-divergence") for p in r2["pages"]), r2["pages"])
+# an under-estimated tail: a birth after the grace delays the close to the next quiet minute, and is counted
+r, st1, r2, st2, v = window_run(late=[timedelta(seconds=150)], close_after=timedelta(seconds=170))
+check("a birth after the grace (off+150 s) is not a quiet minute: the window waits", not st2.get("windows_checked"),
+      st2.get("windows_checked"))
+r3 = tick(v, W_OFF + timedelta(minutes=5))
+row = (store.load_state(birthcap.STATE, {}).get("windows_checked") or [{}])[-1]
+check("... and closes on the next quiet minute with the late birth counted on both sides (clean)",
+      row.get("verdict") == "ok" and row.get("births") == 301 and row.get("end") == "off", row)
+# a failed OFF (births every minute) still closes, at the quiet-max age, marked not-quiet
+reset(); enable(); v = Vendor(active=False); v.put_credits = 100; v.webhooks = 50_000
+store.save_state(birthcap.STATE, {"applied": "off", "plan": full})
+tick(v, W_ON)
+add_births([W_ON + timedelta(seconds=30 + i * 10) for i in range(300)])
+v.webhooks += 300
+tick(v, W_OFF)
+add_births([W_OFF + timedelta(seconds=90 + 60 * i) for i in range(20)])
+v.webhooks += 20
+for m in (3, 10, 14):
+    tick(v, W_OFF + timedelta(minutes=m))
+check("births every minute after the OFF: no compare before the quiet-max age",
+      not store.load_state(birthcap.STATE, {}).get("windows_checked"))
+tick(v, W_OFF + timedelta(seconds=config.BIRTHCAP_WINDOW_QUIET_MAX_S + 30))
+row = (store.load_state(birthcap.STATE, {}).get("windows_checked") or [{}])[-1]
+check("... then it is compared anyway, marked off-not-quiet", row.get("end") == "off-not-quiet", row)
+# the live 11-18 hour-edge split, inside one window: the hourly rows disagree, the window does not
+reset(); enable(); v = Vendor(active=False); v.put_credits = 100; v.webhooks = 50_000
+store.save_state(birthcap.STATE, {"applied": "off", "plan": full})
+tick(v, W_ON)
+edge = (W_ON + timedelta(hours=1)).replace(minute=0, second=0)
+add_births([edge - timedelta(minutes=30) + timedelta(seconds=i * 3) for i in range(532)])   # census: all before the edge (to :56:36)
+v.webhooks += 396                                                                          # the vendor bills 396 of them before it
+tick(v, edge + timedelta(seconds=20))
+v.webhooks += 136                                                                          # ... and the rest just after
+# the divergent hour replans at once (tested above); hold the schedule so this case tests only the window compare
+store.save_state(birthcap.STATE, dict(store.load_state(birthcap.STATE, {}), replan=False))
+tick(v, W_OFF)
+r2 = tick(v, W_OFF + timedelta(minutes=3))
+row = (store.load_state(birthcap.STATE, {}).get("windows_checked") or [{}])[-1]
+wrow = [w for w in store.load_state(birthcap.STATE, {}).get("windows_checked", []) if w.get("opened_at") == W_ON.isoformat()]
+check("the live hour-edge split (396 / 532, then +136) pairs clean over the whole window: verdict ok, no divergence page",
+      wrow and wrow[-1].get("verdict") == "ok" and not any(p["dedupe_key"].startswith("birthcap-divergence") for p in r2["pages"]), wrow)
+# a window with no OFF boundary (always_on) is cut at two plan blocks, never a wall-clock constant
+check("the no-OFF bound is two plan blocks: W=12 -> 4 h, an always-on plan -> two W_MIN blocks (12 h)",
+      birthcap._window_bound_s(full) == 2 * full["block_s"] == 14400.0
+      and birthcap._window_bound_s(dict(full, always_on=True, block_s=None)) == 2 * 86400.0 / config.BIRTHCAP_W_MIN)
+reset(); enable(); v = Vendor(active=True); v.webhooks = 50_000
+always = dict(full, always_on=True, births_allowance_per_day=10 ** 6)
+always.pop("block_s", None)
+store.save_state(birthcap.STATE, {"applied": "on", "plan": always})
+ta = datetime(2026, 11, 28, 1, 0, 30, tzinfo=UTC)
+tick(v, ta)
+check("ON with no window (install, restore) adopts one at a snapshot", (store.load_state(birthcap.STATE, {}).get("window") or {}).get("reason") == "adopt")
+add_births([ta + timedelta(minutes=10 + i) for i in range(400)])
+v.webhooks += 400
+tick(v, ta + timedelta(hours=11, minutes=50))
+check("... it is not cut before two blocks", not store.load_state(birthcap.STATE, {}).get("windows_checked"))
+tick(v, ta + timedelta(hours=12, minutes=1))
+stc = store.load_state(birthcap.STATE, {})
+row = (stc.get("windows_checked") or [{}])[-1]
+check("... and at two blocks it is cut, compared clean, and a new window continues from the same snapshot",
+      row.get("end") == "cut" and row.get("verdict") == "ok" and (stc.get("window") or {}).get("reason") == "cut"
+      and (stc.get("window") or {}).get("web") == 50_400, (row, stc.get("window")))
+# the cumulative leg: one-sided, the money direction
+over = [{"opened_at": (W_ON - timedelta(hours=h + 1)).isoformat(), "closed_at": (W_ON - timedelta(hours=h)).isoformat(),
+         "vendor_webhooks": 1_100, "births": 900, "switch_credits": 100, "verdict": "ok", "share": 0.09, "paged": False}
+        for h in range(1, 6)]
+r, st1, r2, st2, v = window_run(pre={"windows_checked": over})
+check("the vendor billing 9 % ABOVE the census, window by window under the 10 % line, pages CRITICAL on the cumulative leg",
+      any(p["dedupe_key"].startswith("birthcap-cumulative-overbill-") and p["severity"] == "critical" for p in r2["pages"]),
+      (r2["pages"], st2.get("cumulative")))
+under = [dict(o, vendor_webhooks=900) for o in over]
+r, st1, r2, st2, v = window_run(pre={"windows_checked": under})
+check("... and billing BELOW the census does not (one-sided)",
+      not any(p["dedupe_key"].startswith("birthcap-cumulative-overbill-") for p in r2["pages"]), st2.get("cumulative"))
+old = [dict(o, closed_at=(W_ON - timedelta(hours=80)).isoformat()) for o in over]
+r, st1, r2, st2, v = window_run(pre={"windows_checked": old})
+check("rows older than 72 h leave the cumulative leg", st2.get("cumulative", {}).get("windows") == 1, st2.get("cumulative"))
 
 print("== 11. the cap does not disable itself (Langston gate C blocker)")
 reset()

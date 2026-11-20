@@ -35,7 +35,8 @@ import budget
 import liveness
 import providers
 from config import (
-    BIRTHCAP_SNAP_OPEN_S,
+    BIRTHCAP_SNAP_OPEN_S, BIRTHCAP_WINDOW_QUIET_MAX_S, BIRTHCAP_WINDOWS_KEEP_S, BIRTHCAP_CUMULATIVE_MIN,
+    BIRTHCAP_CUMULATIVE_OVER_SHARE, BIRTHCAP_OFF_PROOF_S,
     BIRTHCAP_STATE_NAME,
     BIRTHCAP_DIVERGENCE_MIN, BIRTHCAP_DIVERGENCE_SHARE, BIRTHCAP_FAILED_OFF_MIN_ROWS,
     BIRTHCAP_FAILED_OFF_RATE_SHARE, BIRTHCAP_OFF_GRACE_S, BIRTHCAP_PHASE_STEP, BIRTHCAP_PLANNED_OFF,
@@ -334,7 +335,14 @@ def tick(now: datetime | None = None, usage_fn=providers.helius_usage, put=provi
             except RecordUnreadable:
                 rate_records = None                           # the backstop still bounds the spend
             launch = trailing_launch_rate(now, rate_records)
+            before = (st.get("plan") or {}).get("births_allowance_per_day")
+            reason = st.get("replan") if isinstance(st.get("replan"), str) else ("initial" if st.get("plan") is None else "cycle")
             plan = plan_cycle(now, usage, launch, st.get("rpc_rate_per_day", 0.0))
+            # ⛔ EVERY REPLAN IS RECORDED WITH ITS REASON AND THE ALLOWANCE BEFORE/AFTER (Langston condition 1): the
+            #    feedback path trip -> replan -> new W/phase -> new boundaries -> more partly-on hours is unmeasured.
+            st.setdefault("replans", []).append({"at": now.isoformat(), "reason": reason, "allowance_before": before,
+                                                 "allowance_after": plan.get("births_allowance_per_day")})
+            st["replans"] = st["replans"][-100:]
             st["plan"], st["replan"] = plan, False
             LOG.info("birthcap plan: %s", plan)
             if plan.get("refused"):
@@ -416,6 +424,8 @@ def tick(now: datetime | None = None, usage_fn=providers.helius_usage, put=provi
         else:
             if want == "off":
                 st["off_rate_per_min"] = rate_per_min_before(st, now)
+            else:
+                _window_open(st, now, usage_fn, "on", records, pages)  # snapshot BEFORE the ON switch is charged
             rec = do_switch(want, now, put=put)
             calls[today] = int(calls.get(today, 0)) + 1
             _append(BIRTHCAP_SWITCHES, rec)
@@ -426,10 +436,14 @@ def tick(now: datetime | None = None, usage_fn=providers.helius_usage, put=provi
                 st["applied"], st["applied_at"] = want, now.isoformat()
                 if want == "off":
                     st["off_at"] = now.isoformat()
+                    if st.get("window"):
+                        st["window"]["off_at"] = now.isoformat()
             else:
                 pages.append(_page("birthcap-switch-failed-%s" % now.strftime("%Y%m%dT%H%M"), "critical",
                                    "Birth cap switch to %s did not take" % want.upper(), json.dumps(rec, sort_keys=True)))
                 st["applied"] = None                          # unknown: the next tick re-learns it (one GET)
+                if want == "on":
+                    st.pop("window", None)                    # no ON, no window
 
     # a switch-OFF that "succeeded" but births keep arriving (C-2 (ii))
     if st.get("applied") == "off" and st.get("off_at"):
@@ -440,6 +454,15 @@ def tick(now: datetime | None = None, usage_fn=providers.helius_usage, put=provi
             pages.append(_page("birthcap-off-failed-%s" % off_at.strftime("%Y%m%dT%H%M%S"), "critical",
                                "Birth cap switch-OFF failed — births still arriving",
                                "off at %s; minutes at or over %.1f rows: %s" % (st["off_at"], thr, ", ".join(hits[:10]))))
+
+    # the ON-window compare (the divergence page) and the cumulative leg
+    if plan is not None:
+        try:
+            if st.get("applied") == "on" and not st.get("window"):
+                _window_open(st, now, usage_fn, "adopt")       # ON with no window (install, restore): start one here
+            _window_close_check(st, now, records or [], usage_fn, plan, pages)
+        except Exception as exc:                              # noqa: BLE001 — a missed compare is logged, not fatal
+            LOG.error("birthcap: window compare failed: %s", exc)
 
     # the vendor's own counter, once per clock hour, against what we can account for (r2-1 (b), Langston answer 4)
     if plan is not None:
@@ -482,23 +505,157 @@ def _hourly_crosscheck(st: dict, now: datetime, records: list[dict], usage_fn, p
     switch_cr = sum(int(r.get("credits", 0)) for r in records if str(r.get("requested_at", ""))[:13] == prev)
     expected = births + switch_cr
     base_n = max(dv_web, expected)                            # a frozen vendor counter is tested too (gate C item 3)
-    if base_n >= BIRTHCAP_DIVERGENCE_MIN and abs(dv_web - expected) / base_n > BIRTHCAP_DIVERGENCE_SHARE:
-        st["replan"] = True                                   # the webhook leg IS the births budget (gate C item 2)
-        pages.append(_page("birthcap-divergence-%s" % prev, "warning", "Birth cap: vendor webhook spend disagrees with the census",
-                           "hour %s: vendor webhooks +%d, census births %d + switch credits %d = %d" % (
-                               prev, dv_web, births, switch_cr, expected)))
+    share = round(abs(dv_web - expected) / base_n, 4) if base_n else 0.0
+    verdict, paged = ("small" if base_n < BIRTHCAP_DIVERGENCE_MIN else "ok"), False
+    if dv_web == 0 and expected >= BIRTHCAP_DIVERGENCE_MIN:
+        # ⛔ A DEAD METER IS NOT A BILLING DISAGREEMENT (Langston condition 4): the cap is flying blind. Own key, own title.
+        verdict, paged = "frozen", True
+        st["replan"] = "frozen-meter:%s" % prev
+        pages.append(_page("birthcap-vendor-meter-frozen-%s" % prev, "warning", "Birth cap: the vendor's webhook meter did not move",
+                           "hour %s: vendor webhooks +0 while the census recorded %d births + %d switch credits; the cap "
+                           "cannot see its own spend" % (prev, births, switch_cr)))
+    elif base_n >= BIRTHCAP_DIVERGENCE_MIN and abs(dv_web - expected) / base_n > BIRTHCAP_DIVERGENCE_SHARE:
+        # ⛔ REPLAN, DO NOT PAGE (Langston condition 1): the replan re-derives from the vendor meter, the authority, so a noisy
+        #    trigger on it is near a no-op; the PAGE moved to the ON-window compare, where the delivery lag cannot land.
+        verdict = "divergent"
+        st["replan"] = "divergence-hour:%s" % prev
     allow_rpc_hour = float(st.get("rpc_rate_per_day", 0.0)) / 24.0
     # switch credits land in `webhooks`, not `rpc` (live pause: rpc flat at 25,168 across both PUTs, webhooks +~200
     # each); with a zero allowance ANY rpc spend is unplanned (gate C item 4)
     if dv_rpc > 0 and dv_rpc > 1.25 * allow_rpc_hour + (50 if allow_rpc_hour > 0 else 0):
-        st["replan"] = True
+        st["replan"] = "rpc-overrun:%s" % prev
         pages.append(_page("birthcap-rpc-overrun-%s" % prev, "warning", "Birth cap: RPC spend above its allowance — replanning",
                            "hour %s: vendor rpc +%d against an allowance of %.0f/hour (liquidity carve is 0 under "
                            "AMENDMENT 18, so any rpc spend is unplanned)" % (prev, dv_rpc, allow_rpc_hour)))
     hours = st.setdefault("hours", {})
-    hours[prev] = {"vendor_webhooks": dv_web, "vendor_rpc": dv_rpc, "births": births, "switch_credits": switch_cr}
+    hours[prev] = {"vendor_webhooks": dv_web, "vendor_rpc": dv_rpc, "births": births, "switch_credits": switch_cr,
+                   "share": share, "verdict": verdict, "paged": paged}  # a dirty row with no page != never evaluated (cond. 5)
     for k in sorted(hours)[:-72]:                             # keep three days
         del hours[k]
+
+
+def _window_open(st: dict, now: datetime, usage_fn, reason: str, records: list | None = None,
+                 pages: list | None = None) -> None:
+    """Start an ON window at a vendor snapshot. A window still waiting for its quiet minute after its OFF (a replan that
+    switched straight back ON) is compared first, against this same snapshot, so no window is lost. A failed usage read
+    starts no window (nothing to compare against)."""
+    try:
+        web = int(usage_fn()["credits"]["webhooks"])
+    except Exception as exc:                                  # noqa: BLE001
+        LOG.error("birthcap: no usage snapshot, this ON window will not be compared: %s", exc)
+        st.pop("window", None)
+        return
+    prev = st.get("window")
+    if prev and prev.get("off_at") and pages is not None:
+        _window_compare(st, prev, now, web, records or [], "reopened", pages)
+    st["window"] = {"opened_at": now.isoformat(), "web": web, "reason": reason,
+                    "from_min": (now + timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M") if prev and prev.get("off_at") else None}
+
+
+def _window_bound_s(plan: dict) -> float:
+    """How long a window may stay open with no OFF boundary (always_on, a breaker-forced ON, a refused plan) before it is
+    cut and compared: two blocks of the plan, never a wall-clock constant (Langston condition 2 — at W_MIN a block is 6 h,
+    and a 3-empty-hour gap sits inside the normal envelope). An always-on or refused plan has no blocks of its own — a
+    block_s it still carries is the one it was computed from, not a boundary it switches on — so it takes the W_MIN block."""
+    if plan.get("always_on") or plan.get("refused"):
+        block = 86400.0 / BIRTHCAP_W_MIN
+    else:
+        block = plan.get("block_s") or (86400.0 / BIRTHCAP_W_MIN)
+    return 2.0 * float(block)
+
+
+def _quiet_minute(st: dict, since: datetime, now: datetime) -> bool:
+    """A FULL minute with no births has passed since `since` or since the last minute after `since` that held births,
+    and the minute in progress holds none. (Births in `since`'s own minute are taken as before it: minute buckets.)"""
+    mins = st.get("minutes", {})
+    m0 = since.replace(second=0, microsecond=0)
+    last, m = None, m0 + timedelta(minutes=1)
+    while m <= now:
+        if mins.get(m.strftime("%Y-%m-%dT%H:%M"), 0):
+            last = m
+        m += timedelta(minutes=1)
+    start = since if last is None else last + timedelta(minutes=1)
+    first_full = start if (start.second == 0 and start.microsecond == 0) else start.replace(second=0, microsecond=0) + timedelta(minutes=1)
+    return first_full + timedelta(minutes=1) <= now
+
+
+def _window_close_check(st: dict, now: datetime, records: list[dict], usage_fn, plan: dict, pages: list) -> None:
+    """Close and compare the ON window: after its OFF once the census has been quiet for a full minute (or
+    BIRTHCAP_WINDOW_QUIET_MAX_S after it), or, with no OFF, once it outlives two plan blocks — then a new window
+    continues from the same snapshot."""
+    w = st.get("window")
+    if not w:
+        return
+    opened = _ts(w["opened_at"])
+    if w.get("off_at"):
+        off = _ts(w["off_at"])
+        if now < off + timedelta(seconds=BIRTHCAP_OFF_PROOF_S):
+            return
+        quiet = _quiet_minute(st, off + timedelta(seconds=BIRTHCAP_OFF_GRACE_S), now)
+        if not quiet and now < off + timedelta(seconds=BIRTHCAP_WINDOW_QUIET_MAX_S):
+            return
+        end_reason, reopen = ("off" if quiet else "off-not-quiet"), False
+    else:
+        if (now - opened).total_seconds() < _window_bound_s(plan):
+            return
+        end_reason, reopen = "cut", True
+    try:
+        web_now = int(usage_fn()["credits"]["webhooks"])
+    except Exception as exc:                                  # noqa: BLE001 — retried next tick
+        LOG.error("birthcap: window close deferred, no usage snapshot: %s", exc)
+        return
+    _window_compare(st, w, now, web_now, records, end_reason, pages)
+    if reopen:
+        st["window"] = {"opened_at": now.isoformat(), "web": web_now, "reason": "cut",
+                        "from_min": (now + timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M")}
+    else:
+        st.pop("window", None)
+
+
+def _window_compare(st: dict, w: dict, now: datetime, web_now: int, records: list[dict], end_reason: str,
+                    pages: list) -> None:
+    """The compare itself: the vendor's webhook delta over the window against the census births in it (minutes from
+    `from_min`, or the ON minute, up to and including this one) plus the switch credits requested inside it."""
+    opened = _ts(w["opened_at"])
+    lo, hi = (w.get("from_min") or opened.strftime("%Y-%m-%dT%H:%M")), now.strftime("%Y-%m-%dT%H:%M")
+    births = sum(v for k, v in st.get("minutes", {}).items() if lo <= k <= hi)
+    switch_cr = sum(int(r.get("credits", 0)) for r in records
+                    if r.get("requested_at") and opened <= _ts(r["requested_at"]) < now)
+    expected = births + switch_cr
+    dv = web_now - int(w["web"])
+    base = max(dv, expected)
+    row = {"opened_at": w["opened_at"], "closed_at": now.isoformat(), "end": end_reason, "open_reason": w.get("reason"),
+           "vendor_webhooks": dv, "births": births, "switch_credits": switch_cr,
+           "share": round(abs(dv - expected) / base, 4) if base else 0.0, "verdict": "small", "paged": False}
+    key = opened.strftime("%Y%m%dT%H%M%S")
+    if dv == 0 and expected >= BIRTHCAP_DIVERGENCE_MIN:
+        row["verdict"], row["paged"] = "frozen", True
+        pages.append(_page("birthcap-vendor-meter-frozen-window-%s" % key, "warning",
+                           "Birth cap: the vendor's webhook meter did not move",
+                           "ON window %s -> %s (%s): vendor webhooks +0 while the census recorded %d births + %d switch "
+                           "credits" % (w["opened_at"], now.isoformat(), end_reason, births, switch_cr)))
+    elif base >= BIRTHCAP_DIVERGENCE_MIN:
+        row["verdict"] = "ok"
+        if abs(dv - expected) / base > BIRTHCAP_DIVERGENCE_SHARE:
+            row["verdict"], row["paged"] = "divergent", True
+            st["replan"] = "divergence-window:%s" % key
+            pages.append(_page("birthcap-divergence-%s" % key, "warning",
+                               "Birth cap: vendor webhook spend disagrees with the census",
+                               "ON window %s -> %s (%s): vendor webhooks +%d, census births %d + switch credits %d = %d"
+                               % (w["opened_at"], now.isoformat(), end_reason, dv, births, switch_cr, expected)))
+    cutoff = now - timedelta(seconds=BIRTHCAP_WINDOWS_KEEP_S)
+    kept = [r for r in st.get("windows_checked", []) if _ts(r["closed_at"]) >= cutoff] + [row]
+    st["windows_checked"] = kept
+    # ⛔ THE CUMULATIVE LEG (Langston condition 3): one-sided, the money direction — the vendor billing MORE than the
+    #    census counts, summed over the kept windows. This is what makes not paging a single hour safe.
+    cv = sum(r["vendor_webhooks"] for r in kept)
+    ce = sum(r["births"] + r["switch_credits"] for r in kept)
+    st["cumulative"] = {"at": now.isoformat(), "vendor": cv, "census": ce, "windows": len(kept)}
+    if ce >= BIRTHCAP_CUMULATIVE_MIN and (cv - ce) / ce > BIRTHCAP_CUMULATIVE_OVER_SHARE:
+        pages.append(_page("birthcap-cumulative-overbill-%s" % now.strftime("%Y-%m-%d"), "critical",
+                           "Birth cap: the vendor has billed more than the census over the last 72 h",
+                           "%d windows: vendor webhooks %d against census births + switch credits %d (+%.1f %%); credits "
+                           "drain faster than the plan assumes" % (len(kept), cv, ce, 100.0 * (cv - ce) / ce)))
 
 
 def on_fraction(records: list[dict], day_start: datetime) -> float:
