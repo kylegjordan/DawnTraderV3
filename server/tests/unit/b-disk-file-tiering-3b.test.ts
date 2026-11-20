@@ -501,7 +501,7 @@ describe('3b item 2 — Langston r3 carries', () => {
 });
 
 // ── 3b item 3: bind the pre-3a cold rows to exact versions; the inventory; the exclusive takeover ────────────────────
-import { COLD_NON_ARCHIVE_PREFIXES, coldPathOf, orphanVersions, otherOwnerCounts, ownColdPrefixes, planColdBindings, residueDeleteSet, residueReportLines, unparseableColdUris, type UnboundColdRow } from '../../scripts/b75-cold-bind';
+import { COLD_NON_ARCHIVE_PREFIXES, coldPathOf, orphanVersions, otherOwnerCounts, ownColdPrefixes, planColdBindings, residueDeleteSet, coldReportLines, unparseableColdUris, type UnboundColdRow } from '../../scripts/b75-cold-bind';
 import type { B2ListedVersion } from '../../services/data-archive/storage-client';
 
 const ROW: UnboundColdRow = { id: 'r1', source_table: 'context_bridge_log', partition_label: '2026-01', storage_uri: 'b2://dt-archive-cold/context_bridge_log/2026-01.jsonl.gz', bytes_compressed: 13901237, checksum: 'sha256-x' };
@@ -746,27 +746,29 @@ describe('3b item 4 — the residue delete set: our orphans and non-chosen versi
     ])).toEqual(['b2:/x/y']);
     expect(unparseableColdUris([{ tier: 'cold', storage_uri: ROW.storage_uri }])).toEqual([]);
   });
-  it('3d close C-2 (stream): the warning and every RESIDUE-SET line go to ONE stream, each line stamped while any uri is unparseable', () => {
+  it('3d close C-2 (stream): the warning leads, and every ORPHAN and RESIDUE-SET line goes to ONE stream, stamped while any uri is unparseable', () => {
     const v = (id: string) => ver(id);
-    const bad = residueReportLines([v('a'), v('b')], ['b2:/x/y']);
+    const bad = coldReportLines([v('o')], [v('a'), v('b')], ['b2:/x/y']);
     expect(bad[0]).toContain('UNPARSEABLE cold storage_uri on 1 manifest row(s): [b2:/x/y]');
-    expect(bad.slice(1)).toHaveLength(2);
-    for (const line of bad.slice(1)) {
-      expect(line).toContain('[B75 cold-bind] RESIDUE-SET ');
-      expect(line).toMatch(/ UNTRUSTED\(unparseable=1\)$/);
-    }
-    const good = residueReportLines([v('a')], []);
-    expect(good).toHaveLength(1);
-    expect(good[0]).not.toContain('UNTRUSTED');
+    expect(bad[0]).toContain('the ORPHAN and RESIDUE-SET lines below');
+    expect(bad.slice(1)).toHaveLength(3);
+    expect(bad[1]).toContain('[B75 cold-bind] ORPHAN (no manifest row): ');
+    for (const line of bad.slice(2)) expect(line).toContain('[B75 cold-bind] RESIDUE-SET ');
+    for (const line of bad.slice(1)) expect(line).toMatch(/ UNTRUSTED\(unparseable=1\)$/);
+    const good = coldReportLines([v('o')], [v('a')], []);
+    expect(good).toHaveLength(2);
+    for (const line of good) expect(line).not.toContain('UNTRUSTED');
     // the stream pin: main emits these lines through console.log ONLY, and no other emitter of either text exists
     const bind = read('server/scripts/b75-cold-bind.ts');
     const mainAt = bind.indexOf('async function main(');
     expect(mainAt).toBeGreaterThan(0);
     const body = bind.slice(mainAt);
-    expect(body).toContain('for (const line of residueReportLines(residueSet, unparseable)) console.log(line);');
+    expect(body).toContain('for (const line of coldReportLines(orphanVersions(listing.versions, claimed, ownPrefixes), residueSet, unparseable)) console.log(line);');
     expect(body).not.toContain('UNPARSEABLE cold storage_uri on');
     expect(body).not.toContain('RESIDUE-SET ${');
+    expect(body).not.toContain('ORPHAN (no manifest row)');
     expect(bind.split('UNPARSEABLE cold storage_uri on').length - 1).toBe(1);
+    expect(bind.split('ORPHAN (no manifest row)').length - 1).toBe(1);
     expect(body).toMatch(/if \(unparseable\.length > 0\) process\.exitCode = 1;/);
   });
 });

@@ -174,16 +174,20 @@ export function unparseableColdUris(rows: { tier: string; storage_uri: string }[
 }
 
 /**
- * Pure: the RESIDUE-SET report, every line for ONE stream. While any cold uri is unparseable the warning comes first
- * AND every RESIDUE-SET line carries the UNTRUSTED stamp, so a capture of this stream alone (stdout, staging's out.log)
- * can never hold the set without the notice (Langston 3d Step-4 C-2 finding: the warning was on stderr, the set on
- * stdout, and the exit code is shared with failures > 0). Exported for tests.
+ * Pure: the ORPHAN + RESIDUE-SET report, every line for ONE stream. While any cold uri is unparseable the warning leads
+ * the whole report AND every ORPHAN and RESIDUE-SET line carries the UNTRUSTED stamp, so a capture of this stream alone
+ * (stdout, staging's out.log), or a grep on either label, can never hold those lines without the notice. Langston's 3d
+ * Step-4 C-2 finding (the warning was on stderr, the set on stdout, the exit code shared with failures > 0) and his C-2
+ * re-check residual (an unparseable row's object prints as ORPHAN "no manifest row" when it has one). Exported for tests.
  */
-export function residueReportLines(residueSet: B2ListedVersion[], unparseable: string[]): string[] {
+export function coldReportLines(orphans: B2ListedVersion[], residueSet: B2ListedVersion[], unparseable: string[]): string[] {
   const lines: string[] = [];
   const stamp = unparseable.length > 0 ? ` UNTRUSTED(unparseable=${unparseable.length})` : '';
   if (unparseable.length > 0) {
-    lines.push(`[B75 cold-bind] UNPARSEABLE cold storage_uri on ${unparseable.length} manifest row(s): [${unparseable.join(', ')}] — the RESIDUE-SET below is NOT trustworthy while any exist (their objects read as orphans)`);
+    lines.push(`[B75 cold-bind] UNPARSEABLE cold storage_uri on ${unparseable.length} manifest row(s): [${unparseable.join(', ')}] — the ORPHAN and RESIDUE-SET lines below are NOT trustworthy while any exist (their objects read as orphans)`);
+  }
+  for (const o of orphans) {
+    lines.push(`[B75 cold-bind] ORPHAN (no manifest row): ${o.fileName} id=${o.fileId} bytes=${o.contentLength} sha1=${o.contentSha1} uploaded=${new Date(o.uploadTimestamp).toISOString()}${stamp}`);
   }
   for (const v of residueSet) {
     lines.push(`[B75 cold-bind] RESIDUE-SET ${v.fileName} id=${v.fileId} bytes=${v.contentLength} uploaded=${new Date(v.uploadTimestamp).toISOString()}${stamp}`);
@@ -240,15 +244,12 @@ async function main(): Promise<void> {
         : 'UNKNOWN prefix — not an archive table, not a known owner (never touched; investigate)';
       console.log(`[B75 cold-bind] ${who}: ${seg}/ — ${n} stored version(s)`);
     }
-    for (const o of orphanVersions(listing.versions, claimed, ownPrefixes)) {
-      console.log(`[B75 cold-bind] ORPHAN (no manifest row): ${o.fileName} id=${o.fileId} bytes=${o.contentLength} sha1=${o.contentSha1} uploaded=${new Date(o.uploadTimestamp).toISOString()}`);
-    }
     const decisions = planColdBindings(r.rows, listing.versions);
     const residueSet = residueDeleteSet(listing.versions, claimed, ownPrefixes, decisions, boundIds);
     const unparseable = unparseableColdUris(all.rows);
-    // C-2 (3d close): their objects read as orphans, so the RESIDUE-SET is not a safe keep input until fixed; the
-    // warning and the stamped set share ONE stream (stdout) so neither can be captured without the other
-    for (const line of residueReportLines(residueSet, unparseable)) console.log(line);
+    // C-2 (3d close): their objects read as orphans, so neither the ORPHAN lines nor the RESIDUE-SET is a safe keep
+    // input until fixed; the warning and both stamped families share ONE stream (stdout), warning first
+    for (const line of coldReportLines(orphanVersions(listing.versions, claimed, ownPrefixes), residueSet, unparseable)) console.log(line);
     if (unparseable.length > 0) process.exitCode = 1;
     let failures = 0;
     for (const d of decisions) {
