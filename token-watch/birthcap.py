@@ -44,12 +44,13 @@ from config import (
     BIRTHCAP_MAX_BIRTHS_PER_DAY, BIRTHCAP_WEBHOOK_BODY, BIRTHCAP_WEBHOOK_ID, BIRTHS_DIR, EXPECTED_LAUNCHES_PER_DAY, LIVENESS_GAP_SECONDS,
     STATE_DIR, SWITCH_CREDITS, SWITCH_SHARE_MAX, birthcap_switch_ceiling,
 )
-from store import load_state, save_state
+from store import load_state, save_state, state_path
 
 UTC = timezone.utc
 LOG = logging.getLogger("token-watch.birthcap")
 STATE = BIRTHCAP_STATE_NAME
 RESULT = "birthcap_result"
+STATUS_TAIL = 12                                              # rows of each history `--status` prints
 # pages a failed mint could not deliver, re-offered by every later mint (Langston §13 (i)): bounded in count and age
 CARRY = "birthcap_carry"
 CARRY_MAX = 50
@@ -508,34 +509,49 @@ def _hourly_crosscheck(st: dict, now: datetime, records: list[dict], usage_fn, p
     base_n = max(dv_web, expected)                            # a frozen vendor counter is tested too (gate C item 3)
     share = round(abs(dv_web - expected) / base_n, 4) if base_n else 0.0
     verdict, paged = ("small" if base_n < BIRTHCAP_DIVERGENCE_MIN else "ok"), False
-    reset = _is_reset(dv_web, snap.get("cycle"), cur["cycle"])
+    reset_test = _reset_test(dv_web, snap.get("cycle"), cur["cycle"])
+    reset = reset_test is not None
     if reset:
         # ⛔ THE VENDOR'S COUNTER RESETS AT ITS BILLING-CYCLE BOUNDARY (`providers.helius_usage`: "this project's cycle";
         #    the free cycle turns on the 27th). The two snapshots straddle it, so the delta is not a spend: no replan.
         verdict, share = "reset", 0.0
-    elif dv_web == 0 and expected >= BIRTHCAP_DIVERGENCE_MIN:
+    elif _backwards(dv_web, snap.get("cycle"), cur["cycle"]):
+        # ⛔ THE SAME CYCLE AND A NEGATIVE DELTA IS NOT A RESET (Langston §9e (a)): the counter went BACKWARDS inside a
+        #    cycle. A meter fault, not a spend: own key, own title, a replan, and no comparison.
+        verdict, share, paged = "backwards", 0.0, True
+        _flag_replan(st, "backwards-meter:%s" % prev)
+        pages.append(_page("birthcap-vendor-meter-backwards-%s" % prev, "warning",
+                           "Birth cap: the vendor's webhook meter went backwards inside a billing cycle",
+                           "hour %s: vendor webhooks %+d within cycle %s while the census recorded %d births + %d switch "
+                           "credits; the cap cannot read its own spend" % (prev, dv_web, cur["cycle"], births, switch_cr)))
+    elif dv_web - switch_cr <= 0 and births >= BIRTHCAP_DIVERGENCE_MIN:
         # ⛔ A DEAD METER IS NOT A BILLING DISAGREEMENT (Langston condition 4): the cap is flying blind. Own key, own title.
+        #    "Did not move" means NO MORE THAN THE SWITCHES ALONE EXPLAIN (Langston §9e BLOCKER-1): the vendor bills a
+        #    switch at 100 credits into this same counter, so a meter that stopped counting births still moves by the
+        #    switch credits. Gated on BIRTHS, not births + switches, so an hour of switches and no births is not frozen.
         verdict, paged = "frozen", True
-        st["replan"] = "frozen-meter:%s" % prev
+        _flag_replan(st, "frozen-meter:%s" % prev)
         pages.append(_page("birthcap-vendor-meter-frozen-%s" % prev, "warning", "Birth cap: the vendor's webhook meter did not move",
-                           "hour %s: vendor webhooks +0 while the census recorded %d births + %d switch credits; the cap "
-                           "cannot see its own spend" % (prev, births, switch_cr)))
+                           "hour %s: vendor webhooks %+d, no more than the %d switch credits, while the census recorded %d "
+                           "births; the cap cannot see its own spend" % (prev, dv_web, switch_cr, births)))
     elif base_n >= BIRTHCAP_DIVERGENCE_MIN and abs(dv_web - expected) / base_n > BIRTHCAP_DIVERGENCE_SHARE:
         # ⛔ REPLAN, DO NOT PAGE (Langston condition 1): the replan re-derives from the vendor meter, the authority, so a noisy
         #    trigger on it is near a no-op; the PAGE moved to the ON-window compare, where the delivery lag cannot land.
         verdict = "divergent"
-        st["replan"] = "divergence-hour:%s" % prev
+        _flag_replan(st, "divergence-hour:%s" % prev)
     allow_rpc_hour = float(st.get("rpc_rate_per_day", 0.0)) / 24.0
     # switch credits land in `webhooks`, not `rpc` (live pause: rpc flat at 25,168 across both PUTs, webhooks +~200
     # each); with a zero allowance ANY rpc spend is unplanned (gate C item 4)
     if not reset and dv_rpc > 0 and dv_rpc > 1.25 * allow_rpc_hour + (50 if allow_rpc_hour > 0 else 0):
-        st["replan"] = "rpc-overrun:%s" % prev
+        _flag_replan(st, "rpc-overrun:%s" % prev)
+        paged = True
         pages.append(_page("birthcap-rpc-overrun-%s" % prev, "warning", "Birth cap: RPC spend above its allowance — replanning",
                            "hour %s: vendor rpc +%d against an allowance of %.0f/hour (liquidity carve is 0 under "
                            "AMENDMENT 18, so any rpc spend is unplanned)" % (prev, dv_rpc, allow_rpc_hour)))
     hours = st.setdefault("hours", {})
     hours[prev] = {"vendor_webhooks": dv_web, "vendor_rpc": dv_rpc, "births": births, "switch_credits": switch_cr,
-                   "share": share, "verdict": verdict, "paged": paged}  # a dirty row with no page != never evaluated (cond. 5)
+                   "share": share, "verdict": verdict, "paged": paged,
+                   "reset_test": reset_test}  # a dirty row with no page != never evaluated (cond. 5)
     for k in sorted(hours)[:-72]:                             # keep three days
         del hours[k]
 
@@ -545,13 +561,32 @@ def _cycle_of(usage: dict) -> str | None:
     return (usage.get("creditCycle") or {}).get("start")
 
 
-def _is_reset(delta: int, cycle_then: str | None, cycle_now: str | None) -> bool:
-    """Two usage reads straddle a billing-cycle boundary, so their difference is not a spend. The cycle identity is the
-    exact test (a reset after a quiet cycle can still read as a small POSITIVE delta); a negative delta is the fallback
-    for a snapshot taken before the cycle was recorded, or a read that does not carry one."""
-    if cycle_then and cycle_now and cycle_then != cycle_now:
-        return True
-    return delta < 0
+def _reset_test(delta: int, cycle_then: str | None, cycle_now: str | None) -> str | None:
+    """Which test says two usage reads straddle a billing-cycle boundary (so their difference is not a spend), or None.
+    "cycle": both reads carry a cycle and they differ — the exact test (a reset after a quiet cycle can still read as a
+    small POSITIVE delta). "negative-delta": a read does not carry its cycle (a snapshot taken before the cycle was
+    recorded) and the delta is negative — the fallback. Both cycles known and EQUAL with a negative delta is NOT a reset:
+    that is `_backwards`. The test that fired is recorded on the row (Langston §9e (a))."""
+    if cycle_then and cycle_now:
+        return "cycle" if cycle_then != cycle_now else None
+    return "negative-delta" if delta < 0 else None
+
+
+def _backwards(delta: int, cycle_then: str | None, cycle_now: str | None) -> bool:
+    """The counter went backwards INSIDE one billing cycle: both reads carry the same cycle and the delta is negative."""
+    return bool(cycle_then and cycle_now and cycle_then == cycle_now and delta < 0)
+
+
+def _flag_replan(st: dict, reason: str) -> None:
+    """Ask for a replan, KEEPING any reason already pending: two triggers in one tick (a frozen meter and an RPC overrun)
+    are joined with "+" rather than the second overwriting the first. A legacy `True` reads as "manual"."""
+    prev = st.get("replan")
+    if prev is True:
+        prev = "manual"
+    if not isinstance(prev, str) or not prev:
+        st["replan"] = reason
+    elif reason not in prev.split("+"):
+        st["replan"] = prev + "+" + reason
 
 
 def _window_open(st: dict, now: datetime, usage_fn, reason: str, records: list | None = None,
@@ -652,22 +687,32 @@ def _window_compare(st: dict, w: dict, now: datetime, web_now: int, cycle_now: s
            "vendor_webhooks": dv, "births": births, "switch_credits": switch_cr,
            "share": round(abs(dv - expected) / base, 4) if base else 0.0, "verdict": "small", "paged": False}
     key = opened.strftime("%Y%m%dT%H%M%S")
-    if _is_reset(dv, w.get("cycle"), cycle_now):
+    row["reset_test"] = _reset_test(dv, w.get("cycle"), cycle_now)
+    if row["reset_test"]:
         # ⛔ A CYCLE RESET INSIDE THE WINDOW (the counter is per billing cycle): the window cannot be compared. Recorded,
         #    never paged, never a replan, and kept OUT of the cumulative leg below — its huge negative would otherwise
         #    cancel every overbilled window for the next 72 h.
         row["verdict"], row["share"] = "reset", 0.0
-    elif dv == 0 and expected >= BIRTHCAP_DIVERGENCE_MIN:
+    elif _backwards(dv, w.get("cycle"), cycle_now):
+        # ⛔ BACKWARDS INSIDE ONE CYCLE (Langston §9e (a)): paged, no replan (the hourly arm replans, as for frozen).
+        row["verdict"], row["share"], row["paged"] = "backwards", 0.0, True
+        pages.append(_page("birthcap-vendor-meter-backwards-window-%s" % key, "warning",
+                           "Birth cap: the vendor's webhook meter went backwards inside a billing cycle",
+                           "ON window %s -> %s (%s): vendor webhooks %+d within cycle %s while the census recorded %d births "
+                           "+ %d switch credits" % (w["opened_at"], now.isoformat(), end_reason, dv, cycle_now, births,
+                                                    switch_cr)))
+    elif dv - switch_cr <= 0 and births >= BIRTHCAP_DIVERGENCE_MIN:
+        # ⛔ "DID NOT MOVE" = NO MORE THAN THE SWITCHES ALONE EXPLAIN (Langston §9e BLOCKER-1); gated on births.
         row["verdict"], row["paged"] = "frozen", True
         pages.append(_page("birthcap-vendor-meter-frozen-window-%s" % key, "warning",
                            "Birth cap: the vendor's webhook meter did not move",
-                           "ON window %s -> %s (%s): vendor webhooks +0 while the census recorded %d births + %d switch "
-                           "credits" % (w["opened_at"], now.isoformat(), end_reason, births, switch_cr)))
+                           "ON window %s -> %s (%s): vendor webhooks %+d, no more than the %d switch credits, while the "
+                           "census recorded %d births" % (w["opened_at"], now.isoformat(), end_reason, dv, switch_cr, births)))
     elif base >= BIRTHCAP_DIVERGENCE_MIN:
         row["verdict"] = "ok"
         if abs(dv - expected) / base > BIRTHCAP_DIVERGENCE_SHARE:
             row["verdict"], row["paged"] = "divergent", True
-            st["replan"] = "divergence-window:%s" % key
+            _flag_replan(st, "divergence-window:%s" % key)
             pages.append(_page("birthcap-divergence-%s" % key, "warning",
                                "Birth cap: vendor webhook spend disagrees with the census",
                                "ON window %s -> %s (%s): vendor webhooks +%d, census births %d + switch credits %d = %d"
@@ -677,11 +722,14 @@ def _window_compare(st: dict, w: dict, now: datetime, web_now: int, cycle_now: s
     st["windows_checked"] = kept
     # ⛔ THE CUMULATIVE LEG (Langston condition 3): one-sided, the money direction — the vendor billing MORE than the
     #    census counts, summed over the kept windows. This is what makes not paging a single hour safe.
-    summed = [r for r in kept if r.get("verdict") != "reset"]
+    # ⛔ A METER FAULT IS EXCLUDED LIKE A RESET AND COUNTED ASIDE (Langston §9e RIDER-1): a frozen window's census-only
+    #    births, or a backwards window's negative delta, would otherwise bias the 72 h sum the cumulative leg rests on.
+    summed = [r for r in kept if r.get("verdict") not in ("reset", "frozen", "backwards")]
     cv = sum(r["vendor_webhooks"] for r in summed)
     ce = sum(r["births"] + r["switch_credits"] for r in summed)
     st["cumulative"] = {"at": now.isoformat(), "vendor": cv, "census": ce, "windows": len(summed),
-                        "reset_windows": len(kept) - len(summed)}
+                        "reset_windows": sum(1 for r in kept if r.get("verdict") == "reset"),
+                        "meter_fault_windows": sum(1 for r in kept if r.get("verdict") in ("frozen", "backwards"))}
     if ce >= BIRTHCAP_CUMULATIVE_MIN and (cv - ce) / ce > BIRTHCAP_CUMULATIVE_OVER_SHARE:
         pages.append(_page("birthcap-cumulative-overbill-%s" % now.strftime("%Y-%m-%d"), "critical",
                            "Birth cap: the vendor has billed more than the census over the last 72 h",
@@ -842,11 +890,25 @@ def main(argv: list[str]) -> int:
     if argv[1:] == ["--mint"]:
         return mint()
     if argv[1:] == ["--status"]:
-        print(json.dumps(load_state(STATE, {}).get("plan"), indent=1, sort_keys=True))
+        # ⛔ READ THE FILE DIRECTLY AND REFUSE ON FAILURE: `load_state` returns its default when `os.path.exists` is
+        #    False, and that is ALSO False when the state directory cannot be traversed — so an unreadable state printed
+        #    `null` as if no plan existed. Plan + cumulative + the last replans, hour rows and windows (Langston §9e RIDER-2).
+        path = state_path(STATE)
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                st = json.load(fh)
+        except (OSError, ValueError) as exc:
+            print("birthcap --status: cannot read %s: %s" % (path, exc), file=sys.stderr)
+            return 1
+        hours = st.get("hours", {})
+        print(json.dumps({"plan": st.get("plan"), "cumulative": st.get("cumulative"), "pending_replan": st.get("replan"),
+                          "replans": st.get("replans", [])[-STATUS_TAIL:],
+                          "hours": {k: hours[k] for k in sorted(hours)[-STATUS_TAIL:]},
+                          "windows": st.get("windows_checked", [])[-STATUS_TAIL:]}, indent=1, sort_keys=True))
         return 0
     if argv[1:] == ["--replan"]:
         st = load_state(STATE, {})
-        st["replan"] = True
+        _flag_replan(st, "manual")                            # recorded as "manual", not "cycle" (Langston §9e (c))
         save_state(STATE, st)
         return 0
     print("usage: birthcap.py --tick | --mint | --status | --replan", file=sys.stderr)

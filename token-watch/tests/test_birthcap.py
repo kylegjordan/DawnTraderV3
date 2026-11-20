@@ -375,10 +375,13 @@ r = tick(v, h0 + timedelta(hours=2))
 check("vendor charged 2x the census births in ONE hour: NO hourly divergence page (the page moved to the ON-window compare)",
       not any(p["dedupe_key"].startswith("birthcap-divergence") for p in r["pages"]), r["pages"])
 hrow = store.load_state(birthcap.STATE, {}).get("hours", {}).get("2026-11-28T04", {})
-check("... but the hour row records it: verdict divergent, share 0.5, paged False (a dirty row != never evaluated)",
-      hrow.get("verdict") == "divergent" and hrow.get("share") == 0.5 and hrow.get("paged") is False, hrow)
+check("... but the hour row records it: verdict divergent, share 0.5, paged True (that hour ALSO paged an RPC overrun)",
+      hrow.get("verdict") == "divergent" and hrow.get("share") == 0.5 and hrow.get("paged") is True, hrow)
 check("RPC spend above a zero allowance: overrun page and a replan",
       any(p["dedupe_key"].startswith("birthcap-rpc-overrun") for p in r["pages"]) and store.load_state(birthcap.STATE, {}).get("replan"), r["pages"])
+check("two replan triggers in one hour are JOINED, the second does not overwrite the first (divergence + rpc overrun)",
+      set(str(store.load_state(birthcap.STATE, {}).get("replan")).split("+"))
+      == {"divergence-hour:2026-11-28T04", "rpc-overrun:2026-11-28T04"}, store.load_state(birthcap.STATE, {}).get("replan"))
 
 store.save_state(birthcap.STATE, dict(store.load_state(birthcap.STATE, {}), replan=False))
 add_births([h0 + timedelta(hours=2, minutes=5, seconds=i) for i in range(300)])
@@ -387,6 +390,9 @@ r = tick(v, h0 + timedelta(hours=3))
 check("a webhook divergence alone sets replan, IMMEDIATELY and with its reason (the webhook leg is the births budget)",
       not any(p["dedupe_key"].startswith("birthcap-rpc-overrun") for p in r["pages"])
       and store.load_state(birthcap.STATE, {}).get("replan") == "divergence-hour:2026-11-28T05", r["pages"])
+check("... and that divergence-only hour's row is paged False (no page was sent for it)",
+      store.load_state(birthcap.STATE, {}).get("hours", {}).get("2026-11-28T05", {}).get("paged") is False,
+      store.load_state(birthcap.STATE, {}).get("hours", {}).get("2026-11-28T05"))
 r = tick(v, h0 + timedelta(hours=3, minutes=1))
 rp = store.load_state(birthcap.STATE, {}).get("replans", [])
 hb = store.load_state(birthcap.STATE, {}).get("hours", {})
@@ -394,12 +400,31 @@ check("the replan is RECORDED with its reason and the allowance before and after
       rp and rp[-1]["reason"] == "divergence-hour:2026-11-28T05" and "allowance_before" in rp[-1] and "allowance_after" in rp[-1], rp[-1:])
 h0 = h0 + timedelta(hours=1)
 store.save_state(birthcap.STATE, dict(store.load_state(birthcap.STATE, {}), replan=False))
-v.webhooks = 2500                                              # the vendor counter freezes while the census records 300
 add_births([h0 + timedelta(hours=2, minutes=5, seconds=i) for i in range(300)])
+with open(config.BIRTHCAP_SWITCHES, "a") as fh:                # a switch GET in that hour: the vendor bills it 100
+    fh.write(json.dumps({"kind": "get", "requested_at": (h0 + timedelta(hours=2, minutes=30)).isoformat(),
+                         "credits": config.SWITCH_CREDITS, "echo_active": True}) + NL)
+v.webhooks = 2500 + config.SWITCH_CREDITS                      # the meter moved by the switch alone: births are not counted
 r = tick(v, h0 + timedelta(hours=3))
-check("a frozen vendor counter (vendor +0, census +300) pages under its OWN key, not as a divergence (condition 4)",
+check("a frozen vendor counter (vendor +100 = the switch alone, census +300 births) pages under its OWN key, not as a divergence",
       any(p["dedupe_key"].startswith("birthcap-vendor-meter-frozen-") for p in r["pages"])
       and not any(p["dedupe_key"].startswith("birthcap-divergence") for p in r["pages"]), r["pages"])
+check("... and asks for a replan with its reason", store.load_state(birthcap.STATE, {}).get("replan") == "frozen-meter:2026-11-28T06",
+      store.load_state(birthcap.STATE, {}).get("replan"))
+reset(); enable(); v = Vendor()
+store.save_state(birthcap.STATE, {"applied": "on", "plan": dict(full, always_on=True)})
+v.webhooks, v.rpc = 1000, 0
+tick(v, h0)
+add_births([h0 + timedelta(minutes=5, seconds=i) for i in range(100)])  # 100 births: under the 200 the gate needs
+with open(config.BIRTHCAP_SWITCHES, "a") as fh:
+    fh.write(json.dumps({"kind": "get", "requested_at": (h0 + timedelta(minutes=30)).isoformat(),
+                         "credits": config.SWITCH_CREDITS, "echo_active": True}) + NL)
+v.webhooks = 1000 + config.SWITCH_CREDITS
+r = tick(v, h0 + timedelta(hours=1))
+hrow = store.load_state(birthcap.STATE, {}).get("hours", {}).get(h0.strftime("%Y-%m-%dT%H"), {})
+check("the frozen gate counts BIRTHS, not births + switches: 100 births + a 100-credit switch is not a frozen meter",
+      hrow.get("verdict") != "frozen"
+      and not any(p["dedupe_key"].startswith("birthcap-vendor-meter-frozen") for p in r["pages"]), (hrow, r["pages"]))
 reset(); enable(); v = Vendor()
 store.save_state(birthcap.STATE, {"applied": "on", "plan": dict(full, always_on=True)})
 v.webhooks, v.rpc = 1000, 0
@@ -441,13 +466,46 @@ store.save_state(birthcap.STATE, {"applied": "on", "plan": dict(full, always_on=
 v.webhooks, v.rpc = 818_000, 25_000
 tick(v, h0)
 add_births([h0 + timedelta(minutes=5, seconds=i) for i in range(300)])
-v.webhooks, v.rpc = 120, 0                                     # the cycle turned inside the hour
+v.cycle = ("2026-12-27", "2027-01-27")                       # the cycle turned inside the hour
+v.webhooks, v.rpc = 120, 0
 r = tick(v, h0 + timedelta(hours=1))
 hrow = store.load_state(birthcap.STATE, {}).get("hours", {}).get(h0.strftime("%Y-%m-%dT%H"), {})
-check("a cycle reset inside an hour (vendor 818,000 -> 120) is verdict reset: no replan, no page",
+check("a cycle reset inside an hour (vendor 818,000 -> 120, cycle changed) is verdict reset: no replan, no page",
       hrow.get("verdict") == "reset" and not store.load_state(birthcap.STATE, {}).get("replan")
+      and not any(p["dedupe_key"].startswith(("birthcap-divergence", "birthcap-vendor-meter-frozen", "birthcap-vendor-meter-backwards"))
+                  for p in r["pages"]), (hrow, r["pages"]))
+check("... and the row records WHICH test fired: cycle (Langston §9e (a))", hrow.get("reset_test") == "cycle", hrow)
+reset(); enable(); v = Vendor()
+store.save_state(birthcap.STATE, {"applied": "on", "plan": dict(full, always_on=True)})
+v.webhooks, v.rpc = 818_000, 25_000
+tick(v, h0)
+_st = store.load_state(birthcap.STATE, {})
+_st["usage_snap"].pop("cycle", None)                           # a snapshot taken before the cycle was recorded
+store.save_state(birthcap.STATE, _st)
+add_births([h0 + timedelta(minutes=5, seconds=i) for i in range(300)])
+v.webhooks, v.rpc = 120, 0
+r = tick(v, h0 + timedelta(hours=1))
+hrow = store.load_state(birthcap.STATE, {}).get("hours", {}).get(h0.strftime("%Y-%m-%dT%H"), {})
+check("a snapshot with no cycle and a negative delta is a reset by the FALLBACK, and says so: reset_test negative-delta",
+      hrow.get("verdict") == "reset" and hrow.get("reset_test") == "negative-delta"
+      and not store.load_state(birthcap.STATE, {}).get("replan"), hrow)
+reset(); enable(); v = Vendor()
+store.save_state(birthcap.STATE, {"applied": "on", "plan": dict(full, always_on=True)})
+v.webhooks, v.rpc = 818_000, 25_000
+tick(v, h0)
+add_births([h0 + timedelta(minutes=5, seconds=i) for i in range(300)])
+v.webhooks, v.rpc = 120, 25_000                                # the SAME cycle: the counter went backwards inside it
+r = tick(v, h0 + timedelta(hours=1))
+hk = h0.strftime("%Y-%m-%dT%H")
+hrow = store.load_state(birthcap.STATE, {}).get("hours", {}).get(hk, {})
+check("a negative delta inside the SAME cycle is NOT a reset: verdict backwards, paged, reset_test None",
+      hrow.get("verdict") == "backwards" and hrow.get("paged") is True and hrow.get("reset_test") is None, hrow)
+check("... it pages under its OWN key, not as a divergence or a frozen meter",
+      any(p["dedupe_key"] == "birthcap-vendor-meter-backwards-%s" % hk for p in r["pages"])
       and not any(p["dedupe_key"].startswith(("birthcap-divergence", "birthcap-vendor-meter-frozen")) for p in r["pages"]),
-      (hrow, r["pages"]))
+      r["pages"])
+check("... and asks for a replan with its reason", store.load_state(birthcap.STATE, {}).get("replan") == "backwards-meter:%s" % hk,
+      store.load_state(birthcap.STATE, {}).get("replan"))
 # the exact test is the cycle identity the usage read carries: a reset after a quiet cycle can read as a POSITIVE delta
 reset(); enable(); v = Vendor()
 store.save_state(birthcap.STATE, {"applied": "on", "plan": dict(full, always_on=True)})
@@ -458,8 +516,8 @@ v.cycle = ("2026-12-27", "2027-01-27")                       # the cycle turned;
 v.webhooks, v.rpc = 900, 600
 r = tick(v, h0 + timedelta(hours=1))
 hrow = store.load_state(birthcap.STATE, {}).get("hours", {}).get(h0.strftime("%Y-%m-%dT%H"), {})
-check("a cycle change with a POSITIVE delta (200 -> 900 across the 27th) is verdict reset: no replan, no page",
-      hrow.get("verdict") == "reset" and not store.load_state(birthcap.STATE, {}).get("replan")
+check("a cycle change with a POSITIVE delta (200 -> 900 across the 27th) is verdict reset (reset_test cycle): no replan, no page",
+      hrow.get("verdict") == "reset" and hrow.get("reset_test") == "cycle" and not store.load_state(birthcap.STATE, {}).get("replan")
       and not any(p["dedupe_key"].startswith(("birthcap-divergence", "birthcap-vendor-meter-frozen")) for p in r["pages"]),
       (hrow, r["pages"]))
 check("... and the rpc counter rising across the reset (10 -> 600, zero allowance) is not an overrun",
@@ -483,11 +541,11 @@ def window_run(vendor_extra=0, births_n=300, tail=(), late=(), close_after=timed
     tick(v, W_ON)
     add_births([W_ON + timedelta(seconds=30 + i * 10) for i in range(births_n)])
     v.webhooks += births_n + vendor_extra
+    if new_cycle:
+        v.cycle = new_cycle                                    # the billing cycle turned inside the window, WITH the counter
     tick(v, W_OFF)
     add_births([W_OFF + t for t in tail] + [W_OFF + t for t in late])
     v.webhooks += len(tail) + len(late)
-    if new_cycle:
-        v.cycle = new_cycle                                    # the billing cycle turned before the close read
     r = tick(v, W_OFF + timedelta(seconds=60))
     st1 = store.load_state(birthcap.STATE, {})
     r2 = tick(v, W_OFF + close_after)
@@ -513,15 +571,20 @@ check("vendor charged 2x the births across a WHOLE window: a divergence page for
       any(p["dedupe_key"].startswith("birthcap-divergence-" + W_ON.strftime("%Y%m%dT%H%M%S")) for p in pg)
       and any(w.get("verdict") == "divergent" and w.get("opened_at") == W_ON.isoformat() for w in st2.get("windows_checked", [])),
       (pg, st2.get("windows_checked")))
-reset(); enable(); v = Vendor(active=False); v.put_credits = 0; v.webhooks = 50_000
+reset(); enable(); v = Vendor(active=False); v.put_credits = 100; v.webhooks = 50_000
 store.save_state(birthcap.STATE, {"applied": "off", "plan": full})
 tick(v, W_ON)
 add_births([W_ON + timedelta(seconds=30 + i * 10) for i in range(300)])
 tick(v, W_OFF)
 r2 = tick(v, W_OFF + timedelta(minutes=3))
-check("a meter that never moved across a window pages FROZEN under its own key, not as a divergence",
+check("a meter that moved only by the two switches' 200 credits across a window (300 births) pages FROZEN under its own key",
       any(p["dedupe_key"].startswith("birthcap-vendor-meter-frozen-window-") for p in r2["pages"])
       and not any(p["dedupe_key"].startswith("birthcap-divergence") for p in r2["pages"]), r2["pages"])
+r, st1, r2, st2, v = window_run(births_n=150, vendor_extra=-150)
+row = (st2.get("windows_checked") or [{}])[-1]
+check("the window frozen gate counts BIRTHS: 150 births and a meter moved by the switches alone is not a frozen meter",
+      row.get("verdict") != "frozen"
+      and not any(p["dedupe_key"].startswith("birthcap-vendor-meter-frozen") for p in r["pages"] + r2["pages"]), row)
 # an under-estimated tail: a birth after the grace delays the close to the next quiet minute, and is counted
 r, st1, r2, st2, v = window_run(late=[timedelta(seconds=150)], close_after=timedelta(seconds=170))
 check("a birth after the grace (off+150 s) is not a quiet minute: the window waits", not st2.get("windows_checked"),
@@ -603,16 +666,41 @@ r, st1, r2, st2, v = window_run(pre={"windows_checked": old})
 check("rows older than 72 h leave the cumulative leg", st2.get("cumulative", {}).get("windows") == 1, st2.get("cumulative"))
 
 # the counter resets at the billing-cycle boundary: a window spanning it is recorded, never paged, never summed
+NEXT = ("2026-12-27", "2027-01-27")
+r, st1, r2, st2, v = window_run(vendor_extra=-50_000, new_cycle=NEXT)
+row = (st2.get("windows_checked") or [{}])[-1]
+pg = r["pages"] + r2["pages"]
+check("a window spanning a cycle reset is verdict reset (reset_test cycle): no divergence, frozen or backwards page, no replan",
+      row.get("verdict") == "reset" and row.get("reset_test") == "cycle"
+      and not str(st2.get("replan") or "").startswith("divergence-window")
+      and not any(p["dedupe_key"].startswith(("birthcap-divergence", "birthcap-vendor-meter-frozen", "birthcap-vendor-meter-backwards"))
+                  for p in pg), (row, pg))
+r, st1, r2, st2, v = window_run(vendor_extra=-50_000, new_cycle=NEXT, pre={"windows_checked": over})
+check("... and it is kept OUT of the cumulative leg: the 9 % overbilling still pages CRITICAL, the reset counted aside",
+      any(p["dedupe_key"].startswith("birthcap-cumulative-overbill-") for p in r2["pages"])
+      and st2.get("cumulative", {}).get("windows") == 5 and st2.get("cumulative", {}).get("reset_windows") == 1
+      and st2.get("cumulative", {}).get("meter_fault_windows") == 0, (r2["pages"], st2.get("cumulative")))
 r, st1, r2, st2, v = window_run(vendor_extra=-50_000)
 row = (st2.get("windows_checked") or [{}])[-1]
 pg = r["pages"] + r2["pages"]
-check("a window spanning a cycle reset is verdict reset: no divergence or frozen page, no replan",
-      row.get("verdict") == "reset" and not str(st2.get("replan") or "").startswith("divergence-window")
+check("a window whose meter went BACKWARDS inside one cycle is verdict backwards, paged, under its own key (Langston §9e (a))",
+      row.get("verdict") == "backwards" and row.get("paged") is True and row.get("reset_test") is None
+      and any(p["dedupe_key"].startswith("birthcap-vendor-meter-backwards-window-") for p in pg)
       and not any(p["dedupe_key"].startswith(("birthcap-divergence", "birthcap-vendor-meter-frozen")) for p in pg), (row, pg))
+check("... and the window arm does not replan on it (the hourly arm owns that, as for frozen)",
+      "window" not in str(st2.get("replan") or ""), st2.get("replan"))
 r, st1, r2, st2, v = window_run(vendor_extra=-50_000, pre={"windows_checked": over})
-check("... and it is kept OUT of the cumulative leg: the 9 % overbilling still pages CRITICAL, the reset counted aside",
-      any(p["dedupe_key"].startswith("birthcap-cumulative-overbill-") for p in r2["pages"])
-      and st2.get("cumulative", {}).get("windows") == 5 and st2.get("cumulative", {}).get("reset_windows") == 1,
+check("a backwards window is EXCLUDED like a reset and counted aside: the 9 % overbilling still pages CRITICAL (RIDER-1)"
+      " (compared at the hourly arm's backwards replan, end 'reopened')",
+      any(p["dedupe_key"].startswith("birthcap-cumulative-overbill-") and p["severity"] == "critical" for p in r["pages"] + r2["pages"])
+      and st2.get("cumulative", {}).get("windows") == 5 and st2.get("cumulative", {}).get("reset_windows") == 0
+      and st2.get("cumulative", {}).get("meter_fault_windows") == 1, (r2["pages"], st2.get("cumulative")))
+frozen_row = dict(over[0], opened_at=(W_ON - timedelta(hours=8)).isoformat(), closed_at=(W_ON - timedelta(hours=7)).isoformat(),
+                  vendor_webhooks=100, births=900, verdict="frozen", share=0.0, paged=True)
+r, st1, r2, st2, v = window_run(pre={"windows_checked": over + [frozen_row]})
+check("a frozen window is EXCLUDED too: its census-only births would hide the 9 % overbilling, which still pages CRITICAL",
+      any(p["dedupe_key"].startswith("birthcap-cumulative-overbill-") and p["severity"] == "critical" for p in r2["pages"])
+      and st2.get("cumulative", {}).get("windows") == 6 and st2.get("cumulative", {}).get("meter_fault_windows") == 1,
       (r2["pages"], st2.get("cumulative")))
 r, st1, r2, st2, v = window_run(vendor_extra=400, new_cycle=("2026-12-27", "2027-01-27"))
 row = (st2.get("windows_checked") or [{}])[-1]
@@ -624,6 +712,65 @@ r, st1, r2, st2, v = window_run(vendor_extra=400, new_cycle=("2026-12-27", "2027
 check("... and that window is kept out of the cumulative leg too",
       st2.get("cumulative", {}).get("windows") == 5 and st2.get("cumulative", {}).get("reset_windows") == 1,
       st2.get("cumulative"))
+
+print("== 10c. the replan join, --replan, --status (Langston §9e (c) and RIDER-2)")
+_s = {}
+birthcap._flag_replan(_s, "a")
+birthcap._flag_replan(_s, "b")
+birthcap._flag_replan(_s, "a")
+check("_flag_replan joins a second reason with + and does not repeat one already pending", _s.get("replan") == "a+b", _s)
+_s = {"replan": True}
+birthcap._flag_replan(_s, "x")
+check("a legacy pending True reads as manual when joined", _s.get("replan") == "manual+x", _s)
+_s = {"replan": False}
+birthcap._flag_replan(_s, "x")
+check("a cleared replan (False) is replaced, not joined", _s.get("replan") == "x", _s)
+reset()
+store.save_state(birthcap.STATE, {"applied": "on", "plan": full})
+rc = birthcap.main(["birthcap", "--replan"])
+check("--replan records its reason as manual (not True, not cycle)", rc == 0 and store.load_state(birthcap.STATE, {}).get("replan") == "manual",
+      store.load_state(birthcap.STATE, {}).get("replan"))
+import contextlib as _ctx
+import io as _io
+_hours = {"2026-11-28T%02d" % h: {"verdict": "ok", "n": h} for h in range(15)}
+store.save_state(birthcap.STATE, {"applied": "on", "plan": full, "cumulative": {"windows": 3}, "replan": "manual",
+                                  "hours": _hours, "replans": [{"reason": "r%d" % i} for i in range(15)],
+                                  "windows_checked": [{"verdict": "ok", "i": i} for i in range(15)]})
+_out = _io.StringIO()
+with _ctx.redirect_stdout(_out):
+    rc = birthcap.main(["birthcap", "--status"])
+try:
+    _js = json.loads(_out.getvalue())
+except ValueError:
+    _js = {}
+check("--status prints plan + cumulative + pending replan + the last replans, hour rows and windows",
+      rc == 0 and set(_js) == {"plan", "cumulative", "pending_replan", "replans", "hours", "windows"}
+      and _js.get("plan") == full and _js.get("cumulative") == {"windows": 3} and _js.get("pending_replan") == "manual", _js)
+check("... each history is the LAST %d rows (hours by key order, newest kept)" % birthcap.STATUS_TAIL,
+      len(_js.get("hours", {})) == birthcap.STATUS_TAIL and "2026-11-28T14" in _js.get("hours", {})
+      and "2026-11-28T02" not in _js.get("hours", {})
+      and [x["reason"] for x in _js.get("replans", [])][-1] == "r14" and len(_js.get("replans", [])) == birthcap.STATUS_TAIL
+      and len(_js.get("windows", [])) == birthcap.STATUS_TAIL, _js.get("hours"))
+def _status_run(out, err):
+    """--status with its output captured; an EXCEPTION is a result, not a crash, so a broken refusal reads as a FAIL."""
+    with _ctx.redirect_stdout(out), _ctx.redirect_stderr(err):
+        try:
+            return birthcap.main(["birthcap", "--status"])
+        except Exception as exc:                                  # noqa: BLE001 - the raise IS the finding
+            return "raised %s: %s" % (type(exc).__name__, exc)
+
+
+_err = _io.StringIO()
+with open(store.state_path(birthcap.STATE), "w", encoding="utf-8") as fh:
+    fh.write("{not json")
+rc = _status_run(_io.StringIO(), _err)
+check("--status REFUSES (rc 1, a stderr line) on a state file it cannot parse, never prints a plan",
+      rc == 1 and "cannot read" in _err.getvalue(), (rc, _err.getvalue()))
+os.remove(store.state_path(birthcap.STATE))
+_out, _err = _io.StringIO(), _io.StringIO()
+rc = _status_run(_out, _err)
+check("--status REFUSES on a state file it cannot open, never prints null as if no plan existed (the false-absence fix)",
+      rc == 1 and "cannot read" in _err.getvalue() and "null" not in _out.getvalue(), (rc, _out.getvalue(), _err.getvalue()))
 
 print("== 11. the cap does not disable itself (Langston gate C blocker)")
 reset()
