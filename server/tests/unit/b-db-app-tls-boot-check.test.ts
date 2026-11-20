@@ -98,14 +98,29 @@ describe('B-DB-APP-TLS boot check', () => {
     expect(refusal(good(), { PGSSLROOTCERT: CA })).toBe('env_pgsslrootcert_set');
   });
 
+  it('refuses NODE_TLS_REJECT_UNAUTHORIZED in the environment whatever its value, even beside a good URL', () => {
+    expect(refusal(good(), { NODE_TLS_REJECT_UNAUTHORIZED: '0' })).toBe('env_node_tls_reject_unauthorized_set');
+    expect(refusal(good(), { NODE_TLS_REJECT_UNAUTHORIZED: '1' })).toBe('env_node_tls_reject_unauthorized_set');
+    expect(refusal(good(), { NODE_TLS_REJECT_UNAUTHORIZED: '' })).toBe('env_node_tls_reject_unauthorized_set');
+  });
+
   it('refuses a missing DATABASE_URL', () => {
     expect(refusal(undefined)).toBe('url_missing');
     expect(refusal('')).toBe('url_missing');
   });
 });
 
-// The placement fence (server/index.ts imports the gate FIRST) lands WITH the wiring line, in the T-P3 switch window:
-// wired before the switch, today's URL would stop the app at its next deploy.
+// The placement fence: server/index.ts imports the gate FIRST, so ESM evaluation runs the check before any module that
+// builds a pool. Only comments and blank lines may precede it — any statement above it could reach the database first.
+describe('B-DB-APP-TLS placement', () => {
+  it('server/index.ts imports the boot gate as its first statement', () => {
+    const lines = fs.readFileSync(path.resolve(__dirname, '../../index.ts'), 'utf8').split(/\r?\n/);
+    const first = lines.findIndex((l) => l.trim() !== '' && !l.trim().startsWith('//'));
+    expect(first).toBeGreaterThanOrEqual(0);
+    expect(lines[first].trim()).toBe('import "./db-tls-boot-gate.js";');
+  });
+});
+
 describe('B-DB-APP-TLS parser identity', () => {
   // The check must read the URL with the SAME parser the pool uses. package.json pins pg-connection-string exactly to
   // pg's own version; if a pg upgrade ever moves pg's range off that pin, npm nests a second copy under pg and this
@@ -114,6 +129,17 @@ describe('B-DB-APP-TLS parser identity', () => {
     const require = createRequire(import.meta.url);
     const pgDir = path.dirname(require.resolve('pg/package.json'));
     expect(require.resolve('pg-connection-string')).toBe(require.resolve('pg-connection-string', { paths: [pgDir] }));
+  });
+});
+
+describe('B-DB-APP-TLS import form', () => {
+  // vitest rewrites imports, so a named ESM import of the CommonJS pg-connection-string passes every test above and
+  // then fails to LOAD in the built app (measured 2026-11-21 on the esbuild bundle: `Named export 'parse' not found`).
+  // No test boots dist/, so this text fence is what stands between that form and a refused deploy.
+  it('the boot check loads pg-connection-string through require, never as an ESM import', () => {
+    const src = fs.readFileSync(path.resolve(__dirname, '../../db-tls-boot-check.ts'), 'utf8');
+    expect(src).not.toMatch(/^\s*import\b[^;]*from\s*['"]pg-connection-string['"]/m);
+    expect(src).toContain("createRequire(import.meta.url)('pg-connection-string')");
   });
 });
 

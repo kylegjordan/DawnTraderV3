@@ -1,3 +1,5 @@
+// B-DB-APP-TLS T-P2: MUST stay the first import — it refuses to start without verified, pinned TLS to the database.
+import "./db-tls-boot-gate.js";
 import express, { type Request, Response, NextFunction } from "express";
 import { miniBookIntegrityMonitor } from './services/monitoring/mini-book-integrity-monitor.js';
 import cors from "cors";
