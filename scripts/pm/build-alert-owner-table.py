@@ -54,14 +54,20 @@ for l in open(REG, encoding='utf-8'):
         register[m.group(1)] = sect
 
 
-# The active plan's owner column, for batches the register (built 2026-11-05) does not list: the cell
-# right after the first cell that names a batch. A batch with two different plan owners is left out.
+# The active plan's owner column, for batches the register (built 2026-11-05) does not list. The owner cell
+# sits right after the batch cell in some tables and right BEFORE it in the session-section tables, so both
+# neighbours are read, and a cell counts only when the WHOLE cell is an owner name (Step-4 C-5, Langston
+# 2026-11-20: a search over prose read B-LANGSTON-CONTEXT's note cell as CC-B). A batch with two different
+# plan owners is left out.
+_OWNER_FULL = re.compile(r'(CC-A|CC-B|CC-C|CC-INFRA|CC-PM|Infra Claude|PM Claude)'
+                         r'(?:\s*\((?:Old|New|Analyst|OLD|NEW|ANALYST) (?:Claude|Codex)\)|\s*/\s*OLD Codex)?')
+_OWNER_NAME = {'Infra Claude': 'CC-INFRA', 'PM Claude': 'CC-PM'}
+
+
 def _owner_cell(c):
-    for pat, o in ((r'Infra', 'CC-INFRA'), (r'CC-A\b|Old Claude|OLD Claude', 'CC-A'),
-                   (r'CC-B\b|New Claude|NEW Claude', 'CC-B'), (r'CC-C\b|Analyst|ANALYST', 'CC-C'),
-                   (r'\bPM\b|CC-PM', 'CC-PM')):
-        if re.search(pat, c):
-            return o
+    m = _OWNER_FULL.fullmatch(c.strip().strip('*~').strip())
+    if m:
+        return _OWNER_NAME.get(m.group(1), m.group(1))
 
 
 _plan = collections.defaultdict(set)
@@ -72,9 +78,10 @@ for l in open(PLAN, encoding='utf-8'):
     for j, c in enumerate(cells[:-1]):
         m = re.match(r'^(?:~~|\*\*)*([BT]-[A-Z0-9][A-Z0-9.-]*[A-Z0-9])', c)
         if m:
-            o = _owner_cell(cells[j + 1])
-            if o:
-                _plan[m.group(1)].add(o)
+            for k in (j - 1, j + 1):
+                o = _owner_cell(cells[k]) if k >= 0 else None
+                if o:
+                    _plan[m.group(1)].add(o)
             break
 plan_owner = {b: next(iter(o)) for b, o in _plan.items() if len(o) == 1}
 for b, o in sorted(_plan.items()):
@@ -244,6 +251,8 @@ table = {'_about': {
              'opens with a batch-id -> batch; batch with no table row -> register, then plan owner column; a '
              'register/plan batch named anywhere in the title; none -> fallback',
     'seed_votes_dropped': 'markers naming anyone but the four building sessions (Step-4 rider C-2)',
+    'refusal_reach': 'the register/plan cross-check fires only for rows that carry a batch; rows with batch null '
+                     '(their owner rests on the seed markers and PM overrides alone) are counted in refusal_reach_measured',
     'fallback': 'CC-INFRA, genuinely new keys only',
     'flag': 'agreement below 80%, a real tie (top two equal), n <= 3 markers, or fewer than 1 marker per 20 '
             'queue rows: for Langston to rule',
@@ -296,20 +305,34 @@ for f in sorted(fams):
 
 # R2-2 item 2: refuse to write a table that contradicts the register or itself.
 problems, by_batch = [], collections.defaultdict(set)
+reach = {'checked': [0, 0], 'batch_unlisted': [0, 0], 'batchless': [0, 0]}     # [families, queue rows]
 for s in ('batches', 'prefixes', 'titles'):
     for name, row in table[s].items():
         if row['owner'] not in SESSIONS:
             problems.append('OWNER %s:%s owner %s is not one of the four building sessions' % (s, name, row['owner']))
         b = name if s == 'batches' else row.get('batch')
         if not b or not b.startswith('B-'):
+            reach['batchless'][0] += 1
+            reach['batchless'][1] += row.get('rows', 0)
             continue
         b = b.split(' ')[0]
+        k = 'checked' if b in batch_owner else 'batch_unlisted'
+        reach[k][0] += 1
+        reach[k][1] += row.get('rows', 0)
         by_batch[b].add((row['owner'], s + ':' + name))
         if b in batch_owner and batch_owner[b] != row['owner']:
             problems.append('REGISTER %s:%s owner %s, register/plan says %s for %s' % (s, name, row['owner'], batch_owner[b], b))
 for b, owners in sorted(by_batch.items()):
     if len({o for o, _ in owners}) > 1:
         problems.append('TWO OWNERS %s: %s' % (b, sorted(owners)))
+# Step-4 C-5 (Langston 2026-11-20): say how far the cross-check reaches, so exit 0 is not read as "every row
+# register-verified", and say what the register/plan conflict NOTE was a zero over.
+table['_about']['refusal_reach_measured'] = {k: {'families': v[0], 'queue_rows': v[1]} for k, v in reach.items()}
+table['_about']['register_plan_overlap'] = len(set(register) & set(plan_owner))
+print('REACH cross-checked %d families / %d rows; batch not in register or plan %d / %d; batchless %d / %d'
+      % tuple(reach['checked'] + reach['batch_unlisted'] + reach['batchless']))
+print('REGISTER/PLAN overlap: %d batches (register %d, plan %d) - the conflict NOTE is a zero over these'
+      % (len(set(register) & set(plan_owner)), len(register), len(plan_owner)))
 for p in problems:
     print(p)
 if problems:

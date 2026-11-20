@@ -4,13 +4,29 @@
   "seed": "Langston [[ALERT owner=]] markers 2026-11-06..2026-11-20 joined to the whole staging alert queue",
   "order": "session owner named in title (opening alias or display name, or \"owner CC-x\" anywhere); deploy-window-stale/deploy-in-window key -> batch; keyless row whose title opens with a batch-id -> batch; keyless -> title stem; gov key with \":\" -> batch; key -> longest prefix; keyed row whose title opens with a batch-id -> batch; batch with no table row -> register, then plan owner column; a register/plan batch named anywhere in the title; none -> fallback",
   "seed_votes_dropped": "markers naming anyone but the four building sessions (Step-4 rider C-2)",
+  "refusal_reach": "the register/plan cross-check fires only for rows that carry a batch; rows with batch null (their owner rests on the seed markers and PM overrides alone) are counted in refusal_reach_measured",
   "fallback": "CC-INFRA, genuinely new keys only",
   "flag": "agreement below 80%, a real tie (top two equal), n <= 3 markers, or fewer than 1 marker per 20 queue rows: for Langston to rule",
   "agree": "share of markers, which count re-triages of resurfacing rows, not distinct decisions; read it with n and rows",
   "markers_on_unmapped_ids": 35,
   "seed_votes_dropped_by_owner": {
    "Kyle": 16
-  }
+  },
+  "refusal_reach_measured": {
+   "checked": {
+    "families": 47,
+    "queue_rows": 618
+   },
+   "batch_unlisted": {
+    "families": 3,
+    "queue_rows": 8
+   },
+   "batchless": {
+    "families": 22,
+    "queue_rows": 2226
+   }
+  },
+  "register_plan_overlap": 33
  },
  "batches": {
   "B-CLOSE-WRITER-COSTS": {
