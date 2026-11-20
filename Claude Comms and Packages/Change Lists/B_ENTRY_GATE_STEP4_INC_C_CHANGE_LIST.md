@@ -24,13 +24,19 @@
 ## 3. What changes for a trade
 **A birth refused by EntryWindow never reaches the RTB queue** — the refusal is pushed into the SQE failures at birth, so the signal is dropped there instead of being queued and later evicted at refresh. For xStock this moves ~3 refusals a week from the refresh to the birth; it does not create a new refusal reason.
 
-## 4. Tests — `server/tests/unit/b-entry-gate-inc-c.test.ts` (6, all green)
+## 4. Tests — `server/tests/unit/b-entry-gate-inc-c.test.ts` (9)
+**The resolver and the gate (7):**
 1. row absent ⇒ shadow, never a refusal; the line prints once per class per process;
 2. `false` ⇒ shadow;
 3. `true` ⇒ live: the same birth is refused (`EntryWindow` pushed);
-4. a non-boolean (`"true"`, `1`) ⇒ shadow, logged as an error;
-5. a cold cache (`clearModuleConstantsCache()`, the read throws) ⇒ shadow, logged as an error;
-6. **per class:** xStock `true` while crypto has no row ⇒ xStock refuses, crypto stays shadow. **Mutation-verified:** replacing the class in the read with a fixed class turns test 6 red.
+4. a live refusal prints `[B-ENTRY-GATE][P2][ENTRY_WINDOW_REFUSE:birth]` with the shadow line's fields, and no shadow line (r2 condition 1);
+5. a non-boolean (`"true"`, `1`) ⇒ shadow, logged as an error;
+6. a cold cache (`clearModuleConstantsCache()`, the read throws) ⇒ shadow, logged as an error;
+7. **per class:** xStock `true` while crypto has no row ⇒ xStock refuses, crypto stays shadow. **Mutation-verified:** replacing the class in the read with a fixed class turns this test red.
+
+**The orchestrator wiring, read at the source (2, r1 condition 2):**
+8. exactly one birth SQE call, and its `entryWindowShadow` is `_birthEntryWindowShadow`, never a literal;
+9. `_birthEntryWindowShadow` is defined once, as `resolveBirthEntryWindowMode(String(sqeAssetClass)) !== 'live'`, before the call, and used once.
 
 Local: `node scripts/check-tsc-baseline.mjs` at the baseline; inc C + inc B test files green (re-run before the commit, figures in the dispatch). CI 4/4 per job at the pushed sha is the authority.
 
@@ -40,8 +46,8 @@ Local: `node scripts/check-tsc-baseline.mjs` at the baseline; inc C + inc B test
 
 ## 6. Step 7 — pre-registered here, before the deploy
 - **Read object:** `[B-ENTRY-GATE]` birth EntryWindow outcomes from the tally (`getEntryWindowTally`, `phase = birth`) and the error/out logs, **per class**, over the **first full xStock session after the inc-C deploy** (the venue reopens Sunday 11-22 ~01:00Z; the read covers through Monday 11-23 21:00Z, the end of the US regular session).
-- **Carrier key (amended r2, Langston Step-4 condition 2):** after the deploy an xStock birth refusal tallies **`birth:xstock_spot:judged_refuse`** and prints `[B-ENTRY-GATE][P2][ENTRY_WINDOW_REFUSE:birth]` (condition 1). **`birth:xstock_spot:shadow_would_refuse = 0` is an EXPECTED STRUCTURAL ZERO** — the shadow arm is that key's only writer and it cannot run for a live class — so it is evidence of nothing. Its positive control is the three pre-window rows the week read counted (ORLY 11-18 14:53:58Z, SKHY 11-18 23:51:09Z, DRI 11-20 16:05:46Z).
-- **Cost of birth enforcement (folded, Langston Step-4):** for each in-session xStock birth refusal, whether that (symbol, strategy) later opened a paper position inside the window. A refused birth never queues, so it loses its chance to pass at refresh; refresh judged 250 with 0 `judged_refuse` all week. This is the number that separates "protecting" from "blocking".
+- **Carrier key (amended r2, Langston Step-4 r2 condition 2):** after the deploy an xStock birth refusal tallies **`birth:xstock_spot:judged_refuse`** and prints `[B-ENTRY-GATE][P2][ENTRY_WINDOW_REFUSE:birth]` (r2 condition 1). **`birth:xstock_spot:shadow_would_refuse = 0` is an EXPECTED STRUCTURAL ZERO** — the shadow arm is that key's only writer and it cannot run for a live class — so it is evidence of nothing. Its positive control is the three pre-window rows the week read counted (ORLY 11-18 14:53:58Z, SKHY 11-18 23:51:09Z, DRI 11-20 16:05:46Z).
+- **Cost of birth enforcement (folded, Langston Step-4 r2):** for each in-session xStock birth refusal, whether that (symbol, strategy) later opened a paper position inside the window. A refused birth never queues, so it loses its chance to pass at refresh; refresh judged 250 with 0 `judged_refuse` all week. This is the number that separates "protecting" from "blocking".
 - **Expected:** xStock ≈ 3 refusals a week, ≈ 3.2 % of judged births. **INVESTIGATE if refusals exceed 25 % of judged xStock births in that session.** Crypto: zero refusals (shadow); its `BIRTH_LIVE_OFF mode=shadow_off` line present once per process.
 - **Controls:** the xStock `BIRTH_LIVE_OFF` line must be ABSENT (it is live); the migration DO-block result in the deploy log; both rows read back with `dt-sql`.
 - **Seed (C-4):** xStock `unpriced` promotion refusals per hour, night vs session, from the existing `[P7]` lines — the behavioural consequence above, observed.
@@ -49,4 +55,12 @@ Local: `node scripts/check-tsc-baseline.mjs` at the baseline; inc C + inc B test
 
 ## 7. Files
 `server/core/filters/signal_quality_evaluator.ts` · `server/services/signal-orchestrator.ts` · `server/tests/unit/b-entry-gate-inc-c.test.ts` (new) · `drizzle/migrations/2026-11-20-b-entry-gate-inc-c.sql` + `-rollback.sql` (new) · `drizzle/migrations/2026-11-20-b-entry-gate-xstock-price-age.sql` + `-rollback.sql` (new) · `drizzle/migrations/MANIFEST.txt` · this file · `1-system-manual/DEPLOY_WINDOWS.jsonl` · the week read (Langston's corrections).
-**Step-4 r2 conditions (Langston PROCEED, Discord 1573463754962632838):** (1) `signal_quality_evaluator.ts` — the live refusal prints `[B-ENTRY-GATE][P2][ENTRY_WINDOW_REFUSE:<phase>]` with the shadow line's fields, + a test (9 tests in the inc-C file); (2) §6 carrier, structural zero and positive control, above; (3) two stale texts that said xStock is unseeded — `server/core/rtb/ready_to_buy_service.ts` (comment at the promotion price-age read) and `server/tests/unit/b-entry-gate-priced-pass.test.ts` (title only, assertions unchanged); plus the folded cost line in §6.
+**Step-4 r2 conditions (Langston PROCEED, Discord 1573463754962632838) — numbered as he numbered them, and cited as "r2 condition N" in this file and the tests. Langston's first Step-4 round set two of its own, cited "r1 condition N": (1) a real CI green on the deploy sha, (2) the orchestrator wiring fence (§4 tests 8-9):** (1) `signal_quality_evaluator.ts` — the live refusal prints `[B-ENTRY-GATE][P2][ENTRY_WINDOW_REFUSE:<phase>]` with the shadow line's fields, + a test (§4 test 4); (2) §6 carrier, structural zero and positive control, above; (3) two stale texts that said xStock is unseeded — `server/core/rtb/ready_to_buy_service.ts` (comment at the promotion price-age read) and `server/tests/unit/b-entry-gate-priced-pass.test.ts` (title only, assertions unchanged); plus the folded cost line in §6.
+**Step-4 r3 (Langston SENT BACK, Discord 1573470401244299315), all text, no runtime change:** the REFUSE comment and its test title said the SQE result keeps only the bare gate token, which is false (`signal_quality_evaluator.ts` pushes the full string; `reason = failures.join('; ')`); both now give the real reason, above · the priced-pass test docblock no longer says xStock is unseeded · §4 lists all nine tests · the conditions are numbered "r1/r2 condition N" throughout · the refresh item, §8.
+
+## 8. Why the per-class switch is birth-only (Langston r3, disposition 2 on `#1224`)
+The refresh call (`ready_to_buy_service.ts`, the batch SQE call with `phase: 'refresh'`) passes no `entryWindowShadow`, so EntryWindow enforces at refresh for every class. **That is the scope as approved, and this increment leaves it so:**
+1. **The shadow was only ever a birth measure.** Scope OBJ-2 decision 2 puts the gate in the SQE "at birth and on every refresh"; OBJ-2(a) (Langston r1) ships it "in SHADOW at birth first … It goes live only once that number is known", because the birth price was never known to sit inside the window (pre-audit A-2). OBJ-2's verify line reads "the refresh refuses a signal whose fresh ask left the window". No ruling ever put the refresh in shadow.
+2. **Giving the refresh this resolver would WEAKEN an approved, live gate.** Crypto has `false` and any future class has no row, so the refresh would drop to shadow for both — a behaviour change nobody ruled, in the opposite direction from this increment.
+3. **The crypto exposure F-3 names is the same at both phases, and it is the scope's own.** Crypto refresh judged 0 of 5147 passes in the week read (§4 row `refresh:crypto_spot`): maker-only, so the judged arm is unreached there too. If its fill policy changes, the refresh starts judging crypto at once, as approved, and a refresh refusal deletes a queued row; it never blocks a birth. The birth switch exists because a birth refusal is the more expensive one (the signal never queues; §6 cost line).
+⇒ **Disposition: no code; recorded here and in the completion report.** If Langston rules the refresh should share the switch, that is a behaviour change with its own test and Step-7 read, not a text fix.

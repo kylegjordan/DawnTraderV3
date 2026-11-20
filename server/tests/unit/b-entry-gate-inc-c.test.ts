@@ -55,7 +55,7 @@ describe('increment C — the birth switch', () => {
     expect(birth('crypto_spot')).toEqual({ o: 'judged_refuse', refused: true });
     expect(offLines('crypto_spot')).toHaveLength(0);
   });
-  it('a LIVE refusal prints the same-field REFUSE line (the SQE result keeps only the bare gate token) — Step-4 condition 1', () => {
+  it('a LIVE refusal prints the same-field REFUSE line, tagged by gate, class and phase — Step-4 r2 condition 1', () => {
     seed(row('xstock_spot', 'entry_window_birth_live', true));
     birth('xstock_spot');
     const lines = log.mock.calls.map((c) => String(c[0])).filter((s) => s.includes('[B-ENTRY-GATE][P2][ENTRY_WINDOW_REFUSE:birth]'));
@@ -88,7 +88,7 @@ describe('increment C — the birth switch', () => {
   });
 });
 
-// Step-4 condition 2 (Langston, 2026-11-20): the tests above prove the resolver, not that the orchestrator's birth call
+// Step-4 r1 condition 2 (Langston, 2026-11-20): the tests above prove the resolver, not that the orchestrator's birth call
 // USES it — reverting the call to `entryWindowShadow: true` left all six green. The orchestrator needs its whole graph to
 // run, so the wiring is proved at the source, as in `b-entry-gate-inc-b.test.ts`.
 describe('increment C — the orchestrator birth call is wired to the per-class switch', () => {

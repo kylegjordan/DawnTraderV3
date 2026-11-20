@@ -1,7 +1,8 @@
 /**
  * B-ENTRY-GATE (`#1224`) increment B, P7 — the priced-pass record and the promotion price-age gate (pre-audit P7, r12 Q-4).
  * The refresh is the record's ONLY writer (a re-issue keeps the priced history); promotion needs a priced pass within
- * the class's limit; crypto is seeded from the refresh cadence, xStock is not seeded yet (off, and says so).
+ * the class's limit; crypto is seeded from the refresh cadence (inc B), xStock at 300000 ms by
+ * `2026-11-20-b-entry-gate-xstock-price-age.sql` (inc C, Langston P7 ruling (a)); a class with no row is off, and says so.
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
