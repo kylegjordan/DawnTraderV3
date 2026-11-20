@@ -51,7 +51,13 @@ def main():
     ap = argparse.ArgumentParser(); ap.add_argument('--krel', type=float, required=True); ap.add_argument('--control'); ap.add_argument('--simulate', type=float); ap.add_argument('--ring', type=int, default=20)
     ap.add_argument('logs', nargs='+'); a = ap.parse_args()
     seen = set(); rows = []
-    for p in a.logs:
+    # B-DISK-FILE-TIERING P9: a file is keyed by its base (.gz stripped); while both forms of one rotation exist (the
+    # compression window) the plain file wins and the .gz is skipped, so no file is read twice. The line-identity set
+    # below predates P9 and P9 leaves it unchanged. Its cost, stated: two byte-identical REFUSE lines (same timestamp
+    # to the log's resolution, same symbol, same values) count once, whether they were one event or two.
+    plain = {p for p in a.logs if not p.endswith('.gz')}
+    logs = [p for p in a.logs if not (p.endswith('.gz') and p[:-3] in plain)]
+    for p in logs:
         # B-DISK-FILE-TIERING P9: rotated archives are compressed one rotation later (.log.gz); read either form.
         fh = gzip.open(p, 'rt', errors='replace') if p.endswith('.gz') else open(p, errors='replace')
         for line in fh:

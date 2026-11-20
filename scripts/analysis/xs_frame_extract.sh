@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # B-XSTOCK-BID-TRIGGER-RELAND (row 3n.q7) increment 2 P4 — THE DURABLE CORPUS FOR THE FALSE-HOLLOW CLASSIFIER.
 #
-# WHY: the `[3n.q7][XS_FRAME]` lines go to stderr (`error.log`), which pm2-logrotate keeps as 14 files (~14 days at
-# today's daily rotation). The bid-trigger window is 21 days, so the corpus must be copied out while it exists.
+# WHY: the `[3n.q7][XS_FRAME]` lines go to stderr (`error.log`). Rotation is the system logrotate since B-DISK-FILE-TIERING
+# P9 (comms-infra/staging/logrotate-dawntrader-app.conf; it replaced pm2-logrotate, which kept 14 files): read the count
+# kept there, never from here. The bid-trigger window is 21 days, so the corpus is copied out while it exists.
 # ONLY THE STDERR STREAM IS READ (Langston P4 r2): `EVAL_EXIT` is on stdout (~12.7 h of history) and is not needed —
 # the emitted-vs-invoked reconciliation is already a stderr alarm (`XS_FRAME_RECONCILE_BROKEN`).
 #
@@ -12,11 +13,11 @@
 #   2. CONTIGUITY: every rotated file seen on the previous run must now be either present or in the manifest. A file that
 #      vanished unextracted is a REALIZED GAP => alert `xs-frame-extract-gap`, exit 3 (the alarm of last resort).
 #   3. PRE-LOSS RUNG: the age of the OLDEST retained `error__*.log`; under 2 x cadence (12 h) => alert
-#      `xs-frame-extract-reach` BEFORE a file is lost (e.g. error.log crossing its 1 GB max_size and rotating sub-daily).
+#      `xs-frame-extract-reach` BEFORE a file is lost (e.g. error.log crossing its `maxsize 2G` ceiling and rotating sub-daily).
 #   4. BOUNDARIES (P4 r3, Langston): the pm2.log `App [dawntrader:N] starting|online|exited` lines newer than the last run
 #      and the deploy record VERBATIM (it is a single-record state file, overwritten every deploy) are appended to
 #      `boundaries.log`, so the sha <-> deploy-time pairs inside the window survive to its close. pm2.log is unrotated by
-#      configuration quirk, not policy (`rotateModule: true`, `max_size 1G`; `pm2 flush` truncates it): if it SHRANK since
+#      decision: P9 left it out of the system logrotate pending a Step-10 review with this reader's owner (`pm2 flush` still truncates it): if it SHRANK since
 #      the last run, a flush/rotation happened => warn on the reach alert and read it from the start.
 #      A run that cannot read pm2.log or the deploy record exits 3 on the gap alert.
 #   ALERT KEYS are one per condition (Langston inc-2 Step-4 r2 nit: nothing resolves these automatically, and an unresolved

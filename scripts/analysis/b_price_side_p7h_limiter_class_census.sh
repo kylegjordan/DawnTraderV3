@@ -7,6 +7,8 @@ psql "$DATABASE_URL" -X -At -c "SELECT DISTINCT symbol FROM closed_trades WHERE 
 echo "db xstock symbols: $(wc -l < /tmp/cc_c_xstock_syms.txt)"
 cd /var/log/dawntrader || exit 1
 # B-DISK-FILE-TIERING P9: rotated archives are compressed one rotation later (out__*.log.gz); zgrep reads both forms.
-shopt -s nullglob; F=(out.log out__*.log out__*.log.gz)
+# Keyed by base: while both forms of one rotation exist (the compression window) the plain file wins, so none is read twice.
+shopt -s nullglob; F=(out.log out__*.log)
+for g in out__*.log.gz; do [ -e "${g%.gz}" ] || F+=("$g"); done
 echo "out files read: ${#F[@]}"
 zgrep -h -F -e "[8.8.5][RestRateLimiter]" -e "[P19-B8.9][XSTOCK_REST_GATE]" "${F[@]}" | python3 /tmp/cc_c_coupling.py /tmp/cc_c_xstock_syms.txt
