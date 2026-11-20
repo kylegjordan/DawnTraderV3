@@ -41,7 +41,7 @@ import { getPatternPoolGuardrailsForAssetClass } from '../../asset_classes/patte
 //   3. Hardcoded mirror in SQE_DEFAULT_THRESHOLDS object below — kept ONLY for the
 //      narrow case where module_constants warmup hasn't completed and a non-runtime
 //      consumer (test/audit script) imports the const for static reference.
-import { getCachedNumberRequired } from '../../services/module-constants-service.js';
+import { getCachedConstant, getCachedNumberRequired } from '../../services/module-constants-service.js';
 import { entryWindowRefusalAt } from '../trading/entry-window.js'; // B-ENTRY-GATE (#1224) P2
 // B79: xstock_spot weekend-pause + per-asset-class strategy whitelist.
 // safeResolveAssetClass returns null on unknown — we treat null as
@@ -305,6 +305,38 @@ function _tallyEntryWindow(phase: string, assetClass: string, outcome: EntryWind
 export function _tallyEntryWindowForTests(phase: string, assetClass: string, outcome: EntryWindowOutcome, nowMs: number): void {
   _tallyEntryWindow(phase, assetClass, outcome, nowMs);
 }
+
+// ══ B-ENTRY-GATE (#1224) increment C — the BIRTH enforcement switch, per class ═══════════════════════════════════════
+// The setting `entry_gate.entry_window_birth_live` (per asset class) governs ENFORCEMENT of EntryWindow at birth only;
+// refresh already enforces. ⛔ It is NOT the window VALUE: a missing window value while enforcing still refuses the signal
+// (applyPlanGates `settings_unresolved`, unchanged). The direction for a missing or unusable SWITCH is SHADOW, loud and
+// logged once per class per process — absent ⇒ refuse would refuse every birth (Langston P7 ruling (b), 2026-11-20).
+// Only the boolean `true` turns enforcement on; `false` is an explicit shadow. Read per class, never class-independently.
+const _birthLiveOffLogged = new Set<string>();
+export type BirthEntryWindowMode = 'live' | 'shadow_off' | 'shadow_absent' | 'shadow_invalid' | 'shadow_unresolved';
+export function resolveBirthEntryWindowMode(assetClass: string): BirthEntryWindowMode {
+  const cls = String(assetClass);
+  let v: unknown;
+  try {
+    v = getCachedConstant('entry_gate', 'entry_window_birth_live', { exchange: '*', assetClass: cls, strategy: '*', regime: '*' });
+  } catch (err) {
+    if (!_birthLiveOffLogged.has(`unresolved:${cls}`)) {
+      _birthLiveOffLogged.add(`unresolved:${cls}`);
+      console.error(`[B-ENTRY-GATE][INC_C][BIRTH_LIVE_UNRESOLVED] class=${cls}: ${err instanceof Error ? err.message : String(err)} — EntryWindow stays SHADOW at birth. Logged once per class per process.`);
+    }
+    return 'shadow_unresolved';
+  }
+  if (v === true) return 'live';
+  const mode: BirthEntryWindowMode = v === undefined ? 'shadow_absent' : v === false ? 'shadow_off' : 'shadow_invalid';
+  if (!_birthLiveOffLogged.has(`${mode}:${cls}`)) {
+    _birthLiveOffLogged.add(`${mode}:${cls}`);
+    const line = `[B-ENTRY-GATE][INC_C][BIRTH_LIVE_OFF] class=${cls} mode=${mode} value=${v === undefined ? 'no row' : JSON.stringify(v)} — EntryWindow records at birth and never refuses for this class. Logged once per class per process.`;
+    if (mode === 'shadow_invalid') console.error(line); else console.log(line);
+  }
+  return mode;
+}
+/** Test-only: forget which classes have printed their once-per-process line. */
+export function _resetBirthLiveLogForTests(): void { _birthLiveOffLogged.clear(); }
 
 /** Pure apart from the tally and one settings read; pushes onto `failures` (never when shadowing). */
 export function applyPlanGates(input: SQEInput, options: SQEOptions, failures: string[]): EntryWindowOutcome | null {

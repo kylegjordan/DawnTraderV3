@@ -257,3 +257,5 @@
 2026-11-14-b-disk-file-tiering-cold-retry.sql
 2026-11-14-b-disk-file-tiering-cold-audit.sql
 2026-11-14-b-disk-file-tiering-cold-key-step1.sql
+2026-11-20-b-entry-gate-xstock-price-age.sql
+2026-11-20-b-entry-gate-inc-c.sql
