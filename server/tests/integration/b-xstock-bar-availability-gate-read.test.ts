@@ -289,9 +289,13 @@ describe(TAG, () => {
     await insertEvent(ids[0], 'GRA/USD', at(DAY + 12 * HOUR), at(10 * HOUR));
     const r = await readBoth();
     const oracleEvents = Number(r.oracle.revision_events);
-    const oracleDistinctIds = Number(r.oracle.distinct_revision_ids);
-    expect(oracleDistinctIds).toBeLessThan(oracleEvents); // the single-shot fails immutableIdentities
-    expect(r.distinct.distinctRevisionIds).toBeLessThan(r.chunked.revisionEvents); // and so does the chunked read
-    expect(r.distinct.distinctVisibleSeqs).toBeLessThan(r.chunked.revisionEvents);
+    // immutableIdentities: the single-shot fails it (the duplicate row joins twice) and so must the chunked read.
+    expect(Number(r.oracle.distinct_revision_ids)).toBeLessThan(oracleEvents);
+    expect(r.distinct.distinctRevisionIds).toBeLessThan(r.chunked.revisionEvents);
+    // The visible_seq leg must reach the SAME boolean as the single-shot. Here the duplicate row carries its own
+    // sequence number, so the single-shot's distinct seqs equal its events and that leg passes in both.
+    expect(r.distinct.distinctVisibleSeqs === r.chunked.revisionEvents)
+      .toBe(Number(r.oracle.distinct_visible_seqs) === oracleEvents);
+    expect(r.chunked.revisionEvents).toBeGreaterThan(0);
   });
 });
