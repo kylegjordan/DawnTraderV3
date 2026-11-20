@@ -145,7 +145,26 @@ he = json.loads(out)['lanes'].get('vts', {}).get('hour_equality', {}) if code ==
 check('E a real-time-named .gz rotation reads like CASE A', (code, he.get('cells_graded'), he.get('cells_unequal'),
       he.get('holds')) == (0, 2, 0, True), (code, he.get('cells_graded'), he.get('cells_unequal'), he.get('holds'), err[-200:]))
 code, out, err = run([BOOT, RS], extra=('error__2026-01-06_13-00-00.log',))
-check('F exit 2 on two rotations for one day', code == 2 and 'more than one rotation' in err, (code, err.strip()[-160:]))
+# Step-4 r2 (ANALYST's pin): F is the CONSERVATIVE refusal — content day 01-05 is whole in the 00:00 file, the second
+# dated-01-06 file is 01-06's first slice; it still refuses, and the message names the dated day 2026-01-06.
+check('F exit 2 on two rotations dated C+1, naming 2026-01-06', code == 2 and 'more than one rotation is dated 2026-01-06'
+      in err, (code, err.strip()[-200:]))
+
+# B-DISK-FILE-TIERING P9, Step-4 r2 (Langston, stated before the first run): the measured asymmetric split. A size rotation
+# at 14:00 on content day 01-05 leaves TWO rotations dated 01-05 (00:01:40 = 01-04, 14:00 = 01-05's first slice) and ONE
+# dated 01-06 (01-05's tail, here the corpus). CASE G — EXPECTED exit 2, FATAL naming content day 2026-01-05 as split by
+# the rotations dated 2026-01-05. The pre-fix predicate read the dated-01-06 file alone and graded 01-05's tail silently.
+# CASE G0 (control) — the same with only the 00:01:40 rotation dated 01-05: EXPECTED the CASE-A result (exit 0, 2 cells,
+# 0 unequal, holds), so G refuses on the second dated-C file and not on the presence of any dated-C file.
+code, out, err = run([BOOT, RS], name='error__2026-01-06_00-01-40.log',
+                     extra=('error__2026-01-05_00-01-40.log', 'error__2026-01-05_14-00-00.log'))
+check('G exit 2 on two rotations dated C, naming content day 2026-01-05',
+      code == 2 and 'content day 2026-01-05 is split' in err and 'more than one rotation is dated 2026-01-05' in err,
+      (code, err.strip()[-200:]))
+code, out, err = run([BOOT, RS], name='error__2026-01-06_00-01-40.log', extra=('error__2026-01-05_00-01-40.log',))
+he = json.loads(out)['lanes'].get('vts', {}).get('hour_equality', {}) if code == 0 else {}
+check('G0 one rotation dated C reads like CASE A', (code, he.get('cells_graded'), he.get('cells_unequal'),
+      he.get('holds')) == (0, 2, 0, True), (code, he.get('cells_graded'), he.get('cells_unequal'), he.get('holds'), err[-200:]))
 
 print('SELFTEST ' + ('FAILED: ' + ', '.join(fails) if fails else 'OK — all expectations met'))
 sys.exit(1 if fails else 0)

@@ -79,35 +79,49 @@ def val(v):
 
 
 # ── (b) the rotations this range REQUIRES. `error__<D>_<HH-MM-SS>.log` is rotated at the first run after D 00:00Z and
-# holds day D-1, so the window needs the rotations dated day(start)+1 .. day(end)+1; the last one may not exist yet, in
+# holds day D-1 (content day C is read from the rotation dated C+1), so the window needs the rotations dated
+# day(start)+1 .. day(end)+1; the last one may not exist yet, in
 # which case the live `error.log` holds it (it must, for the flush of the window's final hour, stamped after `end`).
 # B-DISK-FILE-TIERING P9: pm2-logrotate named every rotation `_00-00-00`; the system logrotate that replaced it names it
 # with the real run instant and compresses it one rotation later (.log -> .log.gz). So a day is found by a date glob,
-# keyed by its base name (.gz stripped, the plain file preferred while both exist). More than one distinct rotation for
-# one day means a second rotation ran that day and the day's content is split: refuse rather than read half of it.
-def rotation(day):
+# keyed by its base name (.gz stripped, the plain file preferred while both exist).
+# A SPLIT IS OF THE CONTENT DAY, NOT THE NAME DATE (Langston, Step-4 r2, measured on logrotate 3.21.0): a size-triggered
+# rotation during content day C, at say 14:00, leaves TWO rotations dated C (the 00:0x one holding C-1, the 14:00 one
+# holding C's first slice) and ONE dated C+1 (C's tail). Keyed on the name date alone, a window needing C read only the
+# dated-C+1 file and silently got C's tail. So, for every content day C in the window: refuse when more than one
+# rotation is dated C (C's head sits in a sub-daily rotation this window does not read), and refuse when more than one
+# is dated C+1. The second check is CONSERVATIVE: it also refuses a whole C whose 00:0x source is complete, because the
+# second dated-C+1 file is C+1's first slice. It refuses, never misreads; the selftest pins that behaviour (CASE F).
+def bases(day):
     hits = glob.glob(os.path.join(args.dir, f'error__{day:%Y-%m-%d}_*.log')) + \
         glob.glob(os.path.join(args.dir, f'error__{day:%Y-%m-%d}_*.log.gz'))
-    bases = sorted({h[:-3] if h.endswith('.gz') else h for h in hits})
-    if not bases:
-        return None
-    if len(bases) > 1:
-        die(f'more than one rotation for {day} in {args.dir}: {[os.path.basename(b) for b in bases]} — the day is split')
-    return bases[0] if os.path.exists(bases[0]) else bases[0] + '.gz'
+    return sorted({h[:-3] if h.endswith('.gz') else h for h in hits})
+
+
+def names(bs):
+    return [os.path.basename(b) for b in bs]
 
 
 required = []
-d = START.date() + timedelta(days=1)
-last = (END - timedelta(microseconds=1)).date() + timedelta(days=1)
-while d <= last:
-    p = rotation(d)
-    if p is None:
-        if d == last and os.path.exists(os.path.join(args.dir, 'error.log')):
-            p = os.path.join(args.dir, 'error.log')
-        else:
-            die(f'required rotation for {d} is missing in {args.dir} (neither .log nor .log.gz)')
+c = START.date()
+last_content = (END - timedelta(microseconds=1)).date()
+while c <= last_content:
+    nxt = c + timedelta(days=1)
+    dated_c, dated_next = bases(c), bases(nxt)
+    if len(dated_c) > 1:
+        die(f'content day {c} is split: more than one rotation is dated {c} in {args.dir}: {names(dated_c)} — a '
+            f'sub-daily rotation holds the first slice of {c}, which this window would not read')
+    if len(dated_next) > 1:
+        die(f'content day {c} is split: more than one rotation is dated {nxt} in {args.dir}: {names(dated_next)} — '
+            f'refused rather than read part of {c}')
+    if dated_next:
+        p = dated_next[0] if os.path.exists(dated_next[0]) else dated_next[0] + '.gz'
+    elif c == last_content and os.path.exists(os.path.join(args.dir, 'error.log')):
+        p = os.path.join(args.dir, 'error.log')
+    else:
+        die(f'required rotation for {nxt} (content day {c}) is missing in {args.dir} (neither .log nor .log.gz)')
     required.append(p)
-    d += timedelta(days=1)
+    c = nxt
 live = os.path.join(args.dir, 'error.log')
 if live not in required:
     if not os.path.exists(live):
