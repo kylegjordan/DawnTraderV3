@@ -39,6 +39,11 @@ DT_SQL_EXIT = {
     4: "dt-sql is LOCKED - see dt-sql --status",
     5: "dt-sql BUSY on every try",
 }
+# A write the database must refuse inside a read-only session. If it ever succeeded it would create a temporary table
+# that vanishes with the session, so the probe cannot leave anything behind. It names no setting, so dt-sql's guard
+# against SQL naming the read-only switch does not refuse it before connecting.
+DT_SQL_WRITE_PROBE = "create temp table reviewer_ro_probe(a int)"
+READ_ONLY_REFUSAL = "cannot execute CREATE TABLE in a read-only transaction"
 NL = chr(10)
 ACTORS = {
     "langston": {
@@ -325,6 +330,18 @@ def private_key_fingerprint(path: str, owner: str) -> str:
     return fingerprint_public_key(public.stdout.strip())
 
 
+def run_dt_sql(sql: str) -> "subprocess.CompletedProcess[str]":
+    """One dt-sql call. Exit 5 (BUSY) means another dt-sql call held the lock and NO login was attempted, so it is
+    retried; nothing else is — exit 3 (connection refused, a possible ban) and 4 (LOCKED) fail at once."""
+    for attempt in range(DT_SQL_BUSY_TRIES):
+        result = subprocess.run([STAGING_DT_SQL, "-c", sql], text=True, capture_output=True, check=False)
+        if result.returncode != 5:
+            break
+        if attempt + 1 < DT_SQL_BUSY_TRIES:
+            time.sleep(DT_SQL_BUSY_WAIT_S)
+    return result
+
+
 def verify_remote(actor: str) -> int:
     if pwd is None:
         raise VerificationError("remote verification requires a Unix host")
@@ -385,18 +402,12 @@ def verify_remote(actor: str) -> int:
     # call, writes an INTENT before it, and LOCKS on a refused login (credential arm, critical alert), so neither this
     # daily check nor any helper after it can send the second wrong password that gets the address banned. It also keeps
     # the connection string out of every argv and sets read-only through PGOPTIONS — the two things the hand-built probe here did.
-    # ⚠️ NARROWER THAN THE OLD PROBE: the old query also read current_setting('transaction_read_only') and required
-    # "on". dt-sql refuses any SQL that names that setting (exit 2), so this control no longer re-proves read-only from
-    # inside the session; that guarantee now rests on dt-sql's own guard and its tests (B-DB-READ-TOOL).
-    # Exit 5 (BUSY) means another dt-sql call held the lock and NO attempt was made, so it is retried; nothing else is.
+    # The old probe also read current_setting('transaction_read_only') and required "on". dt-sql refuses any SQL that
+    # names that setting (exit 2), so read-only is re-proved BY BEHAVIOUR instead: a second call attempts a write and
+    # must be refused by the database as a read-only transaction (Langston, F-2 install confirmation 2026-11-20).
     require_path(STAGING_DT_SQL, "root", 0o755)
     query = "select current_user,current_database(),(select count(*) >= 0 from public.users)"
-    for attempt in range(DT_SQL_BUSY_TRIES):
-        database = subprocess.run([STAGING_DT_SQL, "-c", query], text=True, capture_output=True, check=False)
-        if database.returncode != 5:
-            break
-        if attempt + 1 < DT_SQL_BUSY_TRIES:
-            time.sleep(DT_SQL_BUSY_WAIT_S)
+    database = run_dt_sql(query)
     rows = database.stdout.strip().splitlines()
     fields = rows[0].split("|") if len(rows) == 1 else []
     if database.returncode != 0 or len(fields) != 3 or fields[2] != "t":
@@ -405,6 +416,13 @@ def verify_remote(actor: str) -> int:
             % (database.returncode, DT_SQL_EXIT.get(database.returncode, "unexpected exit"),
                database.stderr.strip()[-300:] or "no stderr"))
     database_user, database_name = fields[:2]
+    probe = run_dt_sql(DT_SQL_WRITE_PROBE)
+    if probe.returncode != 1 or READ_ONLY_REFUSAL not in probe.stderr:
+        raise VerificationError(
+            "database session is not proven read-only: the write probe was not refused as a read-only transaction "
+            "(dt-sql exit %d: %s): %s"
+            % (probe.returncode, DT_SQL_EXIT.get(probe.returncode, "unexpected exit") if probe.returncode else
+               "the write SUCCEEDED", probe.stderr.strip()[-300:] or "no stderr"))
     print(json.dumps({
         "actor": actor,
         "remote_identity": "deploy",
@@ -413,6 +431,7 @@ def verify_remote(actor: str) -> int:
         "existing_authorization_files": existing_files,
         "readable_log_sizes": logs,
         "database_read": "ok",
+        "database_write_refused": "ok",
         "database_user": database_user,
         "database_name": database_name,
     }, sort_keys=True))
@@ -696,12 +715,20 @@ def self_test() -> int:
     checks += 1
     # the database control runs through dt-sql (F-2): no hand-built psql login, no DATABASE_URL handling of its own,
     # dt-sql's ownership checked first, and only BUSY (5, no attempt made) retried
-    if ("[STAGING_DT_SQL, \"-c\", query]" not in body or "require_path(STAGING_DT_SQL" not in body
-            or "DATABASE_URL" in body or "-Atqc" in body):
+    runner = inspect.getsource(run_dt_sql)
+    if ("[STAGING_DT_SQL, \"-c\", sql]" not in runner or "run_dt_sql(query)" not in body
+            or "require_path(STAGING_DT_SQL" not in body or "DATABASE_URL" in body or "-Atqc" in body):
         raise VerificationError("database probe does not go through dt-sql")
     checks += 1
-    if "database.returncode != 5" not in body or "range(DT_SQL_BUSY_TRIES)" not in body:
+    if "result.returncode != 5" not in runner or "range(DT_SQL_BUSY_TRIES)" not in runner:
         raise VerificationError("database probe retries something other than dt-sql BUSY, or does not retry it")
+    checks += 1
+    # read-only is re-proved in-session by a write the database must refuse: exit 1 AND the read-only refusal text,
+    # so a write that SUCCEEDS (exit 0) or a login/lock failure (2-5) can never pass
+    if ("run_dt_sql(DT_SQL_WRITE_PROBE)" not in body or "probe.returncode != 1" not in body
+            or "READ_ONLY_REFUSAL not in probe.stderr" not in body or not DT_SQL_WRITE_PROBE.startswith("create temp ")
+            or "read-only transaction" not in READ_ONLY_REFUSAL):
+        raise VerificationError("the in-session read-only write probe is missing or can pass on a write")
     checks += 1
     print("self-test passed: %d checks" % checks)
     return 0
