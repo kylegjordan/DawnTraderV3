@@ -1696,3 +1696,16 @@ Archive: git history is authoritative (this is a field-retirement within live fi
 **ARCHIVE:** `1-system-manual/_archive/deleted-code/w166b-pgq.py.removed`, `1-system-manual/_archive/deleted-code/pgq_pooler.py.removed`.
 **WHAT STAYS:** the ~48 other `psql` helpers in `/home/deploy` (mostly Langston's `lang_*.sh`) — not this batch's; proposed as `B-DB-HELPER-RETIRE` for Kyle's list.
 **COMMIT:** the B-DB-READ-TOOL Step-7 commit.
+
+## 2026-11-20 — `StorageClient.deleteColdVersion` and `b75-cold-bind.ts --delete-residue` — B-DISK-FILE-TIERING 3d close (rule 18; Langston (b) ruling and his 3d r6 carry), CC-A
+| removed | where (pre-removal, at the parent of `78d25acf1`) | what it was |
+|---|---|---|
+| `deleteColdVersion(fileName, fileId)` | `server/services/data-archive/storage-client.ts` (method, with its docblock) | delete ONE cold version by id (`b2_delete_file_version`); unbounded (no `setupMs`) |
+| the `--delete-residue` mode | `server/scripts/b75-cold-bind.ts`: the header usage block, `deleteRefusals()`, the argv parsing in `main()`, the delete branch after the report loop | delete named residue ids that were also in the run's own computed set and bound to no manifest row |
+
+**WHY:** rule 18. Their one job, the KD-79 residue, is done, and nothing scheduled called them. With them gone, "our code never deletes cold data; it only hides `_liveness/` and `_proof/` objects, which the bucket's lifecycle rules then delete" is true — the same property the narrow cold key (3d steps 3-4) enforces at the provider.
+**BLAST RADIUS (§9.5(a-ii)):** `deleteColdVersion` had one caller, the removed branch; `deleteRefusals` was used only by it. No app-process importer: every `getStorageClient` caller is a cron script. `residueDeleteSet` STAYS (the report prints it as `RESIDUE-SET`, the input to Kyle's keep decision through `data_lifecycle.cold_residue_kept_file_ids`). Tests: the delete tests replaced by one no-deleter fence, positive-controlled against the archived copies; the storage-client error-template census floor 15 → 14. Every test file that reads either source, 190/190; tsc at baseline (push guard).
+**DISASTER-RECOVERY PROCEDURE (if residue ever must be destroyed):** Kyle mints a temporary delete-capable key → restore the archived code (`git show 78d25acf1^:server/scripts/b75-cold-bind.ts`, `git show 78d25acf1^:server/services/data-archive/storage-client.ts`) → run the report, then the delete with the ids it printed → delete the temporary key. The same procedure belongs beside the restore cap line in `STORAGE_POLICY` (3d Step 10).
+**LEFT INTENTIONALLY:** the `hideColdFile` path (canary and proof) — a write, not a delete.
+**ARCHIVE:** `1-system-manual/_archive/deleted-code/storage-client.deleteColdVersion.20261120-B-DISK-FILE-TIERING.ts.removed` and `1-system-manual/_archive/deleted-code/b75-cold-bind.delete-residue.20261120-B-DISK-FILE-TIERING.ts.removed`.
+**COMMIT:** `78d25acf1`.
