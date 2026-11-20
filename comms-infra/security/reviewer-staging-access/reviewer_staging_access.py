@@ -34,7 +34,7 @@ DT_SQL_BUSY_TRIES = 3
 DT_SQL_BUSY_WAIT_S = 5   # a dt-sql call measured 0.30 s (B-DB-READ-TOOL log); 5 s spans many calls, and BUSY is rare
 # The remote verifier makes DT_SQL_CALLS dt-sql calls. One call that ATTEMPTS a login is bounded by dt-sql's own
 # psql timeout (CALL_TIMEOUT_S = 300, comms-infra/staging/dt-sql:69) plus, if that attempt locks it, the alert it raises
-# (subprocess timeout 150, dt-sql:171). The client ssh timeout must exceed that whole remote worst case: killing dt-sql
+# (subprocess timeout 150, dt-sql:172). The client ssh timeout must exceed that whole remote worst case: killing dt-sql
 # mid-attempt leaves its INTENT behind and LOCKS it `ambiguous` for every caller (dt-sql:34), which is far worse than
 # this check failing.
 DT_SQL_CALLS = 2                 # the read, then the read-only write probe (verify_remote)
@@ -46,12 +46,15 @@ CLIENT_SSH_TIMEOUT_S = REMOTE_BUDGET_S + 30
 LOCAL_TOOL_TIMEOUT_S = 10   # ssh-keygen, sudo test/cat, sshd -T: each is a sub-second local command
 WRONG_KEY_TIMEOUT_S = 30    # the wrong-key ssh control: one refused login, no remote command
 # The remote verifier starts dt-sql ONLY if everything before it took at most this long. Its pre-dt-sql work fans out
-# (a file read per effective authorization file, a fingerprint per key line), so per-call bounds alone cannot cap it;
-# this gate does. Refusing BEFORE dt-sql starts is always safe: no attempt, no INTENT, no lock.
+# (a file read per effective authorization file, a fingerprint per key line), so per-call bounds alone cannot cap how
+# long that work takes, and this gate does not cap it either: it decides, once that work is done, whether dt-sql
+# starts at all. Refusing BEFORE dt-sql starts is always safe: no attempt, no INTENT, no lock.
 REMOTE_PRE_DT_SQL_S = 30
 REMOTE_LOGIN_REPLY_S = 30   # the ssh login before verify_remote starts and the JSON reply after it ends
 # The systemd unit's TimeoutStartSec. systemd kills the whole unit cgroup at this limit, grandchildren included, so it
-# is the backstop for anything a per-call timeout kills only at the direct child (a `sudo -u` wrapper).
+# is the backstop for anything a per-call timeout kills only at the direct child (a `sudo -u` wrapper). That cgroup is
+# on Helsinki: it bounds THIS verifier, never a process on staging. dt-sql and anything it starts run on staging, where
+# this unit cannot reach; the verifier's own first bound on that remote work is CLIENT_SSH_TIMEOUT_S.
 UNIT_TIMEOUT_START_S = 2400
 DT_SQL_EXIT = {
     1: "logged in, the query failed",
@@ -381,18 +384,27 @@ def parse_dt_sql_bounds(text: str) -> dict[str, int]:
     return {"call_timeout_s": int(value), "alert_timeout_s": found[0]}
 
 
-def check_dt_sql_bounds(actor: str, payload: dict) -> None:
-    """The client half of C-2: REFUSED unless staging reported dt-sql's bounds and their sum fits DT_SQL_CALL_BOUND_S."""
-    bounds = payload.get("dt_sql_bounds")
+def require_dt_sql_bounds_fit(who: str, bounds: object) -> None:
+    """REFUSED unless dt-sql's two bounds are present, positive integers, and their sum fits DT_SQL_CALL_BOUND_S.
+    C-7 (Langston F-2): the remote verifier runs this on the bounds it just parsed, BEFORE its first dt-sql call, so a
+    raised dt-sql bound is refused while no attempt exists. Run on the client only, it fired after the remote had
+    finished, so a raised bound that coincided with a hang reached the ssh timeout first and was never reported."""
     keys = ("call_timeout_s", "alert_timeout_s")
     if (not isinstance(bounds, dict) or sorted(bounds) != sorted(keys)
             or not all(type(bounds[k]) is int and bounds[k] > 0 for k in keys)):
-        raise VerificationError("%s staging did not report dt-sql's call bounds" % actor)
+        raise VerificationError("%s: dt-sql's call bounds are missing or malformed" % who)
     reported = bounds["call_timeout_s"] + bounds["alert_timeout_s"]
     if DT_SQL_CALL_BOUND_S < reported:
         raise VerificationError(
-            "%s dt-sql on staging can now run %d s per call, above DT_SQL_CALL_BOUND_S %d s: raise the bound, or this "
-            "check's ssh timeout can kill dt-sql mid-attempt and lock it" % (actor, reported, DT_SQL_CALL_BOUND_S))
+            "%s: dt-sql on staging can now run %d s per call, above DT_SQL_CALL_BOUND_S %d s: raise the bound, or this "
+            "check's ssh timeout can kill dt-sql mid-attempt and lock it" % (who, reported, DT_SQL_CALL_BOUND_S))
+
+
+def check_dt_sql_bounds(actor: str, payload: dict) -> None:
+    """The client half of C-2, on the evidence: the reply carries dt-sql's bounds and they fit. The refusal that
+    protects dt-sql is the remote one (require_dt_sql_bounds_fit before the first dt-sql call); this re-checks the
+    report, so a reply without the bounds is refused rather than recorded as a pass."""
+    require_dt_sql_bounds_fit(actor, payload.get("dt_sql_bounds"))
 
 
 def run_dt_sql(sql: str) -> "subprocess.CompletedProcess[str]":
@@ -471,6 +483,8 @@ def verify_remote(actor: str) -> int:
     # must be refused by the database as a read-only transaction (Langston, F-2 install confirmation 2026-11-20).
     require_path(STAGING_DT_SQL, "root", 0o755)
     dt_sql_bounds = parse_dt_sql_bounds(Path(STAGING_DT_SQL).read_text(encoding="utf-8"))
+    # C-7: refuse a raised dt-sql bound HERE, before any dt-sql call, while refusing is still free of an attempt
+    require_dt_sql_bounds_fit("%s, dt-sql NOT started" % actor, dt_sql_bounds)
     # C-3 gate: the client's ssh timeout assumes the pre-dt-sql work fits REMOTE_PRE_DT_SQL_S. Past it, dt-sql could
     # still be mid-attempt when the client kills this session, which LOCKS dt-sql — so refuse now, before it starts.
     elapsed = time.monotonic() - started
@@ -605,6 +619,79 @@ def verify_actor(actor: str) -> int:
     return 0
 
 
+def subprocess_fence(source: str) -> None:
+    """C-3 / C-8 (Langston F-2): REFUSED unless every command this module starts is a subprocess.run bounded by one of
+    TIMEOUT_NAMES, except run_dt_sql's, which must carry none (a client timeout would kill dt-sql mid-attempt and lock
+    it). Walks the WHOLE module, module level and self_test included. A call cannot slip past by naming: subprocess may
+    be imported only as itself, never from-imported or aliased; the module and its functions may not be held by another
+    name; and os's command starters are refused by attribute and by from-import alike. It is a LEXICAL fence over this
+    file, not a sandbox: a dynamic import (__import__, importlib) or a getattr by string would pass it, and none
+    exists here today."""
+    import ast
+    tree = ast.parse(source)
+    parents = {}
+    for node in ast.walk(tree):
+        for child in ast.iter_child_nodes(node):
+            parents[child] = node
+
+    def where(node: "ast.AST") -> str:
+        up = parents.get(node)
+        while up is not None and not isinstance(up, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            up = parents.get(up)
+        return up.name if up is not None else "module level"
+
+    os_starters = ("system", "popen", "posix_spawn", "posix_spawnp", "fork", "forkpty")
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module in ("subprocess", "os"):
+            names = [a.name for a in node.names]
+            if node.module == "subprocess" or any(n == "*" or n in os_starters or n.startswith(("exec", "spawn"))
+                                                  for n in names):
+                raise VerificationError("line %d: a from-import of %s (%s); import the module as itself"
+                                        % (node.lineno, node.module, ", ".join(names)))
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name in ("subprocess", "os") and alias.asname not in (None, alias.name):
+                    raise VerificationError("line %d: %s aliased as %s" % (node.lineno, alias.name, alias.asname))
+        if isinstance(node, ast.Name) and node.id == "subprocess":
+            up = parents.get(node)
+            if not (isinstance(up, ast.Attribute) and up.value is node):
+                raise VerificationError("%s line %d: the subprocess module held or passed by name"
+                                        % (where(node), node.lineno))
+        if not (isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name)):
+            continue
+        owner, attr = node.value.id, node.attr
+        if owner == "os" and (attr in os_starters or attr.startswith(("exec", "spawn"))):
+            raise VerificationError("%s line %d: starts a command with os.%s" % (where(node), node.lineno, attr))
+        if owner != "subprocess" or attr in ("TimeoutExpired", "CompletedProcess"):
+            continue
+        call = parents.get(node)
+        if not (isinstance(call, ast.Call) and call.func is node):
+            raise VerificationError("%s line %d: subprocess.%s referenced without calling it"
+                                    % (where(node), node.lineno, attr))
+        if attr != "run":
+            raise VerificationError("%s line %d: subprocess.%s; only bounded subprocess.run is allowed"
+                                    % (where(node), node.lineno, attr))
+        limits = [k.value for k in call.keywords if k.arg == "timeout"]
+        # **kwargs beside an explicit timeout= cannot replace it (Python refuses a repeated keyword), so it is
+        # allowed there; without one it could carry any timeout or none, and in run_dt_sql it could smuggle one in
+        spread = any(k.arg is None for k in call.keywords)
+        name = where(node)
+        if name == "run_dt_sql":
+            if limits or spread:
+                raise VerificationError("run_dt_sql has a client timeout (or **kwargs that could carry one): it "
+                                        "would kill dt-sql mid-attempt")
+            continue
+        if spread and not limits:
+            raise VerificationError("%s line %d: subprocess.run with **kwargs and no timeout= hides its timeout"
+                                    % (name, node.lineno))
+        if not limits:
+            raise VerificationError("an unbounded subprocess.run at %s (line %d)" % (name, node.lineno))
+        # a literal (timeout=3000) would escape UNIT_WORST_CASE_S; only the constants it is built from count
+        if any(not (isinstance(v, ast.Name) and v.id in TIMEOUT_NAMES) for v in limits):
+            raise VerificationError("%s line %d: a timeout that is not one of %s"
+                                    % (name, node.lineno, ", ".join(TIMEOUT_NAMES)))
+
+
 def self_test() -> int:
     fingerprints = {
         "LANGSTON": ACTORS["langston"]["fingerprint"],
@@ -727,20 +814,16 @@ def self_test() -> int:
         user_key = os.path.join(temp, "reviewer")
         ca_key = os.path.join(temp, "ca")
         for path in (user_key, ca_key):
-            generated = subprocess.run(
+            generated = bounded_run(
                 ["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", path],
-                capture_output=True,
-                text=True,
-                check=False,
+                "certificate mutation key generation",
             )
             if generated.returncode != 0:
                 raise VerificationError("certificate mutation key generation failed")
-        signed = subprocess.run(
+        signed = bounded_run(
             ["ssh-keygen", "-q", "-s", ca_key, "-I", "reviewer-mutation",
              "-n", "deploy", user_key + ".pub"],
-            capture_output=True,
-            text=True,
-            check=False,
+            "certificate mutation signing",
         )
         if signed.returncode != 0:
             raise VerificationError("certificate mutation signing failed")
@@ -865,6 +948,20 @@ def self_test() -> int:
             or '"dt_sql_bounds": dt_sql_bounds' not in remote_body):
         raise VerificationError("the remote verifier does not report dt-sql's bounds")
     checks += 1
+    # C-7: the remote refuses a raised bound on what it parsed, after parsing and BEFORE its first dt-sql call
+    fit = 'require_dt_sql_bounds_fit("%s, dt-sql NOT started" % actor, dt_sql_bounds)'
+    if (remote_body.count(fit) != 1
+            or not remote_body.index("dt_sql_bounds = parse_dt_sql_bounds(") < remote_body.index(fit)
+            < remote_body.index("run_dt_sql(")):
+        raise VerificationError("the remote verifier does not refuse dt-sql's bounds before its first dt-sql call")
+    try:
+        require_dt_sql_bounds_fit("t, dt-sql NOT started", {"call_timeout_s": DT_SQL_CALL_BOUND_S, "alert_timeout_s": 1})
+    except VerificationError as error:
+        if "dt-sql NOT started" not in str(error):
+            raise VerificationError("the remote bounds refusal does not say dt-sql was not started: %s" % error)
+    else:
+        raise VerificationError("the remote bounds refusal accepted a sum above the bound")
+    checks += 1
     # C-2, client half: refused unless the reported sum fits DT_SQL_CALL_BOUND_S
     if "check_dt_sql_bounds(actor, payload)" not in actor_body:
         raise VerificationError("the verifier does not check dt-sql's reported bounds")
@@ -886,31 +983,46 @@ def self_test() -> int:
     if actor_body.index("check_dt_sql_bounds(actor, payload)") < actor_body.index('payload["wrong_key_control"]'):
         raise VerificationError("dt-sql bounds are checked before the wrong-key control runs")
     checks += 1
-    # C-3: every subprocess call in this file is bounded, except run_dt_sql's (dt-sql bounds itself, and a client
-    # timeout there would kill it mid-attempt). Read from the parsed source, so a new call cannot slip past by naming.
-    import ast
-    tree = ast.parse(Path(__file__).read_text(encoding="utf-8"))
-    for func in [n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)]:
-        if func.name == "self_test":
+    # C-3 / C-8: every subprocess call in this file is bounded, except run_dt_sql's (dt-sql bounds itself, and a
+    # client timeout there would kill it mid-attempt). The fence reads the parsed source of the WHOLE module.
+    subprocess_fence(Path(__file__).read_text(encoding="utf-8"))
+    checks += 1
+    # C-8: the fence itself refuses each escape Langston measured, plus the naming ones next to them
+    def fn(name, body):
+        return "def %s():" % name + NL + NL.join("    " + line for line in body)
+    fence_bad = (
+        ("from subprocess import run as _r" + NL + fn("f", ["_r(['x'])"]), "a from-import of subprocess", "from-import"),
+        ("import subprocess as sp" + NL + fn("f", ["sp.run(['x'], timeout=LOCAL_TOOL_TIMEOUT_S)"]),
+         "an aliased import of subprocess", "aliased"),
+        ("import subprocess" + NL + "subprocess.run(['x'])", "a module-level unbounded call", "unbounded"),
+        ("import subprocess" + NL + fn("self_test", ["subprocess.run(['x'])"]), "an unbounded call in self_test",
+         "unbounded"),
+        ("import subprocess" + NL + fn("f", ["r = subprocess.run", "r(['x'])"]), "subprocess.run held by a name",
+         "without calling"),
+        ("import subprocess" + NL + fn("f", ["m = subprocess", "m.run(['x'])"]), "the module held by a name",
+         "the subprocess module"),
+        ("import subprocess" + NL + fn("f", ["subprocess.Popen(['x'])"]), "subprocess.Popen", "only bounded"),
+        ("import subprocess" + NL + fn("f", ["subprocess.run(['x'], timeout=3000)"]), "a literal timeout",
+         "not one of"),
+        ("import subprocess" + NL + fn("run_dt_sql", ["subprocess.run(['x'], timeout=LOCAL_TOOL_TIMEOUT_S)"]),
+         "a client timeout on run_dt_sql", "mid-attempt"),
+        ("import subprocess" + NL + fn("run_dt_sql", ["subprocess.run(['x'], **k)"]),
+         "**kwargs on run_dt_sql", "mid-attempt"),
+        ("import subprocess" + NL + fn("f", ["subprocess.run(['x'], **k)"]), "**kwargs with no timeout",
+         "hides its timeout"),
+        ("import os" + NL + fn("f", ["os.system('x')"]), "os.system", "os.system"),
+        ("from os import popen" + NL + fn("f", ["popen('x')"]), "a from-import of os.popen", "from-import"),
+        ("import os as o" + NL + fn("f", ["o.system('x')"]), "an aliased import of os", "aliased"),
+    )
+    for bad, why, says in fence_bad:
+        try:
+            subprocess_fence(bad)
+        except VerificationError as error:
+            if says not in str(error):
+                raise VerificationError("the subprocess fence refused %s with the wrong reason: %s" % (why, error))
             continue
-        for call in [n for n in ast.walk(func) if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)]:
-            owner = call.func.value.id if isinstance(call.func.value, ast.Name) else ""
-            if owner == "os" and call.func.attr in ("system", "popen"):
-                raise VerificationError("%s starts a command with os.%s" % (func.name, call.func.attr))
-            if owner != "subprocess":
-                continue
-            if call.func.attr != "run":
-                raise VerificationError("%s uses subprocess.%s; only bounded subprocess.run is allowed"
-                                        % (func.name, call.func.attr))
-            limits = [k.value for k in call.keywords if k.arg == "timeout"]
-            if func.name == "run_dt_sql" and limits:
-                raise VerificationError("run_dt_sql has a client timeout: it would kill dt-sql mid-attempt")
-            if func.name != "run_dt_sql" and not limits:
-                raise VerificationError("an unbounded subprocess.run in %s (line %d)" % (func.name, call.lineno))
-            # a literal (timeout=3000) would escape UNIT_WORST_CASE_S; only the constants it is built from count
-            if any(not (isinstance(v, ast.Name) and v.id in TIMEOUT_NAMES) for v in limits):
-                raise VerificationError("%s line %d: a timeout that is not one of %s"
-                                        % (func.name, call.lineno, ", ".join(TIMEOUT_NAMES)))
+        raise VerificationError("the subprocess fence accepted %s" % why)
+    subprocess_fence("import subprocess" + NL + fn("g", ["subprocess.run(['x'], timeout=LOCAL_TOOL_TIMEOUT_S)"]))
     checks += 1
     # C-3 gate: verify_remote starts its clock first, and refuses before its first dt-sql call when the pre-database
     # work has run long; that work plus the login and reply must fit what REMOTE_BUDGET_S leaves outside dt-sql
@@ -929,19 +1041,26 @@ def self_test() -> int:
         raise VerificationError("UNIT_TIMEOUT_START_S %d s does not exceed the --actor all worst case %d s"
                                 % (UNIT_TIMEOUT_START_S, UNIT_WORST_CASE_S))
     checks += 1
-    units = [Path(__file__).resolve().parents[2] / "systemd" / "reviewer-staging-access.service",
-             Path("/etc/systemd/system/reviewer-staging-access.service")]
-    unit = next((u for u in units if u.is_file()), None)
-    if unit is None:
-        print("note: no unit file here to compare (repo or /etc/systemd/system); TimeoutStartSec not checked")
-    else:
+    # C-9 (Langston F-2): EVERY candidate that exists is checked, not the first. Repo-first let a checkout pass on the
+    # repo copy while the enforced unit lacked the line. A missing unit is not a refusal (a bare checkout has none),
+    # but it must not read the same as a pass: the line says "N-1 of N" and names no object.
+    candidates = [Path(__file__).resolve().parents[2] / "systemd" / "reviewer-staging-access.service",
+                  Path("/etc/systemd/system/reviewer-staging-access.service")]
+    units = []
+    for candidate in candidates:
+        if candidate.is_file() and candidate.resolve() not in [u.resolve() for u in units]:
+            units.append(candidate)
+    for unit in units:
         lines = [l.strip() for l in unit.read_text(encoding="utf-8").splitlines()]
         found = [l for l in lines if l.startswith("TimeoutStartSec=")]
         if found != ["TimeoutStartSec=%d" % UNIT_TIMEOUT_START_S]:
             raise VerificationError("%s: TimeoutStartSec is %r, expected exactly TimeoutStartSec=%d"
                                     % (unit, found, UNIT_TIMEOUT_START_S))
-        checks += 1
-    print("self-test passed: %d checks" % checks)
+    if not units:
+        print("self-test passed: %d of %d checks (unit not present)" % (checks, checks + 1))
+        return 0
+    checks += 1
+    print("self-test passed: %d checks (unit checked: %s)" % (checks, ", ".join(str(u) for u in units)))
     return 0
 
 
