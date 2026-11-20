@@ -1,0 +1,277 @@
+# B-TOKEN-ECONOMY AMENDMENT 1 — PRE-IMPLEMENTATION AUDIT AND IMPLEMENTATION PLAN
+
+change-class: non_architecture (settled in A10; the docset consequence is named there)
+
+Step 2 for the five objectives Kyle added on 2026-11-20 (KD-108, `1-system-manual/pm/DECISIONS.md`), scoped in `B_TOKEN_ECONOMY_AMENDMENT_1.md` (pushed `eb53cdc2c`). Langston's Step-1 verdict (Discord `1573296874692149378`): **PROCEED TO STEP 2**, with two corrections to the amendment text and seven fold-ins. All nine are taken below. Infra Claude's three inputs (Discord `1573297384920719491`) are taken in A4 and A6. All code reads are at `origin/migration/aws-supabase` = `02b5b666a`. Author: PM Claude.
+
+## PREVIOUSLY STATED → NOW
+
+| # | PREVIOUSLY STATED | NOW | REASON |
+|---|---|---|---|
+| 1 | The PM clone stays unmapped in `alert-split.mjs` and keeps the full alert list (`B_TOKEN_ECONOMY_PRE_AUDIT.md:7`). Before that: PM is mapped so it sees unrouted alerts in full and critical ones as one line (`B_PM_CLAUDE_PRE_AUDIT.md:47`). | **PM gets no per-prompt alert list.** It runs one quiet check on its hourly wake. | Kyle, KD-108(d). That decision supersedes both earlier lines. PM's role file obligation (`1-system-manual/PM_CLAUDE_RULES.md:15`, chase governance-overdue alerts) stays with the PM crew check (`pm-crew-check` step 6), which reads the queue directly; the hourly check covers critical and stale alerts (A7). |
+| 2 | Langston's always-loaded set is 144,666 B, and OBJ-11 writes a ceiling. | **144,656 B measured, against an existing ceiling of 143,856 B. It is 800 B over today.** | Langston, correction 1: `langston-size-watch --status`. The harness index moved 10 B at 11:13Z. The ceiling exists (seeded 2026-09-05), so OBJ-11 lowers it rather than writing one. |
+| 3 | "Closed-batch sections (about 8 KB)" are moved out by hand. | **Zero sections read `STATE: closed`. All 11 read `open`.** About 5.1 KB belongs to batches with a completion report at the ref whose STATE line was never flipped. | Langston, correction 2, re-derived in A1. The 03:50Z trim already moves a closed section verbatim and keeps its `keep:` lines. Flipping the STATE line is the method; a hand-move would lose the keep-line step and duplicate a built tool. |
+| 4 | Kept lines 22,143 B; REVIEWER LEDGER 11,862 B. | **Kept lines 22,464 B; ledger 12,009 B.** Langston measured 22,463 and 12,008. | Byte-exact re-measure. The 1 B difference is whether the section's final newline is counted. The kept-lines heading appears twice (byte 3,048 is a quotation in the preamble); both of us measured the second one. |
+| 5 | OBJ-13(b): "the session that most recently committed to the affected code." | **Not readable from git.** 1,929 commits in 14 days carry one author identity, and the trailer names the model, never the session. (b) becomes: the batch-id leading the commit subject, looked up against the register. | Infra Claude, input 1. The lane can reach git through the push-disabled mirror `/srv/dawntrader-backup.git` (input 2). |
+| 6 | "A count of currently unowned due alerts goes to zero." | **No due alert lacks an owner. But 4 of 25 read as unrouted in every session**, because their owner changed within 24 h. | Measured with the real `splitAlerts` over today's due list (A5). An unowned count of zero does not discriminate; the churn count does. |
+| 7 | Helper start load is 85,422–87,725 tokens (the last six helpers). | **Median 92,963 tokens, range 84,728–103,823, n = 64** Sonnet `general-purpose` helpers in this session. **A narrow-tool `Explore` helper on Sonnet starts at 32,661–32,692 (n = 3).** | The full population, not the last six (A3). The Explore figure is a positive control: a narrow definition does reach the low 30k range in this harness. |
+| 8 | Coltrane 47.9k tokens per invoke, set beside Langston's 144,656 bytes. | **First model call: Langston 81,735 tokens (median, last 40 invokes), Coltrane 22,878 tokens (median, n = 57 rollouts since 11-12).** | Langston, fold-in 9: the old row compared two objects. Both now give the same object in the same unit (A9). |
+
+## AUDIT
+
+### A1 — Langston's always-loaded notes (OBJ-11)
+**Object:** the files `langston-size-watch` sums. These are `/home/langston/CLAUDE.md` (57,049 B), `/home/langston/MEMORY.md` (73,856 B), and the harness index `/home/langston/.claude/projects/-home-langston/memory/MEMORY.md` (13,751 B, 100 lines). Total 144,656 B; ceiling 143,856 B.
+
+**MEMORY.md, section bytes (byte-exact):**
+- Kept lines from closed batches: 22,464.
+- REVIEWER LEDGER: 12,009.
+- STANDING NOTES: 7,941.
+- GOVERNANCE-INTEGRITY: 5,084.
+- CURRENT STATE: 4,144.
+- DELIVERY BOARD: 1,894.
+- 11 sections read `STATE: open`, about 13.1 KB together.
+
+**STATE-line census against the ref:**
+
+| section | bytes | report at ref | flip? |
+|---|---|---|---|
+| B-FILTER-DIAG-STANDARDIZE | 2,301 | `B_FILTER_DIAG_STANDARDIZE_COMPLETION_REPORT.md` | candidate |
+| B-CODEX-FAILOVER | 243 | `B_CODEX_FAILOVER_COMPLETION_REPORT.md` | candidate |
+| B-ARM-REMOVAL | 459 | `B_ARM_REMOVAL_COMPLETION_REPORT.md` | candidate |
+| B-DEPLOY-DRIFT-LINE | 2,138 | `B_DEPLOY_DRIFT_LINE_COMPLETION_REPORT.md` (prose says "✅ CLOSED 2026-09-09") | candidate |
+| B-MEASURE-GATE | 925 | leg 2 only (`B_MEASURE_GATE_LEG2_COMPLETION_REPORT.md`); legs 3+ parked after live (register :35) | **no**: leg 3 is open |
+| B-SILENT-STRATEGY-CENSUS | 3,723 | progress report only; Step 10 watch window (register :48) | no |
+| B-CREDENTIALS-PRIVATE-REPO | 531 | progress report only; in flight (plan :97) | no |
+| B-PRICE-SIDE-BY-JOB | 795 | progress reports only | no |
+| B-XSTOCK-BID-TRIGGER-RELAND | 416 | progress report only | no |
+| P19-B8.5l / B-ATR-SOURCE-FIX | 827 | none found under either name | no |
+| #618 | 715 | an issue, not a batch | no |
+
+The four candidates total 5,141 B. Each is flipped only after Langston confirms the close in his own file. It is his file, and the report's existence is the lead, not the verdict.
+
+**CLAUDE.md, the large sections:**
+- governed-artifact read: 7,970.
+- §2 personality: 4,492.
+- block-thin-scopes: 4,075.
+- §13 surfaced-issue rule: 3,309.
+- §10.5 alert check: 3,123.
+- §8 critical rules: 2,876.
+- **§5 comms protocol: 2,720.**
+
+Langston's fold-in 4: §10.5 and §13 are verbs, not mirrors. They stay; replacing them with a hook is `#623` leg 3, which waits until leg 2's hooks are proven (`RUNNING_ISSUES:2613`). **§5 is the only CLAUDE.md candidate.**
+
+**Who owns the CLAUDE.md headroom:** Langston's fold-in names `B-LANGSTON-CLAUDEMD-RESIDUAL` as its owner. That batch is **CLOSED 2026-11-14** (`SPRINT_TO_LIVE_PLAN.md:86`). No batch owns the CLAUDE.md headroom now, so OBJ-11 carries the §5 move. This is disposition 1, folded into the work in hand under KD-108, which covers "Langston's always-loaded notes".
+
+**Write path:** MEMORY.md is root-owned since `B-LANGSTON-MEMORY-WRITE-FENCE`. Every edit goes through `/usr/local/bin/langston-memory-write` with `--expect-sha` on the part, and never with `--allow-growth`. A shrinking write always passes the gate. The daily `langston-memory-trim.timer` (03:50Z) runs `--trim`, which moves sections whose STATE is closed to `MEMORY-ARCHIVE.md` and hoists their `keep:` lines (`SYSTEM_IMPACT_MAP.md:4118`, `LANGSTON_ARCHITECTURE.md:69`). The archive `/home/langston/.memory-archive` exists and is not counted in the total.
+
+**Tokens:** Langston's first model call is a median 81,735 input tokens (range 81,154–83,831, last 40 transcripts). The summed input and output across each invoke's turns has a median of 4,325,330, because every turn re-reads the context. A trimmed KB is therefore saved on every turn of every invoke.
+
+**Proof gap (fold-in 3):** "one real review passes with no missing-rule refusal" cannot see a loss, because a review that exercises none of the moved rules is silent. The proof must list each moved rule and name, per rule, the review or seeded case that exercised it after the move.
+
+### A2 — Coltrane's per-invoke load (OBJ-11 for Coltrane, OBJ-15)
+**Coltrane's files:** `/home/coltrane/.codex/AGENTS.md` 14,437 B. Config: `gpt-5.6-sol`, high effort. His notes (`/home/coltrane/memory`, 71,496 B) are read on demand through `coltrane-memory recall`, not always loaded.
+
+**First model call:** median 22,878 input tokens, range 19,483–25,835, over 57 rollouts since 11-12. Source: `token_count` events in `/home/coltrane/.codex/sessions/**`, `last_token_usage.input_tokens` on the first event. The whole-invoke cumulative input has a median of 648,131.
+
+The trim rule applies to his AGENTS.md exactly as to Langston's set: measure, move closed material out verbatim, set a ceiling with one-in-one-out. **Coltrane has no size watch and no ceiling today.** That gap is the Codex leg of OBJ-11.
+
+### A3 — Helper start load (OBJ-12)
+**Object:** cache-read plus cache-creation plus input tokens on the first assistant record of each helper transcript under `~/.claude/projects/C--DawnTraderV3-pm/994e6488-…/subagents/*.jsonl`. Each transcript is joined to its `.meta.json` to get the helper type.
+
+| helper type | model | n | min | median | max |
+|---|---|---|---|---|---|
+| general-purpose (inherits every tool) | sonnet | 64 | 84,728 | 92,963 | 103,823 |
+| general-purpose | opus / haiku | 3 / 2 | 102,398 / 102,400 | — | 102,488 / 102,491 |
+| claude-code-guide (5 tools) | sonnet | 4 | 78,418 | 78,767 | 78,815 |
+| **Explore (Glob, Grep, Read)** | **sonnet** | **3** | **32,661** | **32,692** | **32,692** |
+
+**`.claude/agents/general-purpose.md`** (1,437 B) pins `model: sonnet` and has no `tools:` line. It therefore inherits every tool, including the MCP set.
+
+The Explore row shows a narrow definition can start at about 33k. **What I cannot attribute:** how much of the roughly 60k gap is tool descriptions and how much is other context the custom Explore definition does not load. The 5-tool guide helper still starts at 78k, so tool count alone does not explain the gap. The Step-3 measurement on the new definition settles the attribution; it is not assumed here.
+
+**Reachability:** whether a `tools:` list also excludes MCP tools is the harness's own behaviour, not code I can read. It is measured at Step 3, not asserted.
+
+**Langston's RULED-ON-REPORTED-FACT objection:** the baseline sits in PM-side transcripts he cannot read. Infra Claude runs on this laptop and can read them, so the baseline and the post-change figure are re-derived by Infra Claude with the method above (P4). The figures here are the author's.
+
+### A4 — The alert lane (OBJ-13)
+**`comms-infra/discord/alert_lane.py`** (pure logic; installed at `/opt/discord-bridges/alert_lane.py`, sha prefix `37c0e4143b0f`):
+- It runs on `claude-sonnet-5-5` (`LANE_MODEL`, :21).
+- `OWNERS = ("CC-A","CC-B","CC-C","CC-INFRA","Kyle")` (:25). A marker naming anyone else is dropped (:256, :430).
+- The lane cannot read files: every tool is denied. The bridge passes in the live rows, plus a precedent line that `langston_precedent()` builds from Langston's own markers over 7 days.
+- `effective_owner` (:276–288) takes the newest owner on a clean change. On an interleave it returns `ok=False`, and the precedent line then says to escalate to Langston.
+- `read_answer` (:417) escalates any marker whose owner is unknown.
+
+**Call sites** (`discord-langston-bridge.py`):
+- `alert_id_of` (:1227), `alert_key` (:1235), `langston_precedent` (:1238), `build_prompt` → `invoke_lane` (:1247);
+- `read_answer` (:1252), `apply_precedent` (:1253), `enforce_live_rows` (:1254);
+- then the post "Alert lane — …" (:1259).
+
+**What it does today:** bridge log `/var/log/discord-langston-bridge.log`, current file, 2026-11-15T00:00Z to 2026-11-20T11:40Z (5.5 days). Across 76 lane invokes, the per-batch summary lines ("batch of N - routed N, escalated N") sum to **107 routed and 33 escalated**. The per-escalation lines ("escalated msg … to Langston (reason)") number 34. One escalation has no matching batch summary; that is recorded, not reconciled. Reasons, from the per-escalation lines:
+
+| reason | count |
+|---|---|
+| Langston has gone back and forth (interleave) | 20 |
+| critical | 10 |
+| addressed to Kyle | 2 |
+| unreadable id | 1 |
+| long-open | 1 |
+
+**Baseline rate for P6(iv): 20 interleave escalations in 5.5 days, about 3.6 a day.** Langston was invoked 248 times over 11-15, 11-16, 11-19 and 11-20.
+
+**Interleave example (Langston, live today):** `xstock-stale-fill-block` has 71 consecutive CC-C markers, poisoned by one stray CC-B marker at 11-05T08:12:05Z.
+
+**Join blind spot (Langston, re-derived at :263):** a marker becomes precedent only through a join to a `langston_alert_inbound` row. Markers on alerts Langston found through his §10.5 queue read never count: 247 of his 838 valid 7-day markers. The join fix is a proposal on Kyle's list (owner CC-INFRA), **not placed**. OBJ-13 states it as a known limit.
+
+**Overlaps, ledger search (§9.5(b-ii)):**
+- **`#1201` B-ALERT-LANE-LEDGER-OWNER** (Infra Claude): the lane reads an alert's owner from the plan, not from past markers, together with an alert-id-first fix. Kyle moved it to the after-live list on 2026-11-06 (KD-51; `PRE_LIVE_SPRINT.md:92`). The lane's own comments name it as the authoritative owner-from-plan job. **OBJ-13(a) is that job's owner-from-plan half.** KD-108 asks for it now. The alert-id-first half is not part of KD-108 and stays on the after-live list.
+- **`#1137` B-ALERT-OWNER-ON-ROW** (CC-A, `SPRINT_TO_LIVE_PLAN.md` row 1l, QUEUED): the owner moves onto the alert row's own `metadata.owner`, used on 8 of 1,130 rows when filed. That changes where the owner is **stored**; OBJ-13 changes how it is **decided**. The two fit together: when row 1l lands, the lane writes its decision there as well. OBJ-13 does not touch the store.
+- **`#647` / 2.4b B-ALERT-QUEUE-INTEGRITY** (CC-B, after live): queue locking. Not touched.
+
+**Fallback owner (fold-in 5):** it must be one of the lane's five names, and it must also be in the wake filter's `ALERT_OWNERS` (`cc-wake-filter.py:192`, six names including Langston). **CC-INFRA** is in both. It owns the alert machinery and the servers, and an alert no rule can place is a routing gap that is Infra's to close. This is a correction to the amendment text: OBJ-13(c) names CC-INFRA.
+
+**How the lane reaches the register:** `git --git-dir=/srv/dawntrader-backup.git show HEAD:1-system-manual/pm/OPEN_BATCH_REGISTER.md`. The mirror is readable by the langston account and self-pulls every 15 minutes. The lane itself stays tool-less: the **bridge** reads the register and the recent subjects and passes them in, as it already passes the live rows.
+
+**Provenance:** built in B-LANGSTON-RELIEF OBJ-2 (Kyle 2026-10-08; 8 commits, all that batch's). Escalating on an interleave was deliberate: when Langston himself has changed his mind, the lane does not pick a side. **OBJ-13 changes that intent for one case:** when the register or the recent work names exactly one owner, that owner settles the interleave. When neither does, it still goes to Langston. This is Langston's call at review; it is a change to his own lane's rule.
+
+### A5 — The per-session alert split (OBJ-13 proof, OBJ-14)
+**`.claude/hooks/alert-split.mjs`:** a pure module (no state).
+- `CLONE_TO_ALIAS` has four entries (:19–23: old, new, analyst, infra). The PM clone is unmapped.
+- `splitAlerts` sorts due alerts into mine, unrouted, critical-elsewhere (one line each) and others (a count).
+- An owner changed within `CHURN_HOURS = 24` reads as unrouted. That was by design (B-TOKEN-BURN-CUT amendment 1, round 3), and `#1137` records the cost.
+
+**Measured today with the real function** (due list read with the hook's own remote filter, positive control `COUNT|25|3501`. The 25 is the filter's own total over the whole 3,501-id file, not the hook's display cap: the hook prints "+N more NOT shown" when the total passes `MAX_INJECT` (:202), and it printed none; owner records `~/.claude/cc-wake-state/<ALIAS>.alert-owners.json`):
+
+| session | mine | unrouted (all churn) | critical | not shown |
+|---|---|---|---|---|
+| CC-A | 6 | 4 | 0 | 15 |
+| CC-B | 3 | 4 | 0 | 18 |
+| CC-C | 8 | 4 | 0 | 13 |
+| CC-INFRA | 4 | 4 | 0 | 17 |
+
+The four churning alerts:
+- `c8f67c1c` xStock venue quiet: now CC-C, 3 changes. Langston's verdict listed this class under CC-B, which is the churn in action.
+- `0a4276cb` and `13ee54de` database connection without encryption: CC-A, 7 and 9 changes.
+- `8bd256bc` open-batch alert for B-XSTOCK-BAR-AVAILABILITY: CC-C, 1 change.
+
+**This is the discriminating proof for OBJ-13:** the churn count, today 4, falls to 0 and stays there across a week while owner changes are still happening (P6(iii)), and the interleave escalations, 3.6 a day in the current log, fall.
+
+### A6 — The per-prompt alert hook (OBJ-14)
+**`.claude/hooks/inject-due-alerts.mjs`:**
+- Registered as a UserPromptSubmit hook in each clone's untracked `.claude/settings.local.json`.
+- It SSHes to staging with a fixed filter (:78–103, positive-control COUNT line), reads the alias at :136 from the clone's folder name, and reads the owner record and the lost-routing record (:141, :158).
+- It appends a shadow row to `~/.claude/inject-due-alerts.jsonl` (:41–60).
+- It caps output at `MAX_INJECT = 25`.
+- **Fail-open:** an unmapped clone or an unreadable record shows the full list. For PM today, that means all 25 alerts on every prompt.
+
+**Provenance:** B-MEASURE-GATE leg 2 (the §10.5 read as a hook, 2026-09-02), then B-GOV-REPORTING, B-TOKEN-BURN-CUT, B-WAKE-OWNER-LOSS-VISIBLE, and B-TOKEN-ECONOMY's own OBJ-6 shadow (`ea9c7c1dc`).
+
+**The PM role it served:** `B_PM_CLAUDE_PRE_AUDIT.md:47` intended PM to see unrouted alerts in full and critical ones as one line, "the right view for a PM that owns no alerts". Kyle's KD-108(d) replaces that view with a follow-up role.
+
+**Copy of the clone map:** `.claude/hooks/guard-pm-slot.mjs:22` keeps a separate `CLONES` map and already holds `'DawnTraderV3-pm': 'PM'`. It is a different consumer and is not changed.
+
+### A7 — PM's follow-up role (OBJ-14)
+Kyle's words, KD-108(d): PM checks alerts quietly on its hourly wake and speaks only for urgent follow-up. First it checks whether the owner received the alert, then whether the owner is acting.
+
+**What exists:**
+- the hourly guard cron `b1514f3e` (:17, usage line, KD-106);
+- the per-alias owner records (who an alert was routed to);
+- Langston's and the lane's markers in `/var/log/cc-discord-inbox.jsonl`;
+- the ack state on the staging row.
+
+**Received** = the owner's own record holds the id, meaning the owner's wake filter saw the routing. **Acting** = an ack or resolve on the row, or a post or commit by the owner that cites the id prefix, within the last 24 h.
+
+**Which alerts qualify for follow-up:**
+- every critical alert;
+- any alert due for more than 24 h with no recorded action, unless its latest marker says it waits on an event ("never ack", "held to … window").
+
+The governance open-batch classes (`gov-openmaxage`, `gov-staleopen`) are carried by their batch rows and stay with the PM crew check (`pm-crew-check` step 6), not the hourly follow-up. That is where `PM_CLAUDE_RULES.md:15`'s obligation lands.
+
+**Repeat limit:** one follow-up per alert per 24 h, recorded in `1-system-manual/pm/SESSION_LOG.md`.
+
+### A8 — Codex side (OBJ-15, and the Codex legs of OBJ-12, -13 and -14)
+- **Building sessions:** `AGENTS.md:49`. "Alerts reach nobody automatically": each Codex session reads the whole queue with `scripts/due-alerts.py` and takes its Claude counterpart's alerts (CC-A → OLD Codex …). There is no owner filter, so a Codex session reads all 25, the same waste OBJ-6 removed on the Claude side. "Coltrane sorts unrouted alerts during the shift": on the Codex crew, Coltrane does the alert lane's job.
+- **Compaction cap and helper roles:** `~/.codex/config.toml` has `gpt-5.6-sol`, high effort, no `[agents]` section and no `model_auto_compact_token_limit`, and the repo has no `.codex/`. These are parent items P3 and P4, waiting for the next Codex session.
+- **PM Codex:** reads the queue the same way and is not yet told to follow the hourly follow-up form.
+- **Codex has no hooks**, so every Codex control is an instruction plus a script the session runs. Its proof is an observed run in a Codex session, never the instruction text alone (OBJ-15's own proof rule).
+
+### A9 — The parity table's objects (OBJ-15, fold-in 9)
+Every cell states its object and its unit. The reviewer row compares the first model call's input tokens: Langston 81,735 against Coltrane 22,878. It does not compare Langston's file bytes with Coltrane's whole invoke.
+
+### A10 — Change-class, governance, observation window
+**Class: `non_architecture`, kept.** OBJ-13 adds an input and a tiebreak to the alert lane's routing decision. OBJ-14 replaces one consumer's per-prompt view with an hourly check. Both are crew tooling. No trading-engine path, formula, threshold or routing of signals is touched.
+
+**Docset consequence** (`closeout.mjs --class non_architecture`):
+- **Required:** scope, pre-audit, completion report, `BATCH_CATALOG.md`, `PHASE_HISTORY.md`, the plan row, the memory files.
+- **`SYSTEM_IMPACT_MAP.md` is required regardless** (Langston §17). It needs the lane's new inputs and tiebreak (:3119), the PM consumer change and the hourly follow-up script beside the hook (:3195), the owner record's new reader (:4015), the Codex alert CLI, and the helper definition in the Loading Estate (:1128).
+- **Also:** `LANGSTON_ARCHITECTURE.md`, `ALERT_HANDLING_PROTOCOL.md`, `PM_CLAUDE_RULES.md`, `AGENTS.md`, Coltrane's AGENTS.md, `RUNNING_ISSUES.md` (cross-refs on #1137 and #1201) and `CHANGES_AND_FIXES.md`.
+- **N/A:** `SYSTEM_MANUAL.md` (no trading architecture), `ADJUSTMENT_FRAMEWORK.md`, `DELETED_COMPONENTS_LOG.md` (nothing removed).
+- If the class moves, it is re-declared before close, never at close (`#1245`).
+
+**Observation window: no `DEPLOY_WINDOWS.jsonl` row is filed.** This departs from Langston's fold-in, for this reason. That register protects **staging** observations from a deploy. No leg of this amendment reads anything a staging deploy can disturb:
+- OBJ-11 runs on Langston's box;
+- OBJ-12 is a laptop transcript read;
+- OBJ-13's seeded alert is a row in the alerts file, which a restart does not touch;
+- OBJ-14 is a laptop script.
+
+An `open` row would make `dt-deploy` refuse every other session's deploy unless it named this batch, with nothing to protect. If Langston still wants a row, he names the leg a deploy would disturb, and it is filed then.
+
+### Blind-spot lines (the eight classes the audit aids cannot see)
+1. **Two value lists agreeing — APPLIES.** The owner sets are `alert_lane.py:25` (5 names), `cc-wake-filter.py:192` (6, adds Langston) and `alert-split.mjs:19–23` (4 clones). `obs-windows.py` OWNERS is the actor namespace, a different object. Compared by hand: the CC-INFRA fallback is in both owner sets. **CC-PM must not enter either owner set** (PM owns no alerts). Mapping the PM clone is done in the hook, not in the owner sets.
+2. **Literal copies of a list — APPLIES.** `guard-pm-slot.mjs:22` copies the clone map and already carries PM; it is not changed. The Codex→Claude map in `AGENTS.md:49` is a prose copy, and the new Codex CLI (P9) carries the same four pairs.
+3. **Properties and fields — APPLIES, read only.** The marker fields `owner=` and `action=`, and the row's `metadata.owner` (`#1137`), are not written by this batch.
+4. **Sibling producers of one label — APPLIES.** `[[ALERT … owner=]]` has two producers: Langston's own replies and the lane's posts. That is the interleave source. The tiebreak in P6 reads both.
+5. **What a site means — APPLIES.** "Unrouted" in `splitAlerts` includes churned owners. "No owner" is a different count (0 today). OBJ-13's proof uses the churn count.
+6. **Error paths — APPLIES.** The hook is fail-open: no alias shows the full list. PM's branch (P7) shows no list by design, so a failed hourly check must say it failed. The follow-up script carries the same COUNT positive control.
+7. **A library's own behaviour — APPLIES.** Whether a subagent `tools:` list removes MCP tools is measured at Step 3 (P4), not assumed.
+8. **Files outside the TypeScript programs — APPLIES to all four components.** The hooks are `.mjs`, the lane is Python, and the agent definition is markdown. The census aid does not see `scripts/`, hooks or Python and does not say so. The census below is by hand with `git grep` at the ref.
+
+### Census (write · read · mutate · delete · start), by hand at the ref
+- **`alert_lane.py`:**
+  - Runtime importer: `discord-langston-bridge.py:1117` (exactly one).
+  - Installed by `deploy.sh:70`. `langston-bridge-restart:156` imports its `inbox_evidence`.
+  - Tests: `alert_lane_test.py`, `alert_lane_tool_probe.py`, `test_langston_bridge_restart.py`, `test_address_gates.py`.
+  - State it writes: the spool (`spool_write` / `spool_remove`, bridge :542, :552, :847, :1172, :1200–1203, :1267–1269), plus markers in its Discord posts.
+  - Started by the bridge's alert path only.
+- **`alert-split.mjs`:** no state. Importers: `inject-due-alerts.mjs:33` and `scripts/analysis/test-alert-split.mjs:4` (CI `ci.yml:270`). Copy: `guard-pm-slot.mjs:22`. No mutator, no deleter.
+- **Owner record `<ALIAS>.alert-owners.json`:**
+  - Writer: exactly one in normal running, `cc-wake-filter.py:784`. There was also a one-time seed in `B_TOKEN_BURN_CUT_AMENDMENT_1_SWITCH.py`.
+  - Reader today: `inject-due-alerts.mjs:141`; the new PM follow-up script becomes a second reader.
+  - Deleter: none (`cc-wake-filter.py:826`).
+- **`inject-due-alerts.mjs`:** started per prompt by `settings.local.json` in each clone. Writes `~/.claude/inject-due-alerts.jsonl`. Reads staging, the owner record and the lost-routing record.
+- **`general-purpose.md`:** read by the harness only. Its sibling is `Explore.md`, which is not changed.
+
+### Six sources read
+1. **Code at the ref:** the four components plus the bridge call sites, the wake filter and the guard.
+2. **Runtime:** the bridge log, the inbox log, the staging alerts file via the hook's filter, the transcripts, and Coltrane's rollouts.
+3. **System Impact Map:** :1128, :3119, :3195, :4015–4016, :4118.
+4. **System Manual:** silent on crew tooling by scope. That is not a gap: its scope is trading architecture (CLAUDE.md §9 rule 4).
+5. **Ledger and reports:** `#1137`, `#1201`, `#647`, `#623`, KD-51, KD-108, the register, and the four completion reports in A1. `history.mjs` ran on all four components; its "not covered" line is that batch-ids appearing only in commit bodies, and issues citing a component by prose name, are missed. `#1201` was found by prose search, not by the aid.
+6. **`bridge/canonical/`:** consulted; **no coverage** of the alert lane, alert owners or helper definitions. The machinery postdates it.
+
+Dispositions for the existing components: all four are working as designed, with the intent changed by KD-108. That is disposition 1, folded into this batch, for `alert_lane.py`, `alert-split.mjs`, `inject-due-alerts.mjs` and `general-purpose.md`.
+
+## IMPLEMENTATION PLAN
+
+| # | change | owner | back-ref | proof |
+|---|---|---|---|---|
+| P1 | Flip the STATE line to closed for the four sections in A1 that Langston confirms, and prefix their forward-binding lines with `keep:`. The 03:50Z trim then moves them and hoists the keeps. Via `langston-memory-write --expect-sha`, no `--allow-growth`. | Infra Claude + Langston | A1 | The next trim log names each section; each section's text is found in `MEMORY-ARCHIVE.md`. |
+| P2 | Compress the REVIEWER LEDGER to the rulings still live; move the rest verbatim to the archive. Move CLAUDE.md §5 verbatim to an on-demand file and leave a pointer. §10.5 and §13 stay (A1, `#623` leg 3). | Infra Claude + Langston | A1 | `scripts/crew-tooling/move-ledger-check.mjs` finds every moved passage at its destination. A per-rule exercise list names, for each moved rule, the review or seeded case that used it after the move. |
+| P3 | **Lower the ceiling to the post-trim total**, at most 131,856 B (12,000 below today's ceiling). Reaching it needs 12,800 B removed from today's 144,656 B. P1 gives at most 5,141 B, so P2 must give at least 7,659 B; the ledger and §5 sizes are measured before the move, not assumed. If P1 + P2 fall short, the shortfall goes back to Langston with the measured figures, and the floor is not met quietly. Add one-in-one-out beside it in the CONDUCT form. Coltrane gets the same: a size reading of his AGENTS.md, a ceiling, and the closed-material move. | Infra Claude | A1, A2 | `langston-size-watch --status` shows the new total under the new ceiling. Coltrane's equivalent reading is committed. |
+| P4 | Give `general-purpose.md` an explicit tool list: Read, Grep, Glob, Bash, plus Edit and Write. Rewrite CLAUDE.md's delegation line: a helper is for a big, self-contained read with a short answer, never a small lookup. | PM | A3 | **Floor: the first-turn tokens of a new Sonnet `general-purpose` helper ≤ 60,000**, re-derived by Infra Claude with the A3 method against the n = 64 baseline. The served model is still Sonnet. If the MCP set does not drop, that is recorded and the floor is re-argued with Langston, not quietly missed. |
+| P5 | Codex leg of OBJ-12: each `[agents]` role carries minimal instructions and tools. This lands with parent P4 in the next Codex session. | the next Codex session | A8 | An observed role run in a Codex session, with its start tokens. |
+| P6 | Alert lane: the bridge passes in, for each alert, (a) the register row whose batch or system the alert names, read from the mirror, and (b) the owner of the batch-id leading the most recent subject that touched the named path. The lane's prompt assigns from (a), then (b), then **CC-INFRA**. When the register names exactly one owner, an interleave is settled by that owner instead of escalating; with no register owner it still escalates. Owner set unchanged. | Infra Claude | A4, A5 | (i) A seeded test alert, naming a batch in the register, gets that batch's owner and shows in that session only. The lane's post states which rule set it (register, recent work or fallback), so a human routing cannot pass the leg. A second seeded alert naming nothing in the register gets CC-INFRA with the rule stated as fallback. (ii) Both survive `effective_owner` with `ok=True`. (iii) The 24-hour churn window alone would read 0 on a quiet day. So the daily check over 7 days records the due count, the number of owner changes in the markers that day, and the churn count, and the leg passes only if at least one owner change was settled by the register and churn stays 0. (iv) Interleave escalations per day over the 7 days are below today's baseline of 3.6 a day (A4). The join blind spot is stated as a limit. |
+| P7 | The PM clone gets no per-prompt list: `inject-due-alerts.mjs` returns one line for the PM folder, saying alerts are checked hourly, and skips the SSH. The owner sets are unchanged. | PM | A5, A6 | PM prompts carry the one line and no list; the hook's shadow row shows zero alerts shown for PM. |
+| P8 | New `scripts/pm/alert-followup.mjs`, run by the hourly guard cron. It reads the due list with the COUNT control, the owner records, the markers and the ack state, and applies A7's rule and repeat limit. It prints nothing when nothing qualifies, and one line per follow-up otherwise. PM then messages the owner: received first, acting second. Rows go to `SESSION_LOG.md`. `1-system-manual/PM_CLAUDE_RULES.md` gets a line for the hourly follow-up; its :15 governance-overdue chase stays with the crew check. | PM | A7 | A seeded stale alert produces exactly one follow-up to its owner, and none in the next hour. A run with nothing due prints its COUNT line and nothing else. |
+| P9 | Codex alert parity. New `scripts/crew-tooling/my-alerts.mjs --alias <CODEX-X>`. It maps to the Claude counterpart, reads the due list from staging and the markers from the inbox, and calls the same `splitAlerts`. `AGENTS.md:49` tells Codex sessions to run it instead of the full read, and tells PM Codex to run P8's script on its hourly automation. Coltrane's AGENTS.md gets P6's order: register, then recent work, then CC-INFRA's Codex counterpart. | PM (repo) + Infra Claude (Coltrane) | A8 | An observed run in a Codex session shows the narrowed list, and an observed Coltrane routing uses the register. |
+| P10 | The parity table at the ref, every cell carrying its object and unit, with an observed control for each Codex or Coltrane row. | PM | A9 | The table is filled; no row carries documentation as its proof. |
+| P11 | Governance as A10 lists, plus cross-ref lines on `#1137` and `#1201`. The `#1201` row on the after-live list is amended to its id-first half. | PM | A10, A4 | Step 10. |
+
+**Order:** P4 first (smallest, measurable at once). Then P1–P3, then P6, then P7–P8. P9 and P10 fill in as each leg lands, and the Codex rows close when a Codex session runs. The parent's OBJ-6 still leads P6 and P7, as the amendment's order says.
+
+**Nothing in the plan is UNAUDITED.**
+
+## Plain-language summary
+The audit found Kyle's main worry, alerts going to every session, is mostly solved already: every due alert has an owner, and each session sees about a quarter of the list. The real leaks are smaller and specific: four alerts whose owner keeps flipping (so everyone sees them), the PM seeing all 25 every time, Langston being asked to break ties the plan could settle, and helpers loading far more tools than they use. The plan fixes each one, gives the Codex and Coltrane side the same treatment, and checks every fix against a measured before-and-after.
+
+---
+REVIEWER: fresh-reader pass, one Sonnet helper, 2026-11-20, against `origin/migration/aws-supabase` @ `8799b2df9`. It checked 14 code and plan claims: 13 confirmed, and one path corrected (`1-system-manual/PM_CLAUDE_RULES.md`). It raised five issues, all taken: the row-1 contradiction with A7; the escalation sum (re-derived: 107 routed, 33 escalated, 34 escalation lines); the churn proof passing on a quiet day (P6(iii) now needs owner changes in the period); the seeded-alert proof passing on a human routing (P6(i) now needs the stated rule); and P3's zero margin (the P2 minimum is now stated). Its fifth point, that 25 might be the display cap, was checked and withdrawn: 25 is the filter's own total (A5).
