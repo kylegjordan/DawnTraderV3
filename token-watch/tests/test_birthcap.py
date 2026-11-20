@@ -435,6 +435,19 @@ r = tick(v, h1.replace(hour=12, minute=0, second=20))
 check("the next whole hour is compared again (its row carries a verdict)",
       store.load_state(birthcap.STATE, {}).get("hours", {}).get("2026-11-28T11", {}).get("verdict") == "divergent",
       store.load_state(birthcap.STATE, {}).get("hours", {}))
+# the vendor's counter is per billing cycle and resets (the 27th): a negative hour is a reset, never a divergence
+reset(); enable(); v = Vendor()
+store.save_state(birthcap.STATE, {"applied": "on", "plan": dict(full, always_on=True)})
+v.webhooks, v.rpc = 818_000, 25_000
+tick(v, h0)
+add_births([h0 + timedelta(minutes=5, seconds=i) for i in range(300)])
+v.webhooks, v.rpc = 120, 0                                     # the cycle turned inside the hour
+r = tick(v, h0 + timedelta(hours=1))
+hrow = store.load_state(birthcap.STATE, {}).get("hours", {}).get(h0.strftime("%Y-%m-%dT%H"), {})
+check("a cycle reset inside an hour (vendor 818,000 -> 120) is verdict reset: no replan, no page",
+      hrow.get("verdict") == "reset" and not store.load_state(birthcap.STATE, {}).get("replan")
+      and not any(p["dedupe_key"].startswith(("birthcap-divergence", "birthcap-vendor-meter-frozen")) for p in r["pages"]),
+      (hrow, r["pages"]))
 unit = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "systemd", "token-watch-birthcap.service")).read()
 tasks = int(re.search(r"^TasksMax=(\d+)", unit, re.M).group(1))
 check("the unit's TasksMax leaves room for the node mint (measured minimum 48; 32 aborted rc 134)", tasks >= 48, tasks)
@@ -568,6 +581,19 @@ check("... and billing BELOW the census does not (one-sided)",
 old = [dict(o, closed_at=(W_ON - timedelta(hours=80)).isoformat()) for o in over]
 r, st1, r2, st2, v = window_run(pre={"windows_checked": old})
 check("rows older than 72 h leave the cumulative leg", st2.get("cumulative", {}).get("windows") == 1, st2.get("cumulative"))
+
+# the counter resets at the billing-cycle boundary: a window spanning it is recorded, never paged, never summed
+r, st1, r2, st2, v = window_run(vendor_extra=-50_000)
+row = (st2.get("windows_checked") or [{}])[-1]
+pg = r["pages"] + r2["pages"]
+check("a window spanning a cycle reset is verdict reset: no divergence or frozen page, no replan",
+      row.get("verdict") == "reset" and not str(st2.get("replan") or "").startswith("divergence-window")
+      and not any(p["dedupe_key"].startswith(("birthcap-divergence", "birthcap-vendor-meter-frozen")) for p in pg), (row, pg))
+r, st1, r2, st2, v = window_run(vendor_extra=-50_000, pre={"windows_checked": over})
+check("... and it is kept OUT of the cumulative leg: the 9 % overbilling still pages CRITICAL, the reset counted aside",
+      any(p["dedupe_key"].startswith("birthcap-cumulative-overbill-") for p in r2["pages"])
+      and st2.get("cumulative", {}).get("windows") == 5 and st2.get("cumulative", {}).get("reset_windows") == 1,
+      (r2["pages"], st2.get("cumulative")))
 
 print("== 11. the cap does not disable itself (Langston gate C blocker)")
 reset()

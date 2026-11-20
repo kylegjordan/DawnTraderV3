@@ -507,7 +507,11 @@ def _hourly_crosscheck(st: dict, now: datetime, records: list[dict], usage_fn, p
     base_n = max(dv_web, expected)                            # a frozen vendor counter is tested too (gate C item 3)
     share = round(abs(dv_web - expected) / base_n, 4) if base_n else 0.0
     verdict, paged = ("small" if base_n < BIRTHCAP_DIVERGENCE_MIN else "ok"), False
-    if dv_web == 0 and expected >= BIRTHCAP_DIVERGENCE_MIN:
+    if dv_web < 0:
+        # ⛔ THE VENDOR'S COUNTER RESETS AT ITS BILLING-CYCLE BOUNDARY (`providers.helius_usage`: "this project's cycle";
+        #    the free cycle turns on the 27th). A negative delta is that reset, not a disagreement: no replan.
+        verdict, share = "reset", 0.0
+    elif dv_web == 0 and expected >= BIRTHCAP_DIVERGENCE_MIN:
         # ⛔ A DEAD METER IS NOT A BILLING DISAGREEMENT (Langston condition 4): the cap is flying blind. Own key, own title.
         verdict, paged = "frozen", True
         st["replan"] = "frozen-meter:%s" % prev
@@ -628,7 +632,12 @@ def _window_compare(st: dict, w: dict, now: datetime, web_now: int, records: lis
            "vendor_webhooks": dv, "births": births, "switch_credits": switch_cr,
            "share": round(abs(dv - expected) / base, 4) if base else 0.0, "verdict": "small", "paged": False}
     key = opened.strftime("%Y%m%dT%H%M%S")
-    if dv == 0 and expected >= BIRTHCAP_DIVERGENCE_MIN:
+    if dv < 0:
+        # ⛔ A CYCLE RESET INSIDE THE WINDOW (the counter is per billing cycle): the window cannot be compared. Recorded,
+        #    never paged, never a replan, and kept OUT of the cumulative leg below — its huge negative would otherwise
+        #    cancel every overbilled window for the next 72 h.
+        row["verdict"], row["share"] = "reset", 0.0
+    elif dv == 0 and expected >= BIRTHCAP_DIVERGENCE_MIN:
         row["verdict"], row["paged"] = "frozen", True
         pages.append(_page("birthcap-vendor-meter-frozen-window-%s" % key, "warning",
                            "Birth cap: the vendor's webhook meter did not move",
@@ -648,14 +657,16 @@ def _window_compare(st: dict, w: dict, now: datetime, web_now: int, records: lis
     st["windows_checked"] = kept
     # ⛔ THE CUMULATIVE LEG (Langston condition 3): one-sided, the money direction — the vendor billing MORE than the
     #    census counts, summed over the kept windows. This is what makes not paging a single hour safe.
-    cv = sum(r["vendor_webhooks"] for r in kept)
-    ce = sum(r["births"] + r["switch_credits"] for r in kept)
-    st["cumulative"] = {"at": now.isoformat(), "vendor": cv, "census": ce, "windows": len(kept)}
+    summed = [r for r in kept if r.get("verdict") != "reset"]
+    cv = sum(r["vendor_webhooks"] for r in summed)
+    ce = sum(r["births"] + r["switch_credits"] for r in summed)
+    st["cumulative"] = {"at": now.isoformat(), "vendor": cv, "census": ce, "windows": len(summed),
+                        "reset_windows": len(kept) - len(summed)}
     if ce >= BIRTHCAP_CUMULATIVE_MIN and (cv - ce) / ce > BIRTHCAP_CUMULATIVE_OVER_SHARE:
         pages.append(_page("birthcap-cumulative-overbill-%s" % now.strftime("%Y-%m-%d"), "critical",
                            "Birth cap: the vendor has billed more than the census over the last 72 h",
                            "%d windows: vendor webhooks %d against census births + switch credits %d (+%.1f %%); credits "
-                           "drain faster than the plan assumes" % (len(kept), cv, ce, 100.0 * (cv - ce) / ce)))
+                           "drain faster than the plan assumes" % (len(summed), cv, ce, 100.0 * (cv - ce) / ce)))
 
 
 def on_fraction(records: list[dict], day_start: datetime) -> float:
