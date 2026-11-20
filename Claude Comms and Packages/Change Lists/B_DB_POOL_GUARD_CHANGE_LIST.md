@@ -104,3 +104,29 @@
 - **The positive control reproduced as two pages, 21 s after the restart (00:04:10Z):** `db-unencrypted-connection:dawntrader_main` (`0a4276cb-e0fd-4497-b7cd-afea0fcb92a8`, warning, "10 database connection(s)…") and `db-unencrypted-connection:dawntrader_pool_monitor` (`13ee54de-2842-42da-bc40-026d8f2dc219`, warning, "1 …") — exactly the 10 + 1 the `dt-sql` preview of `UNENCRYPTED_SQL` showed before the deploy. **No `db-unencrypted-blind`, no `(unnamed)` page, no app-unplanned-restart page** (every alert row created since 00:03Z read: the seven deploy-in-window notices and these two, nothing else).
 - **Disposition of the two pages:** they are the TRUE state until the T-P3 switch (B-DB-APP-TLS) and machine-clear after two clean reads once the app connects with verify-full. **Never ack; they clear themselves.**
 - **Next:** T-P2 boot check + T-P3 switch in one window (CA install, verify-full proof connection, wrong-CA refusal, atomic `.env` swap, deploy with db-migrate as the canary), then T-P5.
+
+## r4 T-P2 — the boot check, Step 3 (2026-11-20, CC-A) — SHIPS INERT; the one-line wiring is the T-P3 window's first commit
+**Header (Step-4 dispatch fields):** change-class `architecture` (scope header) · doc set at this increment: scope `B_DB_POOL_GUARD_SCOPE.md` present · pre-audit `B_DB_POOL_GUARD_PRE_AUDIT.md` present (r4 T-P2 + Langston's r4 Step-2 approval) · this change list present · completion report, BATCH_CATALOG, PHASE_HISTORY, SYSTEM_MANUAL, SYSTEM_IMPACT_MAP owed at Step 10 (T-P6) · Step-2 reference: `B_DB_POOL_GUARD_PRE_AUDIT.md` T-P2/T-P4.
+
+**Files (all NEW):**
+- `server/db-tls-boot-check.ts` — pure `assertDatabaseTransport(url, env)`. Order: `PGSSLMODE` set → `env_pgsslmode_set`; `PGSSLROOTCERT` set → `env_pgsslrootcert_set`; no URL → `url_missing`; `parse()` throws ENOENT/EACCES/EISDIR → `ca_file_unreadable` (pg-connection-string reads `sslrootcert` with readFileSync INSIDE parse), any other throw → `url_unparseable`; `ssl` not an object → `ssl_not_object` (covers no TLS params, `ssl=true`, `sslmode=disable`); `ssl.ca` not a non-empty string → `ca_missing`; `ssl.rejectUnauthorized === false` → `verification_disabled` (`sslmode=no-verify`); `net.isIP(host) !== 0` (brackets stripped) → `host_is_ip_literal`. Throws `DatabaseTransportError` carrying `.condition`; returns `{ host }`. No fallback, no bypass flag.
+- `server/db-tls-boot-gate.ts` — side-effect module: runs the check on `process.env.DATABASE_URL` + `process.env`, logs `[DB_TLS_BOOT_CHECK] passed: … host=<host>`, or the throw stops the process before any pool exists.
+- `server/tests/unit/b-db-app-tls-boot-check.test.ts` — 14 tests: the pass, today's URL shape as the control (`ssl_not_object`), one per refusal (each asserts the CONDITION NAME), and a fence that the gate checks the real `process.env`. **Mutations M1-M8 (each condition replaced by `if (false)`): every one caught by 1-3 failing tests; restored, 14/14.** tsc baseline 324 = 324.
+
+**Judgement calls — attack these:**
+1. **DEVIATION from the plan's "`server/db.ts`, before either pool is built":** the check lives in its own gate module imported FIRST by `server/index.ts`, not in `db.ts`. Reason: every vitest file and the CI test job import `db.ts` against a plain non-TLS local database (`vitest.config.ts` sets `postgresql://test:test@localhost:5432/test`; CI's postgres service has no TLS). In `db.ts` the check would either break the whole suite or need a test bypass — and a bypass is the fallback the check exists to forbid. Cost, stated: **scripts that import `db.ts` directly are not reached** (extends T-C4: the boot check guards the APP process only; the unencrypted-connection page is what sees scripts, within its 25 s sample). PM2 runs `dist/index.js` with `--env-file=.env`, so the environment exists before the first module evaluates; esbuild keeps ESM evaluation order, so the first import evaluates first.
+2. **SHIPS INERT.** Nothing imports the gate yet. The wiring is one line, withheld because on the shared branch any session's next deploy would refuse to start on today's URL (T-P2's own "never before" clause). It is the FIRST commit of the T-P3 window, with its placement fence, and is deployed in that window:
+   ```diff
+   +// B-DB-APP-TLS T-P2: MUST stay the first import — it refuses to start without verified, pinned TLS to the database.
+   +import "./db-tls-boot-gate.js";
+    import express, { type Request, Response, NextFunction } from "express";
+   ```
+   placement fence (lands with it):
+   ```ts
+   it('server/index.ts imports the gate FIRST, before any module that can build a pool', () => {
+     const src = fs.readFileSync(path.resolve(__dirname, '../../index.ts'), 'utf8');
+     const firstImport = src.split('\n').find((l) => /^\s*import\b/.test(l));
+     expect(firstImport).toMatch(/^import ["']\.\/db-tls-boot-gate\.js["'];$/);
+   });
+   ```
+3. **`pg-connection-string` is imported but not declared in `package.json`** — it is pg's own parser (pg 8.13.1 → pg-connection-string 2.7.0), so the check reads the URL exactly as the pool will. Option: declare it pinned to pg's version, so a pg upgrade that changes the parser cannot silently diverge from a separately-resolved copy. Your call; I lean declare-it in the wiring commit.
