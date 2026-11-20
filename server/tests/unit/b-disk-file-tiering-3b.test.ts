@@ -501,7 +501,7 @@ describe('3b item 2 — Langston r3 carries', () => {
 });
 
 // ── 3b item 3: bind the pre-3a cold rows to exact versions; the inventory; the exclusive takeover ────────────────────
-import { COLD_NON_ARCHIVE_PREFIXES, coldPathOf, orphanVersions, otherOwnerCounts, ownColdPrefixes, planColdBindings, residueDeleteSet, coldReportLines, unparseableColdUris, type UnboundColdRow } from '../../scripts/b75-cold-bind';
+import { COLD_NON_ARCHIVE_PREFIXES, coldPathOf, orphanVersions, otherOwnerCounts, ownColdPrefixes, planColdBindings, residueDeleteSet, coldReportLines, residueReportLine, unparseableColdUris, type UnboundColdRow } from '../../scripts/b75-cold-bind';
 import type { B2ListedVersion } from '../../services/data-archive/storage-client';
 
 const ROW: UnboundColdRow = { id: 'r1', source_table: 'context_bridge_log', partition_label: '2026-01', storage_uri: 'b2://dt-archive-cold/context_bridge_log/2026-01.jsonl.gz', bytes_compressed: 13901237, checksum: 'sha256-x' };
@@ -750,7 +750,7 @@ describe('3b item 4 — the residue delete set: our orphans and non-chosen versi
     const v = (id: string) => ver(id);
     const bad = coldReportLines([v('o')], [v('a'), v('b')], ['b2:/x/y']);
     expect(bad[0]).toContain('UNPARSEABLE cold storage_uri on 1 manifest row(s): [b2:/x/y]');
-    expect(bad[0]).toContain('the ORPHAN and RESIDUE-SET lines below');
+    expect(bad[0]).toContain('the ORPHAN, RESIDUE-SET and per-row RESIDUE lines below');
     expect(bad.slice(1)).toHaveLength(3);
     expect(bad[1]).toContain('[B75 cold-bind] ORPHAN (no manifest row): ');
     for (const line of bad.slice(2)) expect(line).toContain('[B75 cold-bind] RESIDUE-SET ');
@@ -758,6 +758,9 @@ describe('3b item 4 — the residue delete set: our orphans and non-chosen versi
     const good = coldReportLines([v('o')], [v('a')], []);
     expect(good).toHaveLength(2);
     for (const line of good) expect(line).not.toContain('UNTRUSTED');
+    // the third family, the per-row RESIDUE line (Langston's C-2 PROCEED rider): stamped while unparseable, clean when not
+    expect(residueReportLine('t/p', v('r'), 'wrong size, not bound', ['b2:/x/y'])).toMatch(/^\[B75 cold-bind\] t\/p: RESIDUE \(wrong size, not bound\) id=r .* UNTRUSTED\(unparseable=1\)$/);
+    expect(residueReportLine('t/p', v('r'), 'wrong size, not bound', [])).not.toContain('UNTRUSTED');
     // the stream pin: main emits these lines through console.log ONLY, and no other emitter of either text exists
     const bind = read('server/scripts/b75-cold-bind.ts');
     const mainAt = bind.indexOf('async function main(');
@@ -765,10 +768,15 @@ describe('3b item 4 — the residue delete set: our orphans and non-chosen versi
     const body = bind.slice(mainAt);
     expect(body).toContain('for (const line of coldReportLines(orphanVersions(listing.versions, claimed, ownPrefixes), residueSet, unparseable)) console.log(line);');
     expect(body).not.toContain('UNPARSEABLE cold storage_uri on');
-    expect(body).not.toContain('RESIDUE-SET ${');
+    expect(body).toContain('const residueLine = (x: B2ListedVersion, why: string) => console.log(residueReportLine(name, x, why, unparseable));');
+    expect(body).not.toContain('[B75 cold-bind] RESIDUE-SET ');
+    expect(body).not.toContain(': RESIDUE (');
     expect(body).not.toContain('ORPHAN (no manifest row)');
+    // count form for every family (Langston's rider: a non-template second emitter must fail, not just a template one)
     expect(bind.split('UNPARSEABLE cold storage_uri on').length - 1).toBe(1);
     expect(bind.split('ORPHAN (no manifest row)').length - 1).toBe(1);
+    expect(bind.split('[B75 cold-bind] RESIDUE-SET ').length - 1).toBe(1);
+    expect(bind.split(': RESIDUE (').length - 1).toBe(1);
     expect(body).toMatch(/if \(unparseable\.length > 0\) process\.exitCode = 1;/);
   });
 });

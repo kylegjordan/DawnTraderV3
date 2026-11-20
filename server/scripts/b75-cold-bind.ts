@@ -182,9 +182,9 @@ export function unparseableColdUris(rows: { tier: string; storage_uri: string }[
  */
 export function coldReportLines(orphans: B2ListedVersion[], residueSet: B2ListedVersion[], unparseable: string[]): string[] {
   const lines: string[] = [];
-  const stamp = unparseable.length > 0 ? ` UNTRUSTED(unparseable=${unparseable.length})` : '';
+  const stamp = untrustedStamp(unparseable);
   if (unparseable.length > 0) {
-    lines.push(`[B75 cold-bind] UNPARSEABLE cold storage_uri on ${unparseable.length} manifest row(s): [${unparseable.join(', ')}] — the ORPHAN and RESIDUE-SET lines below are NOT trustworthy while any exist (their objects read as orphans)`);
+    lines.push(`[B75 cold-bind] UNPARSEABLE cold storage_uri on ${unparseable.length} manifest row(s): [${unparseable.join(', ')}] — the ORPHAN, RESIDUE-SET and per-row RESIDUE lines below are NOT trustworthy while any exist (their objects read as orphans, or as another row's duplicates)`);
   }
   for (const o of orphans) {
     lines.push(`[B75 cold-bind] ORPHAN (no manifest row): ${o.fileName} id=${o.fileId} bytes=${o.contentLength} sha1=${o.contentSha1} uploaded=${new Date(o.uploadTimestamp).toISOString()}${stamp}`);
@@ -193,6 +193,20 @@ export function coldReportLines(orphans: B2ListedVersion[], residueSet: B2Listed
     lines.push(`[B75 cold-bind] RESIDUE-SET ${v.fileName} id=${v.fileId} bytes=${v.contentLength} uploaded=${new Date(v.uploadTimestamp).toISOString()}${stamp}`);
   }
   return lines;
+}
+
+/** Pure: the stamp every report line about a stored object carries while any cold uri is unparseable. */
+function untrustedStamp(unparseable: string[]): string {
+  return unparseable.length > 0 ? ` UNTRUSTED(unparseable=${unparseable.length})` : '';
+}
+
+/**
+ * Pure: one per-row RESIDUE line (a version a row did not bind), stamped like the ORPHAN and RESIDUE-SET families.
+ * An unparseable row's real object can be a sibling version of a parseable row's path and print here as that row's
+ * duplicate (Langston's 3d C-2 PROCEED rider, 2026-11-20). Same stream (stdout). Exported for tests.
+ */
+export function residueReportLine(name: string, x: B2ListedVersion, why: string, unparseable: string[]): string {
+  return `[B75 cold-bind] ${name}: RESIDUE (${why}) id=${x.fileId} bytes=${x.contentLength} uploaded=${new Date(x.uploadTimestamp).toISOString()}${untrustedStamp(unparseable)}`;
 }
 
 /** Pure: stored VERSIONS (uploads only — hide markers are not versions) outside the archive namespaces, counted by
@@ -248,7 +262,7 @@ async function main(): Promise<void> {
     const residueSet = residueDeleteSet(listing.versions, claimed, ownPrefixes, decisions, boundIds);
     const unparseable = unparseableColdUris(all.rows);
     // C-2 (3d close): their objects read as orphans, so neither the ORPHAN lines nor the RESIDUE-SET is a safe keep
-    // input until fixed; the warning and both stamped families share ONE stream (stdout), warning first
+    // input until fixed; the warning and all three stamped families share ONE stream (stdout), warning first
     for (const line of coldReportLines(orphanVersions(listing.versions, claimed, ownPrefixes), residueSet, unparseable)) console.log(line);
     if (unparseable.length > 0) process.exitCode = 1;
     let failures = 0;
@@ -256,8 +270,7 @@ async function main(): Promise<void> {
       const name = `${d.row.source_table}/${d.row.partition_label}`;
       if (d.kind === 'refused') { failures++; console.error(`[B75 cold-bind] ${name}: REFUSED — ${d.reason}`); continue; }
       let version: B2ListedVersion | null = d.kind === 'bind' ? d.version : null;
-      const residueLine = (x: B2ListedVersion, why: string) =>
-        console.log(`[B75 cold-bind] ${name}: RESIDUE (${why}) id=${x.fileId} bytes=${x.contentLength} uploaded=${new Date(x.uploadTimestamp).toISOString()}`);
+      const residueLine = (x: B2ListedVersion, why: string) => console.log(residueReportLine(name, x, why, unparseable));
       if (d.kind === 'bind') {
         for (const x of d.residue) residueLine(x, 'a duplicate or a wrong-size version, not bound');
         if (d.residue.length > 0 && d.row.created_at) {
