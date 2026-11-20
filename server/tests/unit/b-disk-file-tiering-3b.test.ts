@@ -362,6 +362,14 @@ describe('3b — the rotator lock: refuse a live holder, take over a dead one, n
     const lockedAt = cli.indexOf('acquireRotatorLock(ROTATOR_LOCK_PATH');
     expect(parsedAt).toBeGreaterThan(0);
     expect(lockedAt).toBeGreaterThan(parsedAt);
+    // Langston C-1 (Step 4, dee8a01e4): between taking the lock and the finally-protected try, the ONLY exit is the
+    // 'held' arm, which exits holding nothing. Any other exit there would leave the lock behind, the same leak shape.
+    const region = cli.slice(lockedAt, cli.indexOf('  try {', lockedAt));
+    const heldStart = region.indexOf("if (lock.kind === 'held') {");
+    const heldArm = region.slice(heldStart, region.indexOf('\n  }', heldStart));
+    expect(heldStart).toBeGreaterThan(0);
+    expect(heldArm.split('process.exit(').length - 1).toBe(1);
+    expect(region.split('process.exit(').length - 1).toBe(1);
   });
   it('a holder on ANOTHER host is held, never taken over', () => {
     const f = path.join(tmp(), 'lock');
