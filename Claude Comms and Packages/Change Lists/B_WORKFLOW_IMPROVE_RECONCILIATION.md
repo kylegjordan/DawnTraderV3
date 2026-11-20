@@ -1,6 +1,6 @@
 # B-WORKFLOW-IMPROVE reconciliation: A-block rules vs the summary above them
 
-Ref: `eb12f019ba6ab9ddcae59d4bc83368194445d202` (HEAD of migration/aws-supabase, read with `git show HEAD:.claude/skills/<dir>/SKILL.md`).
+Ref: `b75aeba603f5e5c469e7289e2b9e63810c310e07` (the pre-move ref on migration/aws-supabase, read with `git show b75aeba60:.claude/skills/<dir>/SKILL.md`). *Re-stamped 2026-11-20 (Langston gate 3, Q10 c): the ref first named here, `eb12f019b`, was dropped by a rebase and no remote serves it; `b75aeba60` resolves.* The verdict tables below are AS AT that ref; the section "Re-check at the graded ref" at the end closes five of the nine MISSING rows.
 Method: each A block ("THE ORIGINAL RULES-FILE TEXT, PRESERVED VERBATIM") split into atomic rules; each searched in the SAME file's text above the A heading. Line numbers are the committed file's. A dated attribution that is absent from the summary makes the row PARTIAL (tagged "attribution only" when the substance is carried). Greps of the summary part found nothing for: 2026-05-24, 2026-07-29, #174, #452, #453, "amendment", #649, #621, 2026-07-23, 2026-05-07, and "review branch" (skill 10).
 
 ## workflow-01-scope (A block lines 55-64; summary lines 1-50)
@@ -146,6 +146,20 @@ Totals workflow-11: PRESENT 6 / PARTIAL 0 / MISSING 0 (6 rules).
 
 ## Grand totals
 PRESENT 50 / PARTIAL 15 / MISSING 9 (74 rules) across the 11 skills. Skills 03, 07, 08, 09, 11 are fully carried; 01 and 10 hold most of the gaps.
+
+## Re-check at the graded ref (Langston gate 3, Q10 d, 2026-11-20)
+Population: the 9 MISSING rows above, re-read in the step skills at `origin/migration/aws-supabase`. Five are now carried by the summary; the sentence "every rule in it is carried by the summary above" therefore holds at the ref for every rule except four origin or history items, which the archive keeps by design.
+| row | rule | now | where |
+|---|---|---|---|
+| wf-01 M16 | (5) routes to rule 18/section 15 (delete on the spot or a placed deletion, DELETED_COMPONENTS_LOG + _archive) | CARRIED | `workflow-01-scope/SKILL.md:32` ("(5) routes to CLAUDE.md rule 18") |
+| wf-01 M17 | why (5) exists (reconnect risk, false "connected") | CARRIED | `workflow-01-scope/SKILL.md:32` ("Why (5) exists") |
+| wf-10 M8 | mirror your MEMORY structure in Langston's MEMORY | CARRIED | `workflow-10-governance/SKILL.md:208` (10.b) |
+| wf-10 M12 | update /home/langston/CLAUDE.md only for comms-protocol or persona change | CARRIED | `workflow-10-governance/SKILL.md:208` (10.b) |
+| wf-10 M13 | repo-side docs reach Langston off the review branch, so push them | CARRIED | `workflow-10-governance/SKILL.md:208` (10.b) |
+
+**Still MISSING from the summary, assigned to the archive (4):** wf-01 M4 (the B79.0n.STRATEGY origin case), wf-01 M8 (the #174 seven-weeks case), wf-01 M19 (Kyle's cost reasoning for the five dispositions), wf-04 M6 (the 2026-07-23 correction record). Each is an origin case, a rationale or correction history, which the archive pointer (`1-system-manual/_archive/WORKFLOW_SKILL_ORIGINAL_TEXT.md`) assigns to the archive; none states a rule a session must follow.
+
+**Totals at the graded ref (74 rules):** PRESENT 55 / PARTIAL 15 / MISSING 4 (was PRESENT 50 / PARTIAL 15 / MISSING 9 at the pre-move ref). Line numbers are the committed files' and can move by a line or two; locate by the quoted text.
 
 ## Every PARTIAL and MISSING item, with the A-block wording to carry
 ### workflow-01-scope

@@ -22,6 +22,10 @@
 // passage that stood in several files and now has one home. Every listed source must have lost the passage and
 // kept the id.
 //
+// CANNOT SEE: --dupes searches only each move's declared `sources` and its destination, so a second copy of a passage in a
+// file the ledger does not list is invisible to it (an undeclared copy elsewhere reads as 'one home'). It also cannot show the
+// destination matches the PRE-move text: the sha256 is taken from the destination itself.
+//
 // Usage: node scripts/crew-tooling/move-ledger-check.mjs [--ledger <path>] [--dupes] [--root <dir>] [--ci] | --self-test
 //   --ci: on failure print GitHub `::warning::` lines and exit 0 (warn-only until Langston rules on blocking).
 
@@ -153,7 +157,7 @@ if (isMain) {
   const li = args.indexOf('--ledger');
   const ledgerPath = li >= 0 ? args[li + 1] : LEDGER;
   const r = check(root, { dupes: args.includes('--dupes'), ledgerPath });
-  if (r.ok) { console.log(`${VERSION}: OK — ${ledgerPath}: ${r.n} moves, each present once at its destination, unchanged, gone from every source${args.includes('--dupes') ? ', one home each' : ''}.`); process.exit(0); }
+  if (r.ok) { console.log(`${VERSION}: OK — ${ledgerPath}: ${r.n} moves, each present once at its destination, unchanged, gone from every source${args.includes('--dupes') ? ', one home each (declared sources only; an undeclared second copy elsewhere is not searched)' : ''}.`); process.exit(0); }
   for (const f of r.fails) console.log((args.includes('--ci') ? '::warning title=move ledger::' : 'FAIL ') + f);
   console.log(`${r.fails.length} failure(s) across ${r.n} moves.`);
   process.exit(args.includes('--ci') ? 0 : 1);

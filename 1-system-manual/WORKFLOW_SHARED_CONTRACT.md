@@ -6,7 +6,7 @@
 
 | § | rule | named by |
 |---|---|---|
-| 1 | a fresh reader for a load-bearing claim | `workflow-02`, `workflow-04`, `workflow-07`, `workflow-11`, `bug-investigation` (its one-pass rule), `workflow-hotfix` |
+| 1 | a fresh reader for a load-bearing claim | `workflow-02`, `workflow-04`, `workflow-07`, `workflow-11`, `workflow-hotfix`; `bug-investigation` points at the one-pass block here and holds no copy of it |
 | 2 | the delivery board — who moves the card, and what it may hold | every step skill `workflow-01` … `workflow-11` |
 | 3 | Langston is stateless per invoke | `workflow-04`, `workflow-08`, `workflow-hotfix` |
 

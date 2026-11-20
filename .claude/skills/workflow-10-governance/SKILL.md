@@ -11,6 +11,7 @@ description: STEP 10 ONLY of the DawnTrader batch workflow - Governance Updates.
 > **This is the authoritative list, moved here VERBATIM rather than summarised.** It lived in the always-loaded rules file and was paid for on every start and every compaction by every session — but it is consulted at exactly ONE moment, the governance turn, which is the textbook case for a skill. **`CLAUDE.md` §3 keeps only what fires OUTSIDE this step:** batch NAMING and the CHANGE-CLASS declaration (they fire when a batch is created, at Step 1) and the MEMORY-file rules (they fire at session start).
 
 ⛔⛔ **THE DOCUMENT LIST IS THE TIER LEDGER BELOW. THERE IS NO OTHER LIST IN THIS FILE.**
+★ **Aid for checking the set: the close-out matrix. Its command, its standing and what it cannot see are held once, in `workflow-02-audit-and-plan`, "THE AUDIT AIDS"; read it there.**
 ⚠️ **The Tier-1 AND Tier-2 bullets that stood here are DELETED (2026-08-28).** ★ **The Tier-2 bullets went first; a fresh reader then found the TIER-1 bullets still standing — ninety lines EARLIER in reading order, self-declared *"the authoritative list"*, and ALREADY DIVERGED from the rows: they named only the mirror `MEMORY.md` (not the per-session files) and omitted Langston’s `MEMORY.md` entirely, which is now a Tier-1 row.**
 ⇒ ⛔ **I fixed `#641` on one tier and left it standing on the other — and the copy I left was the one a top-down reader hits FIRST.**
 
@@ -64,6 +65,8 @@ Then complete the objectives table and the governance-files list. ⛔ **You do n
 
 ★ **THE DISPOSITION: THE SELF-RESCHEDULING ALERT IS THE WINDOW’S *TIMER*; THE PROGRESS REPORT IS ITS *RECORD*.** One fires; the other remembers. ⇒ **A batch may close with a genuinely deferred item PROVIDED the alert carries the criterion and, when it fires, the result AND what was decided or done on it, by whom, is written back** (Langston, 2026-09-29 — data with no decision on it is an open loop, and here nothing reopens to decide). ★ **And that supplies the mechanism the sentence below otherwise lacks** — *"it must never quietly wait forever"* is a wish until something re-fires on its own.
 ⛔ **PROSPECTIVE ONLY. This does not reopen a single closed batch.**
+
+⛔ **A BATCH HELD IN OBSERVATION ON A PROGRESS REPORT NEEDS A DECLARED `open` ROW IN `GOVERNANCE_EXCEPTIONS.md` (a live obligation, not a draft).** The governance checker cannot accept a `*_PROGRESS_REPORT.md` as the completion report (it matches the completion-report document by file basename), so without that row the completion-report deadline lapses and alerts; only the declared `open` row suspends the deadline.
 
 ⛔ **AND THE BATCH IS NOT CLOSED UNTIL THAT CONVERSION HAPPENS.** A progress report is an OPEN state. The delivery-board card stays out of `Complete`, and the `RUNNING_ISSUES` entry stays open.
 ⚠️ **IF THE OBSERVATION FAILS ITS CRITERION, THAT IS A RESULT, NOT A DELAY** — it converts to a completion report recording the failure and what follows, or the batch reopens at the step that needs redoing. **It must never quietly wait forever.**
@@ -263,7 +266,7 @@ Move the card to **`Governance`**.
 ---
 
 ## ◇ DRAFT — B-WORKFLOW-IMPROVE (non-blocking until the OBJ-9 pilot; any part becomes a gate only by the reviewer's recorded ruling)
-- **CLOSED-UNPROVEN objectives get a home like any §9.4 finding:** a placed row in the active plan and a `RUNNING_ISSUES` entry naming owner, closing and failure condition. When the Step-11 artifact is a progress report, the declared `open` row in `GOVERNANCE_EXCEPTIONS.md` applies as before.
+- **CLOSED-UNPROVEN objectives get a home like any §9.4 finding:** a placed row in the active plan and a `RUNNING_ISSUES` entry naming owner, closing and failure condition. When the Step-11 artifact is a progress report, the `open`-row obligation above (the progress-report block, before this draft section) applies.
 
 ## THE ORIGINAL RULES-FILE TEXT — ARCHIVED (`WI-A10`)
 The word-for-word `CLAUDE.md` §2 text for this step is archived, unchanged, at `1-system-manual/_archive/WORKFLOW_SKILL_ORIGINAL_TEXT.md` (`WI-A10`; B-WORKFLOW-IMPROVE Q10, 2026-11-20). **Every rule in it is carried by the summary above;** the archive keeps the origin cases, dates and issue numbers. Read it when a rule's history matters.

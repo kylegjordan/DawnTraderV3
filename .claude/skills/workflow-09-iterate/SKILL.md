@@ -26,7 +26,7 @@ Card stays in **`Verification`** while you iterate. **Do not move it backwards**
 ---
 
 ## ◇ DRAFT — B-WORKFLOW-IMPROVE (non-blocking until the OBJ-9 pilot; any part becomes a gate only by the reviewer's recorded ruling)
-- **CLOSED-UNPROVEN** formalizes the open item above. An objective whose proof cannot run inside the batch (it waits on an event, a quantity, or the other crew) takes status `closed-unproven`, with owner, placed home, closing condition and failure condition. It is never recorded `done`; the checker rejects done-while-unproven. The batch ledger: `scripts/crew-tooling/ledger-schema.json`, checked by `node scripts/crew-tooling/ledger-validate.mjs <ledger.json>`.
+- **CLOSED-UNPROVEN** formalizes the open item above. An objective whose proof cannot run inside the batch (it waits on an event, a quantity, or the other crew) takes status `closed-unproven`, with owner, placed home, closing condition and failure condition. It is never recorded `done`; `scripts/crew-tooling/ledger-validate.mjs` rejects done-while-unproven (it validates the batch ledger; it is not the governance checker and is reported, not gated). The batch ledger: `scripts/crew-tooling/ledger-schema.json`, checked by `node scripts/crew-tooling/ledger-validate.mjs <ledger.json>`.
 
 ## THE ORIGINAL RULES-FILE TEXT — ARCHIVED (`WI-A09`)
 The word-for-word `CLAUDE.md` §2 text for this step is archived, unchanged, at `1-system-manual/_archive/WORKFLOW_SKILL_ORIGINAL_TEXT.md` (`WI-A09`; B-WORKFLOW-IMPROVE Q10, 2026-11-20). **Every rule in it is carried by the summary above;** the archive keeps the origin cases, dates and issue numbers. Read it when a rule's history matters.
