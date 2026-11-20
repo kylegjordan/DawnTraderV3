@@ -217,3 +217,29 @@ Part A verdict: CHANGES NEEDED (Discord msg 1573311142691078216). Each item and 
 
 **NOT RE-READ (no fresh reader):** that `dv - switch_cr <= 0` is the right frozen boundary when a switch charge and a real birth land in the same minute; that excluding meter-fault windows cannot hide a genuine over-bill that coincides with a frozen read.
 **Not proven:** a real window's live behaviour — rides `install_storage.sh <sha>` and Step 7 OBJ-1.
+
+### §9e Part B — the ON window, and Part A's three Part-B obligations (2026-11-20)
+
+Part A verdict: **PROCEED** (Discord `1573344383842132081`). His two record corrections are taken: CI `44745580867` graded `b6428d6ef`, not the ref; the leg stands on `c0a82132e`'s own run `44749286952` 4/4 plus `token-watch/birthcap.py` byte-identical (`76a83f61…`) between `62a64bc2f` and `c0a82132e`. And `62a64bc2f`'s parent is `e1a989fa0`.
+
+**READY-AT: `a0d2a36ca9ac41e96a3242d81fb109859ff00400`.** Diff: `git diff c0a82132e a0d2a36ca -- token-watch` — one commit (`git log c0a82132e..a0d2a36ca -- token-watch` lists only `a0d2a36ca`), 158+/26- in `birthcap.py`, `tests/test_birthcap.py`, `tests/mutate_birthcap.py`.
+
+| Part-B obligation | answer at the READY-AT |
+|---|---|
+| **The compare-instant switch** (his hypothesis) | **Real.** A GET or PUT made in the tick that takes a meter read carries that read's own timestamp, so `opened <= requested_at < now` put it on the wrong side: a test of it failed 3 checks before the fix. **Fix: pair by CODE ORDER.** `_charge_switch` (`:590-596`) charges the budget ledger AND a running counter `st["switch_charged"]` in one place; every window snapshots the counter as `sw` at its meter read (open `:616`, cut-reopen `:677`); the compare uses `switch_charged - w["sw"]` (`:693-694`). `records` is no longer passed through the window functions. Tests `:692-716`: a GET charged before the adopt snapshot is not counted; a GET in the cut's own tick is in the delta and is counted (500 = 400 + 100); the reopened window does not count it again. |
+| **The small-window dilution** (named check, no change) | `tests/test_birthcap.py:783-806`: a window with 150 births and a dead meter, driven through the production tick (adopt → births → cut), is verdict `small`, pages nothing, and stays in the cumulative leg; five such rows pull a 9 % overbill under the 3 % line. On the live path an ON window always holds two switch charges (base ≥ 200), so `small` arises only in an adopted or cut window. |
+| **Literal `100` in the window fake** | `config.SWITCH_CREDITS` at `:546, :573, :599, :622, :638`. |
+
+**Found by mutation, fixed:** the billed restore while DISABLED charged the ledger and no test saw it. New check `:253-255`: one `"switch"` journal row AND the counter moved by its credits.
+
+**Install transition, handled:** the live window (opened under `cde88cc02`) has no `sw`; its first compare would raise `KeyError`, and on the switch-ON path (outside the `try`) that fails the tick with the feed off. Such a window closes as verdict `unpaired` (`:703-707`): `switch_credits` None, never paged, never a replan, kept out of the 72 h sum (`:744`), counted aside as `unpaired_windows` (`:749`). Test `:572-587`. At most one window, once.
+
+**Mutation:** 8 new mutants (counter never advances; open / cut not snapshotting; GET charging the ledger only; disabled restore uncharged; compare dropping the credits; pre-counter window compared as paired; unpaired window summed). Local suite **141 passed, 0 failed** (Windows; 3 POSIX-only checks skipped there). Each new mutant KILLED run alone. The full local run read 6 SURVIVED: 3 are the POSIX-only timeout mutants (their checks are skipped on Windows, rc 0), 3 were rc 1 with no FAIL line from overlapping local runs and each KILLED run alone — **cause not proven**. The CI run on Linux is the record for the committed state.
+
+**JUDGEMENT CALLS — please attack these:**
+1. **`unpaired` for the install-transition window** rather than reading its credits from the switch log by timestamp (the defect this batch just removed) or dropping the window silently.
+2. **The hourly arm still pairs by hour prefix** (`:505`). Left unchanged: since §9e it pages only `frozen` (births ≥ 200 and `dv - switch_cr <= 0`) and `backwards`; a switch misplaced across an hour edge moves `dv - switch_cr` by 100, which can turn a frozen hour into a miss (the window arm still sees it) or make a near-dead hour (vendor ≤ 100 against ≥ 200 births) read frozen — which is a meter fault anyway.
+3. **900 s as the never-quiet maximum, and two plan blocks as the no-OFF cut** — both my numbers, not derived (carried from the first Part B draft).
+
+**NOT RE-READ (no fresh reader):** that every vendor call that bills goes through `_charge_switch` (three call sites, `:312, :401, :432`, found by grep for `record_pending("switch"`); that both window ends are quiescent so delivery lag cannot land.
+**Not proven:** a real window's live behaviour — rides `install_storage.sh <sha>` and Step 7 OBJ-1.
