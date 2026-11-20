@@ -201,3 +201,76 @@ Load-bearing claims in this list that were **NOT RE-READ** by a fresh reader: th
 **⚠️ Install entanglement — please read before ruling on either gate.** The installed bridge is the blob at `27ef0d3f7` (sha256 `1b967553a1a5`, read back on Helsinki 2026-11-20 21:0xZ; service active). The branch head carries `discord-langston-bridge.py` blob `db478856d70b`, which contains **both** P6 (`57415baae`, `8db7c0213`) **and** the two-workers fold (`021d015d4`, which you cleared to install at idle). `deploy.sh --only bridges` installs the whole file at a sha, so **installing the fold at head would ship P6 before its PROCEED** — and your ref-versus-installed comparison for the fold spanned the P6 hunks as well. Plan: no bridge install until P6 has its PROCEED; then ONE combined install at idle (`live-vs-sha.py` → `deploy.sh --sha <graded> --only bridges` → `langston-bridge-restart`), moving the `#1004` drift pin in the same sitting.
 
 **For Kyle's list, via PM (owner CC-INFRA, pre-audit §13):** should CC-PM be a routable alert owner? Until he rules, C-1 stands as above.
+
+## AMENDMENT 1 r4 — the Step-6 install refusal and the restart-tool fix (2026-11-20/21)
+
+**READY-AT: `39a3849c2cb1b8be4a20b0d5c92c6972e4eedad8`** on `origin/migration/aws-supabase` — one commit, `39a3849c2^..39a3849c2`, 2 files, +47 / -4: `comms-infra/discord/langston-bridge-restart` and `comms-infra/discord/test_langston_bridge_restart.py`. No change to anything you cleared at `0c9274a21`.
+
+### Dispatch header (workflow-04, three fields)
+
+| # | field | value |
+|---|---|---|
+| i | DECLARED CHANGE-CLASS | `non_architecture` (`Scope Files/B_TOKEN_ECONOMY_SCOPE.md:3`, unchanged) |
+| ii | DOC SET | as in the AMENDMENT 1 header above, unchanged: SCOPE present · PRE_AUDIT present · COMPLETION_REPORT, BATCH_CATALOG, PHASE_HISTORY absent (Steps 10-11) · SYSTEM_MANUAL judged N/A (crew tooling) · SYSTEM_IMPACT_MAP, CHANGES_AND_FIXES, RUNNING_ISSUES, SPRINT row, MEMORY files, task list judged at Step 10 · POST_AUDIT_ROADMAP, ADJUSTMENT_FRAMEWORK, DELETED_COMPONENTS_LOG judged N/A (nothing removed) · PHASE_19_PLAN N/A (not `P19-*`) |
+| iii | STEP-2 REFERENCE | `Scope Files/B_TOKEN_ECONOMY_AMENDMENT_1_PRE_AUDIT.md` (P6 rows). This increment is a Step-9 fix to the install tool found AT Step 6; the pre-audit's P6 install plan named `langston-bridge-restart` as the restart path and did not audit its import of the installed `alert_lane.py` — **that gap is what this increment closes.** |
+
+### What happened at Step 6
+
+After your PROCEED at `0c9274a21`, CI `44832950713` 4/4 green, and the seeded-failure check passing, I installed `0c9274a21` with `deploy.sh --only bridges` (install-verify clean, `alert_owner_route.py` present 0644 beside the bridge). `langston-bridge-restart` then died **before acting**: `ModuleNotFoundError: No module named 'alert_owner_route'` in `load_predicate` → `exec_module` at `alert_lane.py:19`. **The bridge was not restarted** — the running process stayed the `27ef0d3f7` code throughout.
+
+**Rollback (a deploy, not a command):** `deploy.sh --sha 27ef0d3f7cc3a88419afa19f6e12412f5ed57772 --only bridges`. Read back: bridge blob `faa03f41`, `alert_lane.py` `14861b2d` = the running code (MainPID 3937692, active since 2026-11-19 23:03:16); the tool's predicate then loaded clean. The stray `alert_owner_route.py` from the `0c9274a21` install remains in `/opt/discord-bridges` (unused by `27ef0d3f7`'s `alert_lane.py`; the next install overwrites it).
+
+**Cause:** the tool loads `alert_lane.py` BY FILE PATH (`spec_from_file_location`). Running the bridge as a script puts its own directory on `sys.path`, which is why the bridge itself imports the sibling fine; a file-path load does not. P6 gave `alert_lane.py` its first sibling import, so this was the first install the tool could not load.
+
+**Why the suite missed it:** section 5 runs in-process after `sys.path.insert(0, HERE)` (`test_langston_bridge_restart.py:8`), so the branch's own `alert_owner_route.py` satisfied the import whatever the temp dir held. `MISTAKE: wrong-object` trailer on the commit.
+
+### Load-bearing hunk — `load_predicate`
+
+BEFORE:
+```python
+    d = bridge_dir or BRIDGE_DIR
+    spec = importlib.util.spec_from_file_location("lbr_alert_lane", os.path.join(d, "alert_lane.py"))
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+```
+AFTER:
+```python
+    d = bridge_dir or BRIDGE_DIR
+    sys.path.insert(0, d)
+    try:
+        spec = importlib.util.spec_from_file_location("lbr_alert_lane", os.path.join(d, "alert_lane.py"))
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+    except ImportError as e:
+        raise Refusal(12, "refusing: the installed %s/alert_lane.py cannot import a module it needs (%s) - the "
+                          "bridges group is incomplete. Install it (deploy.sh --only bridges) first." % (d, e))
+    finally:
+        sys.path.remove(d)
+```
+Docstring exit list gains `12 the installed alert_lane.py cannot import a sibling it needs (an incomplete bridges install)`. The predicate self-check (exit 10) and everything after it is unchanged.
+
+### New test 5b — the load in a CHILD with `python -I`, `cwd` = the dir under test
+
+```python
+def _child_load(d):
+    r = _sp.run([sys.executable, "-I", "-c", _CHILD, os.path.join(HERE, "langston-bridge-restart"), d],
+                capture_output=True, text=True, cwd=d)
+    out = r.stdout.strip()
+    return out if out else (r.stderr.strip().splitlines() or ["<no output>"])[-1]
+```
+`-I` drops the script dir, `PYTHONPATH` and user site; `_CHILD` is passed with `-c`, so the child has nothing of this test's folder. Cases: complete dir (`alert_lane.py` + `alert_owner_route.py`) → `loaded`; control, `alert_lane.py` alone → `refused 12`. A traceback returns its last stderr line, so it reads as itself and never as a pass.
+
+**Results, on Helsinki in a scratch dir (Windows has no `pwd`):** suite EXIT=0, 0 FAIL. Mutants, judged by exit code, each applied by line number and the applied line printed:
+| mutant | EXIT | caught by |
+|---|---|---|
+| `sys.path.insert` AND `sys.path.remove` → `pass` | 1 | 5b positive case: got `'refused 12'` |
+| `except ImportError` → `except ZeroDivisionError` | 1 | 5b control: got the raw `ModuleNotFoundError` |
+| `sys.path.insert` alone → `pass` | 1 | crash: `remove` of a dir not on the path (exit only, no FAIL line) |
+
+### Judgement calls — please attack these
+
+1. **`sys.modules` is not cleared.** If a module named `alert_owner_route` were already imported in the tool's process, the load would reuse it rather than the installed one. In the tool's real run nothing imports it before `load_predicate`, and 5b's child starts clean. I did not add a `sys.modules.pop` because it would mask exactly what 5b exists to catch in-process. Say if you want it.
+2. **Exit 12 refuses on ANY `ImportError` from the installed `alert_lane.py`**, not only a missing sibling — a broken third-party import would also read as "incomplete bridges install". I judged the message still points at the right action (install the group); the exception text is carried in the refusal.
+3. **Reach, stated:** 5b proves the tool can load a complete install dir and refuses an incomplete one. It does not prove the installed group matches a sha — that remains `live-vs-sha.py` + install-verify, as the docstring's reach note already says.
+
+**Next, after your verdict:** CI on `39a3849c2` → `deploy.sh --sha 39a3849c2… --only bridges` (carries P6 + the two-workers fold + this fix; the bridge files are byte-identical to what you graded at `0c9274a21` — verified by blob at install) → `langston-bridge-restart` while you are idle → read back + move the `#1004` drift pin in the same sitting.
