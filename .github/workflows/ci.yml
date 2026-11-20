@@ -270,6 +270,12 @@ jobs:
       - name: Wake lease verdict tests (pid reuse)
         if: ${{ !cancelled() }}
         run: python3 scripts/analysis/test-wake-lease-verdict.py
+      # B-DISK-FILE-TIERING P9 residual (Langston, Discord 1573403358495248597): the price-side window extractor's
+      # selftest - restart exclusion, start coverage (the rotation prepend and its gaps) and the PM2-log guards, on a
+      # synthetic corpus in a temp directory. Pure Python stdlib, no installs; exits 1 on any failed expectation.
+      - name: Window extractor selftest (start coverage, restarts)
+        if: ${{ !cancelled() }}
+        run: python3 scripts/analysis/p4c-window-extract-selftest.py
 
       - name: Alert hook tests (split, lost routing)
         if: ${{ !cancelled() }}
