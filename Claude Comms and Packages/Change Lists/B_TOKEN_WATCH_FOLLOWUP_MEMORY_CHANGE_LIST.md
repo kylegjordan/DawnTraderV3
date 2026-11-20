@@ -866,3 +866,18 @@ OLD Claude's off-schedule cold audit (B-DISK-FILE-TIERING 3d, 12:5xZ) raised `3e
   MISTAKE: wrong-object [B-TOKEN-WATCH-FOLLOWUP-MEMORY] — I took the 48 h store-growth read without checking that the follow-up was observing during the window; it had observed nothing since 11-16, so the read measured the wrong state.
 
 - **RE-REGISTERED (Langston C-2, `1573123563844538452`): P10's reads open at the budget-fix install, 2026-11-20T00:03:59Z.** Baseline at the install: `du -sb /var/lib/token-watch`, as root, 2026-11-20T00:04:39Z → **5,751,061,075 B** (no census artifact on disk — the same surface as the late read). The 48 h read at **2026-11-22T00:05Z**: growth = (store then − 5,751,061,075) over the elapsed time, projected linearly to the 8 GiB cap; the rule is unchanged (crossing within 14 days → the follow-up timer off and P15 to Kyle via PM). **It counts only if the follow-up observed in its window** (a run with `observed > 0` — the precondition the withdrawn read lacked). The 7-day read moves to **2026-11-27T00:05Z**, from the same install. `DEPLOY_WINDOWS` row amended to match; alert `51237692` superseded by the two new rows.
+
+- **PER-DIRECTORY CENSUS FOR THE RE-REGISTERED 48 h READ (Langston item 4, Discord `1573132625793523815`), taken inside the window, before its data:** `du -sb /var/lib/token-watch/*/`, as root, **2026-11-20T00:27:54Z** (whole store 5,766,668,227 B; +15,607,152 B over the 00:04:39Z baseline, with the first post-fix follow-up run still in progress):
+
+  | directory | bytes | newest write | who writes it (from the newest-write times and the code paths; NOT a full writer census) |
+  |---|---|---|---|
+  | `observations/` | 2,047,361,606 | 11-20 00:03:05Z | the follow-up |
+  | `births/` | 1,747,902,071 | 11-20 00:27:58Z | the receiver (births) — not the follow-up |
+  | `due/` | 824,072,695 | 11-20 00:27:58Z | both: births schedule checkpoints, the follow-up re-queues them |
+  | `study/` | 413,915,873 | 11-20 00:28:03Z | the follow-up (its last write before this run was 11-16 10:52Z, the shed onset) |
+  | `dead/` | 260,167,263 | 11-16 10:00:02Z | the follow-up (silent since the shed onset) |
+  | `provenance/` | 239,835,014 | 11-20 00:12:07Z | mixed (raw bodies, the planned-off log) |
+  | `state/` | 202,336,138 | 11-20 00:28:03Z | mixed (budget, last-seen, the birth-cap state) |
+  | `cold/` | 30,948,104 | 11-19 05:03:23Z | the daily off-box move |
+
+  **At 11-22T00:05Z the read takes the same per-directory census and reports growth per directory.** PROPOSED for Langston's ruling, before the data: the projection and its 14-day threshold are unchanged; if the crossing is driven by directories the follow-up writes (`observations`, `study`, `dead`, the follow-up share of `due`), the named action stands (follow-up timer off + P15 to Kyle via PM); if it is driven by `births`/`state`, only P15 goes to Kyle (that growth is P15's own subject, `#1246`), because switching the follow-up off would not stop it.
