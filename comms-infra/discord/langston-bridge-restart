@@ -37,7 +37,8 @@ Exit codes: 0 recovered · 2 refused before acting (not root, bad start time, jo
 3 no reply posted within --wait-s · 4 restart failed · 5 recovery FAILED · 6 recovered but the floor file
 remains · 7 floor REFUSED by the bridge · 8 no summary in 180 s · 9 waiting messages fall outside the floor ·
 10 the installed delivered-reply rule failed its self-check · 11 the journal stream ENDED early (journalctl
-died: check the unit and read permissions - not a timeout, so waiting longer will not help).
+died: check the unit and read permissions - not a timeout, so waiting longer will not help) · 12 the installed
+alert_lane.py cannot import a sibling it needs (an incomplete bridges install).
 
 Reach, stated (Langston r3 record): exit-10's self-check certifies ONE property of ONE function -
 inbox_evidence's delivered-only rule. A clean --dry-run is NOT proof the installed bridges group is at branch head.
@@ -153,9 +154,19 @@ def load_predicate(bridge_dir=None):
     """The bridge's own reply predicate, loaded from the INSTALLED bridge dir (LBR_BRIDGE_DIR overrides, for tests),
     and refused unless it passes predicate_ok."""
     d = bridge_dir or BRIDGE_DIR
-    spec = importlib.util.spec_from_file_location("lbr_alert_lane", os.path.join(d, "alert_lane.py"))
-    m = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(m)
+    # alert_lane.py imports its sibling alert_owner_route (B-TOKEN-ECONOMY amd-1 P6). The bridge finds it because
+    # Python puts a script's own directory on the path; a file-path load from here does not, so the installed
+    # dir goes on the path for this load only. A sibling missing from the install refuses with code 12.
+    sys.path.insert(0, d)
+    try:
+        spec = importlib.util.spec_from_file_location("lbr_alert_lane", os.path.join(d, "alert_lane.py"))
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+    except ImportError as e:
+        raise Refusal(12, "refusing: the installed %s/alert_lane.py cannot import a module it needs (%s) - the "
+                          "bridges group is incomplete. Install it (deploy.sh --only bridges) first." % (d, e))
+    finally:
+        sys.path.remove(d)
     t = tempfile.mkdtemp(prefix="lbr-selfcheck-")
     try:
         if not predicate_ok(m.inbox_evidence, t):

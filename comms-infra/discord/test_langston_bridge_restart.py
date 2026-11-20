@@ -121,6 +121,38 @@ with tempfile.TemporaryDirectory() as d:
         got = e.code
     case("the OLDER rule (no message_id gate, as installed 2026-10-17) is REFUSED with exit 10", 10, got)
 
+print("5b. the installed dir alone must satisfy alert_lane's imports - loaded in a CHILD with -I, so this test's own")
+print("    folder is NOT on the path (the 2026-11-20 23:25Z live install: sys.path above masked a missing import)")
+import subprocess as _sp
+_CHILD = chr(10).join([
+    "import importlib.machinery as M, importlib.util as U, sys",
+    "l = M.SourceFileLoader('lbr', sys.argv[1]); sp = U.spec_from_loader('lbr', l); m = U.module_from_spec(sp)",
+    "l.exec_module(m)",
+    "try:",
+    "    m.load_predicate(sys.argv[2]); print('loaded')",
+    "except m.Refusal as e:",
+    "    print('refused', e.code)",
+])
+
+
+def _child_load(d):
+    """stdout of the child, or its last stderr line - so a traceback reads as itself, never as a pass."""
+    r = _sp.run([sys.executable, "-I", "-c", _CHILD, os.path.join(HERE, "langston-bridge-restart"), d],
+                capture_output=True, text=True, cwd=d)
+    out = r.stdout.strip()
+    return out if out else (r.stderr.strip().splitlines() or ["<no output>"])[-1]
+
+
+with tempfile.TemporaryDirectory() as d:
+    import shutil
+    for f in ("alert_lane.py", "alert_owner_route.py"):
+        shutil.copy(os.path.join(HERE, f), d)
+    case("a COMPLETE install dir (alert_lane + alert_owner_route) loads with nothing else on the path", "loaded", _child_load(d))
+with tempfile.TemporaryDirectory() as d:
+    import shutil
+    shutil.copy(os.path.join(HERE, "alert_lane.py"), d)
+    case("control: alert_lane WITHOUT its sibling refuses with exit 12 (not a traceback)", "refused 12", _child_load(d))
+
 print("6. follow() driven against a REAL child process (the 07:28Z live crash: only pure functions were tested)")
 import time as _t
 t0 = _t.time()
