@@ -2,15 +2,19 @@
  * B-XSTOCK-BAR-AVAILABILITY P14 phase-2 capacity/quality gate.
  *
  * Read-only and rerunnable. Every database observation is taken under one
- * REPEATABLE READ READ ONLY snapshot. Usage:
+ * REPEATABLE READ READ ONLY snapshot. The heavy legs are read in day chunks under a server-side
+ * time budget (C6, `b-xstock-bar-availability-gate-read.ts`). Usage:
  *
  *   npx tsx server/scripts/b-xstock-bar-availability-capacity-gate.ts \
  *     --window-start 2026-11-09T00:05:00Z --graded-ref <deployed-sha> \
  *     --reviewed-ref <every-contributing-deployed-sha>
  *
- * The command prints one JSON evidence object. It never changes database or
- * application state and cannot authorize the later consumer switch by itself;
- * Coltrane must independently verify the resulting evidence.
+ * The command prints one JSON evidence object whose `verdict.state` is `pass`, `fail` or
+ * `inconclusive`, and exits 0 / 2 / 3 respectively (1 = a fatal error before any verdict).
+ * `inconclusive` means a statement was cancelled by the time budget or a lock timeout: the
+ * gate's inputs are never built from a partial read, so it can never pass on one. It never
+ * changes database or application state and cannot authorize the later consumer switch by
+ * itself; Coltrane must independently verify the resulting evidence.
  */
 import pg from 'pg';
 import { pathToFileURL } from 'node:url';
@@ -18,6 +22,17 @@ import { readFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { XSTOCK_EXACT_ARCHIVE_CURSOR_CONTRACT } from '../services/data-archive/exact-archive-evidence.js';
 import { DATA_LIFECYCLE_SCOPE_SQL, parseLifecycleNumber } from '../services/data-archive/hot-horizon.js';
+import {
+  GATE_READ_BUDGET,
+  InconclusiveRead,
+  budgetedQuery,
+  readIdentity,
+  readPopulationChunked,
+  readSessionsChunked,
+  readUnlinkedChunked,
+  reconstructDistinctCounts,
+  startBudget,
+} from './b-xstock-bar-availability-gate-read.js';
 
 const { Client } = pg;
 const GIB = 1024 ** 3;
@@ -31,6 +46,10 @@ const EXPECTED_VENUE_SESSION_MAX_GAP_SECONDS = 60;
 // this literal against the row's Date.toISOString(), so it must stay in canonical millisecond form.
 const EXPECTED_GRADED_WINDOW_START = '2026-11-09T00:05:00.000Z';
 const EXPECTED_AVAILABILITY_CONTRACT = 'xstock-bar-availability/v1';
+/** Exit codes: the verdict's three states, distinct from a fatal error (1). */
+export const GATE_EXIT = { pass: 0, fatal: 1, fail: 2, inconclusive: 3 } as const;
+/** The scope every gate module_constants lookup reads (carried item (a), C6). */
+const WILDCARD_SCOPE_SQL = "asset_class='*' AND exchange='*' AND strategy='*' AND regime='*'";
 
 // Exported so the integration fence executes the exact production query. The
 // chain begins with the writer that was active at the observation boundary,
@@ -387,19 +406,24 @@ async function main(): Promise<void> {
   if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL not set');
   const args = parseArgs(process.argv.slice(2));
   const buildIdentity = await readBuildIdentity(args.gradedRef);
+  const budget = startBudget();
+  const startedAt = Date.now();
   const client = new Client({ connectionString: process.env.DATABASE_URL });
   await client.connect();
   await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
   try {
-    const meta = (await client.query(
+    await client.query(`SET LOCAL lock_timeout = ${GATE_READ_BUDGET.lockTimeoutMs}`);
+    const meta = (await budgetedQuery(client, budget, GATE_READ_BUDGET.otherCapMs, 'meta',
       `SELECT transaction_timestamp()::text AS observed_at,
               pg_database_size(current_database())::bigint AS database_bytes,
               current_database() AS database_name,
               (SELECT value FROM module_constants
                 WHERE module_name='database_monitor' AND constant_name='plan_cap_mb'
+                  AND ${WILDCARD_SCOPE_SQL}
                 LIMIT 1) AS plan_cap_mb,
               (SELECT value FROM module_constants
                 WHERE module_name='database_monitor' AND constant_name='critical_threshold_pct'
+                  AND ${WILDCARD_SCOPE_SQL}
                 LIMIT 1) AS critical_threshold_pct,
               (SELECT value FROM module_constants
                 WHERE ${DATA_LIFECYCLE_SCOPE_SQL}
@@ -408,10 +432,12 @@ async function main(): Promise<void> {
               (SELECT value FROM module_constants
                 WHERE module_name='xstock_bar_availability'
                   AND constant_name='venue_session_max_gap_seconds'
+                  AND ${WILDCARD_SCOPE_SQL}
                 LIMIT 1) AS venue_session_max_gap_seconds,
               (SELECT value #>> '{}' FROM module_constants
                 WHERE module_name='xstock_bar_availability'
                   AND constant_name='graded_window_start'
+                  AND ${WILDCARD_SCOPE_SQL}
                 LIMIT 1) AS graded_window_start`,
     )).rows[0] as JsonRow;
     const observedAt = new Date(String(meta.observed_at));
@@ -428,62 +454,35 @@ async function main(): Promise<void> {
       && governedWindowStart.toISOString() === EXPECTED_GRADED_WINDOW_START;
     const windowStart = governedWindowStart;
 
-    const population = (await client.query(
-      `WITH admitted AS (
-         SELECT flush_id
-         FROM xstock_bar_projection_flush_admission
-         WHERE admitted_at >= $1 AND admitted_at < $2
-       ), linked AS (
-         SELECT a.flush_id, saved.revision_id
-         FROM admitted a
-         JOIN xstock_bar_projection_flush_completion c USING (flush_id)
-         CROSS JOIN LATERAL unnest(c.revision_ids) saved(revision_id)
-       )
-       SELECT count(*)::bigint AS expected_revision_links,
-              count(e.revision_id)::bigint AS revision_events,
-              count(*) FILTER (WHERE e.revision_id IS NULL)::bigint AS missing_linked_revision_events,
-              count(DISTINCT e.symbol)::bigint AS symbols,
-              count(DISTINCT e.revision_id)::bigint AS distinct_revision_ids,
-              count(DISTINCT e.visible_seq)::bigint AS distinct_visible_seqs,
-              count(*) FILTER (WHERE e.projection_applied)::bigint AS applied_winners,
-              count(*) FILTER (WHERE NOT e.projection_applied)::bigint AS rejected_older_arrivals,
-              count(*) FILTER (WHERE e.payload_repeated_from_winner)::bigint AS repeated_payload_attempts,
-              count(*) FILTER (WHERE e.revision_id IS NOT NULL AND e.visible_by IS NULL)::bigint AS pending_certificates,
-              count(*) FILTER (WHERE e.visible_by IS NOT NULL
-                                AND e.certificate_clock_healthy IS DISTINCT FROM true)::bigint
-                AS unhealthy_certificates,
-              count(*) FILTER (WHERE e.visible_by < e.created_at)::bigint AS negative_certificate_lags,
-              min(extract(epoch FROM (e.visible_by-e.created_at))*1000)
-                FILTER (WHERE e.visible_by IS NOT NULL) AS lag_min_ms,
-              percentile_cont(0.5) WITHIN GROUP (
-                ORDER BY extract(epoch FROM (e.visible_by-e.created_at))*1000
-              ) FILTER (WHERE e.visible_by IS NOT NULL) AS lag_p50_ms,
-              percentile_cont(0.95) WITHIN GROUP (
-                ORDER BY extract(epoch FROM (e.visible_by-e.created_at))*1000
-              ) FILTER (WHERE e.visible_by IS NOT NULL) AS lag_p95_ms,
-              max(extract(epoch FROM (e.visible_by-e.created_at))*1000)
-                FILTER (WHERE e.visible_by IS NOT NULL) AS lag_max_ms
-         FROM linked l
-         LEFT JOIN xstock_bar_revision_event e ON e.revision_id = l.revision_id`,
-      [windowStart, observedAt],
-    )).rows[0] as JsonRow;
+    const populationRead = await readPopulationChunked(client, budget, windowStart, observedAt);
+    const unlinkedRead = await readUnlinkedChunked(client, budget, windowStart, observedAt);
+    const identity = await readIdentity(client, budget, windowStart, observedAt);
+    const distinct = reconstructDistinctCounts(populationRead, identity);
+    const population = {
+      expected_revision_links: populationRead.expectedRevisionLinks,
+      revision_events: populationRead.revisionEvents,
+      missing_linked_revision_events: populationRead.missingLinkedRevisionEvents,
+      symbols: populationRead.symbols.size,
+      distinct_revision_ids: distinct.distinctRevisionIds,
+      distinct_visible_seqs: distinct.distinctVisibleSeqs,
+      applied_winners: populationRead.appliedWinners,
+      rejected_older_arrivals: populationRead.rejectedOlderArrivals,
+      repeated_payload_attempts: populationRead.repeatedPayloadAttempts,
+      pending_certificates: populationRead.pendingCertificates,
+      unhealthy_certificates: populationRead.unhealthyCertificates,
+      negative_certificate_lags: populationRead.negativeCertificateLags,
+      null_visible_seq_rows: populationRead.nullVisibleSeqRows,
+      bound_misses_resolved_by_exactness_pass: populationRead.boundMisses,
+      // Reported per UTC day, NOT merged: a per-day percentile is not the window's.
+      certificate_lag_ms_per_utc_day: populationRead.perDay,
+    };
+    const unlinked = {
+      unlinked_revision_events: unlinkedRead.unlinkedRevisionEvents,
+      events_scanned: unlinkedRead.eventsScanned,
+      candidates_rechecked_against_all_completions: unlinkedRead.recheckedCandidates,
+    };
 
-    const unlinked = (await client.query(
-      `WITH completed_ids AS MATERIALIZED (
-         SELECT saved.revision_id
-         FROM xstock_bar_projection_flush_completion c
-         CROSS JOIN LATERAL unnest(c.revision_ids) saved(revision_id)
-         WHERE c.completed_at < $2
-       )
-       SELECT count(*) FILTER (WHERE linked.revision_id IS NULL)::bigint
-                AS unlinked_revision_events
-       FROM xstock_bar_revision_event e
-       LEFT JOIN completed_ids linked USING (revision_id)
-       WHERE e.created_at >= $1 AND e.created_at < $2`,
-      [windowStart, observedAt],
-    )).rows[0] as JsonRow;
-
-    const telemetry = (await client.query(
+    const telemetry = (await budgetedQuery(client, budget, GATE_READ_BUDGET.otherCapMs, 'telemetry',
       `WITH admitted AS (
          SELECT * FROM xstock_bar_projection_flush_admission
          WHERE admitted_at >= $1 AND admitted_at < $2
@@ -526,65 +525,20 @@ async function main(): Promise<void> {
       [windowStart, observedAt, EXPECTED_AVAILABILITY_CONTRACT],
     )).rows[0] as JsonRow;
 
-    const bootChain = (await client.query(
+    const bootChain = (await budgetedQuery(client, budget, GATE_READ_BUDGET.otherCapMs, 'boot chain',
       XSTOCK_WRITER_BOOT_CHAIN_SQL,
       [windowStart, observedAt],
     )).rows[0] as JsonRow;
 
     // A venue session is the SSOT's 24-hour xStock feed day, 20:00 ET to
     // 20:00 ET, starting Sunday through Thursday. Session membership comes
-    // from admitted/completed flushes, not an event-created-at range scan.
-    // PostgreSQL applies DST.
-    const sessions = (await client.query(
-      `WITH graded_events AS MATERIALIZED (
-         SELECT a.admitted_at AS evidence_at, e.symbol
-         FROM xstock_bar_projection_flush_admission a
-         JOIN xstock_bar_projection_flush_completion c USING (flush_id)
-         CROSS JOIN LATERAL unnest(c.revision_ids) saved(revision_id)
-         JOIN xstock_bar_revision_event e ON e.revision_id = saved.revision_id
-         WHERE a.admitted_at >= $1 AND a.admitted_at < $2
-       ), et_days AS (
-         SELECT d::date AS et_date
-         FROM generate_series(
-           (($1::timestamptz AT TIME ZONE 'America/New_York')::date - 1)::timestamp,
-           (($2::timestamptz AT TIME ZONE 'America/New_York')::date + 1)::timestamp,
-           interval '1 day'
-         ) AS g(d)
-       ), bounds AS (
-         SELECT et_date,
-                (et_date + time '20:00') AT TIME ZONE 'America/New_York' AS session_start,
-                (et_date + 1 + time '20:00') AT TIME ZONE 'America/New_York' AS session_end
-         FROM et_days
-         WHERE extract(isodow FROM et_date) IN (7,1,2,3,4)
-       )
-       SELECT b.et_date::text,
-              b.session_start::text,
-              b.session_end::text,
-              s.revision_events,
-              s.symbols,
-              s.first_event_at::text,
-              s.last_event_at::text,
-              s.max_event_gap_seconds
-       FROM bounds b
-       CROSS JOIN LATERAL (
-         SELECT count(*)::bigint AS revision_events,
-                count(DISTINCT symbol)::bigint AS symbols,
-                min(evidence_at) AS first_event_at,
-                max(evidence_at) AS last_event_at,
-                max(extract(epoch FROM (evidence_at - previous_evidence_at))) AS max_event_gap_seconds
-         FROM (
-           SELECT evidence_at, symbol,
-                  lag(evidence_at) OVER (ORDER BY evidence_at) AS previous_evidence_at
-           FROM graded_events
-           WHERE evidence_at >= b.session_start AND evidence_at < b.session_end
-         ) events
-       ) s
-       WHERE b.session_start >= $1 AND b.session_end <= $2
-       ORDER BY b.session_start`,
-      [windowStart, observedAt],
-    )).rows as JsonRow[];
+    // from admitted/completed flushes, read one session at a time with the
+    // event lookup bounded to the session (C6). PostgreSQL applies DST.
+    const sessions = await readSessionsChunked(
+      client, budget, windowStart, observedAt, populationRead.outOfBoundIds,
+    ) as unknown as JsonRow[];
 
-    const cryptoControl = (await client.query(
+    const cryptoControl = (await budgetedQuery(client, budget, GATE_READ_BUDGET.otherCapMs, 'crypto control',
       `SELECT count(*)::bigint AS retained_rows,
               count(DISTINCT symbol)::bigint AS symbols
          FROM crypto_spot_ohlc_1m
@@ -592,7 +546,7 @@ async function main(): Promise<void> {
       [windowStart, observedAt],
     )).rows[0] as JsonRow;
 
-    const partitionRows = (await client.query(
+    const partitionRows = (await budgetedQuery(client, budget, GATE_READ_BUDGET.otherCapMs, 'partitions',
       `SELECT c.relname AS partition_name,
               pg_get_expr(c.relpartbound, c.oid) AS partition_bound,
               pg_relation_size(c.oid)::bigint AS heap_bytes,
@@ -606,9 +560,10 @@ async function main(): Promise<void> {
         ORDER BY c.relname`,
     )).rows as JsonRow[];
 
-    const storeSizes = (await client.query(XSTOCK_AVAILABILITY_STORE_SIZE_SQL)).rows[0] as JsonRow;
+    const storeSizes = (await budgetedQuery(client, budget, GATE_READ_BUDGET.otherCapMs, 'store sizes',
+      XSTOCK_AVAILABILITY_STORE_SIZE_SQL)).rows[0] as JsonRow;
 
-    const archiveRows = (await client.query(
+    const archiveRows = (await budgetedQuery(client, budget, GATE_READ_BUDGET.otherCapMs, 'archive proof',
       `SELECT m.partition_label, m.state, m.tier, m.row_count::bigint,
               m.bytes_compressed::bigint, m.checksum, m.verified_at::text,
               m.hot_partition_dropped_at::text,
@@ -774,6 +729,7 @@ async function main(): Promise<void> {
         gradedWindowStart: windowStart.toISOString(),
       },
       population,
+      identity,
       unlinkedRevisionEvidence: unlinked,
       flushAdmissionCompletion: telemetry,
       writerBootChain: bootChain,
@@ -788,10 +744,25 @@ async function main(): Promise<void> {
         completeDaySizes,
       },
       archiveProof: archiveRows,
-      verdict,
+      readElapsedMs: Date.now() - startedAt,
+      verdict: { state: verdict.pass ? 'pass' : 'fail', ...verdict },
     }, null, 2)}\n`);
+    process.exitCode = verdict.pass ? GATE_EXIT.pass : GATE_EXIT.fail;
   } catch (error) {
     await client.query('ROLLBACK').catch(() => {});
+    if (error instanceof InconclusiveRead) {
+      // C6-2: a cancelled or lock-timed-out read is a first-class verdict, written before exit,
+      // so a stored verdict always exists for R7 to grade and R7b to release on.
+      process.stdout.write(`${JSON.stringify({
+        batch: 'B-XSTOCK-BAR-AVAILABILITY',
+        phase: 'P14-capacity-quality-gate',
+        gradedRef: args.gradedRef,
+        readElapsedMs: Date.now() - startedAt,
+        verdict: { state: 'inconclusive', pass: false, leg: error.leg, reason: error.reason },
+      }, null, 2)}\n`);
+      process.exitCode = GATE_EXIT.inconclusive;
+      return;
+    }
     throw error;
   } finally {
     await client.end();
@@ -802,6 +773,6 @@ const invokedPath = process.argv[1] ? pathToFileURL(process.argv[1]).href : '';
 if (import.meta.url === invokedPath) {
   main().catch((error) => {
     console.error('[B-XSTOCK-BAR-AVAILABILITY][capacity-gate] fatal:', error);
-    process.exitCode = 1;
+    process.exitCode = GATE_EXIT.fatal;
   });
 }
