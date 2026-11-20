@@ -34,7 +34,7 @@ DT_SQL_BUSY_TRIES = 3
 DT_SQL_BUSY_WAIT_S = 5   # a dt-sql call measured 0.30 s (B-DB-READ-TOOL log); 5 s spans many calls, and BUSY is rare
 # The remote verifier makes DT_SQL_CALLS dt-sql calls. One call that ATTEMPTS a login is bounded by dt-sql's own
 # psql timeout (CALL_TIMEOUT_S = 300, comms-infra/staging/dt-sql:69) plus, if that attempt locks it, the alert it raises
-# (subprocess timeout 150, dt-sql:172). The client ssh timeout must exceed that whole remote worst case: killing dt-sql
+# (subprocess timeout 150, dt-sql:171). The client ssh timeout must exceed that whole remote worst case: killing dt-sql
 # mid-attempt leaves its INTENT behind and LOCKS it `ambiguous` for every caller (dt-sql:34), which is far worse than
 # this check failing.
 DT_SQL_CALLS = 2                 # the read, then the read-only write probe (verify_remote)
