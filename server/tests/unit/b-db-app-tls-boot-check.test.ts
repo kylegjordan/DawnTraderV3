@@ -2,6 +2,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { createRequire } from 'node:module';
 import { assertDatabaseTransport, DatabaseTransportError } from '../../db-tls-boot-check.js';
 
 // B-DB-APP-TLS T-P4 (KD-100): one test per refusal + the pass. Each refusal asserts the CONDITION NAME, so a test
@@ -62,6 +63,25 @@ describe('B-DB-APP-TLS boot check', () => {
     expect(refusal(`postgresql://u:p@${HOST}:5432/postgres?sslmode=no-verify&sslrootcert=${encodeURIComponent(CA)}`)).toBe('verification_disabled');
   });
 
+  it('refuses a URL with no host, even with PGHOST set (pg would take PGHOST, unchecked)', () => {
+    const noHost = `postgresql://u:p@/postgres?sslmode=verify-full&sslrootcert=${encodeURIComponent(CA)}`;
+    expect(refusal(noHost)).toBe('host_missing');
+    expect(refusal(noHost, { PGHOST: '3.65.151.229' })).toBe('host_missing');
+    expect(refusal(`postgresql:///postgres?sslmode=verify-full&sslrootcert=${encodeURIComponent(CA)}`)).toBe('host_missing');
+  });
+
+  it('refuses ssl=no-verify (the string form pg converts later) as carrying no TLS settings object', () => {
+    expect(refusal(`postgresql://u:p@${HOST}:5432/postgres?ssl=no-verify`)).toBe('ssl_not_object');
+  });
+
+  it('refuses a directory named as the root certificate, naming it as unreadable', () => {
+    expect(refusal(`postgresql://u:p@${HOST}:5432/postgres?sslmode=verify-full&sslrootcert=${encodeURIComponent(dir)}`)).toBe('ca_file_unreadable');
+  });
+
+  it('refuses a URL the parser rejects (a non-numeric port)', () => {
+    expect(refusal(`postgresql://u:p@${HOST}:abc/postgres?sslmode=verify-full&sslrootcert=${encodeURIComponent(CA)}`)).toBe('url_unparseable');
+  });
+
   it('refuses an IPv4 host', () => {
     expect(refusal(`postgresql://u:p@3.65.151.229:5432/postgres?sslmode=verify-full&sslrootcert=${encodeURIComponent(CA)}`)).toBe('host_is_ip_literal');
   });
@@ -86,6 +106,17 @@ describe('B-DB-APP-TLS boot check', () => {
 
 // The placement fence (server/index.ts imports the gate FIRST) lands WITH the wiring line, in the T-P3 switch window:
 // wired before the switch, today's URL would stop the app at its next deploy.
+describe('B-DB-APP-TLS parser identity', () => {
+  // The check must read the URL with the SAME parser the pool uses. package.json pins pg-connection-string exactly to
+  // pg's own version; if a pg upgrade ever moves pg's range off that pin, npm nests a second copy under pg and this
+  // fence fails instead of the check silently parsing with a different parser than the pool (Langston, r4 Step 4 call 3).
+  it('pg-connection-string resolves to the same file from the app as from pg itself', () => {
+    const require = createRequire(import.meta.url);
+    const pgDir = path.dirname(require.resolve('pg/package.json'));
+    expect(require.resolve('pg-connection-string')).toBe(require.resolve('pg-connection-string', { paths: [pgDir] }));
+  });
+});
+
 describe('B-DB-APP-TLS boot gate', () => {
   it('the gate checks the real process environment, not a copy', () => {
     const src = fs.readFileSync(path.resolve(__dirname, '../../db-tls-boot-gate.ts'), 'utf8');

@@ -2,18 +2,25 @@
 // The app refuses to start unless DATABASE_URL asks for a VERIFIED, PINNED TLS connection. Plan and findings:
 // `B_DB_POOL_GUARD_PRE_AUDIT.md` T-P2 (C-1, T-A3), approved by Langston at r4 Step 2.
 //
-// WHY THESE FIVE CONDITIONS — what pg actually does with the URL (pg 8.13.1 + pg-connection-string 2.7.0, read at
+// WHY THESE SIX CONDITIONS — what pg actually does with the URL (pg 8.13.1 + pg-connection-string 2.7.0, read at
 // node_modules): `parse()` turns ANY of sslcert/sslkey/sslrootcert/sslmode into `ssl = {}`; `sslrootcert` becomes
 // `ssl.ca` (the file is read synchronously, inside parse); `sslmode=disable` sets `ssl = false`; `sslmode=no-verify`
 // sets `ssl.rejectUnauthorized = false`; prefer/require/verify-ca/verify-full leave the object as is, so Node's TLS
-// defaults (verify the chain AND the hostname) apply. pg ALSO reads the PGSSLMODE environment variable
-// (connection-parameters.js:22), which can override what the URL says — so it is refused outright, as is
-// PGSSLROOTCERT, rather than reasoned about.
+// defaults (verify the chain AND the hostname) apply.
+// The ENVIRONMENT is a second, invisible door, and pg uses it as a FALLBACK, never an override: PGSSLMODE is read only
+// when the URL carries no ssl at all (connection-parameters.js:81, `typeof config.ssl === 'undefined'`), which
+// condition 1 already forbids — and PGHOST is read only when the URL's host is empty (`val()`, :9-19, used at :67).
+// PGSSLMODE is refused outright anyway (and PGHOST is shut by condition 4), so a URL edit can never silently fall
+// through to the environment. pg itself never reads
+// PGSSLROOTCERT (its only `sslrootcert` read builds a libpq string, :142); it binds psql, which shares this
+// environment, so it is refused for the same reason.
 //   1. `ssl` is an object                — no TLS settings at all, `ssl=true`, or `sslmode=disable` all fail here.
 //   2. `ssl.ca` is a non-empty string    — the root is PINNED to our file, not whatever the OS trust store holds.
 //   3. `ssl.rejectUnauthorized !== false` — `sslmode=no-verify` encrypts but accepts any certificate.
-//   4. the host is a NAME, not an IP     — hostname verification needs a name the certificate can carry.
-//   5. no PGSSLMODE / PGSSLROOTCERT      — a second, invisible place the transport could be changed from.
+//   4. the URL names a host              — an empty host makes pg take PGHOST, which may be an IP (no hostname check:
+//                                           connection.js:96 sets servername only for a non-IP host).
+//   5. the host is a NAME, not an IP     — hostname verification needs a name the certificate can carry.
+//   6. no PGSSLMODE / PGSSLROOTCERT      — the environment must never be the place the transport is decided.
 // On failure it THROWS naming the condition. There is no fallback and no bypass flag (CLAUDE.md §11).
 //
 // ⚠️ REACH, stated: this guards the APP process (`server/index.ts` imports `db-tls-boot-gate.ts` FIRST). It does NOT
@@ -29,6 +36,7 @@ export type DatabaseTransportCondition =
   | 'ssl_not_object'
   | 'ca_missing'
   | 'verification_disabled'
+  | 'host_missing'
   | 'host_is_ip_literal'
   | 'env_pgsslmode_set'
   | 'env_pgsslrootcert_set';
@@ -82,6 +90,10 @@ export function assertDatabaseTransport(url: string | undefined, env: NodeJS.Pro
 
   const rawHost = parsed.host ?? '';
   const host = rawHost.replace(/^\[|\]$/g, '');
+  // A non-empty host means pg never consults PGHOST (val() treats '' as absent), so the host checked IS the host used.
+  if (host.trim().length === 0) {
+    throw new DatabaseTransportError('host_missing', 'DATABASE_URL names no host; pg would fall back to PGHOST, which this check cannot vouch for');
+  }
   if (net.isIP(host) !== 0) {
     throw new DatabaseTransportError('host_is_ip_literal', 'DATABASE_URL names the database by IP address; the certificate can only be checked against a host name');
   }
