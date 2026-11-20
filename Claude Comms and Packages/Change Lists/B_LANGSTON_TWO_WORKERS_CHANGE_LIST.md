@@ -198,3 +198,13 @@ Read-only on Helsinki; no flag or file changed.
 5. **One-worker evidence:** all **796** rows in `/var/log/langston-tasks.jsonl` since install are `task-worker-1`, and **0 of 796** task intervals overlap an earlier one. Outcomes on the baseline days: 345 reply, 6 timeout, 0 bridge errors.
 6. **`crew-switch status`, 18:2xZ:** crew mode **CLAUDE** (generation 3), Langston bridge **active/enabled**, Coltrane active/enabled, no open orders. So the alert's "if Langston inactive, park" branch does not apply.
 7. **Decision owed:** the pre-registration says the switch-on proceeds once the baseline exists. It is taken to Langston as one gate before the flag is cleared (`langston-bridge-flag one-worker off --by cc-infra`), at a moment with no review in flight; the three readers are minted at that moment (§5).
+
+## Step 7 — switch-on (2026-11-20)
+
+1. **Gate cleared:** Langston PROCEED, msg `1573405021331259394`, with four conditions (progress report §4).
+2. **Condition 4 (usage):** PM read weekly usage at 28% (msg `1573406161838018747`), below the KD-106 85% line.
+3. **Idle check, then the flip:** `langston-bridge-flag one-worker off --by cc-infra` at **2026-11-20T18:36:29Z**, taken at an idle moment (queue depth 0, nothing running). Status read-back: one-worker OFF, flag file absent.
+4. **Readers minted (progress report §6):** day-3 (q5/q6 stops, 11-23 18:36Z), day-7 (W, q1-q3, q5, q6; 11-27 18:36Z), day-21 (q4 descriptive; 12-11 18:36Z). Each body says resolve with evidence, never ack; the day-7 body carries condition 2 verbatim (a non-qualifying day is NOT a W pass).
+5. **Deviation, recorded as PREVIOUSLY/NOW in the report:** the pre-registration named `--category observation`; the alert CLI refuses it (`ALERT_CATEGORIES`, `server/services/system-alerts.ts:69-77`). Minted as `verification`. The three refused attempts created no rows (read-back: exactly 3 alerts by title).
+6. **Condition 1:** the q1 BEFORE sample is enumerated in progress report §5 (8 ids), labelled NOT RE-READ.
+7. **Condition 3 PENDING:** the flip is confirmed only by read-back — a `task-worker-2` row AND a first overlapping interval in `langston-tasks.jsonl`. At 18:37:45Z: 0 rows after the switch-on. Recorded in the report when it lands.
