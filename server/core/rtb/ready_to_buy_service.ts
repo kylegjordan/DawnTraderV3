@@ -1704,8 +1704,8 @@ class ReadyToBuyService {
         return 'stale_plan';
       }
       // ⭐ B-ENTRY-GATE (#1224) P7: promotion needs a PRICED pass recently — a plan the refresh could not price against an
-      // admissible ask is not promoted on old economics. Per class; NO xStock row yet (seeded after a week of its own
-      // record against a named prediction, r12 Q-4) ⇒ OFF for that class and logged once.
+      // admissible ask is not promoted on old economics. Per class: crypto seeded by the inc-B migration, xStock by
+      // 2026-11-20-b-entry-gate-xstock-price-age.sql after its week read (r12 Q-4). A class with no row ⇒ OFF, logged once.
       let _p7Limit: unknown;
       try {
         _p7Limit = getCachedConstant('entry_gate', 'promotion_price_max_age_ms', { exchange: '*', assetClass: _p11Class ?? '*', strategy: '*', regime: '*' });

@@ -38,7 +38,9 @@ describe('P7 — the promotion gate', () => {
 });
 
 describe('P7 — the migration', () => {
-  it('adds both columns and seeds crypto ONLY (xStock waits for its week and a named prediction)', () => {
+  // This fences the inc-B migration only. The xStock row is seeded by its own later migration,
+  // 2026-11-20-b-entry-gate-xstock-price-age.sql (inc C, after the xStock week read).
+  it('the inc-B migration adds both columns and seeds crypto only (xStock has its own later migration)', () => {
     expect(mig).toMatch(/ADD COLUMN IF NOT EXISTS last_priced_at timestamptz/);
     expect(mig).toMatch(/ADD COLUMN IF NOT EXISTS consecutive_unpriced_passes integer NOT NULL DEFAULT 0/);
     expect(mig).toMatch(/'promotion_price_max_age_ms', '300000'::jsonb, 'crypto_spot'/);

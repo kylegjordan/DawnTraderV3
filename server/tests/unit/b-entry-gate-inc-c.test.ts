@@ -55,6 +55,14 @@ describe('increment C — the birth switch', () => {
     expect(birth('crypto_spot')).toEqual({ o: 'judged_refuse', refused: true });
     expect(offLines('crypto_spot')).toHaveLength(0);
   });
+  it('a LIVE refusal prints the same-field REFUSE line (the SQE result keeps only the bare gate token) — Step-4 condition 1', () => {
+    seed(row('xstock_spot', 'entry_window_birth_live', true));
+    birth('xstock_spot');
+    const lines = log.mock.calls.map((c) => String(c[0])).filter((s) => s.includes('[B-ENTRY-GATE][P2][ENTRY_WINDOW_REFUSE:birth]'));
+    expect(lines).toHaveLength(1);
+    for (const f of ['X/x', 'class=xstock_spot', 'price=103', 'source=book', 'ageMs=50', 'planEntry=100', 'planStop=96', 'window=0.25']) expect(lines[0]).toContain(f);
+    expect(log.mock.calls.some((c) => String(c[0]).includes('ENTRY_WINDOW_SHADOW'))).toBe(false);
+  });
   it('a value that is not a boolean (e.g. the string "true", or 1) ⇒ SHADOW, logged as an error — only boolean true enforces', () => {
     for (const v of ['true', 1]) {
       _resetBirthLiveLogForTests();

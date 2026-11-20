@@ -378,6 +378,9 @@ export function applyPlanGates(input: SQEInput, options: SQEOptions, failures: s
         console.log(`[B-ENTRY-GATE][P2][ENTRY_WINDOW_SHADOW:${phase}] ${input.symbol}/${input.strategy} class=${cls} price=${input.priced.price} source=${input.priced.source} ageMs=${input.priced.ageMs} planEntry=${entry} planStop=${input.planStop} window=${w} — would refuse, recorded only`);
       } else {
         outcome = 'judged_refuse';
+        // Same fields as the shadow line: the failure string reaches the SQE result only as its bare gate token, so this line
+        // is the only record of the deciding price, its age and source, and the window (Langston Step-4 condition 1, inc C).
+        console.log(`[B-ENTRY-GATE][P2][ENTRY_WINDOW_REFUSE:${phase}] ${input.symbol}/${input.strategy} class=${cls} price=${input.priced.price} source=${input.priced.source} ageMs=${input.priced.ageMs} planEntry=${entry} planStop=${input.planStop} window=${w} — refused`);
         failures.push(`EntryWindow: price ${input.priced.price} (${input.priced.source}, ${input.priced.ageMs} ms old) is more than ${w} of the planned risk above plan entry ${entry}`);
       }
     }
