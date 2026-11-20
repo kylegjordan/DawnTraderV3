@@ -782,7 +782,9 @@ check("... and that window is kept out of the cumulative leg too",
 # NAMED CHECK, NOT A CODE CHANGE (Langston §9e Part A, obligation 1): a window under BIRTHCAP_DIVERGENCE_MIN whose meter
 # did not move is verdict 'small', NOT 'frozen' (the frozen arm is gated on births >= the minimum), so it STAYS in the
 # cumulative leg and its census-only births DILUTE the 72 h overbilling test. Pinned here so the behaviour is a decision
-# on the record: 5 small dead windows (150 births each, meter 0) pull the 9 % overbilling under the 3 % line.
+# on the record, AT ITS THRESHOLD (Langston §9e Part B condition 2): the 9 % overbilling below drops under the 3 % line
+# once the dead windows hold 326 census-only births, so THREE small dead windows (150 births each, meter 0) mask it and
+# TWO (+3.45 %) still page. Both sides of the line are checked below; five would also mask, but five is not the line.
 dead_small = [dict(over[0], opened_at=(W_ON - timedelta(hours=h + 10)).isoformat(), closed_at=(W_ON - timedelta(hours=h + 9)).isoformat(),
                    vendor_webhooks=0, births=150, switch_credits=0, verdict='small', share=0.0, paged=False) for h in range(5)]
 # an ON window always holds two switches (base >= 200), so on the live path 'small' arises in a window with NO switch
@@ -800,10 +802,18 @@ check("a small window with a DEAD meter (150 births, vendor +0, no switch) is ve
                   for p in r['pages']), (row, r['pages']))
 check("... and it STAYS in the cumulative leg (summed, not counted aside as a meter fault)",
       st2.get('cumulative', {}).get('windows') == 6 and st2.get('cumulative', {}).get('meter_fault_windows') == 0, st2.get('cumulative'))
-r, st1, r2, st2, v = window_run(pre={'windows_checked': over + dead_small})
-check("... so five of them DILUTE the cumulative leg: the 9 % overbilling that pages alone no longer pages (the named residual)",
+def _share(c):
+    return round(100.0 * (c['vendor'] - c['census']) / c['census'], 2)
+r, st1, r2, st2, v = window_run(pre={'windows_checked': over + dead_small[:2]})
+check("... TWO of them (300 census-only births) do NOT mask it: the 9 % overbilling still pages, at +3.45 %",
+      any(p['dedupe_key'].startswith('birthcap-cumulative-overbill-') for p in r2['pages'])
+      and st2.get('cumulative', {}).get('windows') == 8 and _share(st2['cumulative']) == 3.45,
+      (r2['pages'], st2.get('cumulative')))
+r, st1, r2, st2, v = window_run(pre={'windows_checked': over + dead_small[:3]})
+check("... THREE of them (450 census-only births, past the 326 line) DILUTE it under 3 %: no page (the named residual)",
       not any(p['dedupe_key'].startswith('birthcap-cumulative-overbill-') for p in r2['pages'])
-      and st2.get('cumulative', {}).get('windows') == 11, (r2['pages'], st2.get('cumulative')))
+      and st2.get('cumulative', {}).get('windows') == 9 and _share(st2['cumulative']) < 3.0,
+      (r2['pages'], st2.get('cumulative')))
 
 print("== 10c. the replan join, --replan, --status (Langston §9e (c) and RIDER-2)")
 _s = {}
