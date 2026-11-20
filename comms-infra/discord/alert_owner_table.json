@@ -1,10 +1,11 @@
 {
  "_about": {
-  "batch": "B-TOKEN-ECONOMY amendment 1, P6 condition 1 (Langston Step-2 ruling 2026-11-20)",
-  "seed": "Langston [[ALERT owner=]] markers 2026-11-06..2026-11-20 joined to staging alert keys",
-  "order": "gov key -> batches; key -> longest prefix; keyless -> titles; none -> fallback",
+  "batch": "B-TOKEN-ECONOMY amendment 1, P6 condition 1 (Langston Step-2 rulings 2026-11-20 12:04Z, 12:38Z)",
+  "seed": "Langston [[ALERT owner=]] markers 2026-11-06..2026-11-20 joined to the whole staging alert queue",
+  "order": "owner named in title; deploy-window/in-window key -> batch; gov key -> batch; key -> longest prefix; keyless -> title; batch with no table row -> register, then plan owner column; a register/plan batch named anywhere in the title; none -> fallback",
   "fallback": "CC-INFRA, genuinely new keys only",
-  "flag": "agreement below 80% or a tied vote: for Langston to rule before the lane uses it",
+  "flag": "agreement below 80%, a real tie (top two equal), n <= 3 markers, or fewer than 1 marker per 20 queue rows: for Langston to rule",
+  "agree": "share of markers, which count re-triages of resurfacing rows, not distinct decisions; read it with n and rows",
   "markers_on_unmapped_ids": 35
  },
  "batches": {
@@ -14,6 +15,8 @@
     "CC-A": 46,
     "CC-B": 1
    },
+   "n": 47,
+   "rows": 3,
    "latest": "CC-A",
    "agree": 0.98
   },
@@ -23,8 +26,11 @@
     "CC-A": 1,
     "CC-B": 1
    },
+   "n": 2,
+   "rows": 2,
    "latest": "CC-B",
    "agree": 0.5,
+   "tie": true,
    "flag": true
   },
   "B-DB-POOL-GUARD": {
@@ -33,6 +39,8 @@
     "CC-A": 118,
     "CC-B": 1
    },
+   "n": 119,
+   "rows": 3,
    "latest": "CC-A",
    "agree": 0.99
   },
@@ -41,6 +49,8 @@
    "votes": {
     "CC-A": 78
    },
+   "n": 78,
+   "rows": 2,
    "latest": "CC-A",
    "agree": 1.0
   },
@@ -50,6 +60,8 @@
     "CC-A": 81,
     "CC-INFRA": 1
    },
+   "n": 82,
+   "rows": 5,
    "latest": "CC-A",
    "agree": 0.99
   },
@@ -59,6 +71,8 @@
     "CC-A": 7,
     "CC-INFRA": 88
    },
+   "n": 95,
+   "rows": 6,
    "latest": "CC-INFRA",
    "agree": 0.93
   },
@@ -68,6 +82,8 @@
     "CC-B": 110,
     "CC-A": 3
    },
+   "n": 113,
+   "rows": 7,
    "latest": "CC-B",
    "agree": 0.97
   },
@@ -77,6 +93,8 @@
     "CC-B": 14,
     "CC-A": 5
    },
+   "n": 19,
+   "rows": 4,
    "latest": "CC-B",
    "agree": 0.74,
    "flag": true
@@ -87,6 +105,8 @@
     "CC-A": 3,
     "CC-C": 19
    },
+   "n": 22,
+   "rows": 1,
    "latest": "CC-C",
    "agree": 0.86
   },
@@ -96,8 +116,11 @@
     "CC-A": 1,
     "CC-C": 1
    },
+   "n": 2,
+   "rows": 2,
    "latest": "CC-C",
    "agree": 0.5,
+   "tie": true,
    "flag": true
   },
   "B-PRICE-FEED-COVERAGE": {
@@ -107,6 +130,8 @@
     "CC-B": 57,
     "CC-C": 1
    },
+   "n": 62,
+   "rows": 7,
    "latest": "CC-B",
    "agree": 0.92
   },
@@ -115,22 +140,29 @@
    "votes": {
     "CC-C": 70
    },
+   "n": 70,
+   "rows": 7,
    "latest": "CC-C",
    "agree": 1.0
   },
   "B-RR-FLOOR-HEADROOM": {
    "owner": "CC-B",
    "votes": {
-    "CC-B": 6
+    "CC-B": 3
    },
+   "n": 3,
+   "rows": 2,
    "latest": "CC-B",
-   "agree": 1.0
+   "agree": 1.0,
+   "flag": true
   },
   "B-SILENT-STRATEGY-CENSUS": {
    "owner": "CC-B",
    "votes": {
     "CC-B": 9
    },
+   "n": 9,
+   "rows": 5,
    "latest": "CC-B",
    "agree": 1.0
   },
@@ -139,6 +171,8 @@
    "votes": {
     "CC-A": 23
    },
+   "n": 23,
+   "rows": 2,
    "latest": "CC-A",
    "agree": 1.0
   },
@@ -148,6 +182,8 @@
     "CC-A": 1,
     "CC-INFRA": 46
    },
+   "n": 47,
+   "rows": 5,
    "latest": "CC-INFRA",
    "agree": 0.98
   },
@@ -157,17 +193,23 @@
     "CC-A": 1,
     "CC-INFRA": 2
    },
+   "n": 3,
+   "rows": 3,
    "latest": "CC-INFRA",
    "agree": 0.67,
    "flag": true
   },
   "B-TRANSCRIPT-ARCHIVE": {
-   "owner": "CC-A",
+   "owner": "CC-INFRA",
    "votes": {
     "CC-A": 1
    },
+   "n": 1,
+   "rows": 2,
    "latest": "CC-A",
-   "agree": 1.0
+   "agree": 1.0,
+   "ruling": "PM: plan row 4b names Infra Claude; 1 marker said CC-A; caught by the plan cross-check",
+   "flag": true
   },
   "B-XSTOCK-BAR-AVAILABILITY": {
    "owner": "CC-C",
@@ -175,6 +217,8 @@
     "CC-C": 21,
     "CC-A": 1
    },
+   "n": 22,
+   "rows": 4,
    "latest": "CC-C",
    "agree": 0.95
   },
@@ -183,6 +227,8 @@
    "votes": {
     "CC-C": 72
    },
+   "n": 72,
+   "rows": 11,
    "latest": "CC-C",
    "agree": 1.0
   }
@@ -194,6 +240,8 @@
     "CC-A": 12,
     "CC-B": 6
    },
+   "n": 18,
+   "rows": 2,
    "latest": "CC-B",
    "agree": 0.67,
    "batch": "B-DB-POOL-GUARD",
@@ -205,20 +253,26 @@
    "votes": {
     "CC-C": 2
    },
+   "n": 2,
+   "rows": 1,
    "latest": "CC-C",
    "agree": 1.0,
    "batch": "B-PRICE-SIDE-BY-JOB",
-   "ledger": "#1250"
+   "ledger": "#1250",
+   "flag": true
   },
   "b75-cold-audit-cold-meter-": {
    "owner": "CC-INFRA",
    "votes": {
     "CC-INFRA": 1
    },
+   "n": 1,
+   "rows": 2,
    "latest": "CC-INFRA",
    "agree": 1.0,
    "batch": "B-TOKEN-WATCH-STORAGE",
-   "ledger": null
+   "ledger": null,
+   "flag": true
   },
   "b75-cold-audit-cold-reconcile-untracked-": {
    "owner": "CC-A",
@@ -227,6 +281,8 @@
     "CC-A": 38,
     "CC-B": 2
    },
+   "n": 42,
+   "rows": 2,
    "latest": "CC-A",
    "agree": 0.9,
    "batch": "B-DISK-FILE-TIERING",
@@ -238,6 +294,8 @@
     "CC-INFRA": 1,
     "CC-A": 2
    },
+   "n": 3,
+   "rows": 1,
    "latest": "CC-A",
    "agree": 0.67,
    "batch": "B-DISK-FILE-TIERING",
@@ -249,10 +307,26 @@
    "votes": {
     "CC-INFRA": 2
    },
+   "n": 2,
+   "rows": 4,
    "latest": "CC-INFRA",
    "agree": 1.0,
    "batch": null,
-   "ledger": null
+   "ledger": null,
+   "flag": true
+  },
+  "book-state-hollow-": {
+   "owner": "CC-C",
+   "votes": {},
+   "n": 0,
+   "rows": 74,
+   "latest": null,
+   "agree": null,
+   "batch": "B-XSTOCK-BID-TRIGGER-RELAND",
+   "ledger": "active-execution-engine.ts book-state guard, OBJ-6",
+   "ruling": "PM: minted by the B-XSTOCK-BID-TRIGGER-RELAND book-state guard (register:62)",
+   "inferred": true,
+   "flag": true
   },
   "book-state-ring-snapshot-failing": {
    "owner": "CC-B",
@@ -260,10 +334,27 @@
     "CC-B": 2,
     "CC-INFRA": 1
    },
+   "n": 3,
+   "rows": 1,
    "latest": "CC-B",
    "agree": 0.67,
    "batch": null,
    "ledger": null,
+   "ruling": "Langston round-2 ruling 2026-11-20 12:38Z (Discord 1573316684633350144)",
+   "inferred": true,
+   "flag": true
+  },
+  "coltrane-size-watch-": {
+   "owner": "CC-INFRA",
+   "votes": {},
+   "n": 0,
+   "rows": 9,
+   "latest": null,
+   "agree": null,
+   "batch": "B-SIZE-WATCH-BREACH-ALARM",
+   "ledger": "#1215 (closed 11-14)",
+   "ruling": "PM: plan row 10, Infra Claude",
+   "inferred": true,
    "flag": true
   },
   "cron_recovery:": {
@@ -274,10 +365,12 @@
     "CC-INFRA": 19,
     "CC-A": 5
    },
+   "n": 123,
+   "rows": 24,
    "latest": "CC-C",
    "agree": 0.69,
    "batch": "B-CRON-MISSED-CATCHUP",
-   "ledger": "RUNNING_ISSUES:4039",
+   "ledger": "RUNNING_ISSUES:4039, #691",
    "flag": true
   },
   "cron_stale:": {
@@ -289,10 +382,12 @@
     "CC-A": 2,
     "Kyle": 1
    },
+   "n": 101,
+   "rows": 57,
    "latest": "CC-C",
    "agree": 0.52,
    "batch": "B-CRON-MISSED-CATCHUP",
-   "ledger": "RUNNING_ISSUES:4039",
+   "ledger": "RUNNING_ISSUES:4039, #691",
    "flag": true
   },
   "cron_verifier_blind:": {
@@ -301,32 +396,40 @@
     "CC-INFRA": 1,
     "CC-C": 2
    },
+   "n": 3,
+   "rows": 1,
    "latest": "CC-C",
    "agree": 0.67,
    "batch": "B-CRON-MISSED-CATCHUP",
-   "ledger": null,
+   "ledger": "clears manually only",
    "flag": true
   },
   "db-pool-acquire-timeout": {
-   "owner": "CC-INFRA",
+   "owner": "CC-A",
    "votes": {
     "CC-INFRA": 4
    },
+   "n": 4,
+   "rows": 4,
    "latest": "CC-INFRA",
    "agree": 1.0,
    "batch": "B-DB-POOL-GUARD",
-   "ledger": "#1239"
+   "ledger": "#1239",
+   "ruling": "Langston round-2 ruling 2026-11-20 12:38Z (Discord 1573316684633350144): B-DB-POOL-GUARD is CC-A (register:29)"
   },
   "db-pool-idle-in-tx": {
-   "owner": "CC-INFRA",
+   "owner": "CC-A",
    "votes": {
     "CC-B": 1,
     "CC-INFRA": 4
    },
+   "n": 5,
+   "rows": 5,
    "latest": "CC-INFRA",
    "agree": 0.8,
    "batch": "B-DB-POOL-GUARD",
-   "ledger": "#1239"
+   "ledger": "#1239",
+   "ruling": "Langston round-2 ruling 2026-11-20 12:38Z (Discord 1573316684633350144): B-DB-POOL-GUARD is CC-A (register:29)"
   },
   "db-pool-wait:": {
    "owner": "CC-A",
@@ -335,6 +438,8 @@
     "CC-INFRA": 1,
     "CC-A": 14
    },
+   "n": 17,
+   "rows": 63,
    "latest": "CC-A",
    "agree": 0.82,
    "batch": "B-DB-POOL-GUARD",
@@ -346,10 +451,12 @@
     "CC-INFRA": 13,
     "CC-A": 46
    },
+   "n": 59,
+   "rows": 4,
    "latest": "CC-A",
    "agree": 0.78,
    "batch": "B-DB-APP-TLS",
-   "ledger": "Langston 2026-11-20: CC-A until T-P3",
+   "ledger": "KD-100; Langston 2026-11-20: CC-A until T-P3",
    "flag": true
   },
   "deploy-drift-file-gate-undecidable": {
@@ -359,6 +466,8 @@
     "CC-INFRA": 1,
     "CC-C": 1
    },
+   "n": 37,
+   "rows": 2,
    "latest": "CC-A",
    "agree": 0.95,
    "batch": "B-DEPLOY-DRIFT-LINE (closed)",
@@ -369,6 +478,8 @@
    "votes": {
     "CC-A": 30
    },
+   "n": 30,
+   "rows": 4,
    "latest": "CC-A",
    "agree": 1.0,
    "batch": "B-DEPLOY-DRIFT-LINE (closed)",
@@ -382,6 +493,8 @@
     "CC-C": 17,
     "CC-INFRA": 7
    },
+   "n": 186,
+   "rows": 71,
    "latest": "CC-A",
    "agree": 0.76,
    "batch": "B-DEPLOY-DRIFT-LINE (closed)",
@@ -394,23 +507,68 @@
     "CC-INFRA": 3,
     "CC-B": 1
    },
+   "n": 4,
+   "rows": 7,
    "latest": "CC-B",
    "agree": 0.75,
    "batch": null,
    "ledger": null,
+   "ruling": "Langston round-2 ruling 2026-11-20 12:38Z (Discord 1573316684633350144)",
+   "inferred": true,
    "flag": true
   },
-  "disk-utilization-warning": {
+  "disk-utilization-": {
    "owner": "CC-A",
    "votes": {
     "Kyle": 4,
     "CC-A": 16,
     "CC-B": 1
    },
+   "n": 21,
+   "rows": 27,
    "latest": "CC-A",
    "agree": 0.76,
+   "batch": "B-DB-SIZE-RELIEF",
+   "ledger": "RUNNING_ISSUES:3823; database disk, 200 GB plan cap",
+   "flag": true
+  },
+  "gov-code-drift": {
+   "owner": "CC-INFRA",
+   "votes": {},
+   "n": 0,
+   "rows": 2,
+   "latest": null,
+   "agree": null,
    "batch": null,
-   "ledger": "RUNNING_ISSUES:3823",
+   "ledger": "#490 F9: the governance checker box runs stale code",
+   "ruling": "PM: the governance checker box; colonless gov- key (R2-2 item 1)",
+   "inferred": true,
+   "flag": true
+  },
+  "gov-fetch-failed": {
+   "owner": "CC-INFRA",
+   "votes": {},
+   "n": 0,
+   "rows": 7,
+   "latest": null,
+   "agree": null,
+   "batch": null,
+   "ledger": "#449, #490: the governance checker cannot fetch origin",
+   "ruling": "PM: the governance checker box; colonless gov- key (R2-2 item 1)",
+   "inferred": true,
+   "flag": true
+  },
+  "langston-index-guard-": {
+   "owner": "CC-INFRA",
+   "votes": {},
+   "n": 0,
+   "rows": 1,
+   "latest": null,
+   "agree": null,
+   "batch": null,
+   "ledger": "Langston reviewer infrastructure",
+   "ruling": "PM: reviewer infrastructure is Infra Claude",
+   "inferred": true,
    "flag": true
   },
   "langston-privacy-exposed": {
@@ -418,10 +576,38 @@
    "votes": {
     "CC-INFRA": 14
    },
+   "n": 14,
+   "rows": 7,
    "latest": "CC-INFRA",
    "agree": 1.0,
    "batch": "B-TOKEN-WATCH-FOLLOWUP-MEMORY",
    "ledger": "#979"
+  },
+  "langston-size-watch-": {
+   "owner": "CC-INFRA",
+   "votes": {},
+   "n": 0,
+   "rows": 84,
+   "latest": null,
+   "agree": null,
+   "batch": "B-SIZE-WATCH-BREACH-ALARM",
+   "ledger": "#1215 (closed 11-14)",
+   "ruling": "PM: plan row 10, Infra Claude",
+   "inferred": true,
+   "flag": true
+  },
+  "no-trigger-paper-": {
+   "owner": "CC-C",
+   "votes": {},
+   "n": 0,
+   "rows": 22,
+   "latest": null,
+   "agree": null,
+   "batch": "B-XSTOCK-BID-TRIGGER-RELAND",
+   "ledger": "paper exit trigger; same chain as no-trigger-vts-",
+   "ruling": "PM: B-XSTOCK-BID-TRIGGER-RELAND (register:62)",
+   "inferred": true,
+   "flag": true
   },
   "no-trigger-vts-": {
    "owner": "CC-C",
@@ -429,69 +615,99 @@
     "CC-C": 133,
     "CC-B": 3
    },
+   "n": 136,
+   "rows": 1140,
    "latest": "CC-C",
    "agree": 0.98,
    "batch": null,
    "ledger": "RUNNING_ISSUES:11222, #679"
   },
   "ohlc-writer-permanent": {
-   "owner": "CC-INFRA",
+   "owner": "CC-C",
    "votes": {
     "CC-B": 3,
     "CC-INFRA": 6,
     "CC-A": 1,
     "Kyle": 2
    },
+   "n": 12,
+   "rows": 9,
    "latest": "CC-INFRA",
    "agree": 0.5,
+   "plurality": true,
    "batch": "B-OHLC-FRAME-GUARD",
-   "ledger": "#1028",
+   "ledger": "#1028, RUNNING_ISSUES:9033",
+   "ruling": "Langston round-2 ruling 2026-11-20 12:38Z (Discord 1573316684633350144): register:66; resolve on the guard deploy, never ack",
    "flag": true
   },
   "price-skip-paper-": {
-   "owner": "CC-B",
+   "owner": "CC-C",
    "votes": {
     "CC-B": 1
    },
+   "n": 1,
+   "rows": 603,
    "latest": "CC-B",
    "agree": 1.0,
    "batch": null,
-   "ledger": null
+   "ledger": "RUNNING_ISSUES:11224 (same class as venue-quiet-paper-)",
+   "ruling": "Langston round-2 ruling 2026-11-20 12:38Z (Discord 1573316684633350144): must match venue-quiet-paper-, the standing record of the class",
+   "flag": true
   },
   "row2-4b-": {
    "owner": "CC-C",
    "votes": {
     "CC-C": 2
    },
+   "n": 2,
+   "rows": 2,
    "latest": "CC-C",
    "agree": 1.0,
    "batch": "row 2 4b review",
-   "ledger": null
+   "ledger": null,
+   "flag": true
+  },
+  "server-disk-utilization-": {
+   "owner": "CC-INFRA",
+   "votes": {},
+   "n": 0,
+   "rows": 1,
+   "latest": null,
+   "agree": null,
+   "batch": null,
+   "ledger": "staging server disk, not the database",
+   "ruling": "Langston round-2 ruling 2026-11-20 12:38Z (Discord 1573316684633350144): its own row, the staging server disk",
+   "inferred": true,
+   "flag": true
   },
   "ticker-writer-permanent": {
-   "owner": "CC-INFRA",
+   "owner": "CC-A",
    "votes": {
     "CC-B": 4,
     "CC-INFRA": 8,
     "Kyle": 4
    },
+   "n": 16,
+   "rows": 7,
    "latest": "CC-INFRA",
    "agree": 0.5,
+   "plurality": true,
    "batch": null,
-   "ledger": null,
+   "ledger": "#705, RUNNING_ISSUES:3954, :3969",
+   "ruling": "Langston round-2 ruling 2026-11-20 12:38Z (Discord 1573316684633350144): #705 heading names the ticker writer; last amendment CC-A",
    "flag": true
   },
   "token-watch-store-warn": {
    "owner": "CC-INFRA",
    "votes": {
-    "CC-INFRA": 91,
-    "Infra-Claude": 1,
+    "CC-INFRA": 93,
     "CC-A": 4,
-    "Kyle": 3,
-    "Infra": 1
+    "Kyle": 3
    },
+   "n": 100,
+   "rows": 1,
    "latest": "CC-INFRA",
-   "agree": 0.91,
+   "agree": 0.93,
    "batch": "B-TOKEN-WATCH-STORAGE",
    "ledger": "#1132"
   },
@@ -500,10 +716,25 @@
    "votes": {
     "CC-INFRA": 72
    },
+   "n": 72,
+   "rows": 5,
    "latest": "CC-INFRA",
    "agree": 1.0,
    "batch": "B-TOKEN-WATCH-STORAGE",
    "ledger": "#1132"
+  },
+  "transcript-archive-deadman-": {
+   "owner": "CC-INFRA",
+   "votes": {},
+   "n": 0,
+   "rows": 15,
+   "latest": null,
+   "agree": null,
+   "batch": "B-TRANSCRIPT-ARCHIVE",
+   "ledger": "plan row 4b (closed 11-10)",
+   "ruling": "PM: plan row 4b, Infra Claude",
+   "inferred": true,
+   "flag": true
   },
   "venue-quiet-paper-": {
    "owner": "CC-C",
@@ -511,11 +742,13 @@
     "CC-B": 40,
     "CC-C": 16
    },
+   "n": 56,
+   "rows": 37,
    "latest": "CC-C",
    "agree": 0.71,
    "batch": null,
    "ledger": "RUNNING_ISSUES:11224",
-   "override": "Langston corrected CC-B to CC-C on 2026-11-20; 3a1 closed 10-17",
+   "ruling": "Langston corrected CC-B to CC-C on 2026-11-20; 3a1 closed 10-17",
    "flag": true
   },
   "vts-gc-retention-": {
@@ -523,26 +756,34 @@
    "votes": {
     "CC-A": 3
    },
+   "n": 3,
+   "rows": 2,
    "latest": "CC-A",
    "agree": 1.0,
    "batch": null,
-   "ledger": null
+   "ledger": null,
+   "flag": true
   },
   "vts-quiet-": {
    "owner": "CC-C",
    "votes": {
     "CC-C": 2
    },
+   "n": 2,
+   "rows": 48,
    "latest": "CC-C",
    "agree": 1.0,
    "batch": null,
-   "ledger": null
+   "ledger": null,
+   "flag": true
   },
   "vts-shadow-unpriced-": {
    "owner": "CC-C",
    "votes": {
     "CC-C": 65
    },
+   "n": 65,
+   "rows": 5,
    "latest": "CC-C",
    "agree": 1.0,
    "batch": "B-XSTOCK-BID-TRIGGER-RELAND",
@@ -554,6 +795,8 @@
     "CC-B": 3,
     "CC-C": 26
    },
+   "n": 29,
+   "rows": 13,
    "latest": "CC-C",
    "agree": 0.9,
    "batch": "B-XSTOCK-BID-TRIGGER-RELAND",
@@ -564,10 +807,13 @@
    "votes": {
     "CC-INFRA": 2
    },
+   "n": 2,
+   "rows": 19,
    "latest": "CC-INFRA",
    "agree": 1.0,
    "batch": null,
-   "ledger": null
+   "ledger": null,
+   "flag": true
   },
   "xstock-bar-availability-": {
    "owner": "CC-C",
@@ -578,6 +824,8 @@
     "CC-INFRA": 1,
     "Kyle": 1
    },
+   "n": 273,
+   "rows": 21,
    "latest": "CC-C",
    "agree": 0.96,
    "batch": "B-XSTOCK-BAR-AVAILABILITY",
@@ -589,23 +837,43 @@
     "CC-B": 5,
     "CC-C": 4
    },
+   "n": 9,
+   "rows": 4,
    "latest": "CC-B",
    "agree": 0.56,
    "batch": "B-PRICE-FEED-COVERAGE",
    "ledger": "cold_tick carrier",
    "flag": true
   },
+  "xstock-equity-feed-stall": {
+   "owner": "CC-C",
+   "votes": {},
+   "n": 0,
+   "rows": 18,
+   "latest": null,
+   "agree": null,
+   "batch": null,
+   "ledger": "equity-spot-archiver.ts silent-stall watchdog; B-PRICE-STALENESS-BOUND (closed 10-20)",
+   "ruling": "PM: the xStock feed watchdog; B-PRICE-STALENESS-BOUND closed by CC-C",
+   "inferred": true,
+   "flag": true
+  },
   "xstock-fill-safety-config-missing": {
-   "owner": "CC-INFRA",
+   "owner": "CC-C",
    "votes": {
     "CC-B": 1,
     "CC-INFRA": 2,
     "Kyle": 1
    },
+   "n": 4,
+   "rows": 1,
    "latest": "CC-INFRA",
    "agree": 0.5,
+   "plurality": true,
    "batch": null,
-   "ledger": null,
+   "ledger": "plan row 3b.f-c, config half of xstock-stale-fill-block",
+   "ruling": "Langston round-2 ruling 2026-11-20 12:38Z (Discord 1573316684633350144): config half of the 3b.f-c gate",
+   "inferred": true,
    "flag": true
   },
   "xstock-stale-fill-block": {
@@ -613,10 +881,12 @@
    "votes": {
     "CC-C": 152
    },
+   "n": 152,
+   "rows": 308,
    "latest": "CC-C",
    "agree": 1.0,
    "batch": null,
-   "ledger": "RUNNING_ISSUES:246, :3209"
+   "ledger": "RUNNING_ISSUES:246, :3209, plan row 3b.f-c"
   }
  },
  "titles": {
@@ -625,10 +895,13 @@
    "votes": {
     "CC-C": 1
    },
+   "n": 1,
+   "rows": 4,
    "latest": "CC-C",
    "agree": 1.0,
    "batch": null,
-   "ledger": "#677"
+   "ledger": "#677",
+   "flag": true
   },
   "Balance re-anchored": {
    "owner": "CC-C",
@@ -636,10 +909,13 @@
     "CC-A": 1,
     "CC-C": 1
    },
+   "n": 2,
+   "rows": 3,
    "latest": "CC-C",
    "agree": 0.5,
+   "tie": true,
    "batch": "B-BALANCE-SESSION-PAIRING",
-   "ledger": "#618",
+   "ledger": "#618, register:63",
    "flag": true
   },
   "Weekly dt-deploy observation": {
@@ -647,22 +923,29 @@
    "votes": {
     "CC-INFRA": 1
    },
+   "n": 1,
+   "rows": 9,
    "latest": "CC-INFRA",
    "agree": 1.0,
    "batch": null,
-   "ledger": null
+   "ledger": null,
+   "flag": true
   },
   "switch_on_shadow_evidence": {
-   "owner": "CC-C",
+   "owner": "CC-B",
    "votes": {
     "CC-C": 21,
     "CC-A": 8,
     "CC-B": 1
    },
+   "n": 30,
+   "rows": 4,
    "latest": "CC-A",
    "agree": 0.7,
-   "batch": "B-SILENT-STRATEGY-CENSUS",
-   "ledger": null,
+   "batch": null,
+   "ledger": "#592 (closed 09-29, CC-B): 90-day retention-exception expiry review on that table",
+   "ruling": "Langston round-2 ruling 2026-11-20 12:38Z (Discord 1573316684633350144): the retention-expiry review, not the census switch-on",
+   "inferred": true,
    "flag": true
   }
  },
