@@ -64,9 +64,16 @@ def corpus(s1=False):
     return lines
 
 
-def run(pm2_lines, s1=False, name='error__2026-01-06_00-00-00.log', extra=()):
+# The rotation dated 01-05 ran at 00:01:40, so the dated-01-06 file's content starts then: a non-instrument line stamped
+# 00:01:41 stands for that (the extractor skips non-instrument lines, so no count below moves). `head=False` drops it,
+# leaving the first stamp at 10:40:01 — after START — which is the Step-4 r3 start-coverage case (CASE H).
+HEAD = '2026-01-05 00:01:41 +00:00: [boot] unrelated process output'
+
+
+def run(pm2_lines, s1=False, name='error__2026-01-06_00-00-00.log', extra=(), head=True, files=None, lines=None):
     with tempfile.TemporaryDirectory() as d:
-        body = ('\n'.join(corpus(s1)) + '\n').encode()
+        src = corpus(s1) if lines is None else lines
+        body = ('\n'.join(([HEAD] if head and lines is None else []) + src) + '\n').encode()
         if name.endswith('.gz'):
             with gzip.open(os.path.join(d, name), 'wb') as f:
                 f.write(body)
@@ -75,6 +82,9 @@ def run(pm2_lines, s1=False, name='error__2026-01-06_00-00-00.log', extra=()):
                 f.write(body)
         for x in extra:  # further rotation files, empty: only their NAMES matter to the cases that use them
             open(os.path.join(d, x), 'w').close()
+        for x, xl in (files or {}).items():  # further rotation files WITH content (CASE H-prepend)
+            with open(os.path.join(d, x), 'w') as f:
+                f.write('\n'.join(xl) + '\n')
         open(os.path.join(d, 'error.log'), 'w').close()
         pm2 = os.path.join(d, 'pm2.log')
         with open(pm2, 'w') as f:
@@ -165,6 +175,46 @@ code, out, err = run([BOOT, RS], name='error__2026-01-06_00-01-40.log', extra=('
 he = json.loads(out)['lanes'].get('vts', {}).get('hour_equality', {}) if code == 0 else {}
 check('G0 one rotation dated C reads like CASE A', (code, he.get('cells_graded'), he.get('cells_unequal'),
       he.get('holds')) == (0, 2, 0, True), (code, he.get('cells_graded'), he.get('cells_unequal'), he.get('holds'), err[-200:]))
+
+# B-DISK-FILE-TIERING P9, Step-4 r3 (Langston; every expectation stated here BEFORE the first run — the #744 rider). The
+# rotation that closes day C-1 runs at the first timer pass after 00:00Z on C, so the file dated C holds C's first minutes;
+# for the window's FIRST content day that file is not otherwise read. Every case uses CASE A's PM2 log ([BOOT, RS]).
+# CASE H — `head=False` (the dated-01-06 file's first stamp is 10:40:01, after START 10:30:00) and no rotation dated 01-05.
+#   EXPECTED exit 2, FATAL "window start 2026-01-05 10:30:00+00:00 is not covered", naming "no rotation dated 2026-01-05"
+#   and the unread span "[2026-01-05 10:30:00+00:00, 2026-01-05 10:40:01+00:00)".
+# CASE H-prepend — the same, plus `error__2026-01-05_10-40-00.log` (a catch-up rotation that ran at 10:40 on 01-05)
+#   holding a non-instrument line at 2026-01-04 10:40:05 and ONE in-window touch line at 10:30:01 (looks=2). EXPECTED
+#   exit 0; start_coverage = {first_source_head 2026-01-05T10:40:01+00:00, prepended that file}; files[0] is that file
+#   with in_window 1; regular touch passes 27 (CASE A's 26 + 1); grading unchanged from CASE A (2 cells, 0 unequal,
+#   holds) because the extra look falls in hour 10, which starts before START and is never graded.
+# CASE H-stale — `head=False` plus an EMPTY `error__2026-01-05_00-01-40.log`. EXPECTED exit 2, "is not covered", naming
+#   the span — a dated-day(START) rotation that does not itself reach START never reads as covering it.
+# CASE H-empty — the dated-01-06 file holds only an unstamped line. EXPECTED exit 2, "holds no stamped line" — a source
+#   that cannot show coverage refuses; it never reads as covered.
+HS = '[2026-01-05 10:30:00+00:00, 2026-01-05 10:40:01+00:00)'
+code, out, err = run([BOOT, RS], head=False)
+check('H exit 2: start not covered, no rotation dated 2026-01-05, span named',
+      code == 2 and 'window start 2026-01-05 10:30:00+00:00 is not covered' in err
+      and 'no rotation dated 2026-01-05' in err and HS in err, (code, err.strip()[-260:]))
+PRE = 'error__2026-01-05_10-40-00.log'
+code, out, err = run([BOOT, RS], head=False, files={PRE: [
+    '2026-01-04 10:40:05 +00:00: [boot] unrelated process output',
+    '2026-01-05 10:30:01 +00:00: [8a-P4c][VTS_XS_TOUCH] lane=vts session=regular looks=2 ageOver=[0,0,0,0,0] refused=[0,0,0,0,0]']})
+o = json.loads(out) if code == 0 else {}
+he = o.get('lanes', {}).get('vts', {}).get('hour_equality', {})
+check('H-prepend exit 0, prepended the dated-01-05 rotation', (code, o.get('start_coverage')) == (0, {
+      'first_source_head': '2026-01-05T10:40:01+00:00', 'prepended': PRE}), (code, o.get('start_coverage'), err[-200:]))
+check('H-prepend reads it first: files[0] in_window 1, regular passes 27',
+      code == 0 and (o['files'][0]['file'], o['files'][0]['in_window'],
+                     o['lanes']['vts']['touch_by_session']['regular']['passes']) == (PRE, 1, 27),
+      (o['files'][0], o['lanes']['vts']['touch_by_session']['regular']['passes']) if code == 0 else None)
+check('H-prepend grading unchanged from CASE A', (he.get('cells_graded'), he.get('cells_unequal'), he.get('holds'))
+      == (2, 0, True), (he.get('cells_graded'), he.get('cells_unequal'), he.get('holds')))
+code, out, err = run([BOOT, RS], head=False, extra=('error__2026-01-05_00-01-40.log',))
+check('H-stale exit 2: a dated-day(START) rotation that starts after START does not cover it',
+      code == 2 and 'is not covered' in err and HS in err, (code, err.strip()[-260:]))
+code, out, err = run([BOOT, RS], lines=['no stamp on this line'])
+check('H-empty exit 2: no stamped line refuses', code == 2 and 'holds no stamped line' in err, (code, err.strip()[-200:]))
 
 print('SELFTEST ' + ('FAILED: ' + ', '.join(fails) if fails else 'OK — all expectations met'))
 sys.exit(1 if fails else 0)

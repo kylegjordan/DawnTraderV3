@@ -80,8 +80,10 @@ def val(v):
 
 # ── (b) the rotations this range REQUIRES. `error__<D>_<HH-MM-SS>.log` is rotated at the first run after D 00:00Z and
 # holds day D-1 (content day C is read from the rotation dated C+1), so the window needs the rotations dated
-# day(start)+1 .. day(end)+1; the last one may not exist yet, in
-# which case the live `error.log` holds it (it must, for the flush of the window's final hour, stamped after `end`).
+# day(start)+1 .. last_content+1, where last_content = day(end - 1 µs) — for a midnight-aligned end that is day(end), not
+# day(end)+1. The last one may not exist yet, in which case the live `error.log` holds it. The live file is always read
+# too, for the flush of the window's final hour (stamped after `end`); once that day rotates, a flush stamped on content
+# day day(end) sits in a rotation outside this set (Langston's second r3 residual, homed on row 8a, owner CC-C).
 # B-DISK-FILE-TIERING P9: pm2-logrotate named every rotation `_00-00-00`; the system logrotate that replaced it names it
 # with the real run instant and compresses it one rotation later (.log -> .log.gz). So a day is found by a date glob,
 # keyed by its base name (.gz stripped, the plain file preferred while both exist).
@@ -134,6 +136,40 @@ def open_log(p):
         return gzip.open(p, 'rt', errors='replace') if p.endswith('.gz') else open(p, 'r', errors='replace')
     except OSError as e:
         die(f'cannot open {p}: {e}')
+
+
+# ── (b, continued) the window's FIRST content day is covered from START, judged on CONTENT (Langston, Step-4 r3).
+# The rotation that closes day C-1 runs at the first timer pass after 00:00Z (RandomizedDelaySec, and unbounded after a
+# Persistent=true catch-up), so the file dated C — not read for content day C — holds C's first minutes. For an INTERIOR
+# day that file is already in the set (as C-1's source) and its lines are cut on their own stamps; for the window's FIRST
+# day it is not. So: if the first stamped line of the first source is later than START, prepend the rotation dated
+# day(START) (at most one exists — the split check above refused two) and require ITS first stamp to be at or before
+# START; with no such rotation (never written, or aged out), refuse and name the unread span. A source holding no stamped
+# line at all cannot show coverage and refuses — it never reads as covered. No delay constant appears here.
+def first_stamp(p):
+    with open_log(p) as fh:
+        for line in fh:
+            m = TS.match(line)
+            if m:
+                return datetime.strptime(m.group(1), '%Y-%m-%d %H:%M:%S').replace(tzinfo=timezone.utc)
+    return None
+
+
+head = first_stamp(required[0])
+if head is None:
+    die(f'{required[0]} holds no stamped line, so it cannot show the window start {START_S} is covered')
+prepended = None
+if head > START_S:
+    dated_start = bases(START.date())
+    if not dated_start:
+        die(f'window start {START_S} is not covered: the first stamped line of {os.path.basename(required[0])} is {head}, '
+            f'and no rotation dated {START.date()} exists in {args.dir} — the span [{START_S}, {head}) would go unread')
+    prepended = dated_start[0] if os.path.exists(dated_start[0]) else dated_start[0] + '.gz'
+    phead = first_stamp(prepended)
+    if phead is None or phead > START_S:
+        die(f'window start {START_S} is not covered: {os.path.basename(prepended)} starts at {phead} and '
+            f'{os.path.basename(required[0])} at {head} — the span [{START_S}, {head}) would go unread')
+    required.insert(0, prepended)
 
 
 # ── restarts: PM2's own record. Only a restart AFTER a lane's first instrument line can cut an hour short.
@@ -263,6 +299,7 @@ while ri < len(restarts):
 
 out = {'window': [START.isoformat(), END.isoformat()], 'sym_cut': args.sym_cut, 'first_line': str(first_ts),
        'last_line': str(last_ts), 'files': per_file, 'unparsed_ts': bad,
+       'start_coverage': {'first_source_head': head.isoformat(), 'prepended': os.path.basename(prepended) if prepended else None},
        'restarts_in_range': [r.isoformat() for r in restarts],
        'restart_source': {'path': args.pm2_log, 'first_stamp': pm2_first.isoformat(), 'starting_lines_total': pm2_starting_total},
        'lanes': {}}
