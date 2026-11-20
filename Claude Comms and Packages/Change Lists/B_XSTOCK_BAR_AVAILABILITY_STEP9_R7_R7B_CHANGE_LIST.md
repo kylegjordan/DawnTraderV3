@@ -26,6 +26,22 @@
 
 **Verification at my clone:** vitest 19 files / 289 tests pass (the hold, runner and gate-read tests, every `b-b75-*` test, and the B-DISK-FILE-TIERING AP-7 fence test). tsc baseline 324 = 324. CI: see the dispatch.
 
+## Step-4 verdict on R7c: PROCEED (Langston `1573342539186966542`, 2026-11-20)
+Code `38af683a6`; graded at `b6428d6ef` (CI `44745580867` 4/4); bytes unchanged at `c0a82132e`. Nothing ruled on reported fact. Two readings and five carried items for the record, each with its disposition:
+
+- **What `[]` means.** `in_window_days_missing_from_hot = []` means every in-window UTC day still has a hot child partition, judged from the child NAME (`classifyPartition`). It does NOT mean the rows are intact. Nobody may read `[]` as data completeness.
+- **R2 prediction, re-derived by Langston:** missing `[2026-11-09, 2026-11-10, 2026-11-11]`, 10 days compared (the 00:05 start touches ten UTC days). `[]` on R2 is a broken measurement.
+- **Reflog control (fold-in e):** the deploy clone's reflog holds 160 entries: 151 `reset: moving to <SHA40>`, 9 `reset: moving to HEAD`, zero other verbs. The allowlist covers all of the measured history.
+
+Carried items:
+1. **R7b's hold arms are unexercised on this window.** `hot_retention_days` is 8, so the first age-eligible child (`…_2026_11_12`) reaches the sweep at 11-21 02:15Z. The runner fires at 00:15Z that same night. If night one writes a verdict, the hold, cap and window-unreadable arms never engage on this window, and no silence from them is evidence that they fire (#661 leg 3). DISPOSITION: folded into this batch; this sentence goes into the completion report's honest residual.
+2. **The new nightly job has no liveness check.** The other three nightly subjects each have a `CheckSpec` with start and done patterns. This runner prints no `started` line, and the launcher exits 0 on a held lock with only a log line. DISPOSITION: folded into this batch as R7d (a `started at <ISO>` line plus a `CheckSpec`), owner CC-C. It gets its own Step-4 round and is pushed only after OLD Claude's 11-20 deploy lands, so that deploy carries no unreviewed code.
+3. `/tmp/xstock-bar-availability-verdict.lock` follows the `b75-retention-run.sh` precedent and falls in the shared-`/tmp` class already homed at #979. DISPOSITION: no work, citing #979.
+4. `settleRevisionHold` returns `not-applicable` on `eligible.length === 0` before it clears the hold key. An open `…-sweep-hold:<start>` would then have no clearing edge, which can only happen if the 8-day retention is raised. DISPOSITION: folded into R7d.
+5. `SIGKILL` goes to `npx`, not the process group, so a hung `tsx` grandchild can outlive the 30-minute timeout. It is bounded in practice because `budgetedQuery` caps every statement by the remaining 1,200 s budget. DISPOSITION: folded into R7d (kill the process group).
+
+Step 10 order on `8bd256bc`: flip the GOVERNANCE_EXCEPTIONS row to open-retired and push, THEN resolve. Resolving first frees the dedupe key, and the next tick re-mints it.
+
 ## R7c — answers to the Step-4 send-back (`1573299718837108808`, follow-up `1573304681877348355`)
 One commit, subject `B-XSTOCK-BAR-AVAILABILITY R7c:`; its sha as pushed is in the dispatch. Seven files: runner, launcher, B75 sweep, hold module, `system-alerts.ts` (one `why` string), and the two batch test files.
 
