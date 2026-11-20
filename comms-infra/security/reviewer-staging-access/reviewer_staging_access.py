@@ -9,7 +9,6 @@ It never prints a public-key body, private-key material, or DATABASE_URL.
 from __future__ import annotations
 
 import argparse
-import base64
 import json
 import os
 from pathlib import Path
@@ -18,6 +17,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import time
 from typing import Callable
 
 try:
@@ -29,6 +29,16 @@ except ImportError:  # The parser self-test also runs in the Windows owner clone
 STAGING_HOST = "188.245.193.8"
 HELSINKI_SOURCE = "204.168.141.77"
 STAGING_PSQL = "/usr/local/bin/psql"   # the B-DB-READ-TOOL wrapper (comms-infra/staging/psql-wrapper)
+STAGING_DT_SQL = "/usr/local/bin/dt-sql"   # the B-DB-READ-TOOL one-attempt reader; the database control runs through it
+DT_SQL_BUSY_TRIES = 3
+DT_SQL_BUSY_WAIT_S = 20
+DT_SQL_EXIT = {
+    1: "logged in, the query failed",
+    2: "refused before connecting",
+    3: "connection refused - possible address ban",
+    4: "dt-sql is LOCKED - see dt-sql --status",
+    5: "dt-sql BUSY on every try",
+}
 NL = chr(10)
 ACTORS = {
     "langston": {
@@ -371,71 +381,29 @@ def verify_remote(actor: str) -> int:
         raise VerificationError("psql does not resolve to %s" % STAGING_PSQL)
     require_path(STAGING_PSQL, "root", 0o755)
 
-    # The connection URI must not appear in psql's argv: every local account can read argv.
-    # Source it into a short-lived Python process, translate it to libpq environment fields,
-    # remove DATABASE_URL, then exec psql with only the fixed query in argv.
-    database_probe = r'''
-import os
-import subprocess
-import sys
-from urllib.parse import parse_qs, unquote, urlsplit
-
-uri = urlsplit(os.environ["DATABASE_URL"])
-if uri.scheme not in ("postgres", "postgresql") or not uri.hostname:
-    raise SystemExit(2)
-env = os.environ.copy()
-env.pop("DATABASE_URL", None)
-env.update({
-    "PGHOST": uri.hostname,
-    "PGPORT": str(uri.port or 5432),
-    "PGUSER": unquote(uri.username or ""),
-    "PGPASSWORD": unquote(uri.password or ""),
-    "PGDATABASE": unquote(uri.path.lstrip("/")),
-})
-query = parse_qs(uri.query, keep_blank_values=True)
-for source, target in {
-    "sslmode": "PGSSLMODE",
-    "sslrootcert": "PGSSLROOTCERT",
-    "options": "PGOPTIONS",
-}.items():
-    if source in query and len(query[source]) == 1:
-        env[target] = query[source][0]
-env["PGOPTIONS"] = (env.get("PGOPTIONS", "") +
-                    " -c default_transaction_read_only=on").strip()
-result = subprocess.run(
-    ["%s", "-Atqc",
-     "select current_user,current_database(),"
-     "(select count(*) >= 0 from public.users),"
-     "current_setting('transaction_read_only')"],
-    text=True,
-    capture_output=True,
-    env=env,
-    check=False,
-)
-sys.stdout.write(result.stdout)
-sys.stderr.write(result.stderr)
-raise SystemExit(result.returncode)
-''' % STAGING_PSQL
-    encoded_probe = base64.b64encode(database_probe.encode("utf-8")).decode("ascii")
-    database = subprocess.run(
-        [
-            "bash", "--noprofile", "--norc", "-c",
-            "cd /home/deploy/dawntrader && set -a && . ./.env && "
-            "exec python3 -c 'import base64; exec(base64.b64decode(\"%s\"))'"
-            % encoded_probe,
-        ],
-        text=True,
-        capture_output=True,
-        check=False,
-    )
+    # The database positive control goes THROUGH dt-sql (Langston F-2, 2026-11-20). dt-sql makes ONE login attempt per
+    # call, writes an INTENT before it, and LOCKS on a refused login (credential arm, critical alert), so neither this
+    # daily check nor any helper after it can send the second wrong password that gets the address banned. It also keeps
+    # the connection string out of every argv and sets read-only through PGOPTIONS — the two things the hand-built probe here did.
+    # ⚠️ NARROWER THAN THE OLD PROBE: the old query also read current_setting('transaction_read_only') and required
+    # "on". dt-sql refuses any SQL that names that setting (exit 2), so this control no longer re-proves read-only from
+    # inside the session; that guarantee now rests on dt-sql's own guard and its tests (B-DB-READ-TOOL).
+    # Exit 5 (BUSY) means another dt-sql call held the lock and NO attempt was made, so it is retried; nothing else is.
+    require_path(STAGING_DT_SQL, "root", 0o755)
+    query = "select current_user,current_database(),(select count(*) >= 0 from public.users)"
+    for attempt in range(DT_SQL_BUSY_TRIES):
+        database = subprocess.run([STAGING_DT_SQL, "-c", query], text=True, capture_output=True, check=False)
+        if database.returncode != 5:
+            break
+        if attempt + 1 < DT_SQL_BUSY_TRIES:
+            time.sleep(DT_SQL_BUSY_WAIT_S)
     rows = database.stdout.strip().splitlines()
     fields = rows[0].split("|") if len(rows) == 1 else []
-    if (database.returncode != 0 or len(fields) != 4
-            or fields[2:] != ["t", "on"]):
+    if database.returncode != 0 or len(fields) != 3 or fields[2] != "t":
         raise VerificationError(
-            "read-only database positive control failed: %s"
-            % (database.stderr.strip()[-300:] or "exit %d" % database.returncode)
-        )
+            "read-only database positive control failed (dt-sql exit %d: %s): %s"
+            % (database.returncode, DT_SQL_EXIT.get(database.returncode, "unexpected exit"),
+               database.stderr.strip()[-300:] or "no stderr"))
     database_user, database_name = fields[:2]
     print(json.dumps({
         "actor": actor,
@@ -720,11 +688,20 @@ def self_test() -> int:
     if failure_text(trace, "only stdout") != "only stdout":
         raise VerificationError("failure text fallback to stdout mutation survived")
     checks += 1
-    # the positive control must run the wrapper the reviewer's own `psql` resolves to, never /usr/bin/psql around it
+    # the reviewer's own `psql` must still resolve to the B-DB-READ-TOOL wrapper, never /usr/bin/psql
     import inspect
     body = inspect.getsource(verify_remote)
-    if '"/usr/bin/psql"' in body or "% STAGING_PSQL" not in body or "require_path(STAGING_PSQL" not in body:
-        raise VerificationError("database probe bypasses the psql wrapper")
+    if '"/usr/bin/psql"' in body or "require_path(STAGING_PSQL" not in body:
+        raise VerificationError("the psql wrapper check is gone from the verifier")
+    checks += 1
+    # the database control runs through dt-sql (F-2): no hand-built psql login, no DATABASE_URL handling of its own,
+    # dt-sql's ownership checked first, and only BUSY (5, no attempt made) retried
+    if ("[STAGING_DT_SQL, \"-c\", query]" not in body or "require_path(STAGING_DT_SQL" not in body
+            or "DATABASE_URL" in body or "-Atqc" in body):
+        raise VerificationError("database probe does not go through dt-sql")
+    checks += 1
+    if "database.returncode != 5" not in body or "range(DT_SQL_BUSY_TRIES)" not in body:
+        raise VerificationError("database probe retries something other than dt-sql BUSY, or does not retry it")
     checks += 1
     print("self-test passed: %d checks" % checks)
     return 0
