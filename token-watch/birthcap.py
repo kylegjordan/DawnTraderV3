@@ -486,7 +486,8 @@ def _hourly_crosscheck(st: dict, now: datetime, records: list[dict], usage_fn, p
     if snap and snap.get("hour") == hour:
         return
     usage = usage_fn()
-    cur = {"hour": hour, "at": now.isoformat(), "webhooks": usage["credits"]["webhooks"], "rpc": usage["credits"]["rpc"]}
+    cur = {"hour": hour, "at": now.isoformat(), "webhooks": usage["credits"]["webhooks"], "rpc": usage["credits"]["rpc"],
+           "cycle": _cycle_of(usage)}
     st["usage_snap"] = cur
     if not snap or snap.get("hour") != (now - timedelta(hours=1)).strftime("%Y-%m-%dT%H"):
         return                                                # need two consecutive hours to align
@@ -507,9 +508,10 @@ def _hourly_crosscheck(st: dict, now: datetime, records: list[dict], usage_fn, p
     base_n = max(dv_web, expected)                            # a frozen vendor counter is tested too (gate C item 3)
     share = round(abs(dv_web - expected) / base_n, 4) if base_n else 0.0
     verdict, paged = ("small" if base_n < BIRTHCAP_DIVERGENCE_MIN else "ok"), False
-    if dv_web < 0:
+    reset = _is_reset(dv_web, snap.get("cycle"), cur["cycle"])
+    if reset:
         # ⛔ THE VENDOR'S COUNTER RESETS AT ITS BILLING-CYCLE BOUNDARY (`providers.helius_usage`: "this project's cycle";
-        #    the free cycle turns on the 27th). A negative delta is that reset, not a disagreement: no replan.
+        #    the free cycle turns on the 27th). The two snapshots straddle it, so the delta is not a spend: no replan.
         verdict, share = "reset", 0.0
     elif dv_web == 0 and expected >= BIRTHCAP_DIVERGENCE_MIN:
         # ⛔ A DEAD METER IS NOT A BILLING DISAGREEMENT (Langston condition 4): the cap is flying blind. Own key, own title.
@@ -526,7 +528,7 @@ def _hourly_crosscheck(st: dict, now: datetime, records: list[dict], usage_fn, p
     allow_rpc_hour = float(st.get("rpc_rate_per_day", 0.0)) / 24.0
     # switch credits land in `webhooks`, not `rpc` (live pause: rpc flat at 25,168 across both PUTs, webhooks +~200
     # each); with a zero allowance ANY rpc spend is unplanned (gate C item 4)
-    if dv_rpc > 0 and dv_rpc > 1.25 * allow_rpc_hour + (50 if allow_rpc_hour > 0 else 0):
+    if not reset and dv_rpc > 0 and dv_rpc > 1.25 * allow_rpc_hour + (50 if allow_rpc_hour > 0 else 0):
         st["replan"] = "rpc-overrun:%s" % prev
         pages.append(_page("birthcap-rpc-overrun-%s" % prev, "warning", "Birth cap: RPC spend above its allowance — replanning",
                            "hour %s: vendor rpc +%d against an allowance of %.0f/hour (liquidity carve is 0 under "
@@ -538,21 +540,37 @@ def _hourly_crosscheck(st: dict, now: datetime, records: list[dict], usage_fn, p
         del hours[k]
 
 
+def _cycle_of(usage: dict) -> str | None:
+    """The billing cycle a usage read belongs to (its start), or None when the read does not carry one."""
+    return (usage.get("creditCycle") or {}).get("start")
+
+
+def _is_reset(delta: int, cycle_then: str | None, cycle_now: str | None) -> bool:
+    """Two usage reads straddle a billing-cycle boundary, so their difference is not a spend. The cycle identity is the
+    exact test (a reset after a quiet cycle can still read as a small POSITIVE delta); a negative delta is the fallback
+    for a snapshot taken before the cycle was recorded, or a read that does not carry one."""
+    if cycle_then and cycle_now and cycle_then != cycle_now:
+        return True
+    return delta < 0
+
+
 def _window_open(st: dict, now: datetime, usage_fn, reason: str, records: list | None = None,
                  pages: list | None = None) -> None:
     """Start an ON window at a vendor snapshot. A window still waiting for its quiet minute after its OFF (a replan that
     switched straight back ON) is compared first, against this same snapshot, so no window is lost. A failed usage read
     starts no window (nothing to compare against)."""
     try:
-        web = int(usage_fn()["credits"]["webhooks"])
+        usage = usage_fn()
+        web = int(usage["credits"]["webhooks"])
     except Exception as exc:                                  # noqa: BLE001
         LOG.error("birthcap: no usage snapshot, this ON window will not be compared: %s", exc)
         st.pop("window", None)
         return
+    cycle = _cycle_of(usage)
     prev = st.get("window")
     if prev and prev.get("off_at") and pages is not None:
-        _window_compare(st, prev, now, web, records or [], "reopened", pages)
-    st["window"] = {"opened_at": now.isoformat(), "web": web, "reason": reason,
+        _window_compare(st, prev, now, web, cycle, records or [], "reopened", pages)
+    st["window"] = {"opened_at": now.isoformat(), "web": web, "cycle": cycle, "reason": reason,
                     "from_min": (now + timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M") if prev and prev.get("off_at") else None}
 
 
@@ -604,20 +622,22 @@ def _window_close_check(st: dict, now: datetime, records: list[dict], usage_fn, 
             return
         end_reason, reopen = "cut", True
     try:
-        web_now = int(usage_fn()["credits"]["webhooks"])
+        usage = usage_fn()
+        web_now = int(usage["credits"]["webhooks"])
     except Exception as exc:                                  # noqa: BLE001 — retried next tick
         LOG.error("birthcap: window close deferred, no usage snapshot: %s", exc)
         return
-    _window_compare(st, w, now, web_now, records, end_reason, pages)
+    cycle_now = _cycle_of(usage)
+    _window_compare(st, w, now, web_now, cycle_now, records, end_reason, pages)
     if reopen:
-        st["window"] = {"opened_at": now.isoformat(), "web": web_now, "reason": "cut",
+        st["window"] = {"opened_at": now.isoformat(), "web": web_now, "cycle": cycle_now, "reason": "cut",
                         "from_min": (now + timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M")}
     else:
         st.pop("window", None)
 
 
-def _window_compare(st: dict, w: dict, now: datetime, web_now: int, records: list[dict], end_reason: str,
-                    pages: list) -> None:
+def _window_compare(st: dict, w: dict, now: datetime, web_now: int, cycle_now: str | None, records: list[dict],
+                    end_reason: str, pages: list) -> None:
     """The compare itself: the vendor's webhook delta over the window against the census births in it (minutes from
     `from_min`, or the ON minute, up to and including this one) plus the switch credits requested inside it."""
     opened = _ts(w["opened_at"])
@@ -632,7 +652,7 @@ def _window_compare(st: dict, w: dict, now: datetime, web_now: int, records: lis
            "vendor_webhooks": dv, "births": births, "switch_credits": switch_cr,
            "share": round(abs(dv - expected) / base, 4) if base else 0.0, "verdict": "small", "paged": False}
     key = opened.strftime("%Y%m%dT%H%M%S")
-    if dv < 0:
+    if _is_reset(dv, w.get("cycle"), cycle_now):
         # ⛔ A CYCLE RESET INSIDE THE WINDOW (the counter is per billing cycle): the window cannot be compared. Recorded,
         #    never paged, never a replan, and kept OUT of the cumulative leg below — its huge negative would otherwise
         #    cancel every overbilled window for the next 72 h.

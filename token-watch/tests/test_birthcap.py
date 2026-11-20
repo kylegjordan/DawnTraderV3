@@ -448,6 +448,22 @@ check("a cycle reset inside an hour (vendor 818,000 -> 120) is verdict reset: no
       hrow.get("verdict") == "reset" and not store.load_state(birthcap.STATE, {}).get("replan")
       and not any(p["dedupe_key"].startswith(("birthcap-divergence", "birthcap-vendor-meter-frozen")) for p in r["pages"]),
       (hrow, r["pages"]))
+# the exact test is the cycle identity the usage read carries: a reset after a quiet cycle can read as a POSITIVE delta
+reset(); enable(); v = Vendor()
+store.save_state(birthcap.STATE, {"applied": "on", "plan": dict(full, always_on=True)})
+v.webhooks, v.rpc = 200, 10
+tick(v, h0)
+add_births([h0 + timedelta(minutes=5, seconds=i) for i in range(300)])
+v.cycle = ("2026-12-27", "2027-01-27")                       # the cycle turned; the new cycle's counts are HIGHER
+v.webhooks, v.rpc = 900, 600
+r = tick(v, h0 + timedelta(hours=1))
+hrow = store.load_state(birthcap.STATE, {}).get("hours", {}).get(h0.strftime("%Y-%m-%dT%H"), {})
+check("a cycle change with a POSITIVE delta (200 -> 900 across the 27th) is verdict reset: no replan, no page",
+      hrow.get("verdict") == "reset" and not store.load_state(birthcap.STATE, {}).get("replan")
+      and not any(p["dedupe_key"].startswith(("birthcap-divergence", "birthcap-vendor-meter-frozen")) for p in r["pages"]),
+      (hrow, r["pages"]))
+check("... and the rpc counter rising across the reset (10 -> 600, zero allowance) is not an overrun",
+      not any(p["dedupe_key"].startswith("birthcap-rpc-overrun") for p in r["pages"]), r["pages"])
 unit = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "systemd", "token-watch-birthcap.service")).read()
 tasks = int(re.search(r"^TasksMax=(\d+)", unit, re.M).group(1))
 check("the unit's TasksMax leaves room for the node mint (measured minimum 48; 32 aborted rc 134)", tasks >= 48, tasks)
@@ -459,7 +475,7 @@ W_ON = next(T0 + timedelta(minutes=m) for m in range(1, 1440)
 W_OFF = next(W_ON + timedelta(minutes=m) for m in range(1, 1440) if birthcap.desired(W_ON + timedelta(minutes=m), full) == "off")
 
 
-def window_run(vendor_extra=0, births_n=300, tail=(), late=(), close_after=timedelta(minutes=3), pre=None):
+def window_run(vendor_extra=0, births_n=300, tail=(), late=(), close_after=timedelta(minutes=3), pre=None, new_cycle=None):
     """One planned ON window through the production tick: ON switch, births inside it, OFF switch, then the close.
     The meter moves by births + the two switches' credits (+ vendor_extra). Returns the last tick's result and state."""
     reset(); enable(); v = Vendor(active=False); v.put_credits = 100; v.webhooks = 50_000
@@ -470,6 +486,8 @@ def window_run(vendor_extra=0, births_n=300, tail=(), late=(), close_after=timed
     tick(v, W_OFF)
     add_births([W_OFF + t for t in tail] + [W_OFF + t for t in late])
     v.webhooks += len(tail) + len(late)
+    if new_cycle:
+        v.cycle = new_cycle                                    # the billing cycle turned before the close read
     r = tick(v, W_OFF + timedelta(seconds=60))
     st1 = store.load_state(birthcap.STATE, {})
     r2 = tick(v, W_OFF + close_after)
@@ -566,6 +584,8 @@ row = (stc.get("windows_checked") or [{}])[-1]
 check("... and at two blocks it is cut, compared clean, and a new window continues from the same snapshot",
       row.get("end") == "cut" and row.get("verdict") == "ok" and (stc.get("window") or {}).get("reason") == "cut"
       and (stc.get("window") or {}).get("web") == 50_400, (row, stc.get("window")))
+check("... and the continuing window carries the billing cycle it was opened in",
+      (stc.get("window") or {}).get("cycle") == "2026-11-27", stc.get("window"))
 # the cumulative leg: one-sided, the money direction
 over = [{"opened_at": (W_ON - timedelta(hours=h + 1)).isoformat(), "closed_at": (W_ON - timedelta(hours=h)).isoformat(),
          "vendor_webhooks": 1_100, "births": 900, "switch_credits": 100, "verdict": "ok", "share": 0.09, "paged": False}
@@ -594,6 +614,16 @@ check("... and it is kept OUT of the cumulative leg: the 9 % overbilling still p
       any(p["dedupe_key"].startswith("birthcap-cumulative-overbill-") for p in r2["pages"])
       and st2.get("cumulative", {}).get("windows") == 5 and st2.get("cumulative", {}).get("reset_windows") == 1,
       (r2["pages"], st2.get("cumulative")))
+r, st1, r2, st2, v = window_run(vendor_extra=400, new_cycle=("2026-12-27", "2027-01-27"))
+row = (st2.get("windows_checked") or [{}])[-1]
+pg = r["pages"] + r2["pages"]
+check("a window whose cycle changed is verdict reset even when its delta is POSITIVE (+400 over the census would page)",
+      row.get("verdict") == "reset"
+      and not any(p["dedupe_key"].startswith(("birthcap-divergence", "birthcap-vendor-meter-frozen")) for p in pg), (row, pg))
+r, st1, r2, st2, v = window_run(vendor_extra=400, new_cycle=("2026-12-27", "2027-01-27"), pre={"windows_checked": over})
+check("... and that window is kept out of the cumulative leg too",
+      st2.get("cumulative", {}).get("windows") == 5 and st2.get("cumulative", {}).get("reset_windows") == 1,
+      st2.get("cumulative"))
 
 print("== 11. the cap does not disable itself (Langston gate C blocker)")
 reset()
