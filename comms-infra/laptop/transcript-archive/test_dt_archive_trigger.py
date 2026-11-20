@@ -319,10 +319,38 @@ finally:
 fl = popened[0].get("creationflags") if popened else None
 ok("the real start path calls Popen once, with the module's SPAWN_FLAGS", rc == 0 and len(popened) == 1 and fl == tr.SPAWN_FLAGS, (rc, popened))
 ok("...and never with DETACHED_PROCESS (0x8), which cancels the hidden console", fl is not None and fl & 0x00000008 == 0, fl)
-if os.name == "nt":
-    ok("...and on Windows with exactly NEW_PROCESS_GROUP | CREATE_NO_WINDOW (0x08000200)", fl == 0x08000200, fl)
-else:
-    ok("...and off Windows with no flags at all", fl == 0, fl)
+
+# The Windows value, checked on EVERY host (Langston, ebb4a7db7): off Windows the subprocess flag names are absent, so
+# SPAWN_FLAGS is 0 there and the checks above cannot tell a dropped hidden console from a correct one. Load a fresh copy
+# of the module with the three Windows constants present in subprocess, so the same assertions bind on Linux too.
+import importlib.util  # noqa: E402
+
+WIN_FLAGS = {"CREATE_NEW_PROCESS_GROUP": 0x00000200, "CREATE_NO_WINDOW": 0x08000000, "DETACHED_PROCESS": 0x00000008}
+saved_attrs = {n: getattr(tr.subprocess, n) for n in WIN_FLAGS if hasattr(tr.subprocess, n)}
+for n, v in WIN_FLAGS.items():
+    setattr(tr.subprocess, n, v)
+try:
+    spec = importlib.util.spec_from_file_location("dt_archive_trigger_winflags", tr.__file__)
+    trw = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(trw)
+finally:
+    for n in WIN_FLAGS:
+        if n in saved_attrs:
+            setattr(tr.subprocess, n, saved_attrs[n])
+        else:
+            delattr(tr.subprocess, n)
+popened = []
+tr.subprocess.Popen = lambda args, **kw: popened.append(kw)
+try:
+    rc = call(trw.precompact_hook, "{}", root=root)
+finally:
+    tr.subprocess.Popen = saved_popen
+fw = popened[0].get("creationflags") if popened else None
+ok("with Windows' flag names present, the start path gets exactly NEW_PROCESS_GROUP | CREATE_NO_WINDOW (0x08000200)",
+   rc == 0 and len(popened) == 1 and fw == 0x08000200 and trw.SPAWN_FLAGS == 0x08000200, (rc, fw, getattr(trw, "SPAWN_FLAGS", None)))
+ok("...and DETACHED_PROCESS (0x8) is clear there too", fw is not None and fw & 0x00000008 == 0, fw)
+if os.name != "nt":
+    ok("...while off Windows the real module passes no flags at all", fl == 0, fl)
 shutil.rmtree(base)
 
 print("9. the real remote call's shape (no ssh made)")
