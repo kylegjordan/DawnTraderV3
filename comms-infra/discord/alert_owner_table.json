@@ -1,0 +1,670 @@
+{
+ "_about": {
+  "batch": "B-TOKEN-ECONOMY amendment 1, P6 condition 1 (Langston Step-2 ruling 2026-11-20)",
+  "seed": "Langston [[ALERT owner=]] markers 2026-11-06..2026-11-20 joined to staging alert keys",
+  "order": "gov key -> batches; key -> longest prefix; keyless -> titles; none -> fallback",
+  "fallback": "CC-INFRA, genuinely new keys only",
+  "flag": "agreement below 80% or a tied vote: for Langston to rule before the lane uses it",
+  "markers_on_unmapped_ids": 35
+ },
+ "batches": {
+  "B-CLOSE-WRITER-COSTS": {
+   "owner": "CC-A",
+   "votes": {
+    "CC-A": 46,
+    "CC-B": 1
+   },
+   "latest": "CC-A",
+   "agree": 0.98
+  },
+  "B-CRYPTO-FEED-WATCHDOG": {
+   "owner": "CC-B",
+   "votes": {
+    "CC-A": 1,
+    "CC-B": 1
+   },
+   "latest": "CC-B",
+   "agree": 0.5,
+   "flag": true
+  },
+  "B-DB-POOL-GUARD": {
+   "owner": "CC-A",
+   "votes": {
+    "CC-A": 118,
+    "CC-B": 1
+   },
+   "latest": "CC-A",
+   "agree": 0.99
+  },
+  "B-DB-SIZE-RELIEF": {
+   "owner": "CC-A",
+   "votes": {
+    "CC-A": 78
+   },
+   "latest": "CC-A",
+   "agree": 1.0
+  },
+  "B-DISK-FILE-TIERING": {
+   "owner": "CC-A",
+   "votes": {
+    "CC-A": 81,
+    "CC-INFRA": 1
+   },
+   "latest": "CC-A",
+   "agree": 0.99
+  },
+  "B-DISK-HEADROOM": {
+   "owner": "CC-INFRA",
+   "votes": {
+    "CC-A": 7,
+    "CC-INFRA": 88
+   },
+   "latest": "CC-INFRA",
+   "agree": 0.93
+  },
+  "B-ENTRY-GATE": {
+   "owner": "CC-B",
+   "votes": {
+    "CC-B": 110,
+    "CC-A": 3
+   },
+   "latest": "CC-B",
+   "agree": 0.97
+  },
+  "B-FORMULA-HEALTH-AUDIT-FRESHNESS": {
+   "owner": "CC-B",
+   "votes": {
+    "CC-B": 14,
+    "CC-A": 5
+   },
+   "latest": "CC-B",
+   "agree": 0.74,
+   "flag": true
+  },
+  "B-GUARDRAIL-FAIL-CLOSED": {
+   "owner": "CC-C",
+   "votes": {
+    "CC-A": 3,
+    "CC-C": 19
+   },
+   "latest": "CC-C",
+   "agree": 0.86
+  },
+  "B-OHLC-FRAME-GUARD": {
+   "owner": "CC-C",
+   "votes": {
+    "CC-A": 1,
+    "CC-C": 1
+   },
+   "latest": "CC-C",
+   "agree": 0.5,
+   "flag": true
+  },
+  "B-PRICE-FEED-COVERAGE": {
+   "owner": "CC-B",
+   "votes": {
+    "CC-A": 4,
+    "CC-B": 57,
+    "CC-C": 1
+   },
+   "latest": "CC-B",
+   "agree": 0.92
+  },
+  "B-PRICE-SIDE-BY-JOB": {
+   "owner": "CC-C",
+   "votes": {
+    "CC-C": 70
+   },
+   "latest": "CC-C",
+   "agree": 1.0
+  },
+  "B-RR-FLOOR-HEADROOM": {
+   "owner": "CC-B",
+   "votes": {
+    "CC-B": 6
+   },
+   "latest": "CC-B",
+   "agree": 1.0
+  },
+  "B-SILENT-STRATEGY-CENSUS": {
+   "owner": "CC-B",
+   "votes": {
+    "CC-B": 9
+   },
+   "latest": "CC-B",
+   "agree": 1.0
+  },
+  "B-STATUS-BOARD": {
+   "owner": "CC-A",
+   "votes": {
+    "CC-A": 23
+   },
+   "latest": "CC-A",
+   "agree": 1.0
+  },
+  "B-TOKEN-WATCH-FOLLOWUP-MEMORY": {
+   "owner": "CC-INFRA",
+   "votes": {
+    "CC-A": 1,
+    "CC-INFRA": 46
+   },
+   "latest": "CC-INFRA",
+   "agree": 0.98
+  },
+  "B-TOKEN-WATCH-LIQ-SHED-HOTFIX": {
+   "owner": "CC-INFRA",
+   "votes": {
+    "CC-A": 1,
+    "CC-INFRA": 2
+   },
+   "latest": "CC-INFRA",
+   "agree": 0.67,
+   "flag": true
+  },
+  "B-TRANSCRIPT-ARCHIVE": {
+   "owner": "CC-A",
+   "votes": {
+    "CC-A": 1
+   },
+   "latest": "CC-A",
+   "agree": 1.0
+  },
+  "B-XSTOCK-BAR-AVAILABILITY": {
+   "owner": "CC-C",
+   "votes": {
+    "CC-C": 21,
+    "CC-A": 1
+   },
+   "latest": "CC-C",
+   "agree": 0.95
+  },
+  "B-XSTOCK-BID-TRIGGER-RELAND": {
+   "owner": "CC-C",
+   "votes": {
+    "CC-C": 72
+   },
+   "latest": "CC-C",
+   "agree": 1.0
+  }
+ },
+ "prefixes": {
+  "app-unplanned-restart:": {
+   "owner": "CC-A",
+   "votes": {
+    "CC-A": 12,
+    "CC-B": 6
+   },
+   "latest": "CC-B",
+   "agree": 0.67,
+   "batch": "B-DB-POOL-GUARD",
+   "ledger": "server/db-pool-alerts.ts",
+   "flag": true
+  },
+  "b-price-side-": {
+   "owner": "CC-C",
+   "votes": {
+    "CC-C": 2
+   },
+   "latest": "CC-C",
+   "agree": 1.0,
+   "batch": "B-PRICE-SIDE-BY-JOB",
+   "ledger": "#1250"
+  },
+  "b75-cold-audit-cold-meter-": {
+   "owner": "CC-INFRA",
+   "votes": {
+    "CC-INFRA": 1
+   },
+   "latest": "CC-INFRA",
+   "agree": 1.0,
+   "batch": "B-TOKEN-WATCH-STORAGE",
+   "ledger": null
+  },
+  "b75-cold-audit-cold-reconcile-untracked-": {
+   "owner": "CC-A",
+   "votes": {
+    "CC-INFRA": 2,
+    "CC-A": 38,
+    "CC-B": 2
+   },
+   "latest": "CC-A",
+   "agree": 0.9,
+   "batch": "B-DISK-FILE-TIERING",
+   "ledger": "#1233"
+  },
+  "b75-cold-rotator-": {
+   "owner": "CC-A",
+   "votes": {
+    "CC-INFRA": 1,
+    "CC-A": 2
+   },
+   "latest": "CC-A",
+   "agree": 0.67,
+   "batch": "B-DISK-FILE-TIERING",
+   "ledger": null,
+   "flag": true
+  },
+  "birthcap-divergence-": {
+   "owner": "CC-INFRA",
+   "votes": {
+    "CC-INFRA": 2
+   },
+   "latest": "CC-INFRA",
+   "agree": 1.0,
+   "batch": null,
+   "ledger": null
+  },
+  "book-state-ring-snapshot-failing": {
+   "owner": "CC-B",
+   "votes": {
+    "CC-B": 2,
+    "CC-INFRA": 1
+   },
+   "latest": "CC-B",
+   "agree": 0.67,
+   "batch": null,
+   "ledger": null,
+   "flag": true
+  },
+  "cron_recovery:": {
+   "owner": "CC-C",
+   "votes": {
+    "CC-C": 85,
+    "CC-B": 14,
+    "CC-INFRA": 19,
+    "CC-A": 5
+   },
+   "latest": "CC-C",
+   "agree": 0.69,
+   "batch": "B-CRON-MISSED-CATCHUP",
+   "ledger": "RUNNING_ISSUES:4039",
+   "flag": true
+  },
+  "cron_stale:": {
+   "owner": "CC-C",
+   "votes": {
+    "CC-C": 53,
+    "CC-B": 16,
+    "CC-INFRA": 29,
+    "CC-A": 2,
+    "Kyle": 1
+   },
+   "latest": "CC-C",
+   "agree": 0.52,
+   "batch": "B-CRON-MISSED-CATCHUP",
+   "ledger": "RUNNING_ISSUES:4039",
+   "flag": true
+  },
+  "cron_verifier_blind:": {
+   "owner": "CC-C",
+   "votes": {
+    "CC-INFRA": 1,
+    "CC-C": 2
+   },
+   "latest": "CC-C",
+   "agree": 0.67,
+   "batch": "B-CRON-MISSED-CATCHUP",
+   "ledger": null,
+   "flag": true
+  },
+  "db-pool-acquire-timeout": {
+   "owner": "CC-INFRA",
+   "votes": {
+    "CC-INFRA": 4
+   },
+   "latest": "CC-INFRA",
+   "agree": 1.0,
+   "batch": "B-DB-POOL-GUARD",
+   "ledger": "#1239"
+  },
+  "db-pool-idle-in-tx": {
+   "owner": "CC-INFRA",
+   "votes": {
+    "CC-B": 1,
+    "CC-INFRA": 4
+   },
+   "latest": "CC-INFRA",
+   "agree": 0.8,
+   "batch": "B-DB-POOL-GUARD",
+   "ledger": "#1239"
+  },
+  "db-pool-wait:": {
+   "owner": "CC-A",
+   "votes": {
+    "CC-B": 2,
+    "CC-INFRA": 1,
+    "CC-A": 14
+   },
+   "latest": "CC-A",
+   "agree": 0.82,
+   "batch": "B-DB-POOL-GUARD",
+   "ledger": "#1239"
+  },
+  "db-unencrypted-connection:": {
+   "owner": "CC-A",
+   "votes": {
+    "CC-INFRA": 13,
+    "CC-A": 46
+   },
+   "latest": "CC-A",
+   "agree": 0.78,
+   "batch": "B-DB-APP-TLS",
+   "ledger": "Langston 2026-11-20: CC-A until T-P3",
+   "flag": true
+  },
+  "deploy-drift-file-gate-undecidable": {
+   "owner": "CC-A",
+   "votes": {
+    "CC-A": 35,
+    "CC-INFRA": 1,
+    "CC-C": 1
+   },
+   "latest": "CC-A",
+   "agree": 0.95,
+   "batch": "B-DEPLOY-DRIFT-LINE (closed)",
+   "ledger": "RUNNING_ISSUES:8589"
+  },
+  "deploy-drift-measurement-failed": {
+   "owner": "CC-A",
+   "votes": {
+    "CC-A": 30
+   },
+   "latest": "CC-A",
+   "agree": 1.0,
+   "batch": "B-DEPLOY-DRIFT-LINE (closed)",
+   "ledger": "RUNNING_ISSUES:8589"
+  },
+  "deploy-drift-rung-": {
+   "owner": "CC-A",
+   "votes": {
+    "CC-A": 141,
+    "CC-B": 21,
+    "CC-C": 17,
+    "CC-INFRA": 7
+   },
+   "latest": "CC-A",
+   "agree": 0.76,
+   "batch": "B-DEPLOY-DRIFT-LINE (closed)",
+   "ledger": "RUNNING_ISSUES:8589",
+   "flag": true
+  },
+  "deploy-notice-watcher-heartbeat": {
+   "owner": "CC-INFRA",
+   "votes": {
+    "CC-INFRA": 3,
+    "CC-B": 1
+   },
+   "latest": "CC-B",
+   "agree": 0.75,
+   "batch": null,
+   "ledger": null,
+   "flag": true
+  },
+  "disk-utilization-warning": {
+   "owner": "CC-A",
+   "votes": {
+    "Kyle": 4,
+    "CC-A": 16,
+    "CC-B": 1
+   },
+   "latest": "CC-A",
+   "agree": 0.76,
+   "batch": null,
+   "ledger": "RUNNING_ISSUES:3823",
+   "flag": true
+  },
+  "langston-privacy-exposed": {
+   "owner": "CC-INFRA",
+   "votes": {
+    "CC-INFRA": 14
+   },
+   "latest": "CC-INFRA",
+   "agree": 1.0,
+   "batch": "B-TOKEN-WATCH-FOLLOWUP-MEMORY",
+   "ledger": "#979"
+  },
+  "no-trigger-vts-": {
+   "owner": "CC-C",
+   "votes": {
+    "CC-C": 133,
+    "CC-B": 3
+   },
+   "latest": "CC-C",
+   "agree": 0.98,
+   "batch": null,
+   "ledger": "RUNNING_ISSUES:11222, #679"
+  },
+  "ohlc-writer-permanent": {
+   "owner": "CC-INFRA",
+   "votes": {
+    "CC-B": 3,
+    "CC-INFRA": 6,
+    "CC-A": 1,
+    "Kyle": 2
+   },
+   "latest": "CC-INFRA",
+   "agree": 0.5,
+   "batch": "B-OHLC-FRAME-GUARD",
+   "ledger": "#1028",
+   "flag": true
+  },
+  "price-skip-paper-": {
+   "owner": "CC-B",
+   "votes": {
+    "CC-B": 1
+   },
+   "latest": "CC-B",
+   "agree": 1.0,
+   "batch": null,
+   "ledger": null
+  },
+  "row2-4b-": {
+   "owner": "CC-C",
+   "votes": {
+    "CC-C": 2
+   },
+   "latest": "CC-C",
+   "agree": 1.0,
+   "batch": "row 2 4b review",
+   "ledger": null
+  },
+  "ticker-writer-permanent": {
+   "owner": "CC-INFRA",
+   "votes": {
+    "CC-B": 4,
+    "CC-INFRA": 8,
+    "Kyle": 4
+   },
+   "latest": "CC-INFRA",
+   "agree": 0.5,
+   "batch": null,
+   "ledger": null,
+   "flag": true
+  },
+  "token-watch-store-warn": {
+   "owner": "CC-INFRA",
+   "votes": {
+    "CC-INFRA": 91,
+    "Infra-Claude": 1,
+    "CC-A": 4,
+    "Kyle": 3,
+    "Infra": 1
+   },
+   "latest": "CC-INFRA",
+   "agree": 0.91,
+   "batch": "B-TOKEN-WATCH-STORAGE",
+   "ledger": "#1132"
+  },
+  "token-watch-unit-failed-": {
+   "owner": "CC-INFRA",
+   "votes": {
+    "CC-INFRA": 72
+   },
+   "latest": "CC-INFRA",
+   "agree": 1.0,
+   "batch": "B-TOKEN-WATCH-STORAGE",
+   "ledger": "#1132"
+  },
+  "venue-quiet-paper-": {
+   "owner": "CC-C",
+   "votes": {
+    "CC-B": 40,
+    "CC-C": 16
+   },
+   "latest": "CC-C",
+   "agree": 0.71,
+   "batch": null,
+   "ledger": "RUNNING_ISSUES:11224",
+   "override": "Langston corrected CC-B to CC-C on 2026-11-20; 3a1 closed 10-17",
+   "flag": true
+  },
+  "vts-gc-retention-": {
+   "owner": "CC-A",
+   "votes": {
+    "CC-A": 3
+   },
+   "latest": "CC-A",
+   "agree": 1.0,
+   "batch": null,
+   "ledger": null
+  },
+  "vts-quiet-": {
+   "owner": "CC-C",
+   "votes": {
+    "CC-C": 2
+   },
+   "latest": "CC-C",
+   "agree": 1.0,
+   "batch": null,
+   "ledger": null
+  },
+  "vts-shadow-unpriced-": {
+   "owner": "CC-C",
+   "votes": {
+    "CC-C": 65
+   },
+   "latest": "CC-C",
+   "agree": 1.0,
+   "batch": "B-XSTOCK-BID-TRIGGER-RELAND",
+   "ledger": "inc4a tests"
+  },
+  "vts-unpriced-close-": {
+   "owner": "CC-C",
+   "votes": {
+    "CC-B": 3,
+    "CC-C": 26
+   },
+   "latest": "CC-C",
+   "agree": 0.9,
+   "batch": "B-XSTOCK-BID-TRIGGER-RELAND",
+   "ledger": "RUNNING_ISSUES:10913, #1144"
+  },
+  "watchdog-heartbeat-": {
+   "owner": "CC-INFRA",
+   "votes": {
+    "CC-INFRA": 2
+   },
+   "latest": "CC-INFRA",
+   "agree": 1.0,
+   "batch": null,
+   "ledger": null
+  },
+  "xstock-bar-availability-": {
+   "owner": "CC-C",
+   "votes": {
+    "CC-C": 263,
+    "CC-A": 2,
+    "CC-B": 6,
+    "CC-INFRA": 1,
+    "Kyle": 1
+   },
+   "latest": "CC-C",
+   "agree": 0.96,
+   "batch": "B-XSTOCK-BAR-AVAILABILITY",
+   "ledger": "#707"
+  },
+  "xstock-cold-tick-fill-block": {
+   "owner": "CC-B",
+   "votes": {
+    "CC-B": 5,
+    "CC-C": 4
+   },
+   "latest": "CC-B",
+   "agree": 0.56,
+   "batch": "B-PRICE-FEED-COVERAGE",
+   "ledger": "cold_tick carrier",
+   "flag": true
+  },
+  "xstock-fill-safety-config-missing": {
+   "owner": "CC-INFRA",
+   "votes": {
+    "CC-B": 1,
+    "CC-INFRA": 2,
+    "Kyle": 1
+   },
+   "latest": "CC-INFRA",
+   "agree": 0.5,
+   "batch": null,
+   "ledger": null,
+   "flag": true
+  },
+  "xstock-stale-fill-block": {
+   "owner": "CC-C",
+   "votes": {
+    "CC-C": 152
+   },
+   "latest": "CC-C",
+   "agree": 1.0,
+   "batch": null,
+   "ledger": "RUNNING_ISSUES:246, :3209"
+  }
+ },
+ "titles": {
+  "#677 config-lock watch": {
+   "owner": "CC-C",
+   "votes": {
+    "CC-C": 1
+   },
+   "latest": "CC-C",
+   "agree": 1.0,
+   "batch": null,
+   "ledger": "#677"
+  },
+  "Balance re-anchored": {
+   "owner": "CC-C",
+   "votes": {
+    "CC-A": 1,
+    "CC-C": 1
+   },
+   "latest": "CC-C",
+   "agree": 0.5,
+   "batch": "B-BALANCE-SESSION-PAIRING",
+   "ledger": "#618",
+   "flag": true
+  },
+  "Weekly dt-deploy observation": {
+   "owner": "CC-INFRA",
+   "votes": {
+    "CC-INFRA": 1
+   },
+   "latest": "CC-INFRA",
+   "agree": 1.0,
+   "batch": null,
+   "ledger": null
+  },
+  "switch_on_shadow_evidence": {
+   "owner": "CC-C",
+   "votes": {
+    "CC-C": 21,
+    "CC-A": 8,
+    "CC-B": 1
+   },
+   "latest": "CC-A",
+   "agree": 0.7,
+   "batch": "B-SILENT-STRATEGY-CENSUS",
+   "ledger": null,
+   "flag": true
+  }
+ },
+ "fallback": "CC-INFRA"
+}
