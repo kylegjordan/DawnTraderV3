@@ -684,3 +684,60 @@ Tests: 3b 73/73; tsc 324 = 324.
 - **C-2 folded:** the removed `deleteRefusals.unparseableUris` was the only instrument that surfaced a cold manifest row whose `storage_uri` does not parse; such an object reads as an orphan and lands in the RESIDUE-SET, the input to Kyle's keep decision. New pure `unparseableColdUris()`; the report prints `UNPARSEABLE cold storage_uri on N manifest row(s): [...] — the RESIDUE-SET below is NOT trustworthy` BEFORE the set and sets exit code 1. Test pins the function and the order; mutation (the function returns `[]`) → FAILS. Every test file reading either source: 191/191.
 - **C-3 folded:** this section, and the log's LEFT INTENTIONALLY now names `token-watch/tools/prove_cold_key.py` (the one remaining `b2_delete_file_version` literal, a negative proof).
 - **His answers to my three:** keep `residueDeleteSet`; `deleteIds` is not load-bearing — the real guard is storage-client lacking `b2_delete_file_version`, whose reach is two files (a repo-wide endpoint-literal fence with an allowlist of the two archives plus `prove_cold_key.py` is optional, my call: **not built**, the header's claim is scoped by the fence's stated reach); DR restores the whole file from `git show 78d25acf1^:<path>`, not the archived snippet (`delSet` is now `residueSet`) — that clause goes into the `STORAGE_POLICY` copy at Step 10.
+
+### P9 + amendment 3 — Step 3 plan (2026-11-20, CC-A; Step 9 iteration of B-DISK-FILE-TIERING)
+**What this section is:** the implementation plan for pre-audit P9 (`:116`) and the `sqe_rejections.log` leg of amendment 3 (`:244`), written before the code. AP-8 (the two dated trace files into `DISK_FILE_SPECS`) is a **separate, later Step-4 dispatch** (one gate per dispatch) and is planned at the end only so its shape is on record.
+
+**F9 correction — PREVIOUSLY STATED:** F9 said the system logrotate "cannot produce" pm2-logrotate's archive names, so every reader would have to change name shape. **NOW:** it can. logrotate 3.21.0 on staging, with `dateext`, `dateformat __%Y-%m-%d_%H-%M-%S`, `extension .log`, `compress`, `copytruncate` and `su deploy deploy`, produced `error__2026-11-20_15-47-59.log.gz` from a scratch copy, owner and mode kept. **REASON:** `dateformat` accepts `%H%M%S`, and `extension .log` keeps `.log` after the date. **What still changes for readers:** (a) archives end `.log.gz` (one rotation late, `delaycompress`), and (b) the time in the name is the real run instant, not `00-00-00`. Content is still the PRECEDING UTC day (rotation at the first run after 00:00Z), so the D+1 rule in `workflow-07-verify-cc` holds.
+
+**Deviation from the approved design — config path.** Approved: `/etc/logrotate.d/dawntrader-app`. Planned: **`/etc/dawntrader/logrotate-app.conf`, run only by its own timer with its own state file.** Reason: anything in `/etc/logrotate.d/` is ALSO processed by the distribution's daily logrotate under `/var/lib/logrotate/status`; two runs with two state files over one file is the "two rotators on one file" failure P9 exists to remove. The hourly size check (approved) needs our own timer anyway. Langston to rule on this in the Step-4 dispatch.
+
+**Files (repo → staging):**
+| repo | staging | mode |
+|---|---|---|
+| `comms-infra/staging/logrotate-dawntrader-app.conf` | `/etc/dawntrader/logrotate-app.conf` | 0644 root root |
+| `comms-infra/staging/systemd/dawntrader-logrotate.service` | `/etc/systemd/system/` | 0644 |
+| `comms-infra/staging/systemd/dawntrader-logrotate.timer` | `/etc/systemd/system/` | 0644 |
+| `comms-infra/staging/systemd/dawntrader-logrotate.service.d/onfailure.conf` | `/etc/systemd/system/dawntrader-logrotate.service.d/` | 0644 |
+Registered in `comms-infra/staging/dt-install-drift` and the `comms-infra/staging/README.md` install map (Infra Claude's files; called in the channel first).
+- **Service:** `Type=oneshot`, `ExecStart=/usr/sbin/logrotate -s /var/lib/logrotate/dawntrader-app.status /etc/dawntrader/logrotate-app.conf`, `Nice=19`, `IOSchedulingClass=idle`; OnFailure drop-in → `dt-unit-failure@%N.service`.
+- **Timer:** `OnCalendar=hourly`, `RandomizedDelaySec=120`, `Persistent=true`.
+- **State seeded at install** with today 00:00Z for the two pm2 streams, so the first `daily` rotation lands at the first run after the next 00:00Z (the name-date contract), whether 3.21 compares calendar days or elapsed time.
+
+**Stanzas:**
+| file | rotation | keep | notes |
+|---|---|---|---|
+| `/var/log/dawntrader/error.log` | `daily` | `rotate 30` | `su deploy deploy`, `dateext`, `dateformat __%Y-%m-%d_%H-%M-%S`, `extension .log`, `compress`, `delaycompress`, `copytruncate`, `missingok`, `notifempty` |
+| `/var/log/dawntrader/out.log` | `daily` + `maxsize 1G` | `rotate 60`, `maxage 7` | same options |
+| `disk-file-tiering.log`, `b75-retention.log` (`/var/log/dawntrader/`) | `monthly` | `rotate 12` | NO `dateext`; `compress` + `delaycompress`; `notifempty`; `create 0644 root root`; `postrotate touch -r <log>.1 <log>` |
+| `/home/deploy/dawntrader/logs/diagnostics/sqe_rejections.log` | `size 10M` | `rotate 5` | `compress`, `delaycompress`, `create 0664 deploy deploy`, `su deploy deploy` |
+| `/home/deploy/.pm2/logs/*.log` | `size 50M` | `rotate 3` | `copytruncate`, `compress`, `su deploy deploy` |
+- **Why the archival-health files take that shape (binding, not style):** `b-storage-archival-health.ts` `runCheck` (`:322-380`) judges a nightly job by (1) the live file's mtime against its cron cadence and (2) AP-7's start/done patterns over the live file plus `<log>.1`. So: no `dateext` (`.1` must exist); `.1` stays plain (`delaycompress`); `notifempty`; and the `touch -r` puts the old mtime back on the new empty live file, so rotation cannot make a stalled job look fresh. A stalled job still fails AP-7: live + `.1` hold only an old start line. `monthly` runs at 00:xx on the 1st, clear of 02:15, 02:45 and 03:00. `b75-cold-rotator.log` (1 KB, monthly job) is left out.
+- **Excluded: `/home/deploy/.pm2/pm2.log` (176 MB, unrotated).** Its one known reader, `xs_frame_extract.sh` BOUNDARIES (`:4-24`), reads it as a single file. Finding below.
+
+**Retention arithmetic (measured 2026-11-20 on staging; compression ratios measured at P9's pre-audit):** error ≈ 270 MB/day plain at 21.8:1 ≈ 12 MB/day gz → 30 days ≈ 0.36 GB; out ≈ 3.5 GB/day at 14.9:1 ≈ 235 MB/day → 7 days ≈ 1.6 GB, plus up to one plain `delaycompress` file per stream. Today the 28 plain archives hold 16,002,422,079 B (`du -cb`, staging 2026-11-20 ~16:00Z; zero `.gz` present), so the one-time gzip returns ≈ 15 GB.
+
+**Install sequence (one session, after the deploy that carries the readers):**
+1. `pm2 uninstall pm2-logrotate` (as deploy). `DELETED_COMPONENTS_LOG` entry (rule 18).
+2. Install files → `daemon-reload` → `installed.sha` → seed state → `logrotate -d` dry run read by eye → `enable --now` the timer → `dt-install-drift` clean.
+3. One-time gzip of the 28 existing plain `error__`/`out__` archives: `nice -n19 ionice -c3 gzip` one file at a time (in-place `gzip` keeps owner, mode and mtime).
+4. Root crontab line 4 (the DISABLED B70 comment) rewritten to say what it governs today; no schedule change.
+**Proofs:** (i) the natural post-00:00Z rotation writes `error__<date>_<time>.log` and the previous one becomes `.log.gz`; (ii) a scratch replica stanza with `rotate 2` shows the oldest `.gz` removed; (iii) owner and mode of new archives equal the old (`stat`); (iv) archival-health's next run is green for disk-file-tiering and b75-retention.
+
+**Readers changed in the same commit set (F9 census + ANALYST Claude's four scripts, folded at their request):**
+| reader | change | test |
+|---|---|---|
+| `scripts/analysis/xs_frame_extract.sh` | `:61` matches `\.log(\.gz)?$`; every name keyed by its BASE (`.gz` stripped) for manifest, SEEN, rows and the contiguity check; read with `zcat -f`; reach rung uses the real file | `xs_frame_extract.selftest.sh`: plain then `.gz` of one name → 0 new extractions, no gap alert |
+| `scripts/analysis/p4c-window-extract.py` | `:85` fixed `_00-00-00` → a date glob; refuse on more than one match for a day (`:84` already tries `.gz`) | `p4c-window-extract-selftest.py:68` updated + a two-match refusal case |
+| `scripts/analysis/xstock-refusal-holds.py` | `:24` glob `.log*`, gzip-aware open | — |
+| `scripts/analysis/b_price_side_p7h_limiter_class_census.sh` | `:9-10` `zgrep` | — |
+| `scripts/analysis/b_db_pool_guard_weekday_qd_read.py` (mine) | `:12,:66` `error__{nxt}*.log*` + `gzip.open` | — |
+| comments: `server/core/trading/crypto-touch.ts:58`, `server/services/passive-archive/xstock-bar-timing.ts:6`; `.claude/skills/workflow-07-verify-cc/SKILL.md:40` | retention and name text | — |
+`scripts/dt-deploy.sh:400-402` filters pm2 by `name=='dawntrader'`, so the uninstall changes nothing there (not edited: dt-deploy does not install itself, `#1004`).
+
+**AP-8 (later dispatch):** `DISK_FILE_SPECS` gains `logs` / `rtb_refresh_trace_(\d{8})\.log` and `tcl_event_trace_(\d{8})\.log`, each its own manifest family (`disk_file.rtb_refresh_trace`, `disk_file.tcl_event_trace`), 35-day hot window. `boundsFromName` builds `${m[1]}T00:00:00Z`, so an 8-digit group needs normalising to `YYYY-MM-DD` first. Growth (measured 2026-11-20): rtb ≤ 0.45 MB/day, tcl ≤ 36 KB/day. Readers censused before it is written.
+
+**Findings (§9.4):**
+- `pm2.log` 176 MB, never rotated — `DISPOSITION: review scheduled at this batch's Step 10, with ANALYST Claude (owner of its one reader).`
+- `level-basis-funnel.jsonl` 13.7 MB, `system-health.log` 8.6 MB, `system_events.log` 1.3 MB, all unrotated — `DISPOSITION: review scheduled at this batch's Step 10, growth measured first.`
+- rawcap jsonl (~15 MB/day) appears pruned at ~11 days by its writer — `DISPOSITION: review scheduled at this batch's Step 10 (confirm the pruner at the code).`
