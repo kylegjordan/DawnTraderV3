@@ -4,5 +4,8 @@ Documentation=https://github.com/kylegjordan/DawnTraderV3/blob/migration/aws-sup
 
 [Service]
 Type=oneshot
+# Above the verifier's `--actor all` worst case (UNIT_WORST_CASE_S, 2,140 s); the self-test checks this value.
+# At the limit systemd kills the whole unit, grandchildren included, and the drop-in's OnFailure= pages.
+TimeoutStartSec=2400
 Environment=PYTHONDONTWRITEBYTECODE=1
 ExecStart=/usr/local/sbin/reviewer-staging-access verify --actor all

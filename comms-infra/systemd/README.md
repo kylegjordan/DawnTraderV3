@@ -116,6 +116,13 @@ after the installed file hash matches the reviewed repository blob, the service 
 hand once, the timer is active/enabled, and both JSON rows name separate fingerprints and a
 explicitly denied wrong-key control.
 
+**Time limits (B-CREW-ACCESS-HARDEN F-2 C-3).** The unit's `TimeoutStartSec=2400` sits above the
+verifier's `--actor all` worst case (2,140 s, derived in the script as `UNIT_WORST_CASE_S`; the
+self-test checks the unit holds that value). Every local command inside it has its own bound;
+the two `dt-sql` calls deliberately do not, because a client timeout would kill `dt-sql`
+mid-attempt and lock it. Instead the remote half refuses before starting `dt-sql` if its
+earlier checks took more than 30 s.
+
 ## ⚠️ Honest limits
 
 - The six scheduled pages prove **delivery**, not that every job's failure mode reaches `failed` —

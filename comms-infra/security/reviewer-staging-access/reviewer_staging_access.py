@@ -42,6 +42,17 @@ DT_SQL_CALL_BOUND_S = 300 + 150  # dt-sql CALL_TIMEOUT_S + its alert subprocess 
 REMOTE_OTHER_BOUND_S = 60        # ssh login, the sshd/log/path checks and the JSON reply around the two calls
 REMOTE_BUDGET_S = DT_SQL_CALLS * ((DT_SQL_BUSY_TRIES - 1) * DT_SQL_BUSY_WAIT_S + DT_SQL_CALL_BOUND_S) + REMOTE_OTHER_BOUND_S
 CLIENT_SSH_TIMEOUT_S = REMOTE_BUDGET_S + 30
+# C-3 (Langston F-2): every other command this verifier starts has its own bound, so nothing can hang the unit.
+LOCAL_TOOL_TIMEOUT_S = 10   # ssh-keygen, sudo test/cat, sshd -T: each is a sub-second local command
+WRONG_KEY_TIMEOUT_S = 30    # the wrong-key ssh control: one refused login, no remote command
+# The remote verifier starts dt-sql ONLY if everything before it took at most this long. Its pre-dt-sql work fans out
+# (a file read per effective authorization file, a fingerprint per key line), so per-call bounds alone cannot cap it;
+# this gate does. Refusing BEFORE dt-sql starts is always safe: no attempt, no INTENT, no lock.
+REMOTE_PRE_DT_SQL_S = 30
+REMOTE_LOGIN_REPLY_S = 30   # the ssh login before verify_remote starts and the JSON reply after it ends
+# The systemd unit's TimeoutStartSec. systemd kills the whole unit cgroup at this limit, grandchildren included, so it
+# is the backstop for anything a per-call timeout kills only at the direct child (a `sudo -u` wrapper).
+UNIT_TIMEOUT_START_S = 2400
 DT_SQL_EXIT = {
     1: "logged in, the query failed",
     2: "refused before connecting",
@@ -71,10 +82,23 @@ ACTORS = {
         "comment": "coltrane-dt-agent@204.168.141.77",
     },
 }
+# One actor, worst case: two key-fingerprint tools, the client ssh call, the wrong-key keygen, the wrong-key control.
+PER_ACTOR_WORST_S = 3 * LOCAL_TOOL_TIMEOUT_S + CLIENT_SSH_TIMEOUT_S + WRONG_KEY_TIMEOUT_S
+TIMEOUT_NAMES = ("LOCAL_TOOL_TIMEOUT_S", "CLIENT_SSH_TIMEOUT_S", "WRONG_KEY_TIMEOUT_S")   # the only allowed bounds
+UNIT_WORST_CASE_S = len(ACTORS) * PER_ACTOR_WORST_S   # `verify --actor all` runs the actors one after another
 
 
 class VerificationError(RuntimeError):
     pass
+
+
+def bounded_run(argv: list[str], what: str, **kwargs) -> "subprocess.CompletedProcess[str]":
+    """A local tool call with a hard time bound; a timeout is a REFUSED line, never a hang or a traceback."""
+    try:
+        return subprocess.run(argv, text=True, capture_output=True, check=False,
+                              timeout=LOCAL_TOOL_TIMEOUT_S, **kwargs)
+    except subprocess.TimeoutExpired as error:
+        raise VerificationError("%s did not finish within %d s" % (what, LOCAL_TOOL_TIMEOUT_S)) from error
 
 
 def public_key_fields(line: str) -> tuple[str, str, str]:
@@ -94,13 +118,8 @@ def public_key_fields(line: str) -> tuple[str, str, str]:
 
 
 def fingerprint_public_key(key_material: str) -> str:
-    result = subprocess.run(
-        ["ssh-keygen", "-lf", "-"],
-        input=key_material + "\n",
-        text=True,
-        capture_output=True,
-        check=False,
-    )
+    result = bounded_run(["ssh-keygen", "-lf", "-"], "ssh-keygen fingerprinting a public key",
+                         input=key_material + "\n")
     if result.returncode != 0:
         raise VerificationError("ssh-keygen could not fingerprint a public key")
     fields = result.stdout.split()
@@ -216,22 +235,12 @@ def resolve_authorized_key_paths(tokens: list[str]) -> list[str]:
 
 
 def read_root_text_if_exists(path: str) -> str | None:
-    exists = subprocess.run(
-        ["sudo", "-n", "/usr/bin/test", "-e", path],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    exists = bounded_run(["sudo", "-n", "/usr/bin/test", "-e", path], "testing authorization file %s" % path)
     if exists.returncode == 1:
         return None
     if exists.returncode != 0:
         raise VerificationError("cannot test effective authorization file %s" % path)
-    result = subprocess.run(
-        ["sudo", "-n", "/usr/bin/cat", "--", path],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    result = bounded_run(["sudo", "-n", "/usr/bin/cat", "--", path], "reading authorization file %s" % path)
     if result.returncode != 0:
         raise VerificationError("cannot read effective authorization file %s" % path)
     return result.stdout
@@ -329,12 +338,7 @@ def require_path(path: str, owner: str, mode: int, *, directory: bool = False) -
 
 
 def private_key_fingerprint(path: str, owner: str) -> str:
-    public = subprocess.run(
-        ["sudo", "-u", owner, "ssh-keygen", "-yf", path],
-        text=True,
-        capture_output=True,
-        check=False,
-    )
+    public = bounded_run(["sudo", "-u", owner, "ssh-keygen", "-yf", path], "deriving the %s public key" % owner)
     if public.returncode != 0:
         raise VerificationError("cannot derive %s public key" % owner)
     return fingerprint_public_key(public.stdout.strip())
@@ -346,8 +350,11 @@ def parse_dt_sql_bounds(text: str) -> dict[str, int]:
     the client refuses the day dt-sql's bounds rise past the copy (Langston F-2 round 3 C-2). Exactly one of each, or REFUSED."""
     lines = text.split(NL)
     call = [line for line in lines if line.startswith("CALL_TIMEOUT_S = ")]
-    if len(call) != 1 or not call[0][len("CALL_TIMEOUT_S = "):].strip().isdigit():
-        raise VerificationError("dt-sql source: expected exactly one integer CALL_TIMEOUT_S, found %d" % len(call))
+    if len(call) != 1:
+        raise VerificationError("dt-sql source: expected exactly one CALL_TIMEOUT_S line, found %d" % len(call))
+    value = call[0][len("CALL_TIMEOUT_S = "):].strip()
+    if not (value.isascii() and value.isdigit()):
+        raise VerificationError("dt-sql source: CALL_TIMEOUT_S is not an integer literal: %r" % value)
     start = [i for i, line in enumerate(lines) if line.startswith("def alert(")]
     if len(start) != 1:
         raise VerificationError("dt-sql source: expected exactly one alert() function, found %d" % len(start))
@@ -371,7 +378,7 @@ def parse_dt_sql_bounds(text: str) -> dict[str, int]:
             found.append(int(digits))
     if len(found) != 1:
         raise VerificationError("dt-sql source: expected exactly one timeout= in alert(), found %d" % len(found))
-    return {"call_timeout_s": int(call[0][len("CALL_TIMEOUT_S = "):].strip()), "alert_timeout_s": found[0]}
+    return {"call_timeout_s": int(value), "alert_timeout_s": found[0]}
 
 
 def check_dt_sql_bounds(actor: str, payload: dict) -> None:
@@ -401,21 +408,20 @@ def run_dt_sql(sql: str) -> "subprocess.CompletedProcess[str]":
 
 
 def verify_remote(actor: str) -> int:
+    started = time.monotonic()
     if pwd is None:
         raise VerificationError("remote verification requires a Unix host")
     if os.geteuid() != pwd.getpwnam("deploy").pw_uid:
         raise VerificationError("remote verifier must run as deploy")
     require_path("/home/deploy/.ssh", "deploy", 0o700, directory=True)
     require_path("/home/deploy/.ssh/authorized_keys", "deploy", 0o600)
-    effective = subprocess.run(
+    effective = bounded_run(
         [
             "sudo", "-n", "/usr/sbin/sshd", "-T", "-C",
             "user=deploy,host=%s,addr=%s,laddr=%s,lport=22"
             % (HELSINKI_SOURCE, HELSINKI_SOURCE, STAGING_HOST),
         ],
-        capture_output=True,
-        text=True,
-        check=False,
+        "resolving the effective sshd configuration",
     )
     if effective.returncode != 0:
         raise VerificationError("cannot resolve effective sshd authorization sources")
@@ -465,6 +471,13 @@ def verify_remote(actor: str) -> int:
     # must be refused by the database as a read-only transaction (Langston, F-2 install confirmation 2026-11-20).
     require_path(STAGING_DT_SQL, "root", 0o755)
     dt_sql_bounds = parse_dt_sql_bounds(Path(STAGING_DT_SQL).read_text(encoding="utf-8"))
+    # C-3 gate: the client's ssh timeout assumes the pre-dt-sql work fits REMOTE_PRE_DT_SQL_S. Past it, dt-sql could
+    # still be mid-attempt when the client kills this session, which LOCKS dt-sql — so refuse now, before it starts.
+    elapsed = time.monotonic() - started
+    if elapsed > REMOTE_PRE_DT_SQL_S:
+        raise VerificationError(
+            "pre-database checks took %.1f s, above REMOTE_PRE_DT_SQL_S %d s: dt-sql was NOT started"
+            % (elapsed, REMOTE_PRE_DT_SQL_S))
     query = "select current_user,current_database(),(select count(*) >= 0 from public.users)"
     database = run_dt_sql(query)
     rows = database.stdout.strip().splitlines()
@@ -554,7 +567,6 @@ def verify_actor(actor: str) -> int:
     except VerificationError as error:
         raise VerificationError("%s %s" % (actor, error)) from error
     payload = json.loads(result.stdout)
-    check_dt_sql_bounds(actor, payload)
     payload["local_key_fingerprint"] = actual_fingerprint
 
     # A fresh wrong key must fail with every non-public-key method disabled. This proves the
@@ -564,10 +576,9 @@ def verify_actor(actor: str) -> int:
         os.chown(temp_dir, pwd.getpwnam(actor).pw_uid, pwd.getpwnam(actor).pw_gid)
         os.chmod(temp_dir, 0o700)
         wrong_key = temp_dir + "/id_ed25519"
-        generated = subprocess.run(
-            ["sudo", "-u", actor, "ssh-keygen", "-q", "-t", "ed25519",
-             "-N", "", "-f", wrong_key],
-            capture_output=True, text=True, check=False,
+        generated = bounded_run(
+            ["sudo", "-u", actor, "ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", wrong_key],
+            "creating the %s wrong-key control" % actor,
         )
         if generated.returncode != 0:
             raise VerificationError("could not create %s wrong-key control" % actor)
@@ -576,10 +587,11 @@ def verify_actor(actor: str) -> int:
         negative[-1] = "true"
         try:
             failed = subprocess.run(
-                negative, input="", text=True, capture_output=True, check=False, timeout=30
+                negative, input="", text=True, capture_output=True, check=False, timeout=WRONG_KEY_TIMEOUT_S
             )
         except subprocess.TimeoutExpired as error:
-            raise VerificationError("%s wrong-key control did not finish within 30 s" % actor) from error
+            raise VerificationError("%s wrong-key control did not finish within %d s"
+                                    % (actor, WRONG_KEY_TIMEOUT_S)) from error
         try:
             validate_wrong_key_refusal(failed.returncode, failed.stderr)
         except VerificationError as error:
@@ -587,6 +599,8 @@ def verify_actor(actor: str) -> int:
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
     payload["wrong_key_control"] = "explicit_publickey_denial"
+    # (c): checked LAST, so a dt-sql bound rise still lets the access legs (accepted key, wrong-key refusal) run first
+    check_dt_sql_bounds(actor, payload)
     print(json.dumps(payload, sort_keys=True))
     return 0
 
@@ -830,17 +844,20 @@ def self_test() -> int:
                     "    proc.communicate(timeout=CALL_TIMEOUT_S)"])
     if parse_dt_sql_bounds(good) != {"call_timeout_s": 300, "alert_timeout_s": 150}:
         raise VerificationError("dt-sql bounds parser misread a known source")
-    for bad, why in (
-        (good.replace("CALL_TIMEOUT_S = 300", "CALL_TIMEOUT_S = 3OO"), "a non-integer call timeout"),
-        (good.replace("CALL_TIMEOUT_S = 300", "# none"), "a missing call timeout"),
-        (good + NL + "CALL_TIMEOUT_S = 900", "a second call timeout"),
-        (good.replace("timeout=150)", "timeout=150, x=timeout=9)"), "two alert timeouts"),
-        (good.replace("timeout=150", "timeout=ALERT_S"), "a named alert timeout"),
-        (good.replace("def alert(", "def alarm("), "a missing alert()"),
+    # each refusal must also SAY the right thing (C-4: a non-integer value no longer reads as "found 1")
+    for bad, why, says in (
+        (good.replace("CALL_TIMEOUT_S = 300", "CALL_TIMEOUT_S = 3OO"), "a non-integer call timeout", "integer literal"),
+        (good.replace("CALL_TIMEOUT_S = 300", "# none"), "a missing call timeout", "found 0"),
+        (good + NL + "CALL_TIMEOUT_S = 900", "a second call timeout", "found 2"),
+        (good.replace("timeout=150)", "timeout=150, x=timeout=9)"), "two alert timeouts", "alert"),
+        (good.replace("timeout=150", "timeout=ALERT_S"), "a named alert timeout", "alert"),
+        (good.replace("def alert(", "def alarm("), "a missing alert()", "alert"),
     ):
         try:
             parse_dt_sql_bounds(bad)
-        except VerificationError:
+        except VerificationError as error:
+            if says not in str(error):
+                raise VerificationError("dt-sql bounds parser refused %s with the wrong reason: %s" % (why, error))
             continue
         raise VerificationError("dt-sql bounds parser accepted %s" % why)
     remote_body = inspect.getsource(verify_remote)
@@ -865,6 +882,65 @@ def self_test() -> int:
             continue
         raise VerificationError("dt-sql bounds check accepted %s" % why)
     checks += 1
+    # (c): the bounds check runs LAST in verify_actor, after the wrong-key control, so both access legs still run
+    if actor_body.index("check_dt_sql_bounds(actor, payload)") < actor_body.index('payload["wrong_key_control"]'):
+        raise VerificationError("dt-sql bounds are checked before the wrong-key control runs")
+    checks += 1
+    # C-3: every subprocess call in this file is bounded, except run_dt_sql's (dt-sql bounds itself, and a client
+    # timeout there would kill it mid-attempt). Read from the parsed source, so a new call cannot slip past by naming.
+    import ast
+    tree = ast.parse(Path(__file__).read_text(encoding="utf-8"))
+    for func in [n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)]:
+        if func.name == "self_test":
+            continue
+        for call in [n for n in ast.walk(func) if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)]:
+            owner = call.func.value.id if isinstance(call.func.value, ast.Name) else ""
+            if owner == "os" and call.func.attr in ("system", "popen"):
+                raise VerificationError("%s starts a command with os.%s" % (func.name, call.func.attr))
+            if owner != "subprocess":
+                continue
+            if call.func.attr != "run":
+                raise VerificationError("%s uses subprocess.%s; only bounded subprocess.run is allowed"
+                                        % (func.name, call.func.attr))
+            limits = [k.value for k in call.keywords if k.arg == "timeout"]
+            if func.name == "run_dt_sql" and limits:
+                raise VerificationError("run_dt_sql has a client timeout: it would kill dt-sql mid-attempt")
+            if func.name != "run_dt_sql" and not limits:
+                raise VerificationError("an unbounded subprocess.run in %s (line %d)" % (func.name, call.lineno))
+            # a literal (timeout=3000) would escape UNIT_WORST_CASE_S; only the constants it is built from count
+            if any(not (isinstance(v, ast.Name) and v.id in TIMEOUT_NAMES) for v in limits):
+                raise VerificationError("%s line %d: a timeout that is not one of %s"
+                                        % (func.name, call.lineno, ", ".join(TIMEOUT_NAMES)))
+    checks += 1
+    # C-3 gate: verify_remote starts its clock first, and refuses before its first dt-sql call when the pre-database
+    # work has run long; that work plus the login and reply must fit what REMOTE_BUDGET_S leaves outside dt-sql
+    gate = ("    elapsed = time.monotonic() - started\n    if elapsed > REMOTE_PRE_DT_SQL_S:\n"
+            "        raise VerificationError(")
+    if (remote_body.count("started = ") != 1
+            or remote_body.index("    started = time.monotonic()\n") > remote_body.index("require_path(")
+            or remote_body.count(gate) != 1 or remote_body.index(gate) > remote_body.index("run_dt_sql(")):
+        raise VerificationError("the pre-dt-sql time gate is missing or sits after the first dt-sql call")
+    if REMOTE_PRE_DT_SQL_S + REMOTE_LOGIN_REPLY_S > REMOTE_OTHER_BOUND_S:
+        raise VerificationError("pre-dt-sql gate %d s + login/reply %d s exceed REMOTE_OTHER_BOUND_S %d s"
+                                % (REMOTE_PRE_DT_SQL_S, REMOTE_LOGIN_REPLY_S, REMOTE_OTHER_BOUND_S))
+    checks += 1
+    # C-3 unit: systemd's TimeoutStartSec outlasts the whole `--actor all` worst case, and the unit file says so
+    if UNIT_TIMEOUT_START_S <= UNIT_WORST_CASE_S:
+        raise VerificationError("UNIT_TIMEOUT_START_S %d s does not exceed the --actor all worst case %d s"
+                                % (UNIT_TIMEOUT_START_S, UNIT_WORST_CASE_S))
+    checks += 1
+    units = [Path(__file__).resolve().parents[2] / "systemd" / "reviewer-staging-access.service",
+             Path("/etc/systemd/system/reviewer-staging-access.service")]
+    unit = next((u for u in units if u.is_file()), None)
+    if unit is None:
+        print("note: no unit file here to compare (repo or /etc/systemd/system); TimeoutStartSec not checked")
+    else:
+        lines = [l.strip() for l in unit.read_text(encoding="utf-8").splitlines()]
+        found = [l for l in lines if l.startswith("TimeoutStartSec=")]
+        if found != ["TimeoutStartSec=%d" % UNIT_TIMEOUT_START_S]:
+            raise VerificationError("%s: TimeoutStartSec is %r, expected exactly TimeoutStartSec=%d"
+                                    % (unit, found, UNIT_TIMEOUT_START_S))
+        checks += 1
     print("self-test passed: %d checks" % checks)
     return 0
 
