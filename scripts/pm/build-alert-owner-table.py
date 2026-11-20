@@ -90,7 +90,7 @@ PREFIX = {
     'b-price-side-': ('B-PRICE-SIDE-BY-JOB', '#1250'),
     'b75-cold-audit-cold-meter-': ('B-TOKEN-WATCH-STORAGE', None),
     'b75-cold-rotator-': ('B-DISK-FILE-TIERING', None),
-    'birthcap-divergence-': (None, None),
+    'birthcap-': ('B-TOKEN-WATCH-BIRTH-CAP', '#1247'),
     'book-state-ring-snapshot-failing': (None, None),
     'cron_verifier_blind:': ('B-CRON-MISSED-CATCHUP', 'clears manually only'),
     'deploy-notice-watcher-heartbeat': (None, None),
