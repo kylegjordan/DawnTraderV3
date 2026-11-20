@@ -48,6 +48,7 @@ Grep `RUNNING_ISSUES.md` + `BATCH_CATALOG.md` + the completion reports **for the
 A finding that survives this check is real. One that does not becomes a **cross-reference**, and any new insight is recorded **ON the existing issue**, not as a fresh one.
 
 ## ⛔ 6 — THE PROVENANCE READ (§9.5(b)) — ORIGINAL INTENT, NOT JUST CURRENT STATE
+★ **Aid for this read: `history.mjs` — a lead, never a verdict; its limits are in "THE AUDIT AIDS" below.**
 ⚠️ **THIS OBLIGATION LIVED ONLY IN STEP 1 UNTIL 2026-08-21 — which meant that by the time a session was actually DECIDING HOW TO CHANGE something, it was no longer in front of them.** That is the moment it matters most.
 For any component whose behaviour is **disputed, surprising, or older than the 2026-01/02 governance change**, do both:
 - **`bridge/canonical/`** — the architecture/execution-flow, current-state-reference, project-history, invariants and phase-history documents. **Kyle's framing: these record the system we INTENDED to build then. The purpose is unchanged; the architecture has completely changed — so they are NEVER cited as current truth. Their value is WHY something was built the way it was.**
@@ -56,6 +57,7 @@ For any component whose behaviour is **disputed, surprising, or older than the 2
 **RECORDING RULE:** state what the provenance read found — **including "consulted `bridge/canonical/`, no coverage of this component", which is itself a finding.** *(The canonical corpus documented only ONE of the two RTB refresh mechanisms — which is exactly how a seven-month dual-execution bug survived two audits.)*
 
 ## ⛔ §9.5(a) — COMPONENT CENSUS AT EVERY HOP, NOT A PATH TRACE
+★ **Aid for this census: `census.mjs` — a lead, never a verdict; its limits are in "THE AUDIT AIDS" below.**
 An end-to-end trace is **satisfied by the first sufficient explanation at each hop** — it never asks "is there a SECOND thing doing this?" That is how a dual mechanism ran for seven months through two audits. At each component ask, repo-wide grep, tests excluded:
 | question | why |
 |---|---|
