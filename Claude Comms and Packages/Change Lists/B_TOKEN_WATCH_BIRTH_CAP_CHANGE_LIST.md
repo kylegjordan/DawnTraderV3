@@ -173,6 +173,8 @@ DISPOSITION: folded into this batch (rider, pending your ruling). `NOT RE-READ`.
 
 ## 9e. THE DIVERGENCE PAGE MOVES FROM THE CLOCK HOUR TO THE ON WINDOW (§9b's fix; Langston design, Discord `1573176718766637057`)
 
+**READY-AT (this gate):** `1b4825d654cef4db5072e332011be2d6739906d2` on `origin/migration/aws-supabase`. Read the diff as `git diff cde88cc02 1b4825d65 -- token-watch` (the installed sha to the head; this batch's commits in that range are `4b6606813` → `52164f0d5` → `1b4825d65`; `config.py` +8, `birthcap.py`, `tests/test_birthcap.py`, `tests/mutate_birthcap.py`). Not in this gate: `.github/workflows/ci.yml` and `comms-infra/security/reviewer-staging-access/` in the same range belong to B-WORKFLOW-IMPROVE and B-CREW-ACCESS-HARDEN F-2. CI: run `44712789063` at `1b4825d65` — TypeScript Check success, Test Suite success, Build success, Docker Build success.
+
 - **Why:** §9b — four false divergence pages in 72 h, every one an hour-edge split on a partly-on hour. A clock hour cuts through live deliveries; an ON window does not: it starts at a vendor usage snapshot taken just BEFORE the ON switch is charged, and ends at one taken after the OFF once the census has had a full quiet minute. Both ends are quiescent, so the delivery lag has nowhere to land.
 - **Window lifecycle (`birthcap.py`):**
   - `_window_open` — at a confirmed ON switch (snapshot first, so the switch's own credits fall inside the window), or `adopt` when the feed is ON with no window (install, state restore). A failed usage read starts no window (logged). A window still waiting after its OFF when the feed switches straight back ON is compared first against the same snapshot (`reopened`), so no window is lost; the new one counts births from the next minute.
