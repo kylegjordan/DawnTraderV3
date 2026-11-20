@@ -1,6 +1,6 @@
 # B-XSTOCK-BID-TRIGGER-RELAND — PROGRESS REPORT
 
-## OPEN — waiting on: increment (4c)'s five-session Step 7 read (deployed `0abfd7102` 2026-11-05 09:17:49Z; criterion in `Scope Files/B_XSTOCK_BID_TRIGGER_RELAND_INC4C_PRE_AUDIT.md` §3 r3, cut at the deploy) · C-P5's scoped retirement (read done 2026-11-16 and RULED RETIRE by Langston for the exit suppression at 16:15/20:15 only, §3g; the removal plan is next) · the three folded issues not yet shown delivered (`#961`, `#962`, `#1087`, §5)
+## OPEN — waiting on: the C-P5 retirement's `sun_reopen` leg, closed NARROWED, needs the first post-retirement Sunday reopen read (2026-11-23 ~01:00-01:35Z, alert `a9351617`, §3h; the retirement itself shipped `8fac86e5e`, Step 7 PASS, Step 8 CONFIRMED, Step 10 2026-11-20) · *(increment (4c)'s five-session read is done: Step 7 PASS 2026-11-13, §3f)* · the three folded issues not yet shown delivered (`#961`, `#962`, `#1087`, §5)
 
 change-class: `architecture` (scope header) · owner CC-C (Analyst Claude) · sprint plan row 2 · `#1191` (increment 4a), `#1199` (placed follow-up)
 
@@ -251,6 +251,7 @@ DISPOSITION: folded into this batch — the scoped removal plan goes to Langston
 **Increment C** — its pre-registered EST reads (2026-11-01/02/03) are in the INCC pre-audit; read in §3d. *(This line read "increments A and C … in `WINDOW_READ.md`": A never registered one and `WINDOW_READ.md` holds neither — corrected 2026-11-04.)*
 
 ## 5. Unproven, stated
+- **C-P5 `sun_reopen` leg (NARROWED, §3h):** no live Sunday reopen has run since the 2026-11-16 retirement; the mechanism leg is the 28/28 zero would-fires over four Sundays; the live read is owed 2026-11-23 (alert `a9351617`) before this batch's Step 11.
 - **Three folded issues not yet shown delivered — each checked at this batch's close, and any not delivered becomes a named remaining item (census W44/W45, 2026-11-04):** `#961` (the exit fill walks a book of unbounded age; xStock leg here since row 64 was deleted 2026-10-10), `#962` (a resting maker sell declared filled on the midpoint; xStock leg), `#1087` (the entry gate's dead one-sided arm and the quantity-zero side, folded with `#996` into objective 3; increment A's P3 did not touch it).
 - S6 has never fired (above).
 - The release after a `spread_blown` hold is a fresh seed on two sub-ceiling frames with no movement test — `#1199`, placed after this objective's observation read (53 releases on 17 symbols in the first five hours show how often books oscillate around the ceiling).
