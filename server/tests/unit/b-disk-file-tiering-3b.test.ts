@@ -807,6 +807,8 @@ describe('3b item 4 — the residue delete set: our orphans and non-chosen versi
     expect(loopAt).toBeGreaterThan(comparedAt);
     // Step-4 residual 2: "not downloaded" is true only because a failed download cannot be caught and carried on from;
     // the candidate loop has no catch, so a throw ends the row instead of labelling an attempted download "not downloaded"
+    // Limit (Langston, fold PROCEED): the slice ends at the FIRST "} finally {" after loopAt, which today is the loop's own.
+    // An inner try/finally added inside the candidate loop would shorten the slice silently and let a catch after it escape.
     const loopEnd = body.indexOf('} finally {', loopAt);
     expect(loopEnd).toBeGreaterThan(matchAt);
     expect(body.slice(loopAt, loopEnd)).not.toMatch(/\bcatch\b/);
