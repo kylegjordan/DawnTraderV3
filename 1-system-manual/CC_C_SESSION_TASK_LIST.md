@@ -1,4 +1,4 @@
-# CC-C (ANALYST Claude) — SESSION TASK LIST — as of 2026-11-13
+# CC-C (ANALYST Claude) — SESSION TASK LIST — as of 2026-11-20
 
 > ⛔ **KYLE'S STANDING RULE, 2026-09-05:** every session keeps its own task list.
 > - **It holds:** the batches assigned to this session, the sub-batches already identified, the hotfixes, and the findings still to investigate — in working order.
@@ -105,6 +105,8 @@ Generated from the plan's owner column. The state is the plan's own; the descrip
 | 183c | B-SIZING-SLIP-DETECTOR (`#1155`) | QUEUED | after row 183b: a standing detector for a mistyped max position %, paper and live |
 | 192 | B-KRAKEN-FEE-WATCH | QUEUED | notice when the exchange changes fees |
 | 194 | — batch named at Step 1 | QUEUED | after KRAKEN-LIVE-KEY: confirm live fees |
+| 196 | roadmap 21-3b — batch named at Step 1 (with Langston) | QUEUED | the feed-reliability threshold, plus `#1041`: build the parity gate's inputs before its threshold is set (added 2026-11-20 — the plan row was missing from this list) |
+| 196a | B-XSTOCK-ATR-RECORD | QUEUED | KD-105 (Kyle 2026-11-20, option A): the END of my queue, after row 196, before the go-live rows. The xStock path drops ATR before the paper position is saved; a bug investigation first |
 
 ## THE OTHER LISTS — listed so they can be seen, not touched
 
