@@ -18,6 +18,8 @@ import {
   UNLINKED_RECHECK_SQL,
   readPopulationChunked,
   reconstructDistinctCounts,
+  startBudget,
+  summarizeTimings,
   type IdentityRead,
   type PopulationRead,
   type ReadBudget,
@@ -42,7 +44,7 @@ function fakeClient(responder: (text: string, params?: unknown[]) => unknown) {
 
 function budgetAt(remainingMs: number): ReadBudget {
   const now = 1_000_000;
-  return { deadlineMs: now + remainingMs, now: () => now };
+  return { startedAtMs: now, deadlineMs: now + remainingMs, now: () => now, timings: [] };
 }
 
 describe('C6 planGradedChunks - every bound from the two captured values, nothing dropped', () => {
@@ -103,6 +105,57 @@ describe('C6-3 budgetedQuery - the cap is enforced server-side, re-issued before
       else await expect(run).rejects.toBe(other);
     }
     expect(asInconclusive(other, 'x')).toBeNull();
+  });
+});
+
+describe('R7 condition 1 - every statement is timed, whatever its outcome', () => {
+  function clockBudget(remainingMs: number) {
+    let t = 5_000_000;
+    const budget = startBudget(remainingMs, () => t);
+    return { budget, advance: (ms: number) => { t += ms; } };
+  }
+  it('records leg, elapsed, the applied timeout and the outcome for ok, inconclusive, fatal and refused', async () => {
+    const { budget, advance } = clockBudget(60_000);
+    const cancel = Object.assign(new Error('cancel'), { code: '57014' });
+    const other = Object.assign(new Error('boom'), { code: '42P01' });
+    let next: unknown = { rows: [{}] };
+    const client = fakeClient((text) => {
+      if (text.startsWith('SET LOCAL')) return { rows: [] };
+      advance(250);
+      return next;
+    });
+    await budgetedQuery(client, budget, 120_000, 'meta', 'SELECT 1');
+    next = cancel;
+    await expect(budgetedQuery(client, budget, 2_000, 'population', 'SELECT 2')).rejects.toBeInstanceOf(InconclusiveRead);
+    next = other;
+    await expect(budgetedQuery(client, budget, 120_000, 'telemetry', 'SELECT 3')).rejects.toBe(other);
+    advance(60_000);
+    await expect(budgetedQuery(client, budget, 120_000, 'archive', 'SELECT 4')).rejects.toBeInstanceOf(InconclusiveRead);
+    expect(budget.timings).toEqual([
+      { leg: 'meta', elapsedMs: 250, timeoutMs: 60_000, outcome: 'ok' },
+      { leg: 'population', elapsedMs: 250, timeoutMs: 2_000, outcome: 'inconclusive' },
+      { leg: 'telemetry', elapsedMs: 250, timeoutMs: 59_500, outcome: 'error' },
+      { leg: 'archive', elapsedMs: 0, timeoutMs: 0, outcome: 'refused' },
+    ]);
+  });
+  it('summarizeTimings rolls up per leg in first-seen order and reports the RUN elapsed, not a window length', async () => {
+    const { budget, advance } = clockBudget(20 * 60_000);
+    const client = fakeClient((text) => {
+      if (!text.startsWith('SET LOCAL')) advance(text === 'SLOW' ? 1_000 : 100);
+      return { rows: [{}] };
+    });
+    await budgetedQuery(client, budget, 120_000, 'population', 'SLOW');
+    await budgetedQuery(client, budget, 120_000, 'meta', 'FAST');
+    await budgetedQuery(client, budget, 120_000, 'population', 'FAST');
+    advance(400); // client-side work between statements
+    const s = summarizeTimings(budget);
+    expect(s.runElapsedMs).toBe(1_600);
+    expect(s.statementMs).toBe(1_200);
+    expect(s.statements).toBe(3);
+    expect(s.legTimings).toEqual([
+      { leg: 'population', statements: 2, totalMs: 1_100, maxMs: 1_000, outcomes: { ok: 2, inconclusive: 0, error: 0, refused: 0 } },
+      { leg: 'meta', statements: 1, totalMs: 100, maxMs: 100, outcomes: { ok: 1, inconclusive: 0, error: 0, refused: 0 } },
+    ]);
   });
 });
 
@@ -195,6 +248,10 @@ describe('C6 source fences on the gate script', () => {
     expect(gate).toContain("export const GATE_EXIT = { pass: 0, fatal: 1, fail: 2, inconclusive: 3 } as const;");
     expect(gate).toMatch(/error instanceof InconclusiveRead[\s\S]{0,700}state: 'inconclusive'[\s\S]{0,400}GATE_EXIT\.inconclusive/);
     expect(gate).toContain("state: verdict.pass ? 'pass' : 'fail'");
+  });
+  it('R7 condition 1: the PASS/FAIL verdict and the inconclusive verdict both carry runTiming', () => {
+    expect(gate).toContain("verdict: { state: verdict.pass ? 'pass' : 'fail', ...verdict, runTiming: summarizeTimings(budget) }");
+    expect(gate).toMatch(/state: 'inconclusive'[\s\S]{0,120}runTiming: summarizeTimings\(budget\)/);
   });
   it('carried item (a): EVERY module_constants lookup in the gate carries a scope predicate (counted, not named)', () => {
     const lookups = gate.split('FROM module_constants').slice(1).map((after) => after.slice(0, after.indexOf('LIMIT 1')));

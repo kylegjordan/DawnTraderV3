@@ -34,6 +34,7 @@ import {
   readUnlinkedChunked,
   reconstructDistinctCounts,
   startBudget,
+  summarizeTimings,
 } from './b-xstock-bar-availability-gate-read.js';
 
 const { Client } = pg;
@@ -753,7 +754,9 @@ async function main(): Promise<void> {
       },
       archiveProof: archiveRows,
       readElapsedMs: Date.now() - startedAt,
-      verdict: { state: verdict.pass ? 'pass' : 'fail', ...verdict },
+      // Langston C6 ruling condition 1 (2026-11-20): every stored verdict carries where its
+      // time went - per-leg statement timings plus the run's own elapsed (NOT the window length).
+      verdict: { state: verdict.pass ? 'pass' : 'fail', ...verdict, runTiming: summarizeTimings(budget) },
     }, null, 2)}\n`);
     process.exitCode = verdict.pass ? GATE_EXIT.pass : GATE_EXIT.fail;
   } catch (error) {
@@ -767,7 +770,10 @@ async function main(): Promise<void> {
         gradedRef: args.gradedRef,
         observedAt: new Date().toISOString(),
         readElapsedMs: Date.now() - startedAt,
-        verdict: { state: 'inconclusive', pass: false, leg: error.leg, reason: error.reason },
+        verdict: {
+          state: 'inconclusive', pass: false, leg: error.leg, reason: error.reason,
+          runTiming: summarizeTimings(budget),
+        },
       }, null, 2)}\n`);
       process.exitCode = GATE_EXIT.inconclusive;
       return;

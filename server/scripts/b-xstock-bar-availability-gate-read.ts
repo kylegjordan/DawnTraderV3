@@ -66,13 +66,68 @@ export class InconclusiveRead extends Error {
   }
 }
 
+/**
+ * One statement's measured run time. Recorded for EVERY statement that reaches the server,
+ * whatever its outcome, so a verdict carries where its time went (Langston C6 ruling,
+ * condition 1, 2026-11-20: the stored verdict - PASS, FAIL and inconclusive - carries
+ * per-leg timings plus total run elapsed). `refused` = the budget was exhausted before the
+ * statement could be issued, so it never reached the server (elapsedMs 0).
+ */
+export interface StatementTiming {
+  readonly leg: string;
+  readonly elapsedMs: number;
+  readonly timeoutMs: number;
+  readonly outcome: 'ok' | 'inconclusive' | 'error' | 'refused';
+}
+
 export interface ReadBudget {
+  readonly startedAtMs: number;
   readonly deadlineMs: number;
   readonly now: () => number;
+  readonly timings: StatementTiming[];
 }
 
 export function startBudget(totalMs: number = GATE_READ_BUDGET.totalMs, now: () => number = Date.now): ReadBudget {
-  return { deadlineMs: now() + totalMs, now };
+  const startedAtMs = now();
+  return { startedAtMs, deadlineMs: startedAtMs + totalMs, now, timings: [] };
+}
+
+export interface LegTiming {
+  readonly leg: string;
+  readonly statements: number;
+  readonly totalMs: number;
+  readonly maxMs: number;
+  readonly outcomes: Record<StatementTiming['outcome'], number>;
+}
+
+/**
+ * Per-leg roll-up of the recorded statements, in first-seen order, plus the run's elapsed
+ * from `startBudget` to now. `statementMs` is the sum over statements; the gap to `runElapsedMs`
+ * is client-side work (planning, reconstruction, file writes) and connection setup.
+ */
+export function summarizeTimings(budget: ReadBudget): {
+  runElapsedMs: number;
+  statementMs: number;
+  statements: number;
+  legTimings: LegTiming[];
+} {
+  const byLeg = new Map<string, { statements: number; totalMs: number; maxMs: number; outcomes: Record<StatementTiming['outcome'], number> }>();
+  let statementMs = 0;
+  for (const t of budget.timings) {
+    statementMs += t.elapsedMs;
+    const row = byLeg.get(t.leg) ?? { statements: 0, totalMs: 0, maxMs: 0, outcomes: { ok: 0, inconclusive: 0, error: 0, refused: 0 } };
+    row.statements += 1;
+    row.totalMs += t.elapsedMs;
+    row.maxMs = Math.max(row.maxMs, t.elapsedMs);
+    row.outcomes[t.outcome] += 1;
+    byLeg.set(t.leg, row);
+  }
+  return {
+    runElapsedMs: budget.now() - budget.startedAtMs,
+    statementMs,
+    statements: budget.timings.length,
+    legTimings: [...byLeg.entries()].map(([leg, row]) => ({ leg, ...row })),
+  };
 }
 
 export interface GateChunk { start: Date; end: Date; partial: boolean }
@@ -121,15 +176,20 @@ export async function budgetedQuery(
 ): Promise<pg.QueryResult> {
   const remaining = budget.deadlineMs - budget.now();
   if (remaining < GATE_READ_BUDGET.minimumStatementMs) {
+    budget.timings.push({ leg, elapsedMs: 0, timeoutMs: 0, outcome: 'refused' });
     throw new InconclusiveRead(leg, `run budget exhausted (${Math.max(0, remaining)} ms left)`);
   }
   const timeoutMs = Math.max(1, Math.min(capMs, Math.floor(remaining)));
+  const started = budget.now();
   try {
     // SET LOCAL lasts for the transaction, so it is re-issued before every statement.
     await client.query(`SET LOCAL statement_timeout = ${timeoutMs}`);
-    return await client.query(text, params);
+    const result = await client.query(text, params);
+    budget.timings.push({ leg, elapsedMs: budget.now() - started, timeoutMs, outcome: 'ok' });
+    return result;
   } catch (error) {
     const inconclusive = asInconclusive(error, leg);
+    budget.timings.push({ leg, elapsedMs: budget.now() - started, timeoutMs, outcome: inconclusive ? 'inconclusive' : 'error' });
     if (inconclusive) throw inconclusive;
     throw error;
   }
