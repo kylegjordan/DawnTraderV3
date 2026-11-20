@@ -21,9 +21,9 @@ per hold, and how many holds exceed 5 and 30 minutes.
 POSITIVE CONTROL: --control SYMBOL prints that symbol's holds in full (HUT/USD 10-06/07 is the known long refusal).
 
 Run on staging as deploy, with DATABASE_URL in the environment:
-  python3 xstock-refusal-holds.py --krel 3 [--control HUT/USD] /var/log/dawntrader/error__2026-*.log /var/log/dawntrader/error.log
+  python3 xstock-refusal-holds.py --krel 3 [--control HUT/USD] /var/log/dawntrader/error__2026-*.log* /var/log/dawntrader/error.log
 """
-import argparse, collections, csv, datetime as dt, os, re, subprocess, tempfile
+import argparse, collections, csv, datetime as dt, gzip, os, re, subprocess, tempfile
 
 GAP_S = 60.0
 MAX_SNAP_AGE_S = 120.0
@@ -52,7 +52,9 @@ def main():
     ap.add_argument('logs', nargs='+'); a = ap.parse_args()
     seen = set(); rows = []
     for p in a.logs:
-        for line in open(p, errors='replace'):
+        # B-DISK-FILE-TIERING P9: rotated archives are compressed one rotation later (.log.gz); read either form.
+        fh = gzip.open(p, 'rt', errors='replace') if p.endswith('.gz') else open(p, errors='replace')
+        for line in fh:
             if 'REFUSE unvalidated' not in line or line in seen: continue
             seen.add(line); m = RX_REF.match(line)
             if m: rows.append((ts(m.group(1)).isoformat(), m.group(2), m.group(3), m.group(4)))
@@ -132,7 +134,7 @@ def main():
         # An unknown spread breaks the run and enters the window as over-ceiling; a fragment break (gap > GAP_S) resets.
         c = a.simulate
         print(f'# SIMULATED RELEASE at ceiling {c*100:g}% (ring {a.ring}): per hold with >= 0.25 h refused — '
-              'over-ceiling share of known-spread ticks, released y/n, WALL minutes from the hold's first refused tick to the simulated release (spans gaps between fragments), refused hours after it')
+              "over-ceiling share of known-spread ticks, released y/n, WALL minutes from the hold's first refused tick to the simulated release (spans gaps between fragments), refused hours after it")
         rel_n = 0; saved = 0.0; considered = 0
         for refused, u, sym, t0, t1, frags in sorted(summ, reverse=True):
             ls = units[u]; known = [l for l in ls if l[3] is not None]

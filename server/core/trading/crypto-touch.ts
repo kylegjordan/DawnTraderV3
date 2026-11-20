@@ -55,7 +55,8 @@ export interface CryptoTouchPolicy {
  * pass interval p50 2 s · p90 3 s · p99 3 s · p99.9 3-4 s · max 3-7 s; ≈ 10-12 % of intervals above 2 s
  * (outliers: one 22 s; one 16,607 s gap that is the lane holding no members — 09-14 18:52:38 → 23:29:25 Z
  * holds 549 `[PriceCache][vtsSimulation] refreshed` lines and 0 `openTrade` lines, so the loop was alive).
- * RE-DERIVE: the `[PriceCache][openTrade] refreshed` lines across staging `/var/log/dawntrader/out__*.log`; a pass is
+ * RE-DERIVE: the `[PriceCache][openTrade] refreshed` lines across staging `/var/log/dawntrader/out__*.log*` (read
+ * with `zgrep`: since B-DISK-FILE-TIERING P9 an archive is compressed one rotation later); a pass is
  * the first line after a gap of more than 1 s; the statistic is the interval between consecutive passes.
  * ⇒ The r3 figure of 2,000 ms sat at the nominal period with zero headroom. 8,000 ms is above every
  * normal-operation maximum and 2× the p99.9. PRE-REGISTERED: steady-state refusal ≈ 0 while the lane

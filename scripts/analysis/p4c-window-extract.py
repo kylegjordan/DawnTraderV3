@@ -78,15 +78,22 @@ def val(v):
         return v
 
 
-# ── (b) the rotations this range REQUIRES. PM2's `error__<D>_00-00-00.log` is rotated at D 00:00 and holds day D-1, so
-# the window needs the rotations dated day(start)+1 .. day(end)+1; the last one may not exist yet, in which case the live
-# `error.log` holds it (it must, for the flush of the window's final hour, stamped after `end`).
+# ── (b) the rotations this range REQUIRES. `error__<D>_<HH-MM-SS>.log` is rotated at the first run after D 00:00Z and
+# holds day D-1, so the window needs the rotations dated day(start)+1 .. day(end)+1; the last one may not exist yet, in
+# which case the live `error.log` holds it (it must, for the flush of the window's final hour, stamped after `end`).
+# B-DISK-FILE-TIERING P9: pm2-logrotate named every rotation `_00-00-00`; the system logrotate that replaced it names it
+# with the real run instant and compresses it one rotation later (.log -> .log.gz). So a day is found by a date glob,
+# keyed by its base name (.gz stripped, the plain file preferred while both exist). More than one distinct rotation for
+# one day means a second rotation ran that day and the day's content is split: refuse rather than read half of it.
 def rotation(day):
-    base = os.path.join(args.dir, f'error__{day:%Y-%m-%d}_00-00-00.log')
-    for p in (base, base + '.gz'):
-        if os.path.exists(p):
-            return p
-    return None
+    hits = glob.glob(os.path.join(args.dir, f'error__{day:%Y-%m-%d}_*.log')) + \
+        glob.glob(os.path.join(args.dir, f'error__{day:%Y-%m-%d}_*.log.gz'))
+    bases = sorted({h[:-3] if h.endswith('.gz') else h for h in hits})
+    if not bases:
+        return None
+    if len(bases) > 1:
+        die(f'more than one rotation for {day} in {args.dir}: {[os.path.basename(b) for b in bases]} — the day is split')
+    return bases[0] if os.path.exists(bases[0]) else bases[0] + '.gz'
 
 
 required = []

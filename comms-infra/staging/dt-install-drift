@@ -107,9 +107,20 @@ BOXES = {
             # hashing, because `psql --version` cannot see it.
             ("comms-infra/staging/dt-sql", "/usr/local/bin/dt-sql", 0o755, "root", "root"),
             ("comms-infra/staging/psql-wrapper", "/usr/local/bin/psql", 0o755, "root", "root"),
+            # B-DISK-FILE-TIERING P9: the app's own log rotation (replaces pm2-logrotate). Its own config path and
+            # state file, so the distribution's daily logrotate never processes these files a second time.
+            ("comms-infra/staging/logrotate-dawntrader-app.conf", "/etc/dawntrader/logrotate-app.conf", 0o644, "root", "root"),
+            ("comms-infra/staging/systemd/dawntrader-logrotate.service", "/etc/systemd/system/dawntrader-logrotate.service", 0o644, "root", "root"),
+            ("comms-infra/staging/systemd/dawntrader-logrotate.timer", "/etc/systemd/system/dawntrader-logrotate.timer", 0o644, "root", "root"),
+            ("comms-infra/staging/systemd/dawntrader-logrotate.service.d/onfailure.conf",
+             "/etc/systemd/system/dawntrader-logrotate.service.d/onfailure.conf", 0o644, "root", "root"),
         ],
         "pending_days": {"scripts/dt-deploy.sh": 1, "scripts/obs-windows.py": 1, "comms-infra/staging/dt-deploy-notice-gate": 1,
-                         "comms-infra/staging/dt-sql": 1, "comms-infra/staging/psql-wrapper": 1},
+                         "comms-infra/staging/dt-sql": 1, "comms-infra/staging/psql-wrapper": 1,
+                         "comms-infra/staging/logrotate-dawntrader-app.conf": 1,
+                         "comms-infra/staging/systemd/dawntrader-logrotate.service": 1,
+                         "comms-infra/staging/systemd/dawntrader-logrotate.timer": 1,
+                         "comms-infra/staging/systemd/dawntrader-logrotate.service.d/onfailure.conf": 1},
         "dirs": [
             ("/etc/dt-api", 0o750, "root", "dtapi"),
             ("/var/lib/dt-api", 0o700, "dtapi", "dtapi"),
@@ -128,8 +139,13 @@ BOXES = {
                   "dt-install-drift.timer": (SS + "dt-install-drift.timer", []),
                   # r3 S3: the INSTANCE that actually pages (OnFailure=dt-unit-failure@%N), not a
                   # probe name — a drop-in for that one instance would otherwise go unseen
-                  "dt-unit-failure@dt-install-drift.service": (SS + "dt-unit-failure@.service", [])},
-        "timers": ["dt-install-drift.timer"],
+                  "dt-unit-failure@dt-install-drift.service": (SS + "dt-unit-failure@.service", []),
+                  # B-DISK-FILE-TIERING P9
+                  "dawntrader-logrotate.service": (SS + "dawntrader-logrotate.service",
+                                                   [SS + "dawntrader-logrotate.service.d/onfailure.conf"]),
+                  "dawntrader-logrotate.timer": (SS + "dawntrader-logrotate.timer", []),
+                  "dt-unit-failure@dawntrader-logrotate.service": (SS + "dt-unit-failure@.service", [])},
+        "timers": ["dt-install-drift.timer", "dawntrader-logrotate.timer"],
         "checks": ["dt_api_page", "setter_marker", "accounts", "sudoers_others", "no_authorized_keys2",
                    "deploy_windows", "deploy_notice_key"],
     },

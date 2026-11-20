@@ -27,9 +27,20 @@ check "run1 archives the reflog deploy line" "$(grep -c 'reset: moving to abc' "
 printf 'abc def deploy <d> 1790100000 +0000\treset: moving to def\nabc ghi deploy <d> 1790100100 +0000\treset: moving to ghi\n' >> "$T/reflog"
 run; check "run2 is idempotent (manifest unchanged)" "$(wc -l < "$T/arch/manifest.tsv")" 3
 check "run2 archives BOTH intra-cadence deploys from the reflog, each once" "$(grep -c 'reset: moving to ' "$T/arch/boundaries.log")" 3
+# B-DISK-FILE-TIERING P9: logrotate compresses a rotated file one rotation later (delaycompress), so the same file
+# reappears as <name>.log.gz. It must be neither a second extraction nor a contiguity gap; a .gz-only file is read.
+gzip "$T/logs/error__2026-09-17_00-00-00.log"
+run; check "run2b: a plain file later compressed in place exits 0" "$?" 0
+check "run2b does not re-extract the compressed copy (manifest unchanged)" "$(wc -l < "$T/arch/manifest.tsv")" 3
+check "run2b raises no gap for the rename" "$(grep -c 'ALERT xs-frame-extract-gap' "$T/arch/runs.log")" 0
+check "run2b keys last_seen by the base name" "$(grep -c '^error__2026-09-17_00-00-00.log$' "$T/arch/last_seen.txt")" 1
+printf '2026-09-20 01:00:00 +00:00: [3n.q7][XS_FRAME] MDB/USD pos=p frame=ok\nother\n' | gzip -c > "$T/logs/error__2026-09-20_00-00-00.log.gz"
+touch -d "2026-09-20 00:00:00 UTC" "$T/logs/error__2026-09-20_00-00-00.log.gz"
+run; check "run2c: a .gz-only rotated file is extracted once, under its base name" "$(cut -f1 "$T/arch/manifest.tsv" | grep -c '^error__2026-09-20_00-00-00.log$')" 1
+check "run2c reads the compressed file's XS_FRAME line" "$(gzip -dc "$T/arch/error__2026-09-20_00-00-00.xs.gz" | wc -l)" 1
 echo "error__2026-09-16_00-00-00.log" >> "$T/arch/last_seen.txt"
 run; check "run3: a file seen last run and gone unextracted is a GAP (exit 3)" "$?" 3
-rm "$T"/logs/error__2026-09-1[78]_00-00-00.log; touch -d '2026-09-30 04:00 UTC' "$T/logs/error__2026-09-19_00-00-00.log"
+rm "$T"/logs/error__2026-09-1[78]_00-00-00.log*; touch -d '2026-09-30 04:00 UTC' "$T/logs/error__2026-09-19_00-00-00.log"
 run; check "run4 exits 0 (extracted files leaving is not a gap; oldest 8 h is between cadence and 2x cadence)" "$?" 0
 check "run4 raises the pre-loss reach rung" "$(grep -c 'reach below 2x cadence' "$T/arch/runs.log")" 1
 touch -d '2026-09-30 11:00 UTC' "$T/logs/error__2026-09-19_00-00-00.log"

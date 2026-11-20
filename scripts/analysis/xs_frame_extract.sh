@@ -58,18 +58,27 @@ alert() {   # $1 dedupe key, $2 severity, $3 title, $4 body
 }
 
 status=0
-present=$(ls -1 "$LOG_DIR" 2>/dev/null | grep -E '^error__.*\.log$' | sort)
+# B-DISK-FILE-TIERING P9: logrotate compresses each rotated file one rotation later (delaycompress), so one file is
+# seen first as error__<t>.log and later as error__<t>.log.gz. Every name is KEYED BY ITS BASE (.gz stripped) for the
+# manifest, last_seen, the contiguity check and the reach rung, so the rename is neither a second extraction nor a gap.
+# The plain file wins while both exist (a .gz still being written is incomplete); zcat -f reads either form.
+present=$(ls -1 "$LOG_DIR" 2>/dev/null | grep -E '^error__.*\.log(\.gz)?$' | sed 's/\.gz$//' | sort -u)
+realfile() {   # $1 a base name -> the file on disk that holds it
+  if [ -e "$LOG_DIR/$1" ]; then echo "$LOG_DIR/$1"; else echo "$LOG_DIR/$1.gz"; fi
+}
 
 # 1. extract every rotated file not yet in the manifest
 extracted=0
 for f in $present; do
   if ! cut -f1 "$MANIFEST" | grep -qxF "$f"; then
+    src=$(realfile "$f")
     out="$ARCHIVE/${f%.log}.xs.gz"
     # sequential, not a pipe into a background gzip: the manifest row must never precede a complete archive file
-    grep -aE '\[3n\.q7\]\[XS_FRAME(_RECONCILE_BROKEN)?\]' "$LOG_DIR/$f" > "$out.tmp"
+    zcat -f "$src" | grep -aE '\[3n\.q7\]\[XS_FRAME(_RECONCILE_BROKEN)?\]' > "$out.tmp"
+    [ "${PIPESTATUS[0]}" = 0 ] || { echo "$NOW_ISO read FAILED for $src" >> "$RUNLOG"; rm -f "$out.tmp"; status=3; continue; }
     n=$(wc -l < "$out.tmp")
     gzip -c "$out.tmp" > "$out" && rm -f "$out.tmp" || { echo "$NOW_ISO gzip FAILED for $f" >> "$RUNLOG"; status=3; continue; }
-    printf '%s\t%s\t%s\t%s\n' "$f" "$(stat -c %s "$LOG_DIR/$f")" "$n" "$NOW_ISO" >> "$MANIFEST"
+    printf '%s\t%s\t%s\t%s\n' "$f" "$(stat -c %s "$src")" "$n" "$NOW_ISO" >> "$MANIFEST"
     extracted=$((extracted + 1))
   fi
 done
@@ -89,7 +98,7 @@ fi
 # 3. pre-loss rung: the oldest retained rotated file's age
 oldest=$(printf '%s\n' $present | head -1)
 if [ -n "$oldest" ]; then
-  age=$(( NOW - $(stat -c %Y "$LOG_DIR/$oldest") ))
+  age=$(( NOW - $(stat -c %Y "$(realfile "$oldest")") ))
   if [ "$age" -lt "$CADENCE_S" ]; then
     # Langston inc-2 Step-4 attack (3): a loss the last_seen check cannot see needs >= retain rotations inside one cadence,
     # which forces oldest-age <= cadence — so this is not a warning any more, files may ALREADY be gone unseen.

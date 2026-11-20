@@ -9,13 +9,14 @@ every other main-pool minute of the same day (the baseline).
 Run on staging as root, read-only:
   python3 b_db_pool_guard_weekday_qd_read.py 2026-11-13
 Inputs: scheduled_tasks_audit (task_name='xstock_qd_probe_cron', fired_at on DAY) via psql with DATABASE_URL from
-/home/deploy/dawntrader/.env; the main-pool lines from /var/log/dawntrader/error.log (or error__<DAY+1>*.log
+/home/deploy/dawntrader/.env; the main-pool lines from /var/log/dawntrader/error.log (or error__<DAY+1>*.log[.gz]
 when DAY is not today — the archive is named for the rotation instant, so it holds the PRECEDING day).
 A minute line stamped T covers (T-60s, T]. A fire is [fired_at, fired_at + duration_ms] when meta carries a
 duration, else [fired_at, fired_at + 60s] (stated in the output).
 """
 import datetime as dt
 import glob
+import gzip
 import json
 import os
 import re
@@ -63,14 +64,18 @@ if DAY == today:
     logs = ['/var/log/dawntrader/error.log']
 else:
     nxt = (dt.datetime.strptime(DAY, '%Y-%m-%d') + dt.timedelta(days=1)).strftime('%Y-%m-%d')
-    logs = sorted(glob.glob(f'/var/log/dawntrader/error__{nxt}*.log'))
+    # B-DISK-FILE-TIERING P9: an archive is compressed one rotation later (.log -> .log.gz); read either, never both.
+    found = glob.glob(f'/var/log/dawntrader/error__{nxt}*.log') + glob.glob(f'/var/log/dawntrader/error__{nxt}*.log.gz')
+    bases = sorted({p[:-3] if p.endswith('.gz') else p for p in found})
+    logs = [b if os.path.exists(b) else b + '.gz' for b in bases]
 if not logs:
     raise SystemExit(f'REFUSED: no error log found for {DAY}')
 
 pat = re.compile(r'^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) \+00:00: \[B-DB-POOL-GUARD\]\[POOL_MINUTE_V2\] pool=dawntrader_main (.*)$')
 minutes = []
 for p in logs:
-    for line in open(p, encoding='utf-8', errors='replace'):
+    fh = gzip.open(p, 'rt', encoding='utf-8', errors='replace') if p.endswith('.gz') else open(p, encoding='utf-8', errors='replace')
+    for line in fh:
         m = pat.match(line)
         if not m or not m.group(1).startswith(DAY):
             continue

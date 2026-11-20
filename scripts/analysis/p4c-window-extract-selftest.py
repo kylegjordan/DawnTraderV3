@@ -23,6 +23,7 @@ CASE D (S1, increment 3; stated before the first run) — the CASE-B corpus with
   bracket_own_window [26/52, 52/52] = [0.5, 1.0], live_by_reason ok 26 / too_old 26 / the rest 0, readable true.
   And CASE B's own S1 (lines WITHOUT the fields): readable false, share None — an old corpus never reads as a zero share.
 """
+import gzip
 import json
 import os
 import subprocess
@@ -63,10 +64,17 @@ def corpus(s1=False):
     return lines
 
 
-def run(pm2_lines, s1=False):
+def run(pm2_lines, s1=False, name='error__2026-01-06_00-00-00.log', extra=()):
     with tempfile.TemporaryDirectory() as d:
-        with open(os.path.join(d, 'error__2026-01-06_00-00-00.log'), 'w') as f:
-            f.write('\n'.join(corpus(s1)) + '\n')
+        body = ('\n'.join(corpus(s1)) + '\n').encode()
+        if name.endswith('.gz'):
+            with gzip.open(os.path.join(d, name), 'wb') as f:
+                f.write(body)
+        else:
+            with open(os.path.join(d, name), 'wb') as f:
+                f.write(body)
+        for x in extra:  # further rotation files, empty: only their NAMES matter to the cases that use them
+            open(os.path.join(d, x), 'w').close()
         open(os.path.join(d, 'error.log'), 'w').close()
         pm2 = os.path.join(d, 'pm2.log')
         with open(pm2, 'w') as f:
@@ -126,6 +134,18 @@ check('D live_by_reason: ok 26, too_old 26, the rest 0; readable',
 code, out, err = run(['2026-01-05T11:00:00: PM2 log: App [dawntrader:0] starting in -fork mode-'])
 check('C exit 2 on a PM2 log that starts inside the window', code == 2 and 'does not reach the window start' in err,
       (code, err.strip()[-160:]))
+
+# B-DISK-FILE-TIERING P9 (stated before the first run): the system logrotate names a rotation with its real run instant
+# and compresses it one rotation later. CASE E — CASE A's corpus as `error__2026-01-06_00-01-37.log.gz`: EXPECTED the same
+# result as CASE A (exit 0, 2 cells, 0 unequal, holds). CASE F — CASE A's corpus plus a second rotation for the same day
+# (`error__2026-01-06_13-00-00.log`): EXPECTED exit 2, FATAL "more than one rotation" (the day's content is split).
+RS = RESTART.strftime('%Y-%m-%dT%H:%M:%S') + ': PM2 log: App [dawntrader:0] starting in -fork mode-'
+code, out, err = run([BOOT, RS], name='error__2026-01-06_00-01-37.log.gz')
+he = json.loads(out)['lanes'].get('vts', {}).get('hour_equality', {}) if code == 0 else {}  # no lane = the day was missed
+check('E a real-time-named .gz rotation reads like CASE A', (code, he.get('cells_graded'), he.get('cells_unequal'),
+      he.get('holds')) == (0, 2, 0, True), (code, he.get('cells_graded'), he.get('cells_unequal'), he.get('holds'), err[-200:]))
+code, out, err = run([BOOT, RS], extra=('error__2026-01-06_13-00-00.log',))
+check('F exit 2 on two rotations for one day', code == 2 and 'more than one rotation' in err, (code, err.strip()[-160:]))
 
 print('SELFTEST ' + ('FAILED: ' + ', '.join(fails) if fails else 'OK — all expectations met'))
 sys.exit(1 if fails else 0)

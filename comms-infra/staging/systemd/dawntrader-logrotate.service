@@ -1,0 +1,14 @@
+[Unit]
+Description=Rotate and compress the app's own logs (B-DISK-FILE-TIERING P9; config /etc/dawntrader/logrotate-app.conf)
+Documentation=file:///etc/dawntrader/logrotate-app.conf
+# OnFailure= comes from the drop-in (dt-unit-failure@ raises a system alert, deduped per unit and class,
+# so a standing failure of this hourly unit does not page every hour).
+
+[Service]
+Type=oneshot
+# Its OWN state file: the distribution's daily logrotate keeps /var/lib/logrotate/status and never reads
+# this config, so no file here has two rotators.
+ExecStart=/usr/sbin/logrotate -s /var/lib/logrotate/dawntrader-app.status /etc/dawntrader/logrotate-app.conf
+Nice=19
+IOSchedulingClass=idle
+TimeoutStartSec=3600

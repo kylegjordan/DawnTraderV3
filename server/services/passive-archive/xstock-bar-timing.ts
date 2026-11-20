@@ -3,8 +3,10 @@
  * for the xStock bar writer's three transactions, written as ONE aggregate line on stderr every
  * 15 minutes.
  *
- * WHY stderr and an aggregate: `out__*.log` keeps about one day; `error__*.log` keeps 14, and the read
- * (R6b) spans at least two US regular sessions. Per-flush lines on stdout cannot hold the window.
+ * WHY stderr and an aggregate: when this was written `out__*.log` kept about one day and `error__*.log` 14
+ * (pm2-logrotate); since B-DISK-FILE-TIERING P9 out keeps at most 7 days and error 30, archives compressed
+ * one rotation later (`.log.gz`). The read (R6b) spans at least two US regular sessions, and the long-lived
+ * error stream is still the one that holds it.
  * WHY histograms: percentiles do not add across intervals. Fixed-edge bucket counts do, so a window
  * p50/p95/p99 can be recomputed from the log by anyone — bucket-resolved, not point values; the max
  * composes exactly. The per-interval percentiles stay because they show episodes.

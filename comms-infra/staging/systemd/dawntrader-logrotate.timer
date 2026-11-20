@@ -1,0 +1,10 @@
+[Unit]
+Description=Hourly: app log rotation (the size triggers need an hourly look; the daily ones rotate at the first run after 00:00Z)
+
+[Timer]
+OnCalendar=hourly
+RandomizedDelaySec=120
+Persistent=true
+
+[Install]
+WantedBy=timers.target

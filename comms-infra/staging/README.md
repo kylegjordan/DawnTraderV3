@@ -33,6 +33,10 @@ Exit 0 = the app answered 2xx (body on stdout) · 1 = it answered otherwise · 2
 | `staging/dt-unit-failure-alert` | `/usr/local/bin/dt-unit-failure-alert` | 0755 root:root |
 | `staging/systemd/dt-install-drift.{service,timer}`, `dt-unit-failure@.service` | `/etc/systemd/system/` | 0644 |
 | `staging/systemd/dt-install-drift.service.d/onfailure.conf` | `/etc/systemd/system/dt-install-drift.service.d/` | 0644 |
+| `staging/logrotate-dawntrader-app.conf` (B-DISK-FILE-TIERING P9 — **not** in `/etc/logrotate.d/`, so the distribution's daily logrotate never runs it) | `/etc/dawntrader/logrotate-app.conf` | 0644 root:root |
+| `staging/systemd/dawntrader-logrotate.{service,timer}` | `/etc/systemd/system/` | 0644 |
+| `staging/systemd/dawntrader-logrotate.service.d/onfailure.conf` | `/etc/systemd/system/dawntrader-logrotate.service.d/` | 0644 |
+| *(the install seeds it; logrotate keeps it)* | `/var/lib/logrotate/dawntrader-app.status` — the P9 rotation's own state file | 0644 root:root |
 | *(no file)* | `/etc/dt-api/` 0750 root:dtapi · `/var/lib/dt-api/` 0700 dtapi:dtapi · `/home/dtmint/` **0750 root:dtmint** · `/home/dtmint/.ssh/` 0750 root:dtmint | |
 | *(the setter writes it)* | `/etc/dt-api/staging-api.env` | 0600 dtapi:dtapi |
 | *(the install writes it, both boxes)* | `/var/lib/dt-install-drift/installed.sha` — line 1 the reviewed sha installed from; then optionally `<sha> <repo path>` for a file another flow installed later (the last line for a path wins) | 0644 root, dir 0755 |
