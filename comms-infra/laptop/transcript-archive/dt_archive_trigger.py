@@ -284,7 +284,7 @@ def precompact_run(projects, root, shared, runner=run_once, clock=time.time):
 
 def precompact_hook(stdin_text, root=ROOT, spawn=None):
     """The hook itself: record that it fired (and whether it was handed a transcript path - pre-audit P7b), start the
-    run DETACHED so compaction is never held up, and return. Prints nothing; never fails the hook."""
+    run in the background with no window so compaction is never held up, and return. Prints nothing; never fails the hook."""
     try:
         keys = sorted(json.loads(stdin_text or "{}").keys())
     except ValueError:
@@ -295,7 +295,12 @@ def precompact_hook(stdin_text, root=ROOT, spawn=None):
         if spawn is not None:
             spawn(args)
         else:
-            flags = 0x00000008 | 0x00000200 | 0x08000000 if os.name == "nt" else 0   # DETACHED | NEW_GROUP | NO_WINDOW
+            # NEW_PROCESS_GROUP | CREATE_NO_WINDOW. NOT DETACHED_PROCESS (0x8): Windows ignores CREATE_NO_WINDOW when
+            # it is combined with DETACHED_PROCESS, so the run had no console, and every console child it starts (the
+            # ssh calls) got a brand-new VISIBLE window - three on Kyle's screen per compaction (PM Claude, 2026-11-20,
+            # caught by ~/.claude/winwatch.ps1 at 20:39:41). With CREATE_NO_WINDOW alone the run gets a hidden console
+            # that its ssh children inherit. Popen still returns at once, so compaction is not held up either way.
+            flags = 0x00000200 | 0x08000000 if os.name == "nt" else 0
             subprocess.Popen(args, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                              creationflags=flags, close_fds=True, start_new_session=(os.name != "nt"))
     except Exception as e:  # noqa: BLE001 - a hook must never block compaction; the failure is still written down
