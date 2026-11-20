@@ -47,7 +47,14 @@ INVOKE_SLEEP = {"s": 0.0}
 def fake_invoke(prompt, session_id, scratch=None, meta=None):    # meta: B-AGENT-INVOKE-FAILURE-NOTICE C-2's contract
     with _INV_LOCK:
         INVOKES.append({"prompt": prompt, "scratch": scratch, "t": time.time(), "thread": threading.current_thread().name})
-    time.sleep(INVOKE_SLEEP["s"])
+    if "RAISE-IN-INVOKE" in prompt:          # Step 9: an exception exit of a real inbound
+        raise RuntimeError("injected invoke failure")
+    if "TIMEOUT-IN-INVOKE" in prompt:        # Step 9: a timeout exit, reported structurally as the real invoke does
+        if meta is not None:
+            meta["outcome"], meta["elapsed"] = "timeout", 0.01
+        return ""
+    slow = re.search(r"SLOW:([0-9.]+)", prompt)
+    time.sleep(float(slow.group(1)) if slow else INVOKE_SLEEP["s"])
     m = re.search(r"REPLY-MARKER:(\S+)", prompt)
     return "verdict text" + (f"\n[[QUEUE id={m.group(1)} status=done]]" if m else "")
 
@@ -209,6 +216,157 @@ for i in range(6):
 q.join()
 case("6 automated turns across both workers against a limit of 3: exactly 3 invoked", 3, len(INVOKES))
 b.BOT_TURN_LIMIT = 100000
+
+# ─── Step 9 fold (Langston, msg 1573419152167665767): the HOLD on a real inbound's two edges, C-2, C-3, the exits ───
+HOLD = b.HOLD_KEY
+
+
+class PutQ:                      # stands in for task_q where the test must SEE whether a self-advance was queued
+    def __init__(self):
+        self.items = []
+
+    def put(self, t):
+        self.items.append(t)
+
+
+def item(iid):
+    for it in lq.load_queue(b.QUEUE_FILE):
+        if it.get("id") == iid:
+            return it
+    return None
+
+
+def wait_for(pred, timeout=5.0):
+    end = time.time() + timeout
+    while time.time() < end:
+        if pred():
+            return True
+        time.sleep(0.02)
+    return False
+
+
+def held_open():                 # the invariant's violators: still stamped AND not terminal
+    return [it["id"] for it in lq.load_queue(b.QUEUE_FILE)
+            if it.get(HOLD) and it.get("state") not in lq.TERMINAL_STATES]
+
+
+def rows_for(mid):
+    return [json.loads(l) for l in open(b.TASK_LOG) if json.loads(l).get("message_id") == mid]
+
+
+def item_with_state(iid, state, summary="x"):
+    it = lq.new_item(iid, "NEW Claude", summary, gate_type="step2", now=1)
+    it["state"] = state
+    return it
+
+
+print("9. ENQUEUE EDGE: while a real inbound reviews the item it created, the other worker's self-advance skips it")
+b.SELF_ADVANCE_ENABLED = True
+b._cap.reset()
+seed([])
+INVOKES.clear()
+qa, qb = PutQ(), PutQ()
+ta = threading.Thread(target=b.process_task, args=(task("9001", "OLD Claude, please review the diff SLOW:1.0"), b.BREAKER, qa))
+ta.start()
+case("the new item exists and is HELD while its review runs", True,
+     wait_for(lambda: bool(item("9001")) and bool(item("9001").get(HOLD))))
+b.process_task(task("9002", "OLD Claude, chatter"), b.BREAKER, qb)
+case("the other worker's finish queued NO self-advance of it", [], [t["message_id"] for t in qb.items])
+ta.join(10)
+case("after the review: auto-settled noop and unstamped", ("noop", False),
+     (item("9001").get("state"), bool(item("9001").get(HOLD))))
+
+print("10. C-1 READY EDGE: a [[QUEUE status=ready]] re-mark holds the item while that inbound reviews it")
+b._cap.reset()
+seed([item_with_state("X10", "blocked")])
+qa, qb = PutQ(), PutQ()
+ta = threading.Thread(target=b.process_task, args=(
+    task("1001", "OLD Claude, [[QUEUE id=X10 status=ready]] please re-review REPLY-MARKER:X10 SLOW:1.0"), b.BREAKER, qa))
+ta.start()
+case("re-opened to ready and HELD", True,
+     wait_for(lambda: item("X10").get("state") == "ready" and bool(item("X10").get(HOLD))))
+b.process_task(task("1002", "OLD Claude, chatter"), b.BREAKER, qb)
+case("the other worker's finish queued NO self-advance of it", [], [t["message_id"] for t in qb.items])
+ta.join(10)
+case("after the review: done and unstamped", ("done", False), (item("X10").get("state"), bool(item("X10").get(HOLD))))
+
+print("11. C-2: a self-advance re-checks its item just before invoking, through the real workers")
+b.SELF_ADVANCE_ENABLED = False
+open(b.TASK_LOG, "w").close()
+
+
+def pick_adv(iid_items):
+    b._cap.reset()
+    seed(iid_items)
+    t, _n = lq.locked_update(b.QUEUE_FILE, lambda items: b._self_advance_pick(items, "chan", {}))
+    return t
+
+
+adv = pick_adv([item_with_state("D11", "ready")])
+lq.locked_update(b.QUEUE_FILE, lambda items: [it.update(state="done") for it in items if it["id"] == "D11"])
+INVOKES.clear()
+q.put(adv)
+q.join()
+time.sleep(0.2)
+case("11a settled between pick and invoke: NOT invoked", False, any("id=D11" in i["prompt"] for i in INVOKES))
+case("11a outcome recorded", ["dropped_not_ready"], [r["outcome"] for r in rows_for("adv-D11")])
+adv = pick_adv([item_with_state("E11", "ready")])
+_other = time.time() + 1000
+lq.locked_update(b.QUEUE_FILE, lambda items: [it.update({HOLD: _other}) for it in items if it["id"] == "E11"])
+INVOKES.clear()
+q.put(adv)
+q.join()
+time.sleep(0.2)
+case("11b re-held by another task: NOT invoked", False, any("id=E11" in i["prompt"] for i in INVOKES))
+case("11b outcome recorded", ["dropped_not_ready"], [r["outcome"] for r in rows_for("adv-E11")])
+case("11b the other holder's stamp survives", _other, item("E11").get(HOLD))
+adv = pick_adv([item_with_state("F11", "ready", summary="f REPLY-MARKER:F11")])
+INVOKES.clear()
+q.put(adv)
+q.join()
+time.sleep(0.2)
+case("11c (positive control) still ready and ours: invoked once", 1, sum("id=F11" in i["prompt"] for i in INVOKES))
+case("11c outcome reply", ["reply"], [r["outcome"] for r in rows_for("adv-F11")])
+case("11c done and its stamp released in _settle", ("done", False), (item("F11").get("state"), bool(item("F11").get(HOLD))))
+
+print("12. C-3: a verdict on an item that is already closed is logged and posted, never applied silently")
+seed([item_with_state("G12", "done")])
+SENT.clear()
+b.process_task(task("1201", "OLD Claude, ack REPLY-MARKER:G12"), b.BREAKER, None)
+case("a notice naming the item and the second verdict was posted", True,
+     any("second verdict" in s and "G12" in s for s in SENT))
+case("the bridge log carries the dup-terminal line", True, "dup-terminal marker id=G12" in open(b.LOG_FILE).read())
+case("the item stays done", "done", item("G12").get("state"))
+
+print("13. THE INVARIANT: after ANY exit of a real inbound, each item it touched is terminal OR unstamped")
+open(b.TASK_LOG, "w").close()
+seed([item_with_state("H13", "blocked"), item_with_state("J13", "blocked")])
+q.put(task("1301", "OLD Claude, [[QUEUE id=H13 status=ready]] RAISE-IN-INVOKE"))
+q.join()
+time.sleep(0.2)
+case("13a exception exit after the ready edge: ready AND unstamped", ("ready", False),
+     (item("H13").get("state"), bool(item("H13").get(HOLD))))
+case("13a outcome", ["worker_error"], [r["outcome"] for r in rows_for("1301")])
+q.put(task("1302", "OLD Claude, [[QUEUE id=J13 status=ready]] TIMEOUT-IN-INVOKE"))
+q.join()
+time.sleep(0.2)
+case("13b timeout exit after the ready edge: ready AND unstamped", ("ready", False),
+     (item("J13").get("state"), bool(item("J13").get(HOLD))))
+case("13b outcome", ["timeout"], [r["outcome"] for r in rows_for("1302")])
+q.put(task("1303", "OLD Claude, please review this RAISE-IN-INVOKE"))
+q.join()
+time.sleep(0.2)
+case("13c exception exit after the enqueue edge: the item is settled noop", "noop", (item("1303") or {}).get("state"))
+case("13c no item anywhere is left stamped and open", [], held_open())
+seed([item_with_state("K13", "ready")])
+t1, t2 = {"message_id": "t1"}, {"message_id": "t2"}
+lq.locked_update(b.QUEUE_FILE, lambda items: [b._hold(it, t1) for it in items if it["id"] == "K13"])
+time.sleep(0.01)
+lq.locked_update(b.QUEUE_FILE, lambda items: [b._hold(it, t2) for it in items if it["id"] == "K13"])
+case("13d an EARLIER holder's release leaves a later holder's stamp", [], b._release_holds_locked(t1))
+case("13d the later stamp is intact", t2["_holds"]["K13"], item("K13").get(HOLD))
+case("13d the later holder releases its own", ["K13"], b._release_holds_locked(t2))
+case("13d unstamped", False, bool(item("K13").get(HOLD)))
 
 print(f"\n{'ALL PASS' if not fails else str(fails) + ' FAILED'} (scratch {SCRATCH})")
 os._exit(1 if fails else 0)

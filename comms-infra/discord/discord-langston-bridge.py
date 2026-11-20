@@ -369,12 +369,77 @@ def process_voice(task):
     return text, None
 
 
-SELF_ADVANCE_IN_FLIGHT_S = 2 * CLAUDE_TIMEOUT   # a picked item is skipped by the other worker this long
+SELF_ADVANCE_IN_FLIGHT_S = 2 * CLAUDE_TIMEOUT   # a held item is skipped by the self-advance pick this long
+
+# HOLD_KEY: an invoke HOLDS this item. Set by the self-advance pick (#1248 A4) AND by a real inbound's
+# enqueue edge and its [[QUEUE status=ready]] marker edge (B-LANGSTON-TWO-WORKERS Step 9 fold + C-1).
+# The stored name predates the second meaning; it is kept so stamps already on disk read the same after
+# install. Without the inbound stamps the other worker's self-advance picked an item a real inbound was
+# still reviewing, and Langston gave two verdicts of record on one item (adv-1573408601089908888).
+HOLD_KEY = "advance_in_flight_ts"
 
 
 def _advance_in_flight(it, now=None):
-    ts = it.get("advance_in_flight_ts")
+    ts = it.get(HOLD_KEY)
     return bool(ts) and ((now or time.time()) - ts) < SELF_ADVANCE_IN_FLIGHT_S
+
+
+def _hold(item, task):
+    """Stamp `item` as held by `task` (caller holds the queue lock). The task remembers the exact stamp so
+    its release can be owner-checked: a later holder's stamp is never removed by an earlier task."""
+    ts = time.time()
+    item[HOLD_KEY] = ts
+    task.setdefault("_holds", {})[item["id"]] = ts
+
+
+def _release_holds(items, task):
+    """Pop every stamp this task set that is still ITS stamp (caller holds the queue lock). Returns the ids
+    released. A stamp another task has since written is left alone."""
+    released = []
+    for iid, ts in (task.get("_holds") or {}).items():
+        for it in items:
+            if it.get("id") == iid and it.get(HOLD_KEY) == ts:
+                it.pop(HOLD_KEY, None)
+                released.append(iid)
+    return released
+
+
+def _release_holds_locked(task):
+    """Release a REAL inbound's holds under the queue lock, on EVERY exit of the task (called from the worker's
+    finally). Belt-and-braces: the success path already released them in _settle; this covers the breaker,
+    voice-failure and exception exits. Self-advance tasks are excluded on purpose: a failed self-advance keeps
+    its stamp until it expires, unchanged from #1248 A4. Never raises."""
+    if task.get("self_advance") or not task.get("_holds"):
+        return []
+    try:
+        released = lq.locked_update(QUEUE_FILE, lambda items: _release_holds(items, task))
+        if released:
+            log(f"hold release on task exit: {released} (msg {task.get('message_id')})")
+        return released
+    except Exception as e:
+        log(f"hold release FAILED for msg {task.get('message_id')}: {e!r} (stamp expires in "
+            f"{SELF_ADVANCE_IN_FLIGHT_S}s)")
+        return []
+
+
+def _self_advance_still_held(task):
+    """C-2: just before a self-advance task invokes, confirm under the lock that its item still exists, is
+    still `ready`, and still carries THIS task's stamp. False => drop the task, never invoke."""
+    holds = task.get("_holds") or {}
+    if len(holds) != 1:
+        return False
+    (iid, ts), = holds.items()
+
+    def _check(items):
+        for it in items:
+            if it.get("id") == iid:
+                return it.get("state") == "ready" and it.get(HOLD_KEY) == ts
+        return False
+    try:
+        return bool(lq.locked_update(QUEUE_FILE, _check))
+    except Exception as e:   # an unreadable queue is not evidence the item is still ours: do not invoke
+        log(f"C-2 hold check FAILED for {task.get('message_id')}: {e!r} - dropping, not invoking")
+        return False
 
 
 def _self_advance_pick(items, channel_id, prev_task):
@@ -410,7 +475,6 @@ def _self_advance_pick(items, channel_id, prev_task):
         log(f"self-advance halted: {reason}")
         return None, notices
     lq.register_item_refire(nxt)   # C2: bump the per-item re-fire count BEFORE re-invoking (persisted by the caller's save)
-    nxt["advance_in_flight_ts"] = time.time()   # #1248 A4: the other worker skips it while this invoke runs
     prompt = (f"[Discord SELF-ADVANCE — your previous review is done; work your NEXT queued item NOW. "
               f"id={nxt['id']} gate={nxt['gate_type']} from {nxt['requester']}: {nxt['summary']} "
               f"pointer={nxt.get('pointer')}. End your reply with a queue marker on the LAST line: "
@@ -423,6 +487,7 @@ def _self_advance_pick(items, channel_id, prev_task):
             # #1177: whom the reply is addressed to. "self-advance" above is a LABEL (the breaker and
             # the prompt key on it); without this the reply led with the label and woke nobody.
             "addressee": nxt.get("requester")}
+    _hold(nxt, task)   # #1248 A4: the other worker skips it while this invoke runs; C-2 re-checks this stamp
     log(f"self-advance: re-invoking Langston for queue item {nxt['id']} (gate={nxt['gate_type']})")
     return task, notices
 
@@ -702,6 +767,10 @@ def process_task(task, breaker, task_q=None):
                     items.append(lq.new_item(msg_id, resolve_recipient_name(task) or "?",
                                              prompt, pointer=lq.extract_pointer(prompt),
                                              gate_type=lq.infer_gate_type(prompt)))
+                    # Step 9 fold: this invoke now HOLDS the new item, so the other worker's self-advance
+                    # cannot pick it while this reply is still being written. Released in _settle, and on
+                    # every other exit by the worker's finally.
+                    _hold(items[-1], task)
                     return True
                 # #1248 A3: one locked read-modify-write, so the other worker cannot erase this item.
                 if lq.locked_update(QUEUE_FILE, _enqueue):
@@ -718,7 +787,14 @@ def process_task(task, breaker, task_q=None):
             try:
                 inbound_marker = lq.parse_marker(prompt)
                 if inbound_marker:
-                    it2, act2 = lq.locked_update(QUEUE_FILE, lambda items: lq.apply_marker(items, inbound_marker))
+                    def _apply_inbound(items):
+                        it, act = lq.apply_marker(items, inbound_marker)
+                        # C-1 (Langston): a `status=ready` re-mark is the second edge on which a real inbound
+                        # starts working an item; hold it too, or the other worker can pick it mid-review.
+                        if act == "ready" and it is not None:
+                            _hold(it, task)
+                        return it, act
+                    it2, act2 = lq.locked_update(QUEUE_FILE, _apply_inbound)
                     if it2 is not None:
                         log(f"queue: inbound marker applied id={inbound_marker['id']} -> {act2}")
             except Exception as e:
@@ -882,12 +958,23 @@ def process_task(task, breaker, task_q=None):
         notices = []
 
         def _settle(items):
+            # This invoke is over: release every hold it set (self-advance pick, enqueue edge, ready-marker edge).
+            # Owner-checked, so a later holder's stamp survives. Replaces the self-advance-only pop (#1248 A4).
+            _release_holds(items, task)
             if marker:
                 item, action = lq.apply_marker(items, marker)
                 if action == "error" and item is not None:
                     # error PARKS + must be flagged to Kyle (a wedged read must never silently vanish).
                     notices.append(f"Kyle — Langston hit an ERROR on queue item {marker['id']}: "
                                    f"{marker.get('reason', '?')} — parked, needs a look.")
+                elif action == "dup-terminal":
+                    # C-3 (Langston): a verdict on an item that is ALREADY terminal was not applied. That means
+                    # two verdicts of record may exist on one item, possibly at different refs, and nothing
+                    # marks which is operative - so it is surfaced, never dropped silently.
+                    log(f"queue: dup-terminal marker id={marker['id']} status={marker.get('status')} NOT applied")
+                    notices.append(f"Kyle — Langston gave a second verdict ({marker.get('status')}) on queue item "
+                                   f"{marker['id']}, which was already closed. It was NOT applied: there may now be "
+                                   f"two verdicts of record on this item - check which one is operative.")
             # FINDING-2 (Langston Step-4): a self-advance re-invoke whose reply carried NO marker for the
             # item it was working would leave it `ready` → the next advance re-picks the SAME id → trips
             # the Tier-1 same-id HALT and pauses the WHOLE loop over a merely-missing marker. Park that
@@ -895,9 +982,6 @@ def process_task(task, breaker, task_q=None):
             if task.get("self_advance"):
                 mid = str(task.get("message_id", ""))
                 advanced_id = mid[4:] if mid.startswith("adv-") else None
-                for it in items:            # #1248 A4: this invoke is over, so its item is no longer in flight
-                    if advanced_id and it.get("id") == advanced_id:
-                        it.pop("advance_in_flight_ts", None)
                 if advanced_id and (not marker or marker.get("id") != advanced_id):
                     # #343 (Langston Step-4): distinguish a MALFORMED-but-present marker (he signaled, the
                     # grammar dropped it → worse, park LOUDER) from a genuinely absent one.
@@ -1083,7 +1167,13 @@ def task_worker(task_q):
             started = time.time()
             try:
                 log(f"{me} took msg {task.get('message_id')} lane={task.get('_lane')}")
-                process_task(task, BREAKER, task_q)
+                if task.get("self_advance") and not _self_advance_still_held(task):
+                    # C-2 (Langston): guard the INVOKE, not only the pick. Between the pick and now the item may
+                    # have been settled, or re-held by a real inbound; invoking would review it a second time.
+                    task["_outcome"] = "dropped_not_ready"
+                    log(f"{me} DROPPED self-advance {task.get('message_id')}: item no longer ready and held by it")
+                else:
+                    process_task(task, BREAKER, task_q)
             except Exception as e:
                 task["_outcome"] = "worker_error"
                 log(f"{me} error: {type(e).__name__}: {e}\n{traceback.format_exc()[:500]}")
@@ -1091,6 +1181,7 @@ def task_worker(task_q):
                 # queue item `ready` and the alert's spool record in place. It is a no-reply exit like any other.
                 _after_no_reply(task, "worker_error")
             finally:
+                _release_holds_locked(task)   # every exit of a real inbound leaves its items unheld; never raises
                 task_q.release(task)
                 task_q.task_done()
                 record_task(task, me, started, time.time())

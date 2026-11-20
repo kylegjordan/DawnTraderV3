@@ -17,7 +17,7 @@ MUTATIONS = {
     "the queue read-modify-write is not locked": (QUEUE, "        fcntl.flock(fd, fcntl.LOCK_EX)\n        yield\n",
                                                   "        yield\n"),
     "self-advance does not mark the picked item in flight": (
-        BRIDGE, "    nxt[\"advance_in_flight_ts\"] = time.time()", "    pass"),
+        BRIDGE, "    _hold(nxt, task)   # #1248 A4", "    pass  # #1248 A4"),
     "each worker keeps its own breaker": (
         BRIDGE, "                process_task(task, BREAKER, task_q)",
         "                process_task(task, {\"bot_turns\": 0} if False else dict(BREAKER), task_q)"),
@@ -34,12 +34,39 @@ MUTATIONS = {
         BRIDGE, "    try:\n        os.lstat(path)\n        return True\n    except FileNotFoundError:\n        return False\n"
                 "    except OSError:\n        return True\n",
         "    return os.path.exists(path)\n"),
+    # --- Step 9 fold (Langston msg 1573419152167665767): the hold on both inbound edges, C-2, C-3, the exits ---
+    "the enqueue edge does not hold the new item": (BRIDGE, "                    _hold(items[-1], task)\n",
+                                                    "                    pass\n"),
+    "C-1: the ready-marker edge does not hold": (BRIDGE, "                            _hold(it, task)\n",
+                                                 "                            pass\n"),
+    "C-2: a self-advance is not re-checked before invoking": (
+        BRIDGE, "                if task.get(\"self_advance\") and not _self_advance_still_held(task):\n",
+        "                if False:\n"),
+    "C-3: a dup-terminal verdict is ignored": (BRIDGE, "                elif action == \"dup-terminal\":\n",
+                                               "                elif False:\n"),
+    "happy-path-only release (the worker's finally does not release)": (
+        BRIDGE, "                _release_holds_locked(task)   # every exit", "                pass   # every exit"),
+    "release is not owner-checked": (BRIDGE, "            if it.get(\"id\") == iid and it.get(HOLD_KEY) == ts:\n",
+                                     "            if it.get(\"id\") == iid:\n"),
+    "_settle does not release": (BRIDGE, "            _release_holds(items, task)\n            if marker:\n",
+                                 "            if marker:\n"),
 }
 
 
 def main():
     originals = {p: open(p, encoding="utf-8").read() for p in (BRIDGE, QUEUE)}
     survived = []
+    # Baseline gate (Step 9): the UNMUTATED suite must pass first. Without it a suite that cannot even start
+    # (e.g. run with an interpreter lacking `discord`) fails every mutant and reads as N/N caught - measured
+    # 2026-11-20 with plain python3 instead of the bridge venv.
+    try:
+        base = subprocess.run([sys.executable, SUITE], capture_output=True, text=True, timeout=90).returncode
+    except subprocess.TimeoutExpired:
+        base = "timeout"
+    if base != 0:
+        print(f"BASELINE FAILED (rc={base}): the unmutated suite does not pass - no mutant result is meaningful")
+        sys.exit(2)
+    print("baseline: unmutated suite passes")
     try:
         for name, (path, a, b) in MUTATIONS.items():
             src = originals[path]
