@@ -78,6 +78,18 @@ Before cutting ANY code, **enumerate the state it WRITES and grep for READERS of
 ⇒ **A deletion is verified by "zero callers AND every state it wrote has no surviving reader" — not by zero callers alone.**
 
 
+## ★ THE AUDIT AIDS — LEADS, NEVER VERDICTS (B-WORKFLOW-IMPROVE OBJ-8, 2026-11-20)
+**The one home for the aids' table and standing** — Step 1, the hotfix path, `CLAUDE.md` §9.5 and `AGENTS.md` §2 point here. Plain Node scripts in `scripts/crew-tooling/`; both crews run them from Git Bash at the repo root.
+| aid | what it lists | command |
+|---|---|---|
+| code search | every type-aware use of one symbol | `node scripts/crew-tooling/code-refs.mjs <symbol> [--file <declaring file>]` |
+| census | uses, plus the entry points that reach the target (bootstrap, timers, cron, PM2, systemd) and drizzle and raw-SQL table hits | `node scripts/crew-tooling/census.mjs --symbol <s> [--file <f>]` · `--path <file>` · `--table <name>` |
+| history | the batches behind a file, their scope, audit and completion documents, and the `RUNNING_ISSUES`, `DECISIONS` and `DELETED_COMPONENTS_LOG` rows that cite it | `node scripts/crew-tooling/history.mjs <path> --ref origin/migration/aws-supabase` |
+| search index | — | **not yet delivered; do not cite it** |
+
+⛔ **They answer WHERE, never WHETHER. Quote each run's "cannot see" lines in the pre-audit.** Their silence is **not evidence** for: two value lists agreeing (a type against a database enum, or against a literal list or `Set`) · literal copies of a list · properties and fields (the symbol modes take top-level declarations only) · sibling producers of one label or panel · what a site MEANS (counted before or after a filter; an empty result versus a failed read) · error paths · a library's own behaviour · files outside the TypeScript programs (`scripts/`). **For each of those the batch touches, name the lists or sites and compare them by hand, in the pre-audit.** A `--table` zero counts only after you confirm the object is a table with that name.
+*(Why: the pilot replayed four closed batches; all five escapes were value or meaning misses, none a "where" miss — `Change Lists/B_WORKFLOW_IMPROVE_PILOT.md`. Whether any aid becomes a required gate is the reviewer's ruling, not this text's.)*
+
 ## ⛔ THE PRE-AUDIT CARRIES A "PREVIOUSLY-STATED-VS-NOW" SECTION AT THE TOP
 > **CARRIED FROM `CLAUDE.md` §9.2 (B-CLAUDEMD-SLIM, 2026-08-28).** ⚠️ **The COMPLETION half already lived in `workflow-11`; the PRE-AUDIT half lived nowhere but the rules file** — verified absent here, twice, before the carry.
 

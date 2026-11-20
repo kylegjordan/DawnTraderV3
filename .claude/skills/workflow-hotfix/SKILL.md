@@ -47,6 +47,7 @@ Answer these explicitly, **in writing**, before proposing any fix:
 3. **Are there OTHER call sites with the same defect?** Repo-wide grep for the *pattern*, not the reported symptom. **Fixing one of five identical sites is worse than fixing none, because it makes the remaining four look investigated.**
 4. **What state does the change write, and who READS that state?** (§9.5(a-ii) — an altered or removed writer whose reader survives produces **no compile error and no failing test**.)
 5. **Could this be a symptom of a larger design fault?** If the honest answer is yes or maybe ⇒ **STOP. It is a batch.** Say so and escalate rather than patching.
+★ **AIDS for 2-4 (leads, never verdicts):** `census.mjs --symbol|--path` for the census and entry points, `code-refs.mjs` for other call sites; quote their "cannot see" lines, and check a repeated **pattern** (item 3) by hand — no aid matches a pattern. Table and limits: `workflow-02-audit-and-plan`, "THE AUDIT AIDS".
 
 ### 2.3 — SEARCH THE LEDGER BEFORE CALLING IT A DEFECT (§9.5(b-ii))
 Grep `RUNNING_ISSUES.md`, `BATCH_CATALOG.md` and the completion reports for the component and the symbol. **A deliberate, Kyle-approved, Langston-reviewed decision reported as a defect is worse than no finding** — it burns review cycles and impugns work that was done correctly. ★ **If the code comment names its own provenance — a batch id, an issue number, "Langston-approved" — FOLLOW IT.**

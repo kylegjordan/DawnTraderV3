@@ -24,6 +24,8 @@ For every service/module/function/helper/route the batch touches, **record its O
 
 **Where to look, in order:** (a) `BATCH_CATALOG.md` + completion reports + `RUNNING_ISSUES.md`, searched by **FILE/SYMBOL name, not by symptom** — and **search FORMER filenames too** (the `active-*` family was renamed 2026-07-03; searching the new name returns nothing written under the old one); (b) `git log -S "<symbol>" --reverse`, **NOT path-limited so it survives renames**, then READ the introducing commit's message and any directive attached to it; (c) if it predates the 2026-01/02 governance change → `bridge/canonical/`, which documents **what we INTENDED then** and is **never current-state truth and never edited**.
 
+★ **AID (a lead, not the read):** `node scripts/crew-tooling/history.mjs <path> --ref origin/migration/aws-supabase` lists, per file, the batches that touched it (former names followed), their documents and the ledger rows that cite it. Open what it lists; its silence proves nothing. Table, standing and limits of all the aids: `workflow-02-audit-and-plan`, "THE AUDIT AIDS".
+
 **EVIDENCE STANDARD:** name the corpora actually searched, and **QUOTE the introducing commit verbatim with a ref — do not summarise it.** Where intent is not recoverable, **say so and mark it `INFERRED-FROM-CODE`, not established.**
 
 **Answer one of the FIVE dispositions, explicitly:** (1) still relevant and correct · (2) relevant but needs updating to today's intent · (3) disconnected, should be RECONNECTED · (4) connected, should be REMOVED · (5) disconnected and should stay disconnected / be deleted. **A scope that cannot say which is unfinished.**

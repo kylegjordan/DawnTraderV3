@@ -456,7 +456,7 @@ OpenClaw is decommissioned: post with `cc-send`, read `/var/log/cc-discord-inbox
 
 ⛔⛔ **THE TRIGGER STAYS HERE AND IS NOT MOVED, AND THE REASON IS THE WHOLE POINT (Langston, 2026-08-28): THIS FIRES ON *"ANY AUDIT, PRE-AUDIT, **OR ARCHITECTURAL DISPUTE**"* — AND `workflow-02` IS GATED `STEP 2 ONLY` IN ITS OWN FRONTMATTER.**
 ★ **Writing the trigger into a skill that refuses to load outside step 2 would put the rule behind the exact gate that excludes two of its three triggers — and it would READ AS COVERED.** ⇒ **an unscheduled architectural dispute has no step to invoke, so the trigger must live where it is always loaded.**
-⚠️ **So: a DISPUTE about how a component behaves obliges you to run the census and the provenance read, even with no batch and no step open. Load `workflow-02-audit-and-plan` and work from it.**
+⚠️ **So: a DISPUTE about how a component behaves obliges you to run the census and the provenance read, even with no batch and no step open. Load `workflow-02-audit-and-plan` and work from it.** Its "THE AUDIT AIDS" (code search, census, history) are leads, never verdicts.
 
 ### 9.4 THE FIND IS THE TRIGGER — EVERY OUT-OF-SCOPE FINDING GETS A DECLARED DISPOSITION, IN THE SAME TURN *(Kyle directive 2026-06-13)*
 
