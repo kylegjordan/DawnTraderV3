@@ -75,11 +75,11 @@ for l in open(PLAN, encoding='utf-8'):
     if not l.startswith('|'):
         continue
     cells = [c.strip() for c in l.strip().strip('|').split('|')]
-    for j, c in enumerate(cells[:-1]):
+    for j, c in enumerate(cells):      # every cell, the last included (Langston Step-4 rider b)
         m = re.match(r'^(?:~~|\*\*)*([BT]-[A-Z0-9][A-Z0-9.-]*[A-Z0-9])', c)
         if m:
             for k in (j - 1, j + 1):
-                o = _owner_cell(cells[k]) if k >= 0 else None
+                o = _owner_cell(cells[k]) if 0 <= k < len(cells) else None
                 if o:
                     _plan[m.group(1)].add(o)
             break
@@ -328,7 +328,8 @@ for b, owners in sorted(by_batch.items()):
 # Step-4 C-5 (Langston 2026-11-20): say how far the cross-check reaches, so exit 0 is not read as "every row
 # register-verified", and say what the register/plan conflict NOTE was a zero over.
 table['_about']['refusal_reach_measured'] = {k: {'families': v[0], 'queue_rows': v[1]} for k, v in reach.items()}
-table['_about']['register_plan_overlap'] = len(set(register) & set(plan_owner))
+table['_about']['register_plan_overlap'] = {'shared': len(set(register) & set(plan_owner)), 'register': len(register),
+                                            'plan_single_owner': len(plan_owner)}
 print('REACH cross-checked %d families / %d rows; batch not in register or plan %d / %d; batchless %d / %d'
       % tuple(reach['checked'] + reach['batch_unlisted'] + reach['batchless']))
 print('REGISTER/PLAN overlap: %d batches (register %d, plan %d) - the conflict NOTE is a zero over these'

@@ -26,7 +26,11 @@
     "queue_rows": 2226
    }
   },
-  "register_plan_overlap": 33
+  "register_plan_overlap": {
+   "shared": 33,
+   "register": 39,
+   "plan_single_owner": 200
+  }
  },
  "batches": {
   "B-CLOSE-WRITER-COSTS": {
