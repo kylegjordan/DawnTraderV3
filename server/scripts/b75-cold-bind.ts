@@ -131,6 +131,9 @@ export function orphanVersions(versions: B2ListedVersion[], claimedPaths: Set<st
 /**
  * Pure: the residue set — orphans in our own namespaces, plus every non-chosen version of a bound row's name — minus
  * any id a manifest row is bound to. Reported only since the 3d close removed the deleter (rule 18). Exported for tests.
+ * The NAME is kept deliberately (Langston's 3d Step-4 answer, CHANGE_LIST "keep residueDeleteSet"): it is what the
+ * set was built to be, the change list and the DELETED_COMPONENTS_LOG entry cite it by this name, and the rule-18 fence
+ * forbids the delete CALL shapes (b2_delete_file_version, deleteCold*), not the word.
  */
 export function residueDeleteSet(
   versions: B2ListedVersion[],
@@ -168,6 +171,24 @@ export function residueDeleteSet(
  */
 export function unparseableColdUris(rows: { tier: string; storage_uri: string }[]): string[] {
   return rows.filter((x) => x.tier === 'cold' && coldPathOf(x.storage_uri) === null).map((x) => x.storage_uri);
+}
+
+/**
+ * Pure: the RESIDUE-SET report, every line for ONE stream. While any cold uri is unparseable the warning comes first
+ * AND every RESIDUE-SET line carries the UNTRUSTED stamp, so a capture of this stream alone (stdout, staging's out.log)
+ * can never hold the set without the notice (Langston 3d Step-4 C-2 finding: the warning was on stderr, the set on
+ * stdout, and the exit code is shared with failures > 0). Exported for tests.
+ */
+export function residueReportLines(residueSet: B2ListedVersion[], unparseable: string[]): string[] {
+  const lines: string[] = [];
+  const stamp = unparseable.length > 0 ? ` UNTRUSTED(unparseable=${unparseable.length})` : '';
+  if (unparseable.length > 0) {
+    lines.push(`[B75 cold-bind] UNPARSEABLE cold storage_uri on ${unparseable.length} manifest row(s): [${unparseable.join(', ')}] — the RESIDUE-SET below is NOT trustworthy while any exist (their objects read as orphans)`);
+  }
+  for (const v of residueSet) {
+    lines.push(`[B75 cold-bind] RESIDUE-SET ${v.fileName} id=${v.fileId} bytes=${v.contentLength} uploaded=${new Date(v.uploadTimestamp).toISOString()}${stamp}`);
+  }
+  return lines;
 }
 
 /** Pure: stored VERSIONS (uploads only — hide markers are not versions) outside the archive namespaces, counted by
@@ -225,14 +246,10 @@ async function main(): Promise<void> {
     const decisions = planColdBindings(r.rows, listing.versions);
     const residueSet = residueDeleteSet(listing.versions, claimed, ownPrefixes, decisions, boundIds);
     const unparseable = unparseableColdUris(all.rows);
-    if (unparseable.length > 0) {
-      // C-2 (3d close): their objects read as orphans, so the RESIDUE-SET is not a safe keep/delete input until fixed
-      console.error(`[B75 cold-bind] UNPARSEABLE cold storage_uri on ${unparseable.length} manifest row(s): [${unparseable.join(', ')}] — the RESIDUE-SET below is NOT trustworthy while any exist (their objects read as orphans)`);
-      process.exitCode = 1;
-    }
-    for (const v of residueSet) {
-      console.log(`[B75 cold-bind] RESIDUE-SET ${v.fileName} id=${v.fileId} bytes=${v.contentLength} uploaded=${new Date(v.uploadTimestamp).toISOString()}`);
-    }
+    // C-2 (3d close): their objects read as orphans, so the RESIDUE-SET is not a safe keep input until fixed; the
+    // warning and the stamped set share ONE stream (stdout) so neither can be captured without the other
+    for (const line of residueReportLines(residueSet, unparseable)) console.log(line);
+    if (unparseable.length > 0) process.exitCode = 1;
     let failures = 0;
     for (const d of decisions) {
       const name = `${d.row.source_table}/${d.row.partition_label}`;
