@@ -6,7 +6,9 @@ import { describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
 import {
   heldChildren,
-  HOLD_CAP_DAYS,
+  HOLD_ALERT_KEY_PREFIX,
+  HOLD_CAP_ALERT_KEY_PREFIX,
+  HOLD_CAP_PARTITIONS,
   holdAlertKey,
   holdCapAlertKey,
   overlapsRegisteredWindow,
@@ -15,6 +17,7 @@ import {
   WINDOW_UNREADABLE_ALERT_KEY,
   XSTOCK_REVISION_PARENT,
   type HoldablePartition,
+  type VerdictKeyState,
 } from '../../services/data-archive/xstock-revision-verdict-hold.js';
 import { settleRevisionHold, type PartitionRow, type RevisionHoldDependencies } from '../../scripts/b75-retention-sweep.js';
 import { verdictKey as runnerVerdictKey, VERDICT_KEY_PREFIX as RUNNER_PREFIX } from '../../scripts/b-xstock-bar-availability-verdict-runner.js';
@@ -34,18 +37,21 @@ function day(iso: string): PartitionRow {
   };
 }
 
-const ok = { ok: true as const, start: START };
+/** A readable window. The verdict state lives inside it (Langston Step-4 ruling 4). */
+function win(verdictState: VerdictKeyState = 'absent') {
+  return { ok: true as const, start: START, verdictState };
+}
 
 describe('R7b plan — planRevisionHold', () => {
   it('does not apply to any other table', () => {
-    const plan = planRevisionHold({ parent: 'xstock_spot_ticker_snap', eligible: [day('2026-11-23')], window: ok, verdictState: 'absent' });
+    const plan = planRevisionHold({ parent: 'xstock_spot_ticker_snap', eligible: [day('2026-11-23')], window: win() });
     expect(plan.kind).toBe('not-applicable');
     expect(heldChildren(plan).size).toBe(0);
   });
 
   it('holds in-window partitions while the verdict key is absent, newest first', () => {
     const eligible = [day('2026-11-23'), day('2026-11-24')];
-    const plan = planRevisionHold({ parent: XSTOCK_REVISION_PARENT, eligible, window: ok, verdictState: 'absent' });
+    const plan = planRevisionHold({ parent: XSTOCK_REVISION_PARENT, eligible, window: win() });
     expect(plan.kind).toBe('hold');
     if (plan.kind !== 'hold') return;
     expect(plan.held.map((p) => p.partitionLabel)).toEqual(['2026-11-24', '2026-11-23']);
@@ -54,7 +60,7 @@ describe('R7b plan — planRevisionHold', () => {
 
   it('never holds a partition outside [start, start + 9 days)', () => {
     const eligible = [day('2026-11-21'), day('2026-11-22'), day('2026-12-02')];
-    const plan = planRevisionHold({ parent: XSTOCK_REVISION_PARENT, eligible, window: ok, verdictState: 'absent' });
+    const plan = planRevisionHold({ parent: XSTOCK_REVISION_PARENT, eligible, window: win() });
     expect(plan).toMatchObject({ kind: 'no-hold', verdictPresent: false });
   });
 
@@ -75,18 +81,19 @@ describe('R7b plan — planRevisionHold', () => {
     expect(overlapsRegisteredWindow(month, START)).toBe(true);
   });
 
-  it(`caps the hold at ${HOLD_CAP_DAYS}: the OLDEST in-window partitions are released`, () => {
+  it(`caps the hold at ${HOLD_CAP_PARTITIONS} partitions: the OLDEST in-window partitions are released`, () => {
+    expect(HOLD_CAP_PARTITIONS).toBe(3);
     const eligible = ['2026-11-23', '2026-11-24', '2026-11-25', '2026-11-26', '2026-11-27'].map(day);
-    const plan = planRevisionHold({ parent: XSTOCK_REVISION_PARENT, eligible, window: ok, verdictState: 'absent' });
+    const plan = planRevisionHold({ parent: XSTOCK_REVISION_PARENT, eligible, window: win() });
     expect(plan.kind).toBe('hold');
     if (plan.kind !== 'hold') return;
     expect(plan.held.map((p) => p.partitionLabel)).toEqual(['2026-11-27', '2026-11-26', '2026-11-25']);
     expect(plan.capReleased.map((p) => p.partitionLabel)).toEqual(['2026-11-24', '2026-11-23']);
-    expect([...heldChildren(plan)]).toHaveLength(HOLD_CAP_DAYS);
+    expect([...heldChildren(plan)]).toHaveLength(HOLD_CAP_PARTITIONS);
   });
 
   it.each(['nonterminal', 'resolved'] as const)('ANY verdict state (%s) ends the hold — it guards the read, never the result', (state) => {
-    const plan = planRevisionHold({ parent: XSTOCK_REVISION_PARENT, eligible: [day('2026-11-23')], window: ok, verdictState: state });
+    const plan = planRevisionHold({ parent: XSTOCK_REVISION_PARENT, eligible: [day('2026-11-23')], window: win(state) });
     expect(plan).toMatchObject({ kind: 'no-hold', verdictPresent: true });
     expect(heldChildren(plan).size).toBe(0);
   });
@@ -97,7 +104,6 @@ describe('R7b plan — planRevisionHold', () => {
       parent: XSTOCK_REVISION_PARENT,
       eligible,
       window: { ok: false, reason: 'found 0 rows' },
-      verdictState: null,
     });
     expect(plan.kind).toBe('window-unreadable');
     expect(heldChildren(plan)).toEqual(new Set(eligible.map((p) => p.child)));
@@ -111,23 +117,27 @@ describe('R7b plan — planRevisionHold', () => {
 });
 
 function fakeDeps(over: Partial<RevisionHoldDependencies> = {}) {
-  const raised: Array<{ title: string; severity: string; metadata: Record<string, unknown>; key: string }> = [];
+  const raised: Array<{ title: string; severity: string; metadata: Record<string, unknown>; key: string; category: string | undefined }> = [];
   const resolved: string[] = [];
+  const otherWindows: Array<{ prefix: string; keepKey: string }> = [];
   const lines: string[] = [];
-  const readWindowStart = vi.fn(async () => ok as { ok: true; start: Date } | { ok: false; reason: string });
+  const readWindowStart = vi.fn(async () => ({ ok: true, start: START }) as { ok: true; start: Date } | { ok: false; reason: string });
   const deps: RevisionHoldDependencies = {
     readWindowStart,
     verdictState: () => 'absent',
-    raiseAlert: async (title, _body, severity, metadata, key) => {
-      raised.push({ title, severity, metadata, key });
+    raiseAlert: async (title, _body, severity, metadata, key, category) => {
+      raised.push({ title, severity, metadata, key, category });
     },
     resolveAlerts: async (keys) => {
       resolved.push(...keys);
     },
+    resolveOtherWindows: async (prefix, keepKey) => {
+      otherWindows.push({ prefix, keepKey });
+    },
     log: (line) => lines.push(line),
     ...over,
   };
-  return { deps, raised, resolved, lines, readWindowStart };
+  return { deps, raised, resolved, otherWindows, lines, readWindowStart };
 }
 
 describe('R7b settle step — settleRevisionHold', () => {
@@ -138,6 +148,7 @@ describe('R7b settle step — settleRevisionHold', () => {
     expect(f.readWindowStart).not.toHaveBeenCalled();
     expect(f.raised).toEqual([]);
     expect(f.resolved).toEqual([]);
+    expect(f.otherWindows).toEqual([]);
   });
 
   it('hold: one HELD line per held partition, a warning on the hold key owned by this batch', async () => {
@@ -164,21 +175,53 @@ describe('R7b settle step — settleRevisionHold', () => {
     expect(cap?.metadata.released).toEqual(['2026-11-23']);
   });
 
-  it('verdict exists: no hold, the hold key is resolved', async () => {
+  it('every hold raise uses the non-breakage category (Step-4 fold-in d)', async () => {
+    const f = fakeDeps();
+    await settleRevisionHold(XSTOCK_REVISION_PARENT, ['2026-11-23', '2026-11-24', '2026-11-25', '2026-11-26'].map(day), f.deps);
+    const u = fakeDeps({ readWindowStart: async () => ({ ok: false, reason: 'found 0 rows' }) });
+    await settleRevisionHold(XSTOCK_REVISION_PARENT, [day('2026-11-23')], u.deps);
+    const all = [...f.raised, ...u.raised];
+    expect(all.map((r) => r.key).sort()).toEqual([holdAlertKey(START), holdCapAlertKey(START), WINDOW_UNREADABLE_ALERT_KEY].sort());
+    for (const r of all) expect(r.category).toBe('verification');
+  });
+
+  it('verdict exists: no hold, BOTH the hold key and the cap key are resolved', async () => {
     const f = fakeDeps({ verdictState: () => 'resolved' });
     const plan = await settleRevisionHold(XSTOCK_REVISION_PARENT, [day('2026-11-23')], f.deps);
     expect(plan.kind).toBe('no-hold');
     expect(f.raised).toEqual([]);
-    expect(f.resolved).toEqual([WINDOW_UNREADABLE_ALERT_KEY, holdAlertKey(START)]);
+    expect(f.resolved).toEqual([WINDOW_UNREADABLE_ALERT_KEY, holdAlertKey(START), holdCapAlertKey(START)]);
   });
 
-  it('window unreadable: holds everything, CRITICAL on the unreadable key, never throws', async () => {
+  it('nothing in window and no verdict: the hold key clears, the cap key STAYS (a cap release is a permanent loss)', async () => {
+    const f = fakeDeps();
+    const plan = await settleRevisionHold(XSTOCK_REVISION_PARENT, [day('2026-11-01')], f.deps);
+    expect(plan).toMatchObject({ kind: 'no-hold', verdictPresent: false });
+    expect(f.resolved).toEqual([WINDOW_UNREADABLE_ALERT_KEY, holdAlertKey(START)]);
+    expect(f.resolved).not.toContain(holdCapAlertKey(START));
+  });
+
+  it.each([
+    ['hold', () => 'absent' as const, [day('2026-11-23')]],
+    ['verdict exists', () => 'resolved' as const, [day('2026-11-23')]],
+    ['nothing in window', () => 'absent' as const, [day('2026-11-01')]],
+  ])('%s: older-window hold and cap rows are cleared, keeping the current window\'s keys (#1074 class)', async (_name, verdictState, eligible) => {
+    const f = fakeDeps({ verdictState });
+    await settleRevisionHold(XSTOCK_REVISION_PARENT, eligible, f.deps);
+    expect(f.otherWindows).toEqual([
+      { prefix: HOLD_ALERT_KEY_PREFIX, keepKey: holdAlertKey(START) },
+      { prefix: HOLD_CAP_ALERT_KEY_PREFIX, keepKey: holdCapAlertKey(START) },
+    ]);
+  });
+
+  it('window unreadable: holds everything, CRITICAL on the unreadable key, never throws, clears nothing', async () => {
     const f = fakeDeps({ readWindowStart: async () => ({ ok: false, reason: 'expected exactly one row, found 0' }) });
     const plan = await settleRevisionHold(XSTOCK_REVISION_PARENT, [day('2026-10-01'), day('2026-11-23')], f.deps);
     expect(plan.kind).toBe('window-unreadable');
     expect(heldChildren(plan).size).toBe(2);
     expect(f.raised).toEqual([expect.objectContaining({ severity: 'critical', key: WINDOW_UNREADABLE_ALERT_KEY })]);
     expect(f.resolved).toEqual([]);
+    expect(f.otherWindows).toEqual([]);
   });
 
   it('alert store unreadable: treated as no verdict, so the in-window partitions stay held', async () => {
@@ -192,16 +235,28 @@ describe('R7b settle step — settleRevisionHold', () => {
 describe('R7b wiring in the sweep loop', () => {
   const src = fs.readFileSync(new URL('../../scripts/b75-retention-sweep.ts', import.meta.url), 'utf8');
 
-  it('the loop skips a held child before it is processed', () => {
+  it('the loop skips a held child, counting it as held and NOT as examined, before it is processed', () => {
     const loop = src.slice(src.indexOf('const held = heldChildren(await settleRevisionHold('));
-    const skip = loop.indexOf('if (held.has(partition.child)) continue;');
+    const skip = loop.indexOf('if (held.has(partition.child)) { partitionsHeld++; continue; }');
+    const examined = loop.indexOf('partitionsExamined++');
     const process = loop.indexOf('processPartitionAndSettle(spec, partition, cfg)');
     expect(skip).toBeGreaterThan(0);
+    expect(examined).toBeGreaterThan(skip);
     expect(process).toBeGreaterThan(skip);
   });
 
-  it('the fenced started and DONE lines are untouched (B-DISK-FILE-TIERING AP-7)', () => {
+  it('the fenced started and DONE lines are untouched (B-DISK-FILE-TIERING AP-7); held= is appended at the end', () => {
     expect(src).toContain('`[B75 sweep] started at ${startedAt.toISOString()} run_id=');
     expect(src).toContain('[B75 sweep] DONE — examined=');
+    expect(src).toContain('`snapshot_failed=${snapshotFailed} duration_ms=${totalMs} held=${partitionsHeld}`');
+  });
+
+  it('the storage-health DONE reader still matches a DONE line carrying held=', () => {
+    const health = fs.readFileSync(new URL('../../scripts/b-storage-archival-health.ts', import.meta.url), 'utf8');
+    expect(health).toContain(String.raw`donePattern: /DONE .*\bfailed=(\d+)\b.*\bplain_failed=(\d+)\b.*\bsnapshot_failed=(\d+)\b/,`);
+    const donePattern = /DONE .*\bfailed=(\d+)\b.*\bplain_failed=(\d+)\b.*\bsnapshot_failed=(\d+)\b/;
+    const line = '[B75 sweep] DONE — examined=4 dropped=3 failed=0 bytes_freed=1 bytes_archived=1 plain_deleted=0 '
+      + 'plain_failed=0 snapshot_deleted=0 snapshot_failed=0 duration_ms=1200 held=2';
+    expect(donePattern.exec(line)?.slice(1)).toEqual(['0', '0', '0']);
   });
 });

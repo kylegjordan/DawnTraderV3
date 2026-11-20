@@ -5,6 +5,11 @@
 # outlives its successor's start cannot overlap it (the gate read alone can take ~11 minutes).
 
 set -eu
+# B1: never as root - the alerts file is deploy-owned. Schedule as: su - deploy -c "cd /home/deploy/dawntrader && <this script>"
+if [ "$(id -u)" = 0 ]; then
+  echo "[xstock-bar-verdict-runner] refusing to run as root; schedule it as su - deploy -c" >&2
+  exit 1
+fi
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 ROOT_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)

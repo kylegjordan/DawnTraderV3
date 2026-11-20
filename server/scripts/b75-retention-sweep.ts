@@ -62,19 +62,28 @@ import {
   deriveModeFromLabels,
   isPartitionEligible,
 } from '../services/data-archive/sweep-slicing.js';
-import { addAlert, getAlertDedupeState, resolveAlertsByDedupeKey } from '../services/system-alerts.js';
+import {
+  addAlert,
+  getAlertDedupeState,
+  resolveAlertsByDedupeKey,
+  resolveAlertsByDedupePrefix,
+  type AlertCategory,
+} from '../services/system-alerts.js';
 import {
   GRADED_WINDOW_START_SQL,
   heldChildren,
   holdAlertKey,
   holdCapAlertKey,
-  HOLD_CAP_DAYS,
+  HOLD_ALERT_KEY_PREFIX,
+  HOLD_CAP_ALERT_KEY_PREFIX,
+  HOLD_CAP_PARTITIONS,
   parseGradedWindowStart,
   planRevisionHold,
   registeredWindowEnd,
   verdictKey,
   WINDOW_UNREADABLE_ALERT_KEY,
   XSTOCK_REVISION_PARENT,
+  type RevisionHoldInput,
   type RevisionHoldPlan,
   type VerdictKeyState,
 } from '../services/data-archive/xstock-revision-verdict-hold.js';
@@ -1484,11 +1493,15 @@ async function raiseSweepAlert(
   severity: 'warning' | 'critical',
   metadata: Record<string, unknown>,
   dedupeKey: string,
+  // A sweep failure is a breakage. A state the sweep enters ON PURPOSE (the R7b hold) is not, so it
+  // passes its own category and a held partition never reads as something broken. Warning and
+  // critical rows still page either way.
+  category: AlertCategory = 'breakage',
 ): Promise<void> {
   try {
     await addAlert({
       triggers_at: new Date(), // immediate; dispatcher promotes scheduled→active next tick
-      category: 'breakage',
+      category,
       severity,
       title,
       body: `${body} First seen in sweep run ${RUN_ID} (${new Date().toISOString()}); ` +
@@ -1605,7 +1618,25 @@ export interface RevisionHoldDependencies {
   verdictState: (key: string) => VerdictKeyState;
   raiseAlert: typeof raiseSweepAlert;
   resolveAlerts: typeof resolveSweepAlerts;
+  /** Resolve every open row under `prefix` except `keepKey`: the orphans an older window left (#1074 class). */
+  resolveOtherWindows: (prefix: string, keepKey: string, what: string) => Promise<void>;
   log: (line: string) => void;
+}
+
+/** Default `resolveOtherWindows`. Never masks the sweep. */
+async function resolveOtherWindowAlerts(prefix: string, keepKey: string, what: string): Promise<void> {
+  try {
+    const ids = await resolveAlertsByDedupePrefix(
+      prefix,
+      SWEEP_ALERT_ACTOR,
+      `b75 sweep run ${RUN_ID}: ${what}`,
+      'timer-script',
+      new Set([keepKey]),
+    );
+    if (ids.length > 0) console.log(`[B75 sweep] resolved ${ids.length} older-window alert(s) under ${prefix}`);
+  } catch (alertErr) {
+    console.error(`[B75 sweep] failed to resolve older-window alerts under ${prefix}:`, alertErr);
+  }
 }
 
 /** The ONE governed read of the window start (SQL shared with the verdict runner). A failure of any
@@ -1629,10 +1660,13 @@ const DEFAULT_REVISION_HOLD_DEPS: RevisionHoldDependencies = {
   verdictState: (key) => getAlertDedupeState(key),
   raiseAlert: raiseSweepAlert,
   resolveAlerts: resolveSweepAlerts,
+  resolveOtherWindows: resolveOtherWindowAlerts,
   log: (line) => console.log(line),
 };
 
 const HOLD_BATCH = 'B-XSTOCK-BAR-AVAILABILITY';
+/** The hold is a deliberate state, not a breakage (Langston Step-4 fold-in d). Warning and critical still page. */
+const HOLD_ALERT_CATEGORY: AlertCategory = 'verification';
 
 /** Decide and announce the R7b hold for one table. Reads nothing for any table but the revision
  *  table. Returns the plan; the caller skips `heldChildren(plan)` and processes the rest normally. */
@@ -1643,11 +1677,12 @@ export async function settleRevisionHold(
 ): Promise<RevisionHoldPlan> {
   if (parent !== XSTOCK_REVISION_PARENT || eligible.length === 0) return { kind: 'not-applicable' };
 
-  const window = await deps.readWindowStart();
-  let verdictState: VerdictKeyState | null = null;
-  if (window.ok) {
+  const read = await deps.readWindowStart();
+  let window: RevisionHoldInput['window'];
+  if (read.ok) {
+    let verdictState: VerdictKeyState;
     try {
-      verdictState = deps.verdictState(verdictKey(window.start));
+      verdictState = deps.verdictState(verdictKey(read.start));
     } catch (err) {
       // The alert store could not be read: no evidence a verdict exists, so keep holding (capped).
       deps.log(
@@ -1655,8 +1690,11 @@ export async function settleRevisionHold(
       );
       verdictState = 'absent';
     }
+    window = { ok: true, start: read.start, verdictState };
+  } else {
+    window = read;
   }
-  const plan = planRevisionHold({ parent, eligible, window, verdictState });
+  const plan = planRevisionHold({ parent, eligible, window });
 
   if (plan.kind === 'window-unreadable') {
     deps.log(
@@ -1672,6 +1710,7 @@ export async function settleRevisionHold(
       'critical',
       { batch: HOLD_BATCH, parent, held: plan.held.map((p) => p.partitionLabel), reason: plan.reason },
       WINDOW_UNREADABLE_ALERT_KEY,
+      HOLD_ALERT_CATEGORY,
     );
     return plan;
   }
@@ -1683,29 +1722,34 @@ export async function settleRevisionHold(
   const windowStart = plan.windowStart;
   const end = registeredWindowEnd(windowStart);
   const key = verdictKey(windowStart);
+  // The sweep guards ONE window, the governed one. Hold and cap rows an older window left behind (the
+  // governed start moved, R2') are nobody's to clear any more, so they are cleared here.
+  const moved = `graded window is now ${windowStart.toISOString()}; rows of an older window cleared`;
+  await deps.resolveOtherWindows(HOLD_ALERT_KEY_PREFIX, holdAlertKey(windowStart), moved);
+  await deps.resolveOtherWindows(HOLD_CAP_ALERT_KEY_PREFIX, holdCapAlertKey(windowStart), moved);
   if (plan.kind === 'no-hold') {
     deps.log(
       `[B75 sweep] ${parent}: no hold — ${plan.verdictPresent
         ? `verdict exists on ${key}`
         : `no eligible partition inside graded window ${windowStart.toISOString()}..${end.toISOString()}`}`,
     );
-    await deps.resolveAlerts(
-      [holdAlertKey(windowStart)],
-      `${parent} hold ended (${plan.verdictPresent ? 'verdict exists' : 'nothing in window'})`,
-    );
+    // The hold row clears on any night that holds nothing. The cap row clears ONLY once a verdict
+    // exists: a cap release is a permanent loss for this window, so it stays until the window is graded.
+    const keys = plan.verdictPresent ? [holdAlertKey(windowStart), holdCapAlertKey(windowStart)] : [holdAlertKey(windowStart)];
+    await deps.resolveAlerts(keys, `${parent} hold ended (${plan.verdictPresent ? 'verdict exists' : 'nothing in window'})`);
     return plan;
   }
 
   plan.held.forEach((p, i) => {
     deps.log(
       `[B75 sweep] ${parent}/${p.partitionLabel}: HELD — inside graded window ${windowStart.toISOString()}..${end.toISOString()}, ` +
-        `no verdict on ${key} (held ${i + 1} of cap ${HOLD_CAP_DAYS})`,
+        `no verdict on ${key} (held ${i + 1} of cap ${HOLD_CAP_PARTITIONS})`,
     );
   });
   await deps.raiseAlert(
     'B75 sweep is holding xStock revision partitions for an open graded window',
     `No verdict exists yet on ${key}, so the sweep kept the revision partitions the window still needs hot instead of ` +
-      `archiving and dropping them: ${plan.held.map((p) => p.partitionLabel).join(', ')} (cap ${HOLD_CAP_DAYS}). ` +
+      `archiving and dropping them: ${plan.held.map((p) => p.partitionLabel).join(', ')} (cap ${HOLD_CAP_PARTITIONS} partitions). ` +
       'The hold ends by itself the night after a verdict is written, whatever it says; about 0.7 GiB of database disk per held day.',
     'warning',
     {
@@ -1716,20 +1760,22 @@ export async function settleRevisionHold(
       held: plan.held.map((p) => p.partitionLabel),
     },
     holdAlertKey(windowStart),
+    HOLD_ALERT_CATEGORY,
   );
   if (plan.capReleased.length > 0) {
     const released = plan.capReleased.map((p) => p.partitionLabel);
     deps.log(
-      `[B75 sweep] ${parent}: hold cap ${HOLD_CAP_DAYS} reached — releasing ${released.join(', ')} to normal archive-and-drop`,
+      `[B75 sweep] ${parent}: hold cap ${HOLD_CAP_PARTITIONS} reached — releasing ${released.join(', ')} to normal archive-and-drop`,
     );
     await deps.raiseAlert(
       'B75 sweep released in-window xStock revision partitions past the hold cap',
-      `The open graded window (${key}) still has no verdict and more than ${HOLD_CAP_DAYS} of its revision partitions are past ` +
+      `The open graded window (${key}) still has no verdict and more than ${HOLD_CAP_PARTITIONS} of its revision partitions are past ` +
         `retention. The oldest — ${released.join(', ')} — go through the normal export-verify-drop path tonight, so this ` +
         'window can no longer be graded in full. Find why the verdict runner has not written a verdict.',
       'critical',
       { batch: HOLD_BATCH, parent, window_start: windowStart.toISOString(), verdict_key: key, released },
       holdCapAlertKey(windowStart),
+      HOLD_ALERT_CATEGORY,
     );
   }
   return plan;
@@ -2210,6 +2256,7 @@ async function runSweep(options: { snapshotOnly: boolean } = { snapshotOnly: fal
 
   const startedAt = new Date();
   let partitionsExamined = 0;
+  let partitionsHeld = 0; // R7b: skipped on purpose, never counted as examined
   let partitionsDropped = 0;
   let partitionsFailed = 0;
   let bytesFreedTotal = 0;
@@ -2246,8 +2293,8 @@ async function runSweep(options: { snapshotOnly: boolean } = { snapshotOnly: fal
     const held = heldChildren(await settleRevisionHold(spec.parent, oldPartitions));
 
     for (const partition of oldPartitions) {
+      if (held.has(partition.child)) { partitionsHeld++; continue; } // R7b: logged and alerted by settleRevisionHold
       partitionsExamined++;
-      if (held.has(partition.child)) continue; // R7b: logged and alerted by settleRevisionHold
       console.log(
         `[B75 sweep] ${spec.parent}: processing partition=${partition.partitionLabel} child=${partition.child}`,
       );
@@ -2294,7 +2341,7 @@ async function runSweep(options: { snapshotOnly: boolean } = { snapshotOnly: fal
       `failed=${partitionsFailed} bytes_freed=${bytesFreedTotal} ` +
       `bytes_archived=${bytesArchivedTotal} plain_deleted=${plainResult.deleted} ` +
       `plain_failed=${plainResult.failed} snapshot_deleted=${snapshotRowsDeleted} `
-      + `snapshot_failed=${snapshotFailed} duration_ms=${totalMs}`,
+      + `snapshot_failed=${snapshotFailed} duration_ms=${totalMs} held=${partitionsHeld}`,
   );
   // Reaching DONE is the fatal key's resolve edge: a run that completes has not crashed.
   await resolveSweepAlerts([FATAL_ALERT_KEY], 'the whole sweep (reached DONE)');

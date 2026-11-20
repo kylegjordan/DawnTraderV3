@@ -4,8 +4,8 @@
  * C6 timing ruling 1573271063721287783).
  *
  * Why: the R2 window's gate read was missed while every session was stopped, and the sweep then dropped
- * two of the window's `xstock_bar_revision_event` partitions (11-09 and 11-10), so the window could no
- * longer be graded. R7 (the unattended verdict runner, 00:15 UTC) makes the verdict independent of a
+ * three of the window's `xstock_bar_revision_event` partitions (11-09, 11-10 and 11-11), so the window
+ * could no longer be graded. R7 (the unattended verdict runner, 00:15 UTC) makes the verdict independent of a
  * session; R7b makes R7 RETRYABLE — if a runner night fails, the data the next run needs is still hot.
  *
  * The rule, for `xstock_bar_revision_event` ONLY:
@@ -14,12 +14,25 @@
  *     (dedupe state `absent`), an age-eligible in-window partition is HELD: not exported, not dropped;
  *   - the hold ends the moment a verdict exists, WHATEVER it says (pass, fail or inconclusive) — the hold
  *     guards the read, never the result;
- *   - a hard cap of HOLD_CAP_DAYS (3) held partitions: beyond it the OLDEST in-window partitions are
+ *   - a hard cap of HOLD_CAP_PARTITIONS (3) held partitions — a count of child tables, not of days: a
+ *     daily child is one day, a monthly child is one partition however many days it spans; beyond it the OLDEST in-window partitions are
  *     released to the normal export-verify-drop path and a CRITICAL alert names them, because the window
  *     can then no longer be graded in full. `revisionHotRetentionDays` stays 8; the hold never edits it.
  *
  * Cost of the cap, recorded for the batch: ~0.7 GiB hot per held day (741,040,128 B measured for 11-09),
  * and at the cap the gate's two whole-table legs read ~1.43x the rows: ~665 s, 55% of its budget.
+ * What the cap buys: with `revisionHotRetentionDays` 8 against a 9-day window, a partition becomes
+ * age-eligible the night the window's runner first falls due, so a cap of 3 covers three runner-failure
+ * nights before the oldest in-window day is released (Langston Step-4 ruling 3).
+ *
+ * Alert edges (every key this rule raises has a named clearing edge):
+ *   - `…-sweep-hold:<start>` (warning): resolved on a night that holds nothing — a verdict exists, or no
+ *     eligible partition is in the window;
+ *   - `…-sweep-hold-cap:<start>` (critical): resolved only when a verdict exists for that window; a
+ *     cap release is a permanent loss for that window, so it stays until the window is graded;
+ *   - both keys for an OLDER window are resolved when the governed start moves (R2' re-registration),
+ *     because the sweep then guards the new window only;
+ *   - `…-sweep-hold-window-unreadable` (critical): resolved on the first night the window reads again.
  *
  * This module is pure: the sweep passes in the eligible partitions, the window start and the verdict
  * key's dedupe state, and acts on the returned plan. The verdict key and window length are defined HERE
@@ -31,8 +44,8 @@ export const XSTOCK_REVISION_PARENT = 'xstock_bar_revision_event';
 export const REGISTERED_WINDOW_DAYS = 9;
 export const REGISTERED_WINDOW_MS = REGISTERED_WINDOW_DAYS * 86_400_000;
 export const VERDICT_KEY_PREFIX = 'xstock-bar-availability-capacity-verdict:';
-/** At most this many in-window partitions are held at once (Langston r6). */
-export const HOLD_CAP_DAYS = 3;
+/** At most this many in-window partitions (child tables, not days) are held at once (Langston r6). */
+export const HOLD_CAP_PARTITIONS = 3;
 export const HOLD_ALERT_KEY_PREFIX = 'xstock-bar-availability-sweep-hold:';
 export const HOLD_CAP_ALERT_KEY_PREFIX = 'xstock-bar-availability-sweep-hold-cap:';
 export const WINDOW_UNREADABLE_ALERT_KEY = 'xstock-bar-availability-sweep-hold-window-unreadable';
@@ -89,15 +102,23 @@ export type RevisionHoldPlan =
   | { kind: 'window-unreadable'; held: HoldablePartition[]; reason: string }
   /** A verdict exists (any state), or nothing eligible is in the window: process everything normally. */
   | { kind: 'no-hold'; windowStart: Date; verdictPresent: boolean }
-  /** Hold `held` (newest first, at most HOLD_CAP_DAYS); `capReleased` are in-window but past the cap. */
+  /** Hold `held` (newest first, at most HOLD_CAP_PARTITIONS); `capReleased` are in-window but past the cap. */
   | { kind: 'hold'; windowStart: Date; held: HoldablePartition[]; capReleased: HoldablePartition[] };
 
-export function planRevisionHold(input: {
+/**
+ * The plan input. The verdict state is carried INSIDE the readable-window arm, so a readable window
+ * without a verdict state cannot be expressed (Langston Step-4 ruling 4: a `null` here used to read as
+ * "a verdict exists" and released the hold — fail-open).
+ */
+export type RevisionHoldInput = {
   parent: string;
   eligible: HoldablePartition[];
-  window: { ok: true; start: Date } | { ok: false; reason: string };
-  verdictState: VerdictKeyState | null;
-}): RevisionHoldPlan {
+  window:
+    | { ok: true; start: Date; verdictState: VerdictKeyState }
+    | { ok: false; reason: string };
+};
+
+export function planRevisionHold(input: RevisionHoldInput): RevisionHoldPlan {
   if (input.parent !== XSTOCK_REVISION_PARENT) return { kind: 'not-applicable' };
   if (!input.window.ok) {
     // No governed window ⇒ no way to tell which partitions the open window needs. Fail CLOSED for this
@@ -105,7 +126,7 @@ export function planRevisionHold(input: {
     return { kind: 'window-unreadable', held: [...input.eligible], reason: input.window.reason };
   }
   const windowStart = input.window.start;
-  if (input.verdictState !== 'absent') {
+  if (input.window.verdictState !== 'absent') {
     return { kind: 'no-hold', windowStart, verdictPresent: true };
   }
   const inWindow = input.eligible
@@ -115,8 +136,8 @@ export function planRevisionHold(input: {
   return {
     kind: 'hold',
     windowStart,
-    held: inWindow.slice(0, HOLD_CAP_DAYS),
-    capReleased: inWindow.slice(HOLD_CAP_DAYS),
+    held: inWindow.slice(0, HOLD_CAP_PARTITIONS),
+    capReleased: inWindow.slice(HOLD_CAP_PARTITIONS),
   };
 }
 

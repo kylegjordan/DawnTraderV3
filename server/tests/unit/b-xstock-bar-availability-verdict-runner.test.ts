@@ -2,18 +2,23 @@
  * B-XSTOCK-BAR-AVAILABILITY R7 — fences for the unattended verdict runner (Langston C6 ruling, C-1..C-3).
  * Every I/O edge is injected, so these run without a database, a git clone or the alert file.
  */
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   FINAL_GATE_OFFSET_MS,
+  applyRunnerChecks,
   buildVerdictAlert,
   classifyGateExit,
   decide,
   deployRefsFromReflog,
   finalGateAt,
+  hotCoverage,
   runVerdictRunner,
   runnerFailureKey,
   verdictKey,
+  unrecognisedReflogEntries,
   verdictReadBack,
+  type HotPartition,
   type RunnerDeps,
 } from '../../scripts/b-xstock-bar-availability-verdict-runner.js';
 import type { AddAlertOptions, AlertDedupeState, SystemAlert } from '../../services/system-alerts.js';
@@ -25,6 +30,20 @@ const SHA = (c: string) => c.repeat(40);
 function reflogLine(short: string, iso: string, sha: string): string {
   return `${short} HEAD@{${iso}}: reset: moving to ${sha}`;
 }
+
+const DAY = 86_400_000;
+/** Daily children covering [from, from + n days). */
+function dailyParts(fromIso: string, n: number): HotPartition[] {
+  const from = new Date(fromIso).getTime();
+  return Array.from({ length: n }, (_, i) => {
+    const d = new Date(from + i * DAY);
+    const label = d.toISOString().slice(0, 10).replace(/-/g, '_');
+    return { child: `xstock_bar_revision_event_${label}`, rangeStart: d, rangeEnd: new Date(d.getTime() + DAY) };
+  });
+}
+const FULL = dailyParts('2026-11-22T00:00:00.000Z', 11);
+const WINDOW_DAYS = ['2026-11-23', '2026-11-24', '2026-11-25', '2026-11-26', '2026-11-27',
+  '2026-11-28', '2026-11-29', '2026-11-30', '2026-12-01'];
 
 function passEvidence(state: 'pass' | 'fail' = 'pass'): string {
   return JSON.stringify({
@@ -124,6 +143,7 @@ describe('buildVerdictAlert (C-1 key + one-shot, C-2 checks and headline in meta
   const ctx = {
     windowStart: START, finalGateAt: finalGateAt(START), gradedRef: SHA('f'), reviewedRefs: [SHA('b'), SHA('f')],
     evidenceFile: '/var/log/dawntrader/x.json', runAt: new Date('2026-12-02T00:15:00.000Z'),
+    hotCoverage: hotCoverage(FULL, START), reflogUnrecognised: [] as string[],
   };
   it('PASS is info, one-shot, on the verdict key, with the full checks and the day count', () => {
     const out = classifyGateExit(0, null, passEvidence('pass'));
@@ -136,6 +156,9 @@ describe('buildVerdictAlert (C-1 key + one-shot, C-2 checks and headline in meta
     expect(a.metadata?.reviewed_refs_source).toBe('dt-deploy-reflog');
     expect(a.metadata?.headline).toMatchObject({ complete_utc_days: 9, days_beyond_registered: 0, complete_venue_sessions: 2, revision_events: 4321 });
     expect(a.metadata?.run_timing).toEqual({ totalMs: 480_000 });
+    expect(a.metadata?.in_window_days_missing_from_hot).toEqual([]);
+    expect(a.metadata?.in_window_days_compared).toEqual(WINDOW_DAYS);
+    expect((a.metadata?.hot_partitions_examined as string[]).length).toBe(11);
   });
   it('FAIL is a warning and names the failed checks', () => {
     const out = classifyGateExit(2, null, passEvidence('fail'));
@@ -149,8 +172,94 @@ describe('buildVerdictAlert (C-1 key + one-shot, C-2 checks and headline in meta
     if (out.kind !== 'verdict') throw new Error('expected verdict');
     const a = buildVerdictAlert(out, ctx);
     expect(a.severity).toBe('warning');
-    expect(a.metadata?.inconclusive).toEqual({ leg: 'population', reason: 'budget' });
+    expect(a.metadata?.inconclusive).toEqual({ leg: 'population', reason: 'budget', gate_state: 'inconclusive' });
     expect((a.metadata?.headline as Record<string, unknown>).complete_utc_days).toBeNull();
+  });
+  it('a runner DOWNGRADE keeps the gate counts and names the runner leg and the missing days', () => {
+    const cov = hotCoverage(dailyParts('2026-11-26T00:00:00.000Z', 7), START);
+    const out = applyRunnerChecks(classifyGateExit(0, null, passEvidence('pass')), cov, []);
+    if (out.kind !== 'verdict') throw new Error('expected verdict');
+    const a = buildVerdictAlert(out, { ...ctx, hotCoverage: cov });
+    expect(out.state).toBe('inconclusive');
+    expect(a.severity).toBe('warning');
+    expect(a.metadata?.state).toBe('inconclusive');
+    expect(a.metadata?.inconclusive).toMatchObject({ leg: 'runner-checks', gate_state: 'pass' });
+    expect(a.metadata?.in_window_days_missing_from_hot).toEqual(['2026-11-23', '2026-11-24', '2026-11-25']);
+    expect((a.metadata?.headline as Record<string, unknown>).complete_utc_days).toBe(9);
+    expect(a.title + a.body).toMatch(/INCONCLUSIVE/);
+  });
+});
+
+describe('hotCoverage (B2: the in-window days the hot partitions no longer hold — a MEASURED list)', () => {
+  it('full daily coverage ⇒ nothing missing, and the compared set is the nine window days', () => {
+    const c = hotCoverage(FULL, START);
+    expect(c.missing).toEqual([]);
+    expect(c.daysCompared).toEqual(WINDOW_DAYS);
+    expect(c.partitionsExamined).toHaveLength(11);
+  });
+  it('the R2 shape — earliest child 11-12 for a window opening 11-09 — names 11-09, 11-10 and 11-11', () => {
+    const r2 = new Date('2026-11-09T00:00:00.000Z');
+    const c = hotCoverage(dailyParts('2026-11-12T00:00:00.000Z', 23), r2);
+    expect(c.missing).toEqual(['2026-11-09', '2026-11-10', '2026-11-11']);
+    expect(c.daysCompared).toHaveLength(9);
+  });
+  it('a mid-day window start compares ten UTC days and needs only the in-window span of the first and last', () => {
+    const mid = new Date('2026-11-23T12:00:00.000Z');
+    const c = hotCoverage(dailyParts('2026-11-23T00:00:00.000Z', 10), mid);
+    expect(c.daysCompared).toHaveLength(10);
+    expect(c.missing).toEqual([]);
+    const short = hotCoverage(dailyParts('2026-11-23T00:00:00.000Z', 9), mid);
+    expect(short.missing).toEqual(['2026-12-02']);
+  });
+  it('a monthly child covers every day of its month', () => {
+    const m = [{ child: 'xstock_bar_revision_event_2026_11', rangeStart: new Date('2026-11-01T00:00:00Z'), rangeEnd: new Date('2026-12-01T00:00:00Z') }];
+    expect(hotCoverage(m, START).missing).toEqual(['2026-12-01']);
+  });
+  it('THROWS on an empty read — an empty list is never a pass', () => {
+    expect(() => hotCoverage([], START)).toThrow(/not evidence/);
+  });
+});
+
+describe('unrecognisedReflogEntries (allowlist: a dt-deploy reset or a known-good verb, nothing else)', () => {
+  const base = [
+    reflogLine('bbb', '2026-11-22T20:00:00+00:00', SHA('b')),
+    'aaa HEAD@{2026-11-20T09:00:00+00:00}: checkout: moving from x to y',
+  ];
+  it('a reset to HEAD is benign; a reset to a sha is a deploy; neither counts', () => {
+    const r = ['ccc HEAD@{2026-11-24T09:00:00+00:00}: reset: moving to HEAD', ...base].join('\n');
+    expect(unrecognisedReflogEntries(r, START)).toEqual([]);
+  });
+  it('a checkout, pull or commit since the opening build counts; one older than it does not', () => {
+    const r = ['ddd HEAD@{2026-11-24T09:00:00+00:00}: pull: Fast-forward',
+      'eee HEAD@{2026-11-25T09:00:00+00:00}: commit: local edit', ...base].join('\n');
+    const out = unrecognisedReflogEntries(r, START);
+    expect(out).toHaveLength(2);
+    expect(out.join(' ')).not.toMatch(/checkout/);
+  });
+  it('an entry between the opening build and the window start counts (it moved the build that ran at open)', () => {
+    const r = ['fff HEAD@{2026-11-22T22:00:00+00:00}: checkout: moving from a to b', ...base].join('\n');
+    expect(unrecognisedReflogEntries(r, START)).toHaveLength(1);
+  });
+  it('an unparseable line counts regardless of position', () => {
+    expect(unrecognisedReflogEntries(['garbage line', ...base].join('\n'), START)).toEqual(['garbage line']);
+  });
+});
+
+describe('applyRunnerChecks (only a PASS can be downgraded)', () => {
+  const cov = hotCoverage(FULL, START);
+  const gap = hotCoverage(dailyParts('2026-11-24T00:00:00.000Z', 9), START);
+  it('a clean pass stays a pass', () => {
+    expect(applyRunnerChecks(classifyGateExit(0, null, passEvidence('pass')), cov, [])).toMatchObject({ state: 'pass' });
+  });
+  it('missing days or an unrecognised reflog entry turn a pass inconclusive, naming each reason', () => {
+    const out = applyRunnerChecks(classifyGateExit(0, null, passEvidence('pass')), gap, ['x']);
+    expect(out).toMatchObject({ state: 'inconclusive', downgrade: { from: 'pass' } });
+    if (out.kind !== 'verdict') throw new Error('expected verdict');
+    expect(out.downgrade?.reasons).toHaveLength(2);
+  });
+  it('a FAIL stays a FAIL', () => {
+    expect(applyRunnerChecks(classifyGateExit(2, null, passEvidence('fail')), gap, ['x'])).toMatchObject({ state: 'fail' });
+    expect((applyRunnerChecks(classifyGateExit(2, null, passEvidence('fail')), gap, ['x']) as { downgrade?: unknown }).downgrade).toBeUndefined();
   });
 });
 
@@ -168,12 +277,15 @@ function harness(over: Partial<RunnerDeps> & { gate?: { code: number | null; sig
   const store: SystemAlert[] = [];
   const logs: string[] = [];
   const resolved: string[] = [];
+  const otherWindows: string[] = [];
   let gateCalls = 0;
   const deps: RunnerDeps = {
     now: () => new Date('2026-12-02T00:15:00.000Z'),
     readGovernedWindowStart: async () => START,
     readGradedRef: async () => `${SHA('f')}\n`,
     readReflog: () => [reflogLine('fff', '2026-11-22T20:00:00+00:00', SHA('f'))].join('\n'),
+    readRevisionPartitions: async () => FULL,
+    resolveOtherWindows: async (keep) => { otherWindows.push(keep); return []; },
     runGate: async () => { gateCalls += 1; return { ...(over.gate ?? { code: 0, signal: null, stdout: passEvidence('pass') }), stderr: '' }; },
     writeEvidence: async (name) => `/tmp/${name}`,
     dedupeState: (key): AlertDedupeState => (store.some((a) => a.dedupe_key === key) ? 'nonterminal' : 'absent'),
@@ -183,7 +295,7 @@ function harness(over: Partial<RunnerDeps> & { gate?: { code: number | null; sig
     log: (l) => logs.push(l),
     ...over,
   };
-  return { deps, store, logs, resolved, gateCalls: () => gateCalls };
+  return { deps, store, logs, resolved, otherWindows, gateCalls: () => gateCalls };
 }
 
 describe('runVerdictRunner (end to end with injected edges)', () => {
@@ -222,10 +334,73 @@ describe('runVerdictRunner (end to end with injected edges)', () => {
     expect(await runVerdictRunner(h.deps)).toBe('ran-no-verdict');
     expect(h.gateCalls()).toBe(0);
   });
-  it('a failed read-back throws rather than printing RAN-AND-WROTE', async () => {
+  it('a failed read-back RAISES on the failure key before it throws, and never prints RAN-AND-WROTE', async () => {
     const h = harness({ readAllAlerts: () => [] });
     await expect(runVerdictRunner(h.deps)).rejects.toThrow(/read-back failed/);
     expect(h.logs.some((l) => l.includes('RAN-AND-WROTE'))).toBe(false);
+    expect(h.store.map((a) => a.dedupe_key)).toEqual([verdictKey(START), runnerFailureKey(START)]);
+    expect(h.store[1].severity).toBe('warning');
+    expect(h.store[1].title).toMatch(/NOT read back/);
+    expect(h.resolved).toEqual([]);
+  });
+  it('a failed read-back still throws when the failure-key raise itself fails', async () => {
+    let n = 0;
+    const h = harness({ readAllAlerts: () => [] });
+    const add = h.deps.addAlert;
+    h.deps.addAlert = async (o) => { n += 1; if (n === 2) throw new Error('store down'); return add(o); };
+    await expect(runVerdictRunner(h.deps)).rejects.toThrow(/read-back failed/);
+    expect(h.logs.some((l) => l.includes('could not be raised'))).toBe(true);
+  });
+  it('every run clears older-window failure rows, keeping only the current key', async () => {
+    const h = harness({ now: () => new Date('2026-12-02T00:09:59.000Z') });
+    await runVerdictRunner(h.deps);
+    expect(h.otherWindows).toEqual([runnerFailureKey(START)]);
+  });
+  it('an older-window clear that throws does not stop the run', async () => {
+    const h = harness({ resolveOtherWindows: async () => { throw new Error('store down'); } });
+    expect(await runVerdictRunner(h.deps)).toBe('ran-and-wrote');
+    expect(h.logs.some((l) => l.includes('older-window clear failed'))).toBe(true);
+  });
+  it('days missing from the hot partitions turn a gate PASS into a recorded INCONCLUSIVE', async () => {
+    const h = harness({ readRevisionPartitions: async () => dailyParts('2026-11-26T00:00:00.000Z', 7) });
+    expect(await runVerdictRunner(h.deps)).toBe('ran-and-wrote');
+    expect(h.store[0].metadata.state).toBe('inconclusive');
+    expect(h.store[0].metadata.in_window_days_missing_from_hot).toEqual(['2026-11-23', '2026-11-24', '2026-11-25']);
+    expect(h.logs.at(-1)).toMatch(/missing_from_hot=3/);
+  });
+  it('an unrecognised reflog entry turns a gate PASS into a recorded INCONCLUSIVE and is listed', async () => {
+    const line = 'ddd HEAD@{2026-11-24T09:00:00+00:00}: pull: Fast-forward';
+    const h = harness({ readReflog: () => [line, reflogLine('fff', '2026-11-22T20:00:00+00:00', SHA('f'))].join('\n') });
+    expect(await runVerdictRunner(h.deps)).toBe('ran-and-wrote');
+    expect(h.store[0].metadata.state).toBe('inconclusive');
+    expect(h.store[0].metadata.reflog_unrecognised_entries).toEqual([line]);
+  });
+  it('a partition read that returns nothing ⇒ NO verdict, and the gate is never run', async () => {
+    const h = harness({ readRevisionPartitions: async () => [] });
+    expect(await runVerdictRunner(h.deps)).toBe('ran-no-verdict');
+    expect(h.gateCalls()).toBe(0);
+    expect(h.store[0].dedupe_key).toBe(runnerFailureKey(START));
+    expect(h.store[0].metadata.reason).toMatch(/not evidence/);
+  });
+  it('a partition read that throws ⇒ NO verdict, and the gate is never run', async () => {
+    const h = harness({ readRevisionPartitions: async () => { throw new Error('connection reset'); } });
+    expect(await runVerdictRunner(h.deps)).toBe('ran-no-verdict');
+    expect(h.gateCalls()).toBe(0);
+    expect(h.store.every((a) => a.dedupe_key !== verdictKey(START))).toBe(true);
+  });
+});
+
+describe('B1: never as root', () => {
+  it('the runner refuses uid 0 before it touches anything', () => {
+    const src = readFileSync('server/scripts/b-xstock-bar-availability-verdict-runner.ts', 'utf8');
+    const main = src.slice(src.indexOf('async function main()'));
+    expect(main.indexOf('process.getuid?.() === 0')).toBeGreaterThan(-1);
+    expect(main.indexOf('process.getuid?.() === 0')).toBeLessThan(main.indexOf('runVerdictRunner('));
+  });
+  it('the launcher refuses uid 0 before it takes the lock', () => {
+    const sh = readFileSync('server/scripts/b-xstock-bar-availability-verdict-run.sh', 'utf8');
+    expect(sh).toMatch(/if \[ "\$\(id -u\)" = 0 \]; then[\s\S]*?exit 1/);
+    expect(sh.indexOf('id -u')).toBeLessThan(sh.indexOf('/usr/bin/flock -n'));
   });
 });
 
