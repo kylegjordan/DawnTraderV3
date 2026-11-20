@@ -1,6 +1,10 @@
 /**
  * B-XSTOCK-BAR-AVAILABILITY R7 — the unattended verdict runner (Langston C6 ruling, 2026-11-20).
  *
+ * Cron line (root crontab on staging — daily 00:15 UTC; installed by Infra 2026-11-20, line 15 of 15;
+ * the archival-health check holds its schedule equal to this line, R7d):
+ *   15 0 * * * su - deploy -c "cd /home/deploy/dawntrader && server/scripts/b-xstock-bar-availability-verdict-run.sh" >> /var/log/dawntrader/xstock-bar-availability-verdict.log 2>&1
+ *
  * Why it exists: the R2 window's final gate read was missed while every session was stopped, and
  * the nightly B75 sweep then dropped three of the window's revision partitions (11-09, 11-10 and 11-11).
  * A verdict must not depend on a session being awake. This runner is scheduled from root's crontab beside
@@ -54,7 +58,15 @@
  * resolved on each run once the governed start has moved (R2'). A read-back failure raises on that key
  * and stays open for the grading session: that case needs a person to look.
  *
- * Prints exactly one of: `RAN-AND-WROTE`, `RAN-NO-VERDICT`, `SKIPPED not-due`, `SKIPPED verdict-exists`.
+ * Between the R7d started and DONE lines it prints exactly one result: `RAN-AND-WROTE`, `RAN-NO-VERDICT`, `SKIPPED not-due`, `SKIPPED verdict-exists`.
+ *
+ * R7d — LIVENESS (the gap between "it was scheduled" and "it ran"). The nightly archival-health check
+ * grades this job like the B75 sweeps: `main` writes `started at <ISO>` first and, on every terminal
+ * result, `DONE result=<result> failed=<0|1>` (1 only for ran-no-verdict). No start line after the
+ * 00:15Z fire pages `not_started`; a start with no DONE after it (a fatal, a kill) pages `incomplete`;
+ * a missing crontab line or a different expression pages `not_scheduled` / `schedule_drift`. A night
+ * the launcher skips because the lock is held writes no start line, so it pages `not_started` — on
+ * purpose: a run still holding the lock 24 h later needs a person.
  */
 import 'dotenv/config';
 import pg from 'pg';
@@ -531,14 +543,35 @@ async function readRevisionPartitions(): Promise<HotPartition[]> {
   });
 }
 
+/**
+ * R7d: SIGKILL the whole process group led by `pid` (the gate child is spawned `detached`, so its pid is the
+ * group id). If the group signal throws (the group is already gone, or no pid), fall back to the direct kill.
+ */
+export function killProcessGroup(
+  pid: number | undefined,
+  fallback: () => void,
+  kill: (pid: number, signal: NodeJS.Signals) => void = (p, sig) => { process.kill(p, sig); },
+): 'group' | 'fallback' {
+  if (typeof pid === 'number' && pid > 0) {
+    try {
+      kill(-pid, 'SIGKILL');
+      return 'group';
+    } catch { /* fall through to the direct kill */ }
+  }
+  fallback();
+  return 'fallback';
+}
+
 function runGate(args: string[]): Promise<{ code: number | null; signal: string | null; stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
-    const child = spawn('npx', ['tsx', GATE_SCRIPT, ...args], { env: process.env, stdio: ['ignore', 'pipe', 'pipe'] });
+    // R7d: `detached` puts npx, tsx and the gate's node in their OWN process group, so the timeout can kill
+    // all of them. `child.kill` alone signals only npx and leaves the gate running (and holding a DB client).
+    const child = spawn('npx', ['tsx', GATE_SCRIPT, ...args], { env: process.env, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
     let stdout = '';
     let stderr = '';
     child.stdout.on('data', (chunk) => { stdout += String(chunk); });
     child.stderr.on('data', (chunk) => { stderr += String(chunk); });
-    const timer = setTimeout(() => child.kill('SIGKILL'), GATE_CHILD_TIMEOUT_MS);
+    const timer = setTimeout(() => killProcessGroup(child.pid, () => child.kill('SIGKILL')), GATE_CHILD_TIMEOUT_MS);
     child.on('error', (error) => { clearTimeout(timer); reject(error); });
     child.on('close', (code, signal) => { clearTimeout(timer); resolve({ code, signal, stdout, stderr }); });
   });
@@ -552,6 +585,8 @@ async function main(): Promise<void> {
     process.exitCode = 1;
     return;
   }
+  // R7d: the archival-health check reads these two lines (its startPattern / donePattern) — a cross-file contract.
+  console.log(`${LOG} started at ${new Date().toISOString()}`);
   const dir = process.env.XSTOCK_VERDICT_DIR || '/var/log/dawntrader';
   const result = await runVerdictRunner({
     now: () => new Date(),
@@ -575,6 +610,7 @@ async function main(): Promise<void> {
     log: (line) => console.log(line),
   });
   process.exitCode = result === 'ran-no-verdict' ? 1 : 0;
+  console.log(`${LOG} DONE result=${result} failed=${result === 'ran-no-verdict' ? 1 : 0}`);
 }
 
 const invokedPath = process.argv[1] ? pathToFileURL(process.argv[1]).href : '';

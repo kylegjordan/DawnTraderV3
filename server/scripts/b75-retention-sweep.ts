@@ -1675,7 +1675,10 @@ export async function settleRevisionHold(
   eligible: PartitionRow[],
   deps: RevisionHoldDependencies = DEFAULT_REVISION_HOLD_DEPS,
 ): Promise<RevisionHoldPlan> {
-  if (parent !== XSTOCK_REVISION_PARENT || eligible.length === 0) return { kind: 'not-applicable' };
+  // R7d (carried item 4): an EMPTY eligible list still runs — the night after the last held partition ages
+  // past the window (or a verdict lands with nothing eligible), the hold row must clear, and only a run that
+  // reaches the no-hold branch below can clear it. Returning early here left `…-sweep-hold:<start>` open.
+  if (parent !== XSTOCK_REVISION_PARENT) return { kind: 'not-applicable' };
 
   const read = await deps.readWindowStart();
   let window: RevisionHoldInput['window'];
@@ -1696,6 +1699,12 @@ export async function settleRevisionHold(
   }
   const plan = planRevisionHold({ parent, eligible, window });
 
+  if (plan.kind === 'window-unreadable' && plan.held.length === 0) {
+    // Nothing is eligible, so nothing is held and no data is at risk tonight: log it and page nothing. The
+    // unreadable row (if open) is NOT resolved — the window is still unreadable.
+    deps.log(`[B75 sweep] ${parent}: graded window unreadable (${plan.reason}); no eligible partition, nothing held`);
+    return plan;
+  }
   if (plan.kind === 'window-unreadable') {
     deps.log(
       `[B75 sweep] ${parent}: HOLD ALL ${plan.held.length} eligible partition(s) — graded window unreadable (${plan.reason})`,
@@ -2281,6 +2290,10 @@ async function runSweep(options: { snapshotOnly: boolean } = { snapshotOnly: fal
       await ctlList.end();
     }
 
+    // R7d: settle BEFORE the empty-list skip, so a night with nothing eligible still clears the revision
+    // table's hold row (settleRevisionHold reads nothing for any other table).
+    const held = heldChildren(await settleRevisionHold(spec.parent, oldPartitions));
+
     if (oldPartitions.length === 0) {
       console.log(
         `[B75 sweep] ${spec.parent}: no partitions older than ${cutoffMonth
@@ -2289,8 +2302,6 @@ async function runSweep(options: { snapshotOnly: boolean } = { snapshotOnly: fal
       );
       continue;
     }
-
-    const held = heldChildren(await settleRevisionHold(spec.parent, oldPartitions));
 
     for (const partition of oldPartitions) {
       if (held.has(partition.child)) { partitionsHeld++; continue; } // R7b: logged and alerted by settleRevisionHold

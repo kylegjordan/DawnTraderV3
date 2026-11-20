@@ -13,6 +13,7 @@ import {
   deployRefsFromReflog,
   finalGateAt,
   hotCoverage,
+  killProcessGroup,
   runVerdictRunner,
   runnerFailureKey,
   verdictKey,
@@ -410,5 +411,77 @@ describe('verdictReadBack', () => {
     expect(verdictReadBack([row], 'k', row, 'pass')).toBe(true);
     expect(verdictReadBack([row], 'k', row, 'fail')).toBe(false);
     expect(verdictReadBack([row, { ...row, id: 'id-2' }], 'k', row, 'pass')).toBe(false);
+  });
+});
+
+describe('R7d: killProcessGroup (the timeout kills npx, tsx and the gate together)', () => {
+  it('signals the negative pid (the whole group) with SIGKILL and skips the fallback', () => {
+    const calls: Array<[number, string]> = [];
+    let fellBack = false;
+    const out = killProcessGroup(4242, () => { fellBack = true; }, (p, sig) => { calls.push([p, sig]); });
+    expect(out).toBe('group');
+    expect(calls).toEqual([[-4242, 'SIGKILL']]);
+    expect(fellBack).toBe(false);
+  });
+  it('a throwing group signal falls back to the direct kill', () => {
+    let fellBack = false;
+    const out = killProcessGroup(4242, () => { fellBack = true; }, () => { throw new Error('ESRCH'); });
+    expect(out).toBe('fallback');
+    expect(fellBack).toBe(true);
+  });
+  it.each([undefined, 0])('no usable pid (%s) never signals a group, only the fallback', (pid) => {
+    const calls: number[] = [];
+    let fellBack = false;
+    const out = killProcessGroup(pid, () => { fellBack = true; }, (p) => { calls.push(p); });
+    expect(out).toBe('fallback');
+    expect(calls).toEqual([]);
+    expect(fellBack).toBe(true);
+  });
+  it('the gate child is spawned detached and the timer goes through killProcessGroup', () => {
+    const src = readFileSync('server/scripts/b-xstock-bar-availability-verdict-runner.ts', 'utf8');
+    const gate = src.slice(src.indexOf('function runGate('), src.indexOf('async function main()'));
+    expect(gate).toMatch(/spawn\('npx', \['tsx', GATE_SCRIPT, \.\.\.args\], \{[^}]*detached: true/);
+    expect(gate).toContain("setTimeout(() => killProcessGroup(child.pid, () => child.kill('SIGKILL')), GATE_CHILD_TIMEOUT_MS)");
+  });
+});
+
+describe('R7d: the started and DONE lines the archival-health check grades', () => {
+  const src = readFileSync('server/scripts/b-xstock-bar-availability-verdict-runner.ts', 'utf8');
+  const main = src.slice(src.indexOf('async function main()'));
+  const health = readFileSync('server/scripts/b-storage-archival-health.ts', 'utf8');
+  const spec = health.slice(health.indexOf("name: 'xstock-bar-verdict'"));
+  const startPattern = /\[xstock-bar-verdict-runner\] started at (\S+)/;
+  const donePattern = /\[xstock-bar-verdict-runner\] DONE result=\S+ failed=(\d+)/;
+
+  it('started comes after the root refusal and before the run; DONE comes after it', () => {
+    const root = main.indexOf('process.getuid?.() === 0');
+    const started = main.indexOf('console.log(`${LOG} started at ${new Date().toISOString()}`);');
+    const run = main.indexOf('runVerdictRunner(');
+    const done = main.indexOf("console.log(`${LOG} DONE result=${result} failed=${result === 'ran-no-verdict' ? 1 : 0}`);");
+    expect(root).toBeGreaterThan(-1);
+    expect(started).toBeGreaterThan(root);
+    expect(run).toBeGreaterThan(started);
+    expect(done).toBeGreaterThan(run);
+  });
+
+  it('the CheckSpec carries exactly these patterns, the log file the cron line writes, and the cron schedule', () => {
+    expect(spec).toContain(String.raw`donePattern: /\[xstock-bar-verdict-runner\] DONE result=\S+ failed=(\d+)/,`);
+    expect(spec).toContain(String.raw`startPattern: /\[xstock-bar-verdict-runner\] started at (\S+)/,`);
+    expect(spec).toContain("logFile: 'xstock-bar-availability-verdict.log',");
+    expect(spec).toContain("schedule: '15 0 * * *',");
+    expect(spec).toContain("onMissing: 'alert',");
+    expect(src).toContain('>> /var/log/dawntrader/xstock-bar-availability-verdict.log 2>&1');
+  });
+
+  it('lines built the way main builds them match the patterns; only ran-no-verdict counts as failed', () => {
+    const LOG = '[xstock-bar-verdict-runner]';
+    const iso = '2026-11-21T00:15:01.234Z';
+    expect(startPattern.exec(`${LOG} started at ${iso}`)?.[1]).toBe(iso);
+    const doneLine = (result: string) => `${LOG} DONE result=${result} failed=${result === 'ran-no-verdict' ? 1 : 0}`;
+    expect(donePattern.exec(doneLine('ran-and-wrote'))?.[1]).toBe('0');
+    expect(donePattern.exec(doneLine('skipped-not-due'))?.[1]).toBe('0');
+    expect(donePattern.exec(doneLine('skipped-verdict-exists'))?.[1]).toBe('0');
+    expect(donePattern.exec(doneLine('ran-no-verdict'))?.[1]).toBe('1');
+    expect(donePattern.exec(`${LOG} fatal: Error: boom`)).toBeNull();
   });
 });

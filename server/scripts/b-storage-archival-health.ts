@@ -186,6 +186,20 @@ const CHECKS: CheckSpec[] = [
     startPattern: /\[disk-tiering\] (\S+) started run /,
     onMissing: 'alert',
   },
+  {
+    // B-XSTOCK-BAR-AVAILABILITY R7d (carried item 2): the unattended verdict runner's liveness. The runner
+    // raises its own warning on a no-verdict night; this check catches what it cannot report itself — a night it
+    // never started (cron line gone, lock still held, launcher refused) or never finished (fatal, killed), and a
+    // crontab line that drifted from 15 0 * * *. `failed` is 1 only for ran-no-verdict. 'alert' from the start:
+    // the first fire (00:15Z 2026-11-21) precedes any 05:00Z run of this check that could carry this entry.
+    name: 'xstock-bar-verdict',
+    label: 'xStock bar availability verdict runner (daily 00:15 UTC)',
+    logFile: 'xstock-bar-availability-verdict.log',
+    schedule: '15 0 * * *',
+    donePattern: /\[xstock-bar-verdict-runner\] DONE result=\S+ failed=(\d+)/,
+    startPattern: /\[xstock-bar-verdict-runner\] started at (\S+)/,
+    onMissing: 'alert',
+  },
 ];
 
 async function fire(

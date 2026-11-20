@@ -232,6 +232,45 @@ describe('R7b settle step — settleRevisionHold', () => {
   });
 });
 
+describe('R7d: a night with NO eligible revision partition still settles the hold keys', () => {
+  it('readable window, no verdict, nothing eligible: the hold key clears, the cap key stays', async () => {
+    const f = fakeDeps();
+    const plan = await settleRevisionHold(XSTOCK_REVISION_PARENT, [], f.deps);
+    expect(plan).toMatchObject({ kind: 'no-hold', verdictPresent: false });
+    expect(f.readWindowStart).toHaveBeenCalledTimes(1);
+    expect(f.raised).toEqual([]);
+    expect(f.resolved).toEqual([WINDOW_UNREADABLE_ALERT_KEY, holdAlertKey(START)]);
+  });
+
+  it('readable window, verdict present, nothing eligible: both the hold and cap keys clear', async () => {
+    const f = fakeDeps({ verdictState: () => 'resolved' });
+    const plan = await settleRevisionHold(XSTOCK_REVISION_PARENT, [], f.deps);
+    expect(plan).toMatchObject({ kind: 'no-hold', verdictPresent: true });
+    expect(f.resolved).toEqual([WINDOW_UNREADABLE_ALERT_KEY, holdAlertKey(START), holdCapAlertKey(START)]);
+  });
+
+  it('window unreadable with nothing eligible: nothing held, NO critical raised, and the unreadable key is NOT resolved', async () => {
+    const f = fakeDeps({ readWindowStart: async () => ({ ok: false, reason: 'found 0 rows' }) });
+    const plan = await settleRevisionHold(XSTOCK_REVISION_PARENT, [], f.deps);
+    expect(plan.kind).toBe('window-unreadable');
+    expect(heldChildren(plan).size).toBe(0);
+    expect(f.raised).toEqual([]);
+    expect(f.resolved).toEqual([]);
+    expect(f.otherWindows).toEqual([]);
+    expect(f.lines.some((l) => l.includes('no eligible partition, nothing held'))).toBe(true);
+  });
+
+  it('the sweep settles the hold BEFORE it skips a table with no old partitions', () => {
+    const src = fs.readFileSync(new URL('../../scripts/b75-retention-sweep.ts', import.meta.url), 'utf8');
+    const settle = src.indexOf('const held = heldChildren(await settleRevisionHold(spec.parent, oldPartitions));');
+    expect(settle).toBeGreaterThan(0);
+    const empty = src.indexOf('if (oldPartitions.length === 0)', settle);
+    expect(empty).toBeGreaterThan(settle);
+    expect(src.lastIndexOf('if (oldPartitions.length === 0)', settle)).toBeLessThan(src.lastIndexOf('for (const spec', settle));
+    expect(src.match(/settleRevisionHold\(spec\.parent/g)).toHaveLength(1);
+  });
+});
+
 describe('R7b wiring in the sweep loop', () => {
   const src = fs.readFileSync(new URL('../../scripts/b75-retention-sweep.ts', import.meta.url), 'utf8');
 
