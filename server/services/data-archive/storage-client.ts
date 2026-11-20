@@ -1003,23 +1003,6 @@ export class StorageClient {
   }
 
   /**
-   * Deletes ONE file version by id (amendment 4 C-1: the 3a proof objects; 3b: the P10 orphan). Needs the `deleteFiles`
-   * capability, which the narrowed key of 3d will not have — so this is usable only until 3d step 5.
-   */
-  async deleteColdVersion(fileName: string, fileId: string): Promise<void> {
-    const auth = await this.b2Authorize();
-    const res = await fetch(`${auth.apiUrl}/b2api/v3/b2_delete_file_version`, {
-      method: 'POST',
-      headers: { Authorization: auth.accountAuthToken, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fileName, fileId }),
-    });
-    if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      throw new Error(`[B75 storage-client] B2 delete_file_version failed: ${res.status} — ${body}`);
-    }
-  }
-
-  /**
    * B-DISK-FILE-TIERING 3d step 1 — HIDE the current version of a name (`b2_hide_file`). Replaces `deleteCold` (rule 18):
    * after 3d the cold key holds listFiles/readFiles/writeFiles only, and a hide is a WRITE. 3d STEP 2 (not yet in place
    * at this commit) adds the bucket lifecycle rule on `_liveness/` and `_proof/` (daysFromHidingToDeleting 1 AND

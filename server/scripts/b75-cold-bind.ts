@@ -16,18 +16,15 @@
  * records provider_file_id / provider_sha1 / provider_bytes and verification_method 'b2-sha1-attested'.
  *
  * It also reports every stored version whose name has NO manifest row (orphans — the P10 orphan, a failed retry's
- * leftover) and every non-newest duplicate: the inventory item 4 deletes from.
+ * leftover) and every non-newest duplicate (reported only; nothing in the code deletes them since the 3d close).
  *
  * DEFAULT IS A REPORT. Nothing is written and nothing is downloaded without --apply.
  * Usage (as deploy, on staging):  npx tsx server/scripts/b75-cold-bind.ts [--apply]
  *
- * 3b item 4 — RESIDUE DELETION (by file id, with the wide key, before 3d step 5 removes every delete right):
- *   npx tsx server/scripts/b75-cold-bind.ts --delete-residue <fileId>[,<fileId>...]
- * deletes ONLY ids that are BOTH named on the command line AND in the delete set this run computes itself (orphans in
- * DawnTrader's own namespaces + duplicates/losers of bound rows), and NEVER an id any manifest row's provider_file_id
- * names. An id outside that intersection is refused and nothing is deleted. A named id that is no longer listed is
- * reported, not an error (already gone). The delete set comes from orphanVersions / planColdBindings ONLY, never from
- * the owner counts (Langston item 3 r2). Permanent: the operator runs the report first and passes the ids it printed.
+ * 3d close (2026-11-20, rule 18): the RESIDUE DELETION mode (--delete-residue) and StorageClient.deleteColdVersion were
+ * REMOVED — after 3d there is no deleter of cold data in our code (the cold key cannot delete either). The report still
+ * prints the RESIDUE-SET (orphans + unbound duplicates) for Kyle's keep decision (data_lifecycle.cold_residue_kept_file_ids).
+ * DR procedure and archive: 1-system-manual/DELETED_COMPONENTS_LOG.md, 2026-11-20 entry.
  * ═════════════════════════════════════════════════════════════════════════════
  */
 
@@ -132,8 +129,8 @@ export function orphanVersions(versions: B2ListedVersion[], claimedPaths: Set<st
 }
 
 /**
- * Pure: the residue delete set — orphans in our own namespaces, plus every non-chosen version of a bound row's name —
- * minus any id a manifest row is bound to. The only source item 4 deletes from. Exported for tests.
+ * Pure: the residue set — orphans in our own namespaces, plus every non-chosen version of a bound row's name — minus
+ * any id a manifest row is bound to. Reported only since the 3d close removed the deleter (rule 18). Exported for tests.
  */
 export function residueDeleteSet(
   versions: B2ListedVersion[],
@@ -164,31 +161,6 @@ export function residueDeleteSet(
   return [...out.values()];
 }
 
-/**
- * Pure: why a --delete-residue run must refuse — every named id that is listed but outside the computed set, bound to a
- * manifest row, or on a name whose manifest row is still UNBOUND (nothing proven to keep yet; Langston item 4 C-1 —
- * keyed on the manifest, not the plan; an orphan has no row, so it is never in `unboundPaths`). Empty = may delete.
- */
-export function deleteRefusals(
-  deleteIds: Set<string>,
-  delSet: B2ListedVersion[],
-  listing: B2ListedVersion[],
-  boundIds: Set<string>,
-  unboundPaths: Set<string>,
-  coldUris: string[],
-): { notInSet: string[]; bound: string[]; unproven: string[]; unparseableUris: string[] } {
-  const inSet = new Set(delSet.map((v) => v.fileId));
-  const listed = new Map(listing.map((v) => [v.fileId, v]));
-  return {
-    notInSet: [...deleteIds].filter((id) => listed.has(id) && !inSet.has(id)),
-    bound: [...deleteIds].filter((id) => boundIds.has(id)),
-    unproven: [...deleteIds].filter((id) => unboundPaths.has(listed.get(id)?.fileName ?? '')),
-    // Langston item 4 r2: a cold row whose storage_uri does not parse drops out of BOTH the claimed set and the
-    // unbound set, so the object it references would read as an orphan and be deletable. Any such row refuses the run.
-    unparseableUris: coldUris.filter((u) => coldPathOf(u) === null),
-  };
-}
-
 /** Pure: stored VERSIONS (uploads only — hide markers are not versions) outside the archive namespaces, counted by
  * first segment and labelled by owner. Reported, never touched. */
 export function otherOwnerCounts(versions: B2ListedVersion[], ownPrefixes: Set<string>): Map<string, number> {
@@ -203,13 +175,6 @@ export function otherOwnerCounts(versions: B2ListedVersion[], ownPrefixes: Set<s
 
 async function main(): Promise<void> {
   const apply = process.argv.includes('--apply');
-  const delIdx = process.argv.indexOf('--delete-residue');
-  const deleteIds = delIdx >= 0 ? new Set((process.argv[delIdx + 1] ?? '').split(',').map((x) => x.trim()).filter(Boolean)) : null;
-  if (delIdx >= 0 && process.argv.slice(delIdx + 2).some((a) => !a.startsWith('--'))) {
-    throw new Error('[B75 cold-bind] --delete-residue takes ONE comma-separated list; a stray argument would be silently dropped');
-  }
-  if (deleteIds && apply) throw new Error('[B75 cold-bind] --apply and --delete-residue are separate runs');
-  if (deleteIds && deleteIds.size === 0) throw new Error('[B75 cold-bind] --delete-residue needs the ids the report printed');
   const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
   await client.connect();
   try {
@@ -238,7 +203,7 @@ async function main(): Promise<void> {
     console.log(`[B75 cold-bind] listed ${listing.versions.length} version(s) in ${listing.pages} page(s) of ${bucket}; ${r.rows.length} unbound cold row(s); apply=${apply}`);
     for (const [seg, n] of otherOwnerCounts(listing.versions, ownPrefixes)) {
       // an unrecognised first segment is UNKNOWN, not quietly "another owner" (Langston item 3 r2, carried for item 4:
-      // a mistyped namespace must surface). Item 4 takes its delete set from orphanVersions ONLY, never from these counts.
+      // a mistyped namespace must surface). The residue set comes from orphanVersions ONLY, never from these counts.
       const kind = COLD_NON_ARCHIVE_PREFIXES.get(seg);
       const who = kind === 'ours-untracked' ? 'ours, not manifest-tracked (never an orphan)'
         : kind === 'other-owner' ? 'other owner (never touched)'
@@ -249,9 +214,9 @@ async function main(): Promise<void> {
       console.log(`[B75 cold-bind] ORPHAN (no manifest row): ${o.fileName} id=${o.fileId} bytes=${o.contentLength} sha1=${o.contentSha1} uploaded=${new Date(o.uploadTimestamp).toISOString()}`);
     }
     const decisions = planColdBindings(r.rows, listing.versions);
-    const delSet = residueDeleteSet(listing.versions, claimed, ownPrefixes, decisions, boundIds);
-    for (const v of delSet) {
-      console.log(`[B75 cold-bind] DELETE-SET ${v.fileName} id=${v.fileId} bytes=${v.contentLength} uploaded=${new Date(v.uploadTimestamp).toISOString()}`);
+    const residueSet = residueDeleteSet(listing.versions, claimed, ownPrefixes, decisions, boundIds);
+    for (const v of residueSet) {
+      console.log(`[B75 cold-bind] RESIDUE-SET ${v.fileName} id=${v.fileId} bytes=${v.contentLength} uploaded=${new Date(v.uploadTimestamp).toISOString()}`);
     }
     let failures = 0;
     for (const d of decisions) {
@@ -301,36 +266,6 @@ async function main(): Promise<void> {
       );
       if (u.rowCount !== 1) { failures++; console.error(`[B75 cold-bind] ${name}: the row changed underneath (updated ${u.rowCount})`); continue; }
       console.log(`[B75 cold-bind] ${name}: BOUND`);
-    }
-    if (deleteIds) {
-      // item 4, after the report loop so the delete run's own output shows the plan it deletes against (C-4). With
-      // apply false that loop wrote nothing and downloaded nothing.
-      const byId = new Map(delSet.map((v) => [v.fileId, v]));
-      // C-1: a name whose manifest row is still UNBOUND has nothing proven to keep — none of its versions may go yet.
-      const unboundPaths = new Set(r.rows.map((x) => coldPathOf(x.storage_uri)?.path).filter((x): x is string => !!x));
-      const { notInSet, bound, unproven, unparseableUris } = deleteRefusals(
-        deleteIds, delSet, listing.versions, boundIds, unboundPaths, all.rows.filter((x) => x.tier === 'cold').map((x) => x.storage_uri),
-      );
-      if (notInSet.length > 0 || bound.length > 0 || unproven.length > 0 || unparseableUris.length > 0) {
-        // C-3: a refusal names everything it refused, by reason
-        console.error(
-          `[B75 cold-bind] REFUSED — nothing deleted. not in the computed set: [${notInSet.join(', ')}]; ` +
-            `bound to a manifest row: [${bound.join(', ')}]; its name's row is not yet bound (run --apply first): [${unproven.join(', ')}]; ` +
-            `cold manifest rows whose storage_uri does not parse: [${unparseableUris.join(', ')}]`,
-        );
-        process.exitCode = 1;
-        return;
-      }
-      let deleted = 0;
-      for (const id of deleteIds) {
-        const v = byId.get(id);
-        if (!v) { console.log(`[B75 cold-bind] ${id}: not in this listing — skipped (already deleted, or mistyped)`); continue; }
-        await storage.deleteColdVersion(v.fileName, v.fileId);
-        deleted++;
-        console.log(`[B75 cold-bind] DELETED ${v.fileName} id=${v.fileId} bytes=${v.contentLength}`);
-      }
-      console.log(`[B75 cold-bind] DONE deleted=${deleted} named=${deleteIds.size}`);
-      return;
     }
     console.log(`[B75 cold-bind] DONE failures=${failures} apply=${apply}`);
     if (failures > 0) process.exitCode = 1;

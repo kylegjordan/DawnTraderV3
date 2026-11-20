@@ -501,7 +501,7 @@ describe('3b item 2 — Langston r3 carries', () => {
 });
 
 // ── 3b item 3: bind the pre-3a cold rows to exact versions; the inventory; the exclusive takeover ────────────────────
-import { COLD_NON_ARCHIVE_PREFIXES, coldPathOf, orphanVersions, otherOwnerCounts, ownColdPrefixes, planColdBindings, residueDeleteSet, deleteRefusals, type UnboundColdRow } from '../../scripts/b75-cold-bind';
+import { COLD_NON_ARCHIVE_PREFIXES, coldPathOf, orphanVersions, otherOwnerCounts, ownColdPrefixes, planColdBindings, residueDeleteSet, type UnboundColdRow } from '../../scripts/b75-cold-bind';
 import type { B2ListedVersion } from '../../services/data-archive/storage-client';
 
 const ROW: UnboundColdRow = { id: 'r1', source_table: 'context_bridge_log', partition_label: '2026-01', storage_uri: 'b2://dt-archive-cold/context_bridge_log/2026-01.jsonl.gz', bytes_compressed: 13901237, checksum: 'sha256-x' };
@@ -722,43 +722,20 @@ describe('3b item 4 — the residue delete set: our orphans and non-chosen versi
     const decisions = planColdBindings([ROW], vs2);
     expect(residueDeleteSet(vs2, claimed, own, decisions, new Set()).map((v) => v.fileId)).toEqual(['p10']);
   });
-  it('deleteRefusals: before --apply the duplicate is refused (its row is unbound); the orphan never is; after, both may go', () => {
-    const decisions = planColdBindings([ROW], vs);
-    const set = residueDeleteSet(vs, claimed, own, decisions, new Set());
-    const unboundBefore = new Set([coldPathOf(ROW.storage_uri)!.path]);
-    expect(deleteRefusals(new Set(['old', 'p10']), set, vs, new Set(), unboundBefore, [ROW.storage_uri]))
-      .toEqual({ notInSet: [], bound: [], unproven: ['old'], unparseableUris: [] });
-    expect(deleteRefusals(new Set(['p10']), set, vs, new Set(), unboundBefore, [ROW.storage_uri]))
-      .toEqual({ notInSet: [], bound: [], unproven: [], unparseableUris: [] });
-    // after --apply: 2026-01 is bound to 'new', so its row is no longer in unboundPaths
-    const after = residueDeleteSet(vs, claimed, own, [], new Set(['new']));
-    expect(deleteRefusals(new Set(['old', 'p10']), after, vs, new Set(['new']), new Set(), [ROW.storage_uri]))
-      .toEqual({ notInSet: [], bound: [], unproven: [], unparseableUris: [] });
-  });
-  it('deleteRefusals: a cold row whose storage_uri does not parse refuses the whole run (its object would read as an orphan)', () => {
-    const after = residueDeleteSet(vs, claimed, own, [], new Set(['new']));
-    expect(deleteRefusals(new Set(['p10']), after, vs, new Set(['new']), new Set(), [ROW.storage_uri, 'b2:/x/y']).unparseableUris)
-      .toEqual(['b2:/x/y']);
-  });
-  it('deleteRefusals: a bound id and an id outside the set are each named', () => {
-    const after = residueDeleteSet(vs, claimed, own, [], new Set(['new']));
-    expect(deleteRefusals(new Set(['new', 'tw']), after, vs, new Set(['new']), new Set(), [ROW.storage_uri]))
-      .toEqual({ notInSet: ['new', 'tw'], bound: ['new'], unproven: [], unparseableUris: [] });
-  });
-  it('the delete run: argument hygiene and ordering', () => {
-    const src = read('server/scripts/b75-cold-bind.ts');
-    expect(src).toContain("'[B75 cold-bind] --apply and --delete-residue are separate runs'");
-    expect(src).toMatch(/a stray argument would be silently dropped/);
-    // C-4: the delete branch sits AFTER the report loop
-    // anchored on a string UNIQUE to the report loop (Langston item 4 r2: the old anchor occurs three times and indexOf
-    // took the first, inside residueDeleteSet — the fence passed with the delete branch moved above the loop)
-    // anchored on the report loop's TERMINAL statement (Langston item 4 r3 CARRY-1: 'let failures = 0;' sits before the
-    // loop, so the delete block could slip between it and the loop and stay green)
-    const loopEnd = '`[B75 cold-bind] ${name}: BOUND`';
-    expect(src.split(loopEnd).length).toBe(2);
-    expect(src.split('if (deleteIds) {').length).toBe(2);
-    expect(src.indexOf('if (deleteIds) {')).toBeGreaterThan(src.indexOf(loopEnd));
+  it('3d close (rule 18): no deleter of cold data remains in our code — the residue set is reported, never deleted', () => {
+    const bind = read('server/scripts/b75-cold-bind.ts');
+    const sc = read('server/services/data-archive/storage-client.ts');
+    // positive control: the strings this fence forbids are the ones the archived code carries
+    const arch = read('1-system-manual/_archive/deleted-code/b75-cold-bind.delete-residue.20261120-B-DISK-FILE-TIERING.ts.removed');
+    expect(arch).toContain("'--delete-residue'");
+    expect(arch).toContain('storage.deleteColdVersion(');
+    expect(read('1-system-manual/_archive/deleted-code/storage-client.deleteColdVersion.20261120-B-DISK-FILE-TIERING.ts.removed')).toContain('b2_delete_file_version');
+    expect(bind).not.toContain("'--delete-residue'"); // the argv literal; the header may name the removed mode
+    expect(bind).not.toMatch(/\.deleteColdVersion\(|function deleteRefusals|deleteIds/); // code shapes; the header names the removal
+    expect(sc).not.toContain('b2_delete_file_version');
+    expect(sc).not.toMatch(/async deleteCold(Version)?\(/);
+    expect(bind).toContain('[B75 cold-bind] RESIDUE-SET ');
     // and every manifest row claims its object, whatever its tier (CARRY-2)
-    expect(src).toContain('`SELECT tier, storage_uri, provider_file_id FROM data_archive_manifest`');
+    expect(bind).toContain('`SELECT tier, storage_uri, provider_file_id FROM data_archive_manifest`');
   });
 });

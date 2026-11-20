@@ -1,0 +1,21 @@
+// REMOVED 2026-11-20 — B-DISK-FILE-TIERING 3d close (rule 18). From server/services/data-archive/storage-client.ts.
+// Non-compilable archive copy; git history is authoritative (DELETED_COMPONENTS_LOG names the removing commit).
+// DR: Kyle mints a temporary delete-capable key -> restore this method -> run -> delete the temporary key.
+
+  /**
+   * Deletes ONE file version by id (amendment 4 C-1: the 3a proof objects; 3b: the P10 orphan). Needs the `deleteFiles`
+   * capability, which the narrowed key of 3d will not have — so this is usable only until 3d step 5.
+   */
+  async deleteColdVersion(fileName: string, fileId: string): Promise<void> {
+    const auth = await this.b2Authorize();
+    const res = await fetch(`${auth.apiUrl}/b2api/v3/b2_delete_file_version`, {
+      method: 'POST',
+      headers: { Authorization: auth.accountAuthToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fileName, fileId }),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(`[B75 storage-client] B2 delete_file_version failed: ${res.status} — ${body}`);
+    }
+  }
+
