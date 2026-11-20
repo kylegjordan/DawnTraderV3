@@ -259,6 +259,12 @@ jobs:
       - name: Langston lane tests (two workers)
         if: ${{ !cancelled() }}
         run: python3 comms-infra/discord/test_langston_lanes.py && (cd comms-infra/discord && python3 mutate_langston_lanes.py)
+      # B-TOKEN-ECONOMY amendment 1, P6: the alert lane's owner-table routing - the shared rules, apply_table, and
+      # run_alert_batch itself (a table batch, the fallback, a failed or unparseable mirror read escalating the whole
+      # batch without invoking the lane); then the mutation runner, judged by exit code. Imports fcntl: CI only.
+      - name: Alert lane owner-table tests (P6)
+        if: ${{ !cancelled() }}
+        run: python3 comms-infra/discord/alert_owner_route_test.py && (cd comms-infra/discord && python3 mutate_alert_owner_route.py)
       # B-WAKE-LEASE-PID-REUSE (#1179): the wake lease's holder decision as a 24-row truth table, read out of the REPO
       # copy of the filter with ast. Green here does not prove the laptop's hand-installed copy (the #1004 class).
       - name: Wake lease verdict tests (pid reuse)

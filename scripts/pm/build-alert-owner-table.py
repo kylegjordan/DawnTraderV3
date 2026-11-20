@@ -19,6 +19,9 @@ Exit status (round 2, Langston 2026-11-20 12:38Z, R2-2 item 2 -- a build-time re
      the table's sections. The table is NOT written.
 """
 import json, re, sys, collections
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'comms-infra', 'discord'))
+import alert_owner_route as aor  # noqa: E402
 
 args = sys.argv[1:]
 UNTIL = None
@@ -41,56 +44,16 @@ if len(queue) != len(_lines):
     sys.exit(2)
 keys = {i: v[:3] for i, v in queue.items()}
 
-# Register: batch -> owner, from the session section the row sits in.
-SECTION = {'OLD Claude': 'CC-A', 'NEW Claude': 'CC-B', 'ANALYST Claude': 'CC-C',
-           'Infra Claude': 'CC-INFRA', 'PM Claude': 'CC-PM'}
-register, sect = {}, None
-for l in open(REG, encoding='utf-8'):
-    if l.startswith('## '):
-        sect = next((v for k, v in SECTION.items() if l[3:].startswith(k)), None)
-        continue
-    m = re.match(r'^\| (?:~~)?([BT]-[A-Z0-9.-]+)', l)
-    if sect and m:
-        register[m.group(1)] = sect
-
-
-# The active plan's owner column, for batches the register (built 2026-11-05) does not list. The owner cell
-# sits right after the batch cell in some tables and right BEFORE it in the session-section tables, so both
-# neighbours are read, and a cell counts only when the WHOLE cell is an owner name (Step-4 C-5, Langston
-# 2026-11-20: a search over prose read B-LANGSTON-CONTEXT's note cell as CC-B). A batch with two different
-# plan owners is left out.
-_OWNER_FULL = re.compile(r'(CC-A|CC-B|CC-C|CC-INFRA|CC-PM|Infra Claude|PM Claude)'
-                         r'(?:\s*\((?:Old|New|Analyst|OLD|NEW|ANALYST) (?:Claude|Codex)\)|\s*/\s*OLD Codex)?')
-_OWNER_NAME = {'Infra Claude': 'CC-INFRA', 'PM Claude': 'CC-PM'}
-
-
-def _owner_cell(c):
-    m = _OWNER_FULL.fullmatch(c.strip().strip('*~').strip())
-    if m:
-        return _OWNER_NAME.get(m.group(1), m.group(1))
-
-
-_plan = collections.defaultdict(set)
-for l in open(PLAN, encoding='utf-8'):
-    if not l.startswith('|'):
-        continue
-    cells = [c.strip() for c in l.strip().strip('|').split('|')]
-    for j, c in enumerate(cells):      # every cell, the last included (Langston Step-4 rider b)
-        m = re.match(r'^(?:~~|\*\*)*([BT]-[A-Z0-9][A-Z0-9.-]*[A-Z0-9])', c)
-        if m:
-            for k in (j - 1, j + 1):
-                o = _owner_cell(cells[k]) if 0 <= k < len(cells) else None
-                if o:
-                    _plan[m.group(1)].add(o)
-            break
-plan_owner = {b: next(iter(o)) for b, o in _plan.items() if len(o) == 1}
-for b, o in sorted(_plan.items()):
-    if len(o) > 1:
-        print('NOTE plan names two owners for %s: %s (left out of the cross-check)' % (b, sorted(o)))
+# Register and plan owners, family and routing: ONE home, shared with the alert lane (P6, Step 3), so the rule order
+# this build checks is the rule order the lane applies.
+register = aor.parse_register(open(REG, encoding='utf-8').read())
+plan_owner, _multi = aor.parse_plan(open(PLAN, encoding='utf-8').read())
+for b, o in sorted(_multi.items()):
+    print('NOTE plan names two owners for %s: %s (left out of the cross-check)' % (b, o))
 for b, o in sorted(plan_owner.items()):
     if b in register and register[b] != o:
         print('NOTE register says %s, plan says %s for %s (register wins)' % (register[b], o, b))
-batch_owner = dict(plan_owner, **register)
+batch_owner = aor.batch_owners(register, plan_owner)
 
 # Owning batch and ledger reference per family: the PM reading of the ledger, ruled by Langston round 2.
 PREFIX = {
@@ -182,45 +145,16 @@ SEED = {
 }
 ALIAS = {'Infra-Claude': 'CC-INFRA', 'Infra': 'CC-INFRA'}
 
-# The lane applies families in this order: generic owner/batch rules; gov key -> batch; key -> longest
-# prefix; keyless -> title stem; nothing matched -> CC-INFRA (a genuinely new key).
-OWNER_TITLE = re.compile(r'^(CC-(?:A|B|C|INFRA)|OLD Claude|NEW Claude|ANALYST Claude|Infra Claude)\s*[:—-]')
-OWNER_SUFFIX = re.compile(r'\bowner (CC-(?:A|B|C|INFRA)|Infra)\b')
-DISPLAY = {'OLD Claude': 'CC-A', 'NEW Claude': 'CC-B', 'ANALYST Claude': 'CC-C', 'Infra Claude': 'CC-INFRA',
-           'Infra': 'CC-INFRA'}
-BATCH_TITLE = re.compile(r'^(B-[A-Z0-9-]+)[: ]')
-BATCH_KEY = ('deploy-window-stale:', 'deploy-in-window:')
-BATCH_ANY = re.compile(r'\b(B-[A-Z0-9][A-Z0-9-]*[A-Z0-9])\b')
 
 
 def family(k, c, t):
-    m = OWNER_TITLE.match(t) or OWNER_SUFFIX.search(t)
-    if m:
-        return ('owner', DISPLAY.get(m.group(1), m.group(1)))
-    for bk in BATCH_KEY:
-        if k.startswith(bk):
-            return ('batch', k.split(':')[1])          # <prefix>:<BATCH>[:sha:ts]
-    if not k and BATCH_TITLE.match(t):
-        return ('batch', BATCH_TITLE.match(t).group(1))
-    if not k:
-        for stem in TITLE:
-            if t.startswith(stem):
-                return ('title', stem)
-        return ('title', '?' + t[:40])
-    if k.startswith('gov-') and ':' in k:
-        return ('batch', k.split(':')[1])             # gov-<check>:<BATCH>[:<sub>]
-    for pre in sorted(PREFIX, key=len, reverse=True):  # colonless gov- keys land here (R2-2 item 1)
-        if k.startswith(pre):
-            return ('prefix', pre)
-    if BATCH_TITLE.match(t):                           # a keyed row whose title names its batch
-        return ('batch', BATCH_TITLE.match(t).group(1))
-    return ('prefix', '?' + k)
+    return aor.family(k, c, t, PREFIX, TITLE)
 
 
 rows_per = collections.Counter(family(*v) for v in keys.values())
 agg = collections.defaultdict(collections.Counter)
 last, latest, unmapped = {}, {}, 0
-SESSIONS = ('CC-A', 'CC-B', 'CC-C', 'CC-INFRA')
+SESSIONS = aor.SESSIONS
 dropped = collections.Counter()
 for l in open(D + '/markers.tsv', encoding='utf-8'):
     i, o, ts, who = l.rstrip('\n').split('\t')
@@ -260,7 +194,7 @@ table = {'_about': {
              'with n and rows',
     'markers_on_unmapped_ids': unmapped, 'seed_votes_dropped_by_owner': dict(dropped)},
     'batches': {}, 'prefixes': {}, 'titles': {}, 'fallback': 'CC-INFRA'}
-SECT = {'batch': 'batches', 'prefix': 'prefixes', 'title': 'titles'}
+SECT = aor.SECT
 unfamilied = []
 fams = set(agg) | set(SEED)
 for f in sorted(fams):
@@ -347,18 +281,7 @@ for f, c, r in unfamilied:
 
 
 def route(i):
-    f = family(*keys[i])
-    if f[0] == 'owner':
-        return (f[1], 'owner named in title')
-    row = table[SECT[f[0]]].get(f[1])
-    if row:
-        return (row['owner'], f[0] + ':' + f[1])
-    if f[0] == 'batch' and f[1] in batch_owner:
-        return (batch_owner[f[1]], 'register/plan:' + f[1])
-    for b in BATCH_ANY.findall(keys[i][2]):          # a batch the register or plan knows, named anywhere in the title
-        if b in batch_owner:
-            return (batch_owner[b], 'title names ' + b)
-    return ('CC-INFRA', 'fallback')
+    return aor.table_route(*keys[i], table, batch_owner)
 
 
 # R2-5, the population named: rows NEWLY MINTED per UTC day (created_at) that reach the fallback.

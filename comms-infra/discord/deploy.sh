@@ -68,6 +68,7 @@ bridges|comms-infra/discord/address_list.py|$BRIDGE_DIR/address_list.py|0644
 bridges|comms-infra/discord/gateway_watchdog.py|$BRIDGE_DIR/gateway_watchdog.py|0755
 bridges|comms-infra/discord/langston_queue.py|$BRIDGE_DIR/langston_queue.py|0755
 bridges|comms-infra/discord/alert_lane.py|$BRIDGE_DIR/alert_lane.py|0755
+bridges|comms-infra/discord/alert_owner_route.py|$BRIDGE_DIR/alert_owner_route.py|0644
 bridges|comms-infra/discord/alert-lane/CLAUDE.md|/srv/alert-lane/CLAUDE.md|0644
 bridges|comms-infra/discord/bridge-failed-notify.sh|$BRIDGE_DIR/bridge-failed-notify.sh|0755
 bridges|comms-infra/discord/langston-bridge-restart|/usr/local/sbin/langston-bridge-restart|0755

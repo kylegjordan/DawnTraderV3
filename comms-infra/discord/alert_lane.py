@@ -16,6 +16,8 @@ import os
 import re
 import time
 
+import alert_owner_route as aor
+
 LANE_DIR = "/srv/alert-lane"
 SPOOL_DIR = "/home/langston/.alert-lane/spool"   # durable alert work (Coltrane send-back r2, 2026-10-16)                # cwd of the lane invoke: its CLAUDE.md, never Langston's
 LANE_MODEL = "claude-sonnet-5-5"            # cheaper than Langston's; confirmed by a live one-off invoke at install
@@ -23,6 +25,14 @@ LANE_TIMEOUT_S = 600
 BATCH_SETTLE_S = 20                         # after the first alert, wait this long for the rest of a burst
 BATCH_MAX = 15                              # alerts per invocation
 OWNERS = ("CC-A", "CC-B", "CC-C", "CC-INFRA", "Kyle")
+# B-TOKEN-ECONOMY amendment 1, P6 (pre-audit row P6): the crew's owner table, the open-batch register and the active
+# plan are read by the BRIDGE from the Helsinki repo mirror at the review branch (never from a laptop copy, never from
+# the lane), once per batch. A failed or unparseable read escalates the whole batch (R2-4) - never the fallback owner.
+OWNER_MIRROR = "/srv/dawntrader-backup.git"
+OWNER_REF = "refs/heads/migration/aws-supabase"
+OWNER_TABLE_PATH = "comms-infra/discord/alert_owner_table.json"
+OWNER_REGISTER_PATH = "1-system-manual/pm/OPEN_BATCH_REGISTER.md"
+OWNER_PLAN_PATH = "1-system-manual/SPRINT_TO_LIVE_PLAN.md"
 # Every tool the ENUMERATION returned - not the account's allow list (Langston r2 condition 1, 2026-10-16: a copy of
 # settings.json's 12-item allow list left ListAgents, ReportFindings, ScheduleWakeup, ToolSearch and Workflow
 # reachable, and SendMessage EXECUTED; ToolSearch is the gate to every deferred tool and MCP family). Measured by
@@ -288,13 +298,18 @@ def effective_owner(rows):
     return newest, (prior[-1] if prior else None), True
 
 
-def precedent_line(key, prec):
+def precedent_line(key, prec, table_owner=None):
+    """`table_owner`: the owner the crew's owner table set by a non-fallback rule (B-TOKEN-ECONOMY amd-1 P6, R2-6) -
+    it settles an interleave, so the line then says so instead of telling the lane to escalate."""
     if not key:
         return "LANGSTON PRECEDENT: none (no title could be read)"
     rows = prec.get(key)
     if not rows:
         return "LANGSTON PRECEDENT: none for %s - route by your rules; do not guess his intent" % (key[1] or key[0])
     owner, sup, ok = effective_owner(rows)
+    if not ok and table_owner:
+        return ("LANGSTON PRECEDENT for %s: he has gone back and forth between owners; the OWNER TABLE settles it - "
+                "route to %s" % (key[1] or key[0], table_owner))
     if not ok:
         return ("LANGSTON PRECEDENT for %s: he has gone back and forth between owners - ESCALATE it to him"
                 % (key[1] or key[0]))
@@ -364,6 +379,93 @@ def apply_precedent(routed, escalate, keys, prec):
     return routed, escalate, notes
 
 
+def owner_routing(read):
+    """(table, batch_owner) from the three governed files. `read(path)` returns a file's text at OWNER_REF and raises
+    when it cannot. RAISES on any failed read or on an input that parses to nothing (alert_owner_route raises rather
+    than return an empty map) - the bridge turns that into a whole-batch escalation (R2-4)."""
+    table = aor.load_table(read(OWNER_TABLE_PATH))
+    register = aor.parse_register(read(OWNER_REGISTER_PATH))
+    plan_owner, _multi = aor.parse_plan(read(OWNER_PLAN_PATH))
+    return table, aor.batch_owners(register, plan_owner)
+
+
+def table_routes(rows, table, batch_owner):
+    """{alert_id: (owner, rule)} for every alert whose live row was read; an id with no row gets no route (its
+    unreadable row is escalated by enforce_live_rows)."""
+    return {aid: aor.table_route(aor.dedupe_key_of(row), row.get("category"), row.get("title"), table, batch_owner)
+            for aid, row in (rows or {}).items() if row is not None}
+
+
+def owner_table_line(troute):
+    """One line telling the lane what the crew's owner table says (B-TOKEN-ECONOMY amd-1 P6)."""
+    if troute is None:
+        return "OWNER TABLE: no row could be read for this alert - follow the precedent and your rules"
+    owner, rule = troute
+    if rule == "fallback":
+        return ("OWNER TABLE: no rule matches this alert (fallback %s) - follow LANGSTON PRECEDENT; with none, it goes "
+                "to %s" % (owner, owner))
+    return ("OWNER TABLE: %s, by rule \"%s\". Route to %s. If LANGSTON PRECEDENT names a DIFFERENT single owner, "
+            "ESCALATE." % (owner, rule, owner))
+
+
+def apply_table(routed, escalate, keys, prec, troutes):
+    """B-TOKEN-ECONOMY amendment 1, P6: enforce the owner table on the lane's VALIDATED routing, BEFORE
+    `apply_precedent`. `troutes` = {alert_id: (owner, rule)} from `alert_owner_route.table_route` over the alert's live
+    row. Returns (routed, escalate, notes, rest): `rest` = {alert_id: (owner, action)} still to go through
+    `apply_precedent` (the fallback rule WITH a Langston precedent, or no table route at all). Never drops an alert.
+
+    A table owner (any rule but fallback):
+      - the lane routed to Kyle -> escalate (only Langston decides an instance needs Kyle);
+      - Langston's clean precedent names Kyle -> escalate;
+      - Langston's clean precedent names a DIFFERENT session -> escalate (the table or his ruling is stale - he decides);
+      - an interleave in his precedent -> the table owner SETTLES it (R2-6);
+      - otherwise -> the table owner, whatever the lane chose (a different lane choice is noted, never silent).
+    The fallback rule (nothing matched):
+      - a Langston precedent exists -> `rest`, so `apply_precedent` rules exactly as before;
+      - none -> the table's fallback owner (R2-5: the post states it was the fallback)."""
+    routed, escalate, notes, rest = dict(routed), dict(escalate), [], {}
+    for aid in list(routed):
+        owner, action = routed.pop(aid)
+        tr = (troutes or {}).get(aid)
+        key = keys.get(aid)
+        rows = prec.get(key) if key else None
+        if tr is None:
+            rest[aid] = (owner, action)
+            continue
+        t_owner, rule = tr
+        if owner == "Kyle":
+            escalate[aid] = "the lane would route this to Kyle - only Langston decides that Kyle must see an instance"
+            continue
+        if rule == "fallback":
+            if rows:
+                rest[aid] = (owner, action)
+                continue
+            if owner != t_owner:
+                notes.append("lane chose %s for %s; no rule and no precedent, so the table fallback %s holds"
+                             % (owner, aid, t_owner))
+            routed[aid] = (t_owner, (action + " (owner table: fallback - no rule matched, no Langston precedent)")
+                           .strip())
+            continue
+        tag = "owner table: " + rule
+        if rows:
+            eff, _sup, ok = effective_owner(rows)
+            name = key[1] or key[0]
+            if ok and eff == "Kyle":
+                escalate[aid] = ("Langston's last routing of %s was to Kyle and the owner table says %s (%s) - he "
+                                 "decides" % (name, t_owner, rule))
+                continue
+            if ok and eff != t_owner:
+                escalate[aid] = ("the owner table says %s (%s) but Langston's latest routing of %s is %s - the table "
+                                 "or his ruling is stale; he decides" % (t_owner, rule, name, eff))
+                continue
+            if not ok:
+                tag += "; settles Langston's back-and-forth"
+        if owner != t_owner:
+            notes.append("lane chose %s for %s; owner table rule %r sets %s" % (owner, aid, rule, t_owner))
+        routed[aid] = (t_owner, (action + " (" + tag + ")").strip())
+    return routed, escalate, notes, rest
+
+
 def enforce_live_rows(routed, escalate, rows):
     """Langston r2 condition 2: "its live row could not be read" is ENFORCED, not left to the model - any routed id the
     bridge could not read a row for goes to Langston with that reason. Returns (routed, escalate)."""
@@ -398,17 +500,22 @@ def live_row_line(row):
         row.get("state"), row.get("acknowledged_at"), row.get("resolved_at"), row.get("severity"))
 
 
-def build_prompt(batch, keys=None, prec=None, rows=None):
+def build_prompt(batch, keys=None, prec=None, rows=None, troutes=None):
     """batch: [(alert_id, content)]. The instructions live in the lane's own CLAUDE.md; this is the data: each alert's
-    LIVE ROW (read by the bridge) and LANGSTON PRECEDENT line (the code enforces it after the answer as well)."""
+    LIVE ROW (read by the bridge), OWNER TABLE line (when `troutes` is given) and LANGSTON PRECEDENT line (the code
+    enforces both after the answer as well)."""
     lines = ["System alerts to triage (%d). For EACH alert id below, end with exactly one [[ALERT ...]] line, "
              "and add one [[ESCALATE ...]] line when your rules say Langston must see it." % len(batch), ""]
     for n, (aid, content) in enumerate(batch, 1):
         lines.append("=== ALERT %d - id %s ===" % (n, aid))
         if rows is not None:
             lines.append(live_row_line(rows.get(aid)))
+        tr = (troutes or {}).get(aid) if troutes is not None else None
+        if troutes is not None:
+            lines.append(owner_table_line(tr))
         if prec is not None:
-            lines.append(precedent_line((keys or {}).get(aid), prec))
+            lines.append(precedent_line((keys or {}).get(aid), prec,
+                                        tr[0] if tr and tr[1] != "fallback" else None))
         lines.append((content or "").strip())
         lines.append("")
     return "\n".join(lines)

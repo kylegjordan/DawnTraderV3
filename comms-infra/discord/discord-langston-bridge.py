@@ -1139,6 +1139,16 @@ def read_live_rows(ids):
     return al.parse_live_rows(r.stdout, ids)
 
 
+def read_mirror_file(path):
+    """One governed file's text at al.OWNER_REF from the Helsinki repo mirror (B-TOKEN-ECONOMY amd-1 P6). RAISES on any
+    failure - the caller escalates the whole batch (R2-4); it never substitutes an empty file."""
+    r = subprocess.run(["git", "--git-dir", al.OWNER_MIRROR, "show", "%s:%s" % (al.OWNER_REF, path)],
+                       env=dict(os.environ, HOME=WORK_DIR), capture_output=True, text=True, timeout=30)
+    if r.returncode != 0:
+        raise RuntimeError("git show %s exit %d: %s" % (path, r.returncode, (r.stderr or "").strip()[:200]))
+    return r.stdout
+
+
 def invoke_lane(prompt):
     """One fresh lane invocation. Returns (answer, None) or (None, why)."""
     env = os.environ.copy()
@@ -1230,6 +1240,16 @@ def run_alert_batch(batch, task_q):
         else:
             ided.append((aid, t))
     if ided:
+        # B-TOKEN-ECONOMY amd-1 P6: the owner table, register and plan, read once per batch from the mirror. A failed
+        # or unparseable read escalates the WHOLE batch and the lane is not invoked (R2-4) - never the fallback owner.
+        try:
+            table, batch_owner = al.owner_routing(read_mirror_file)
+        except Exception as e:
+            why = f"the owner table/register/plan could not be read ({type(e).__name__}: {e}) - R2-4"
+            log(f"alert lane: {why} - escalating all {len(ided)} alert(s) of this batch to Langston")
+            escalate += [(t, why) for _, t in ided]
+            ided = []
+    if ided:
         # Langston's precedent ruling (2026-10-16): his OWN past assignments per (template, symbol), shown to the lane
         # AND enforced after its answer - a contradiction, a split, or a unanimity alarm goes to him.
         keys = {aid: al.alert_key(t["content"]) for aid, t in ided}
@@ -1244,15 +1264,23 @@ def run_alert_batch(batch, task_q):
             log(f"alert lane: {len(conflicts)} alert id(s) carry two title templates after the re-surface strip; "
                 f"first kept, e.g. {conflicts[0][0]}: {conflicts[0][1]} vs {conflicts[0][2]}")
         rows = read_live_rows([aid for aid, _ in ided])
-        answer, why = invoke_lane(al.build_prompt([(aid, t["content"]) for aid, t in ided], keys, prec, rows))
+        troutes = al.table_routes(rows, table, batch_owner)
+        nfb = sum(1 for _o, rule in troutes.values() if rule == "fallback")
+        log(f"alert lane: owner table routes {len(troutes)} of {len(ided)} alert(s), {nfb} by the fallback")
+        answer, why = invoke_lane(al.build_prompt([(aid, t["content"]) for aid, t in ided], keys, prec, rows,
+                                                  troutes))
         if answer is None:
             log(f"alert lane: FAILED ({why}) - escalating all {len(ided)} alert(s) of this batch to Langston")
             escalate += [(t, f"the alert lane failed ({why})") for _, t in ided]
         else:
             routed, esc, problems = al.read_answer(answer, [aid for aid, _ in ided])
-            routed, esc, pnotes = al.apply_precedent(routed, esc, keys, prec)
+            # P6: the owner table rules first; what it does not settle (no row, or the fallback rule with a Langston
+            # precedent) goes through his precedent exactly as before.
+            routed, esc, tnotes, rest = al.apply_table(routed, esc, keys, prec, troutes)
+            rest, esc, pnotes = al.apply_precedent(rest, esc, keys, prec)
+            routed.update(rest)
             routed, esc = al.enforce_live_rows(routed, esc, rows)      # condition 2: no blind routing
-            for p in problems + pnotes:
+            for p in problems + tnotes + pnotes:
                 log(f"alert lane: {p}")
             by_id = dict(ided)
             # ⛔ Coltrane send-back 1: only markers rebuilt from the VALIDATED result are published.
