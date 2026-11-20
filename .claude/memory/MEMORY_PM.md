@@ -38,7 +38,7 @@
 
 - **FOR KYLE (OLD 11-20 ~00:10Z, Discord 1573132153913348188):** proposal from B-ARCHIVE-NETWORK-RETRY J3: raise the xStock ticker recorder outage hold 9 min -> 60 min (~196 MB worst case); BLOCKED until #1032 (row 119); OLD recommends an item AFTER row 119. Slotting ask -> run pm-slotting (CC-A) before putting it to Kyle.
 
-- **FOR KYLE (ANALYST 11-20 ~01:00Z, via Langston C-P5 Step-8 review, Discord 1573141069716262923):** xStock positions carry no ATR (open paper: crypto 6/6 have it, xStock 0/9), so every xStock stop uses the fixed-stop fallback and trailing can never engage for xStocks. Not urgent: trailing is OFF until after live (KD-36). Open: by design or dropped. Old home #556 CLOSED 09-29 - needs a slot; decision required, no work. Run pm-slotting before asking.
+- **FOR KYLE (ANALYST 11-20, corrected framing per Langston Discord 1573145946089455727): a RECORD GAP, not a trailing decision** (trailing on/off is answered, KD-36). The xStock path computes ATR (xstock_spot/eval-cycle.ts :629, :774) and stamps it on the VTS open trade (:1273), but it is dropped on the way to the active position record: xStock paper 0/7 carry it (atr_at_open literal '0'), crypto 5/5. Same family as carry defects #549/#550/#560. Likely a defect but a HYPOTHESIS (active-path writer not read yet). No trading effect today (trailing off by flag). Decision required, no work; needs a slot. Run pm-slotting (owner CC-C) before asking.
 
 - **Small-items bundle +1 (ANALYST 11-16 ~16Z):** Settings "config snapshot" view 500s (route calls removed storage.getPortfolioBalance; repoint vs remove undecided). Not paper/VTS. Bundle ids in archive 2026-11: small-items-bundle-1/2-pending-kyle.
 
