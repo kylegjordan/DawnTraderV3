@@ -9,7 +9,7 @@
   - `BATCH_CATALOG`, `PHASE_HISTORY`, System Manual, System Impact Map: **owed at Step 10**. They will record R7 (a new root cron, a new canonical actor, a new one-shot alert key) and R7b (a new retention-hold rule inside the B75 sweep). The STORAGE_POLICY and SIM text for B-DISK-FILE-TIERING is OLD Claude's; the R7b hold rule is mine to document (agreed in channel, `1573272236641746975`).
 - **(iii) Step 2:** the pre-audit above, Step-2 ref `a46a79f7a` (r6 re-run plan). This diff implements r6 R7 + R7b as ruled at `1573143973550096385`, plus C6-ruling condition 1 (`1573271063721287783`). Condition 2 (the ~665 s / 55% figure) is recorded in the R7b module header and goes into the batch record at Step 10. Condition 3 belongs to R2'.
 
-**Diff range:** `2c93147fb` → `556e60702` (three code commits: `d2e9dea7d` condition 1, `4690c0181` R7, `556e60702` R7b; shas after the rebase onto `d56a55033`). Only my files are in this range.
+**Diff range:** the three code commits whose subjects start `B-XSTOCK-BAR-AVAILABILITY R7 condition 1`, `… R7:` and `… R7b:`; their shas as pushed are in the Step-4 dispatch (a rebase changes them). Only my files are in this range.
 
 | file | change |
 |---|---|
