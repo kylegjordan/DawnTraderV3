@@ -64,6 +64,12 @@ ACTOR = "cc-infra"
 DEADMAN_H = 26
 NIGHTLY_WAIT_S = 15 * 60
 PRECOMPACT_FLOOR_S = 30 * 60
+# How the PreCompact hook starts its run: own process group, and a HIDDEN console that the run's ssh children inherit.
+# ⛔ NEVER add DETACHED_PROCESS (0x8): Windows ignores CREATE_NO_WINDOW when it is combined with DETACHED_PROCESS, so the
+# run had no console and every ssh child it started got a brand-new VISIBLE window - three on Kyle's screen per
+# compaction until 2026-11-20 (PM Claude; caught by ~/.claude/winwatch.ps1). Same form as codex-discord-outbox.py:71.
+# Both names are 0 off Windows. The hook test asserts these bits on the real Popen call.
+SPAWN_FLAGS = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) | getattr(subprocess, "CREATE_NO_WINDOW", 0)
 STAGING = "root@188.245.193.8"
 HOME = os.path.expanduser("~")
 ROOT = os.path.join(HOME, ".claude", "transcript-archive")
@@ -295,14 +301,8 @@ def precompact_hook(stdin_text, root=ROOT, spawn=None):
         if spawn is not None:
             spawn(args)
         else:
-            # NEW_PROCESS_GROUP | CREATE_NO_WINDOW. NOT DETACHED_PROCESS (0x8): Windows ignores CREATE_NO_WINDOW when
-            # it is combined with DETACHED_PROCESS, so the run had no console, and every console child it starts (the
-            # ssh calls) got a brand-new VISIBLE window - three on Kyle's screen per compaction (PM Claude, 2026-11-20,
-            # caught by ~/.claude/winwatch.ps1 at 20:39:41). With CREATE_NO_WINDOW alone the run gets a hidden console
-            # that its ssh children inherit. Popen still returns at once, so compaction is not held up either way.
-            flags = 0x00000200 | 0x08000000 if os.name == "nt" else 0
             subprocess.Popen(args, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                             creationflags=flags, close_fds=True, start_new_session=(os.name != "nt"))
+                             creationflags=SPAWN_FLAGS, close_fds=True, start_new_session=(os.name != "nt"))
     except Exception as e:  # noqa: BLE001 - a hook must never block compaction; the failure is still written down
         try:
             log_line(root, "precompact-hook", "-", "COULD NOT START THE RUN: %s: %s" % (type(e).__name__, e))
