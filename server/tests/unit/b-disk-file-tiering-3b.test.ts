@@ -501,7 +501,7 @@ describe('3b item 2 — Langston r3 carries', () => {
 });
 
 // ── 3b item 3: bind the pre-3a cold rows to exact versions; the inventory; the exclusive takeover ────────────────────
-import { COLD_NON_ARCHIVE_PREFIXES, coldPathOf, orphanVersions, otherOwnerCounts, ownColdPrefixes, planColdBindings, residueDeleteSet, type UnboundColdRow } from '../../scripts/b75-cold-bind';
+import { COLD_NON_ARCHIVE_PREFIXES, coldPathOf, orphanVersions, otherOwnerCounts, ownColdPrefixes, planColdBindings, residueDeleteSet, unparseableColdUris, type UnboundColdRow } from '../../scripts/b75-cold-bind';
 import type { B2ListedVersion } from '../../services/data-archive/storage-client';
 
 const ROW: UnboundColdRow = { id: 'r1', source_table: 'context_bridge_log', partition_label: '2026-01', storage_uri: 'b2://dt-archive-cold/context_bridge_log/2026-01.jsonl.gz', bytes_compressed: 13901237, checksum: 'sha256-x' };
@@ -737,5 +737,18 @@ describe('3b item 4 — the residue delete set: our orphans and non-chosen versi
     expect(bind).toContain('[B75 cold-bind] RESIDUE-SET ');
     // and every manifest row claims its object, whatever its tier (CARRY-2)
     expect(bind).toContain('`SELECT tier, storage_uri, provider_file_id FROM data_archive_manifest`');
+  });
+  it('3d close C-2: a cold row whose storage_uri does not parse is reported, and the RESIDUE-SET called untrustworthy, before it prints', () => {
+    expect(unparseableColdUris([
+      { tier: 'cold', storage_uri: ROW.storage_uri },
+      { tier: 'cold', storage_uri: 'b2:/x/y' },
+      { tier: 'warm', storage_uri: 'supabase://bucket/x.jsonl.gz' },
+    ])).toEqual(['b2:/x/y']);
+    expect(unparseableColdUris([{ tier: 'cold', storage_uri: ROW.storage_uri }])).toEqual([]);
+    const bind = read('server/scripts/b75-cold-bind.ts');
+    const warnAt = bind.indexOf('UNPARSEABLE cold storage_uri on');
+    expect(warnAt).toBeGreaterThan(0);
+    expect(bind.indexOf('[B75 cold-bind] RESIDUE-SET ')).toBeGreaterThan(warnAt);
+    expect(bind.slice(warnAt, warnAt + 400)).toContain('process.exitCode = 1');
   });
 });

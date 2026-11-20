@@ -8,7 +8,7 @@
  * bucket (b2_list_file_versions, paged, a partial listing FAILS) and binds each unbound cold row to its version:
  *   - exactly one 'upload' version under the row's path, length = the manifest's bytes → that version;
  *   - several, all with one SHA-1 and length → byte-identical: the NEWEST (what a by-name read returns); the others
- *     are reported as residue (item 4 deletes them by id);
+ *     are reported as residue (reported only: nothing in the code deletes them since the 3d close);
  *   - several with different SHA-1s → each candidate is downloaded BY ID and its SHA-256 compared with the manifest's
  *     (this spends B2 download budget — reported before it runs, and only with --apply);
  *   - none, or a length mismatch → REFUSED, reported, nothing written.
@@ -54,7 +54,7 @@ export interface UnboundColdRow {
 /**
  * Prefixes in the SHARED cold bucket that are never DawnTrader's archive objects (Langston item 3 (b)):
  * `token-watch/` is CC-INFRA's cold archive (its own tool tracks it); `_liveness/` is OUR canary — ours but never
- * manifest-tracked, so never an orphan either. This set is what item 4's deleter reads too, not only this reporter.
+ * manifest-tracked, so never an orphan either. It shapes the reported RESIDUE-SET (the deleter that read it is gone).
  */
 export const COLD_NON_ARCHIVE_PREFIXES: ReadonlyMap<string, 'other-owner' | 'ours-untracked'> = new Map([
   ['token-watch', 'other-owner'],
@@ -63,8 +63,8 @@ export const COLD_NON_ARCHIVE_PREFIXES: ReadonlyMap<string, 'other-owner' | 'our
 
 /**
  * The prefixes that CAN hold DawnTrader archive orphans: every manifest source_table, plus `_proof`. REFUSES (throws)
- * if a source_table equals a non-archive prefix — a silent exclusion would either arm a deleter against another owner's
- * objects or blind the orphan check (Langston item 3 (b): source_table is free text with no constraint).
+ * if a source_table equals a non-archive prefix — a silent exclusion would either put another owner's objects in the
+ * RESIDUE-SET or blind the orphan check (Langston item 3 (b): source_table is free text with no constraint).
  */
 export function ownColdPrefixes(sourceTables: Iterable<string>): Set<string> {
   const own = new Set<string>(['_proof']);
@@ -161,6 +161,15 @@ export function residueDeleteSet(
   return [...out.values()];
 }
 
+/**
+ * Pure: cold manifest rows whose storage_uri does not parse as a cold path. Such a row claims nothing, so its object
+ * reads as an ORPHAN and lands in the RESIDUE-SET (Langston item 4 r2; kept as a report line at the 3d close, C-2,
+ * when the deleteRefusals guard that carried it was removed). Exported for tests.
+ */
+export function unparseableColdUris(rows: { tier: string; storage_uri: string }[]): string[] {
+  return rows.filter((x) => x.tier === 'cold' && coldPathOf(x.storage_uri) === null).map((x) => x.storage_uri);
+}
+
 /** Pure: stored VERSIONS (uploads only — hide markers are not versions) outside the archive namespaces, counted by
  * first segment and labelled by owner. Reported, never touched. */
 export function otherOwnerCounts(versions: B2ListedVersion[], ownPrefixes: Set<string>): Map<string, number> {
@@ -186,7 +195,7 @@ async function main(): Promise<void> {
     const limits = await loadColdLimits(client, 'B75 cold-bind');
     // EVERY manifest row claims its object, whatever its tier (Langston item 4 r3 CARRY-2: a non-cold row whose object
     // sat in the cold bucket would otherwise read as an orphan). A supabase:// uri does not parse as a cold path, so the
-    // widening costs nothing; the unparseable-uri refusal still looks at COLD rows only.
+    // widening costs nothing; the unparseable-uri warning below looks at COLD rows only.
     const all = await client.query<{ tier: string; storage_uri: string; provider_file_id: string | null }>(
       `SELECT tier, storage_uri, provider_file_id FROM data_archive_manifest`,
     );
@@ -215,6 +224,12 @@ async function main(): Promise<void> {
     }
     const decisions = planColdBindings(r.rows, listing.versions);
     const residueSet = residueDeleteSet(listing.versions, claimed, ownPrefixes, decisions, boundIds);
+    const unparseable = unparseableColdUris(all.rows);
+    if (unparseable.length > 0) {
+      // C-2 (3d close): their objects read as orphans, so the RESIDUE-SET is not a safe keep/delete input until fixed
+      console.error(`[B75 cold-bind] UNPARSEABLE cold storage_uri on ${unparseable.length} manifest row(s): [${unparseable.join(', ')}] — the RESIDUE-SET below is NOT trustworthy while any exist (their objects read as orphans)`);
+      process.exitCode = 1;
+    }
     for (const v of residueSet) {
       console.log(`[B75 cold-bind] RESIDUE-SET ${v.fileName} id=${v.fileId} bytes=${v.contentLength} uploaded=${new Date(v.uploadTimestamp).toISOString()}`);
     }
