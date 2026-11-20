@@ -260,6 +260,42 @@ DISPOSITION: folded into this batch — the scoped removal plan goes to Langston
 
 - **(4b) T2/T3 basis is evidenced by inspection and the fence test only** (Langston Step 8, 2026-11-04): the only per-decision `basis=` line (`EXIT_TRIGGER`) is on the paper lane, so 455+ VTS xStock closes went through the new selector with no per-decision basis record. Nobody cites 19/19 for T2/T3.
 
+## 6d. Governance files changed — the C-P5 retirement (Step 10, 2026-11-20)
+CHANGE-CLASS: sub_batch (row 2's C-P5 outcome; declared in the C-P5 pre-audit header)
+| tier | document | verdict | what changed / why not |
+|---|---|---|---|
+| T1 | `BATCH_CATALOG.md` | ✅ | Row 2 entry: a 2026-11-20 line, C-P5 done (retired, Step 7 PASS, Step 8 confirmed); row 2 stays open. |
+| T1 | `PHASE_HISTORY.md` | ✅ | A 2026-11-20 plain-language line under row 2's entry. |
+| T1 | `SPRINT_TO_LIVE_PLAN.md` | ✅ | Row 2 status leads with C-P5 done and the forward dependency. |
+| T1 | `PHASE_19_PLAN.md` | N/A | Not a `P19-*` batch and row 2 has no in-flight row there. |
+| T1 | shared `MEMORY.md` + `MEMORY_CC_C.md` | ✅ mine / N/A shared | Own file: row 2 C-P5 at Step 10; shared: no new consensus truth. |
+| T1 | the batch `SCOPE` | ✅ (existing) | Parent scope `B_XSTOCK_BID_TRIGGER_RELAND_SCOPE.md`; unchanged. |
+| T1 | the batch `PRE_AUDIT` | ✅ (existing) | `B_XSTOCK_BID_TRIGGER_RELAND_CP5_RETIREMENT_PRE_AUDIT.md` r2. |
+| T1 | the `COMPLETION_REPORT` | N/A yet | Row 2 is open: this progress report carries C-P5 (section 3h) until row 2's Step 11 converts it. |
+| T1 | the `Observation` column | ✅ | The C-P5 observation was declared and read: the DEPLOY_WINDOWS row was closed (completed) after Step 7. |
+| T1 | `CC_C_SESSION_TASK_LIST.md` | ✅ | Row 2: C-P5 done, harvest cron already removed 11-16; row 17: 8c switched on with its week read. Other three lists: N/A, not mine. |
+| T1 | Langston's `MEMORY.md` | ✅ | Row 2 line via `langston-memory-write` (part `00-legacy.md` `bf7a4bc142ba` -> `790a1e00b18e`); 73,875 -> 73,860 B, loaded set 143,829 B vs ceiling 143,856 B. |
+| T2 | `SYSTEM_MANUAL.md` | ✅ (Step 3) | The pause bullet rewritten as RETIRED 2026-11-16 with what holds now and what stays (code commit `f61207159`). |
+| T2 | `SYSTEM_IMPACT_MAP.md` | ✅ | `market-hours.ts` entry: the venue-transition predicate, its three remaining consumers with lines, the retired fourth, and the `spread_blown` forward dependency (pre-audit A8). |
+| T2 | `RUNNING_ISSUES.md` | ✅ | `#943`: the retirement and the forward dependency, since `#943` is the handoff bad-print case. |
+| T2 | `CHANGES_AND_FIXES.md` | ✅ | `FIX-2026-11-16-A`: symptom, fix, verification. |
+| T2 | `POST_AUDIT_ROADMAP.md` | N/A | No phase-level change. |
+| T2 | `ADJUSTMENT_FRAMEWORK.md` | ✅ | Rule 2's third form: a named-impact instance (no epoch bump; population, direction, size; a reading rule). |
+| T2 | `AUTHORITY_BASELINE.md` | N/A | No constitutional change. |
+| T2 | `STORAGE_POLICY.md` | N/A | No tier or retention change. |
+| T2 | `MULTI_ASSET_VTS_EXPANSION_PLAN.md` | N/A | Not a B78-B81 item. |
+| T2 | `ASSET_CLASS_ONBOARDING_WORKFLOW.md` | N/A | No onboarding learning. |
+| T2 | `BUILD_METHOD_PLAYBOOK.md` | N/A | The method did not change. |
+| T2 | `LANGSTON_ARCHITECTURE.md` | N/A | The reviewer's build did not change. |
+| T2 | `CLAUDE.md` / `CONDUCT.md` | N/A | No stable rule changed. |
+| T2 | `_archive/CLAUDE_MD_RULE_HISTORY.md` | N/A | No `CLAUDE.md` rule changed. |
+| T2 | `DELETED_COMPONENTS_LOG.md` | ✅ (Step 3) | 2026-11-16 entry with the archived `.removed` copy. |
+| T2 | `MISTAKE_PATTERNS.md` | N/A | `MISTAKE:` trailers were written on this work's commits (Step 7/8 counting and control-object slips); the weekly pass collects them from the trailers. |
+| T2 | `GOVERNANCE_EXCEPTIONS.md` | N/A now | Row 39 flips to open-retired at row 2's Step 11, not here. |
+| T2 | `ALERT_HANDLING_PROTOCOL.md` | N/A | Process unchanged. |
+| T2 | `DELIVERY_BOARD_PROTOCOL.md` | N/A | Board unchanged. |
+| T2 | `CLAUDE_CODE_FEATURE_WATCH.md` | N/A | Not this session's run. |
+
 ## 6c. Governance files changed — increment (4b) (Step 10, 2026-11-04 → 11-05)
 
 CHANGE-CLASS: architecture

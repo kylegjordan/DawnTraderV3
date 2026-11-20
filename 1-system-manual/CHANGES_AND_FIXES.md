@@ -1,5 +1,13 @@
 # DawnTrader: Changes, Fixes & Improvements Registry
 
+## FIX-2026-11-16-A — `B-XSTOCK-BID-TRIGGER-RELAND` C-P5 retirement (row 2, CC-C) — paper xStock exits were frozen for 20 minutes at every venue handoff, whatever the book
+
+**CLASS: `sub_batch` (row 2's C-P5 outcome). SYMPTOM:** the C-P2 block skipped every paper xStock exit decision inside the 16:15 ET, 20:15 ET and Sunday-reopen windows, so a stop or target crossed on a tight, tradable book waited for the window to end. The four-week read (20 weekdays to 2026-11-16) ruled RETIRE on mechanism (Langston), the broken-book case being covered by objective 6's `spread_blown` arm.
+
+**FIX:** deleted the exit block and its four counters in `active-execution-engine.ts` (code `f61207159`; archived, `DELETED_COMPONENTS_LOG` 2026-11-16); kept the predicate and its three other consumers (the entry refusal, the VTS lane, the archiver suppression); forward-dependency comments at `book-state.ts` and `book-state-config.ts`; a test fence that a blown in-window book is still held by `spread_blown`, with a mutant control. No epoch bump; impact named in `ADJUSTMENT_FRAMEWORK`.
+
+**Verified:** deployed `8fac86e5e` 2026-11-16 03:39Z; the Mon 11-16 session: 0 `[VENUE_PAUSE]` lines in both handoff windows (control: 3 before the deploy), exit frames continued (2,937 / 1,052), the entry and VTS pauses still fired (12 / 1 and 1); one in-window exit, GIS/USD 21:16:01Z, held by `spread_blown` through the blown book and released at 0.683% spread, the only tradable minute in the window. Langston CONFIRMED Step 8 re-deriving every cell (progress report section 3h).
+
 ## FIX-2026-11-16-A — `B-TOKEN-WATCH-LIQ-SHED-HOTFIX` (hotfix, `#1247`, Infra Claude; parent `B-TOKEN-WATCH-BIRTH-CAP`, KD-90): token-watch's liquidity reads were spending the free Helius credits the new-coin census needs
 **Symptom:** on 2026-11-16 the Helius free cycle (10-27 → 11-27, vendor counter) was 85% spent (854,007 at 02:36Z) and projected dry ~11-17 afternoon — a ~10-day dark new-coin census, unrecoverable.
 **Root cause:** the credit ledger and its shed gate key the CALENDAR month (`budget._month_key`, `allowed()`), while Helius bills a cycle from the 27th, so the liquidity leg (~2.3k credits/hour since the follow-up switch-on, `pool_sol_reserves` only) was still allowed (November 25,231 < carve 190,000) while the vendor cycle ran out; births alone (~39,600/day) also overrun the cycle.
