@@ -31,7 +31,17 @@ HELSINKI_SOURCE = "204.168.141.77"
 STAGING_PSQL = "/usr/local/bin/psql"   # the B-DB-READ-TOOL wrapper (comms-infra/staging/psql-wrapper)
 STAGING_DT_SQL = "/usr/local/bin/dt-sql"   # the B-DB-READ-TOOL one-attempt reader; the database control runs through it
 DT_SQL_BUSY_TRIES = 3
-DT_SQL_BUSY_WAIT_S = 20
+DT_SQL_BUSY_WAIT_S = 5   # a dt-sql call measured 0.30 s (B-DB-READ-TOOL log); 5 s spans many calls, and BUSY is rare
+# The remote verifier makes DT_SQL_CALLS dt-sql calls. One call that ATTEMPTS a login is bounded by dt-sql's own
+# psql timeout (CALL_TIMEOUT_S = 300, comms-infra/staging/dt-sql:69) plus, if that attempt locks it, the alert it raises
+# (subprocess timeout 150, dt-sql:171). The client ssh timeout must exceed that whole remote worst case: killing dt-sql
+# mid-attempt leaves its INTENT behind and LOCKS it `ambiguous` for every caller (dt-sql:34), which is far worse than
+# this check failing.
+DT_SQL_CALLS = 2                 # the read, then the read-only write probe (verify_remote)
+DT_SQL_CALL_BOUND_S = 300 + 150  # dt-sql CALL_TIMEOUT_S + its alert subprocess timeout
+REMOTE_OTHER_BOUND_S = 60        # ssh login, the sshd/log/path checks and the JSON reply around the two calls
+REMOTE_BUDGET_S = DT_SQL_CALLS * ((DT_SQL_BUSY_TRIES - 1) * DT_SQL_BUSY_WAIT_S + DT_SQL_CALL_BOUND_S) + REMOTE_OTHER_BOUND_S
+CLIENT_SSH_TIMEOUT_S = REMOTE_BUDGET_S + 30
 DT_SQL_EXIT = {
     1: "logged in, the query failed",
     2: "refused before connecting",
@@ -473,9 +483,15 @@ def verify_actor(actor: str) -> int:
         "python3 - verify-remote --actor " + actor,
     ]
     validate_client_ssh_command(command)
-    result = subprocess.run(
-        command, input=source, text=True, capture_output=True, check=False, timeout=60
-    )
+    try:
+        result = subprocess.run(
+            command, input=source, text=True, capture_output=True, check=False, timeout=CLIENT_SSH_TIMEOUT_S
+        )
+    except subprocess.TimeoutExpired as error:
+        raise VerificationError(
+            "%s live verification did not finish within %d s (remote budget %d s)"
+            % (actor, CLIENT_SSH_TIMEOUT_S, REMOTE_BUDGET_S)
+        ) from error
     if result.returncode != 0:
         raise VerificationError(
             "%s live verification failed: %s"
@@ -507,9 +523,12 @@ def verify_actor(actor: str) -> int:
         negative = command.copy()
         negative[negative.index(config["key"])] = wrong_key
         negative[-1] = "true"
-        failed = subprocess.run(
-            negative, input="", text=True, capture_output=True, check=False, timeout=30
-        )
+        try:
+            failed = subprocess.run(
+                negative, input="", text=True, capture_output=True, check=False, timeout=30
+            )
+        except subprocess.TimeoutExpired as error:
+            raise VerificationError("%s wrong-key control did not finish within 30 s" % actor) from error
         try:
             validate_wrong_key_refusal(failed.returncode, failed.stderr)
         except VerificationError as error:
@@ -729,6 +748,25 @@ def self_test() -> int:
             or "READ_ONLY_REFUSAL not in probe.stderr" not in body or not DT_SQL_WRITE_PROBE.startswith("create temp ")
             or "read-only transaction" not in READ_ONLY_REFUSAL):
         raise VerificationError("the in-session read-only write probe is missing or can pass on a write")
+    checks += 1
+    # the client ssh timeout covers the remote worst case (every dt-sql call BUSY to its last try, then running to
+    # dt-sql's own bound), so the client never kills dt-sql mid-attempt and locks it (F-2 round 3, Langston)
+    if body.count("run_dt_sql(") != DT_SQL_CALLS:
+        raise VerificationError("DT_SQL_CALLS is %d but the remote verifier makes %d dt-sql calls"
+                                % (DT_SQL_CALLS, body.count("run_dt_sql(")))
+    if DT_SQL_CALL_BOUND_S < 300 + 150:
+        raise VerificationError("DT_SQL_CALL_BOUND_S %d s is below dt-sql's own call bound of 450 s" % DT_SQL_CALL_BOUND_S)
+    worst = DT_SQL_CALLS * ((DT_SQL_BUSY_TRIES - 1) * DT_SQL_BUSY_WAIT_S + DT_SQL_CALL_BOUND_S)
+    if CLIENT_SSH_TIMEOUT_S <= worst or REMOTE_BUDGET_S <= worst:
+        raise VerificationError("client ssh timeout %d s does not cover the remote worst case %d s"
+                                % (CLIENT_SSH_TIMEOUT_S, worst))
+    actor_body = inspect.getsource(verify_actor)
+    if "timeout=CLIENT_SSH_TIMEOUT_S" not in actor_body or "timeout=60" in actor_body:
+        raise VerificationError("the verifier's ssh call is not bounded by the derived client timeout")
+    checks += 1
+    # a timeout is a REFUSED line, never a traceback: every bounded call in verify_actor is caught
+    if actor_body.count("except subprocess.TimeoutExpired") != actor_body.count("timeout="):
+        raise VerificationError("a bounded call in the verifier lets TimeoutExpired escape as a traceback")
     checks += 1
     print("self-test passed: %d checks" % checks)
     return 0
