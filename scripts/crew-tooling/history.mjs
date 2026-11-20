@@ -54,9 +54,22 @@ if (commits.length === 0) { console.log(`NO COMMITS for ${target} at ${REF} (pat
 // 2. Batch documents.
 const docFiles = git('ls-tree', '-r', '--name-only', REF, '--', 'Claude Comms and Packages/').split('\n').filter(Boolean);
 const batches = [...new Set(commits.map((c) => c.batch).filter(Boolean))];
-const docsFor = (id) => {
+// Q8 pilot fix (2026-11-20): numbered batches before ~B80 filed their documents as BATCH_<n>_*.md, so "B55" also
+// looks for BATCH_55_. A sub-batch with no documents of its own (B74.1, B64a) falls back to its parent's, and the
+// output labels those "parent B74", so a parent document is never shown as the sub-batch's own.
+const docKeys = (id) => {
   const key = id.replace(/-/g, '_').replace(/\./g, '_').toUpperCase();
-  return docFiles.filter((f) => /SCOPE|PRE_AUDIT|COMPLETION|PROGRESS/i.test(basename(f)) && basename(f).toUpperCase().replace(/[-.]/g, '_').startsWith(`${key}_`));
+  const m = key.match(/^B(\d.*)$/);
+  return m ? [key, 'BATCH_' + m[1]] : [key];
+};
+const docsMatching = (id) => docFiles.filter((f) => /SCOPE|PRE_AUDIT|COMPLETION|PROGRESS/i.test(basename(f))
+  && docKeys(id).some((k) => basename(f).toUpperCase().replace(/[-.]/g, '_').startsWith(k + '_')));
+const docsFor = (id) => {
+  const own = docsMatching(id);
+  const pm = id.match(/^(B\d+)[a-z.]/i);
+  if (own.length || !pm) return own;
+  const parent = pm[1];
+  return docsMatching(parent).map((f) => 'parent ' + parent + ': ' + f);
 };
 
 // 3. Ledger entries citing the file or a former name (by basename, which is how entries cite files).
@@ -80,7 +93,7 @@ const ledgers = [
 ];
 
 const result = {
-  tool: 'history.mjs', tool_version: '1.0', ref: REF, target, former_names: [...names].filter((n) => n !== target),
+  tool: 'history.mjs', tool_version: '1.1', ref: REF, target, former_names: [...names].filter((n) => n !== target),
   counts: { commits: commits.length, attributed: commits.filter((c) => c.batch).length, unattributed: commits.filter((c) => !c.batch).length, batches: batches.length },
   batches: batches.map((id) => ({ id, commits: commits.filter((c) => c.batch === id).map((c) => c.sha), documents: docsFor(id) })),
   unattributed: commits.filter((c) => !c.batch),
@@ -90,7 +103,7 @@ const result = {
 if (asJson) { console.log(JSON.stringify(result, null, 2)); process.exit(0); }
 console.log(`HISTORY ${target} at ${REF}: ${result.counts.commits} commits, ${result.counts.attributed} attributed to ${batches.length} batches, ${result.counts.unattributed} unattributed`);
 if (result.former_names.length) console.log(`former names: ${result.former_names.join(', ')}`);
-for (const b of result.batches) console.log(`  ${b.id}  [${b.commits.join(' ')}]  docs: ${b.documents.length ? b.documents.map((d) => basename(d)).join(', ') : 'NONE FOUND'}`);
+for (const b of result.batches) console.log(`  ${b.id}  [${b.commits.join(' ')}]  docs: ${b.documents.length ? b.documents.map((d) => d.startsWith('parent ') ? d.replace(/: .*\//, ': ') : basename(d)).join(', ') : 'NONE FOUND'}`);
 console.log(`unattributed (${result.unattributed.length}):`);
 for (const c of result.unattributed.slice(0, 40)) console.log(`  ${c.sha} ${c.date} ${c.subject.slice(0, 100)}`);
 if (result.unattributed.length > 40) console.log(`  ... ${result.unattributed.length - 40} more (use --json for all)`);
