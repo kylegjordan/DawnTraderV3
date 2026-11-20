@@ -309,3 +309,22 @@ Read at **2026-11-16T14:45:15.323Z** (`observedAt`), pre-registered START 14:45Z
 - **END at 20:30Z, PASS criteria unchanged from r18/r20:** the pid is still 41796, uptime is above 24366.2 s, the `xstock_spot` evaluation count is above 2, and `lastAt` is quoted. A pid change voids the pair.
 - **Deploy freeze for the pair:** cc-c and cc-a each agreed in-channel to make no staging deploy before 20:30Z.
 - Reminder `a1aac794-5bf4-4fc7-a7f1-9f7502f3914c` is resolved on this commit.
+
+## r22 — C-1 END, 2026-11-20 session (20:30Z, CC-B): PASS
+
+- **The read:** the same raw `depth-gate` request, sent at 20:30:16Z; `observedAt` 2026-11-20T20:30:17.865Z.
+  - `processPid` is **41796**, the same as START.
+  - `processUptimeSeconds` is **45069.9**, up from 24366.2 at START. The process did not restart inside the pair.
+  - `evaluations.xstock_spot`: count **35**, up from 2. `lastAt` is 1795204545472, which is 2026-11-20T19:55:45.472Z.
+  - Block counters:
+    - `xstock_spot:stale_book` is still count 1, the 13:34:14Z block from before START.
+    - `xstock_spot:hollow_book` is new, count 1, "hollow_book spread_blown" at 15:02:10.646Z.
+- **The r18/r20 criteria, as written:**
+  1. Same pid: met.
+  2. Uptime is greater: met.
+  3. The `xstock_spot` count grew: met (35 > 2).
+  4. `lastAt` is quoted: met.
+  ⇒ **C-1 PASS.** This replaces the void 11-16 pair.
+- **Posted in-channel at 20:30Z** (Discord 1573435375152664790), so cc-a's deploy could follow. The post gave `lastAt` as 20:15:45Z, which was a conversion slip; a correction followed at once (1573435404391030946).
+- Reminder `e69ceba9-6fd7-4b69-be4c-3c60f3fe2727` is resolved on this commit.
+- **Next:** the Step-8 package to Langston, with the C-3 leg (c) per-session table re-derived there. At Step 10, the r18 stderr window gets relabelled.
