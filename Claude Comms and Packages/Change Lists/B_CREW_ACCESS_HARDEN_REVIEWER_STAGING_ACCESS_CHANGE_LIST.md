@@ -245,3 +245,21 @@ The `coltrane-size-watch` difference named above (installed `ac244b69…` vs the
 - Mutants, laptop and Helsinki, each patch applied exactly once, baseline passing, judged by a non-zero exit plus a FAIL/REFUSED line: `bounded_run` loses its timeout; `bounded_run` uses a literal 3000; `run_dt_sql` gains a client timeout; the gate removed; the gate weakened ×100; `elapsed` forced to 0; `UNIT_TIMEOUT_START_S` set to 2000; unit file `TimeoutStartSec=2000`; unit file loses `TimeoutStartSec`; C-4 messages re-merged; (c) undone; wrong-key timeout a literal 3000; a `bounded_run` replaced by a raw `subprocess.run`; an `os.system` added; `LOCAL_TOOL_TIMEOUT_S` raised to 200; a `subprocess.Popen` added — **16 of 16 KILLED** on both hosts.
 - Behaviour through `verify_remote` itself (every check before the gate stubbed to pass, the clock faked to 0 s at entry and N s at the gate, `run_dt_sql` recording whether it was started): **31.0 s and 30.5 s → refused with the message above, dt-sql calls 0; 30.0 s and 29.0 s → dt-sql started, calls 1.**
 **Not proven yet:** a live `verify --actor all` with this file and the new unit. It runs at install, after the verdict. Install order: unit first, then `systemctl daemon-reload`, then the script, then a hand run.
+
+#### F-2 C-3 round — verdict and install (Infra Claude, 2026-11-20)
+**Verdict.** Langston PROCEED at `eca5607f7` (Discord `1573314108051169483`): *"Install now."* Conditions: unit first, `daemon-reload`, then the script; self-test from `/usr/local/sbin`, reporting the count and the unit path; the live `verify --actor all` exit and its `dt_sql_bounds`; this record; the board card's stale "Blocked on". He carried six items (C-7 to C-12) into a follow-on increment, below.
+**Install, Helsinki, 2026-11-20T12:48:13Z:**
+- Both blobs read from Helsinki's own mirror (`/srv/dawntrader-backup.git`, as langston) at `eca5607f7`. Script sha256 `5f7a3d8b…8474e491`, unit `4f3fbafd…7b0b417`; each equals `git show eca5607f7:<path> | sha256sum` on the laptop, and the installed files read back the same.
+- Rollback copies: `/root/reviewer-staging-access.pre-f2c3` (sha256 `50a4ba17…7673623a`, the `678131671` install) and `/root/reviewer-staging-access.service.pre-f2c3` (`2f84ae86…`).
+- Unit installed `root:root 0644`, then `systemctl daemon-reload`: `TimeoutStartUSec` read `infinity` before and **`40min`** after (2,400 s). Script installed `root:root 0755`.
+- **Self-test from `/usr/local/sbin/reviewer-staging-access`, cwd `/root`: `self-test passed: 35 checks`, rc 0.** The unit path it read is `/etc/systemd/system/reviewer-staging-access.service`: from that location the repo-relative candidate resolves to `/systemd/reviewer-staging-access.service`, which does not exist (`ls`: no such file), and the count is 35 rather than 34, so the unit check ran. The script does not print the path on a pass; C-9 below makes it.
+- **Live run, `systemctl start reviewer-staging-access.service` (`verify --actor all`), 12:48:24Z → 12:48:28Z: Result=success, ExecMainStatus=0.** Both rows (langston, coltrane): **`"dt_sql_bounds": {"alert_timeout_s": 150, "call_timeout_s": 300}`**, `database_read` ok, `database_write_refused` ok, `wrong_key_control` `explicit_publickey_denial`. Afterwards `dt-sql --status` on staging: `OK — not locked`. Timer active; next run 11-21 06:20Z.
+- Drift enrolment stays on `#1004` (with `P19-B12`).
+
+**Carried to the follow-on increment (his items, owner Infra Claude, next on this batch):**
+- **C-7:** move the dt-sql bound refusal to the remote side, before dt-sql starts, using `DT_SQL_CALL_BOUND_S`.
+- **C-8:** the AST fence walks the whole module, refuses `from subprocess import …` and aliased imports, bounds the two `subprocess.run` calls inside `self_test`, and drops the blanket exemption.
+- **C-9:** the unit check covers every existing candidate, names the object in its pass line, and prints `34 of 35 (unit not present)` when none exists.
+- **C-10:** cite dt-sql's alert `subprocess.run` at `:172`, not `:171`.
+- **C-11:** reword the C-6 residual: dt-sql runs on staging and the unit's cgroup is on Helsinki, so the cgroup kill does not reach a staging grandchild; the first bound is `CLIENT_SSH_TIMEOUT_S` = 1,010 s.
+- **C-12:** reword the comment the verdict cited at `:48-50`: the gate decides whether dt-sql starts; it does not cap the fan-out.
