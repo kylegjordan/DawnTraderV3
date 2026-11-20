@@ -33,6 +33,14 @@ OWNER_REF = "refs/heads/migration/aws-supabase"
 OWNER_TABLE_PATH = "comms-infra/discord/alert_owner_table.json"
 OWNER_REGISTER_PATH = "1-system-manual/pm/OPEN_BATCH_REGISTER.md"
 OWNER_PLAN_PATH = "1-system-manual/SPRINT_TO_LIVE_PLAN.md"
+# Step-4 C-1/C-2 (Langston 2026-11-20, msg 1573412141736661015): the bridge pins ONE commit and reads all three files at it,
+# and refuses a mirror older than this. The age is the NEWEST of the mirror's two success stamps - the */15 sync's
+# DT_SYNC_PASS and dt-review's DT_REVIEW_FETCH_OK, each "<epoch> <iso>" written atomically on success - exactly as
+# dt-review's age() reads them. Never FETCH_HEAD's mtime: dt-backup-sync.sh:47-48 - a failed fetch truncates and
+# touches FETCH_HEAD, so it cannot mean "last success". Step-4 C-3 (Langston, msg 1573415701635403989): the limit is
+# TWO */15 cron periods, 1800 s - one missed sync is tolerated, two raise.
+OWNER_MIRROR_STAMPS = ("DT_SYNC_PASS", "DT_REVIEW_FETCH_OK")
+OWNER_MIRROR_MAX_AGE_S = 1800
 # Every tool the ENUMERATION returned - not the account's allow list (Langston r2 condition 1, 2026-10-16: a copy of
 # settings.json's 12-item allow list left ListAgents, ReportFindings, ScheduleWakeup, ToolSearch and Workflow
 # reachable, and SendMessage EXECUTED; ToolSearch is the gate to every deferred tool and MCP family). Measured by
@@ -401,6 +409,9 @@ def owner_table_line(troute):
     if troute is None:
         return "OWNER TABLE: no row could be read for this alert - follow the precedent and your rules"
     owner, rule = troute
+    if aor.is_escalation(troute):
+        return ("OWNER TABLE: ESCALATE - %s. This alert is escalated to Langston whatever you route it to."
+                % rule[len(aor.ESCALATE):])
     if rule == "fallback":
         return ("OWNER TABLE: no rule matches this alert (fallback %s) - follow LANGSTON PRECEDENT; with none, it goes "
                 "to %s" % (owner, owner))
@@ -420,6 +431,7 @@ def apply_table(routed, escalate, keys, prec, troutes):
       - Langston's clean precedent names a DIFFERENT session -> escalate (the table or his ruling is stale - he decides);
       - an interleave in his precedent -> the table owner SETTLES it (R2-6);
       - otherwise -> the table owner, whatever the lane chose (a different lane choice is noted, never silent).
+    An escalation rule (rules 8/9 found an owner outside the building sessions) -> escalate, whatever the lane chose.
     The fallback rule (nothing matched):
       - a Langston precedent exists -> `rest`, so `apply_precedent` rules exactly as before;
       - none -> the table's fallback owner (R2-5: the post states it was the fallback)."""
@@ -433,6 +445,9 @@ def apply_table(routed, escalate, keys, prec, troutes):
             rest[aid] = (owner, action)
             continue
         t_owner, rule = tr
+        if aor.is_escalation(tr):                      # Step-4 BLOCKER-1: a non-building owner in the register or plan
+            escalate[aid] = "owner table: %s - Langston decides" % rule[len(aor.ESCALATE):]
+            continue
         if owner == "Kyle":
             escalate[aid] = "the lane would route this to Kyle - only Langston decides that Kyle must see an instance"
             continue

@@ -1139,13 +1139,69 @@ def read_live_rows(ids):
     return al.parse_live_rows(r.stdout, ids)
 
 
-def read_mirror_file(path):
-    """One governed file's text at al.OWNER_REF from the Helsinki repo mirror (B-TOKEN-ECONOMY amd-1 P6). RAISES on any
-    failure - the caller escalates the whole batch (R2-4); it never substitutes an empty file."""
-    r = subprocess.run(["git", "--git-dir", al.OWNER_MIRROR, "show", "%s:%s" % (al.OWNER_REF, path)],
-                       env=dict(os.environ, HOME=WORK_DIR), capture_output=True, text=True, timeout=30)
+def _mirror_git_env():
+    """Step-4 C-5 (Langston, msg 1573415701635403989): the environment for a git read of the mirror - every GIT_*
+    variable cleared (as dt-backup-sync.sh does), so an inherited GIT_DIR / GIT_INDEX_FILE / GIT_OBJECT_DIRECTORY can
+    never point the read at another repository; HOME is the bridge's work dir."""
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    env["HOME"] = WORK_DIR
+    return env
+
+
+def mirror_stamp_age(now=None):
+    """(age_s, stamp_name) of the NEWEST of the mirror's success stamps (al.OWNER_MIRROR_STAMPS), read as dt-review's
+    age() reads them: the first field, digits only, no leading zero. RAISES when none is readable - the caller
+    escalates the batch (R2-4). Never FETCH_HEAD's mtime (dt-backup-sync.sh:47-48: a failed fetch touches it)."""
+    best, which, bad = 0, None, []
+    for name in al.OWNER_MIRROR_STAMPS:
+        f = os.path.join(al.OWNER_MIRROR, name)
+        if not os.path.exists(f):
+            continue
+        with open(f, encoding="ascii", errors="replace") as fh:
+            first = (fh.readline().split() or [""])[0]
+        if not first.isdigit() or not first.isascii() or first.startswith("0"):
+            bad.append(name)
+            continue
+        if int(first) > best:
+            best, which = int(first), name
+    if not best:
+        raise RuntimeError("no readable mirror success stamp (%s)" % ("unreadable: " + ", ".join(bad) if bad
+                                                                       else "none present"))
+    age = int(time.time() if now is None else now) - best
+    return age, which
+
+
+def pin_mirror(now=None):
+    """Step-4 C-1/C-2: the ONE commit every owner-routing read of this batch is taken at. RAISES - so the caller
+    escalates the whole batch (R2-4) - when the mirror is older than al.OWNER_MIRROR_MAX_AGE_S, its stamp is in the
+    future, or the ref does not resolve to a full commit id. Returns (sha, age_s, stamp_name)."""
+    age, which = mirror_stamp_age(now)
+    if age < 0:
+        raise RuntimeError("mirror success stamp %s is %ds in the future (clock skew)" % (which, -age))
+    if age > al.OWNER_MIRROR_MAX_AGE_S:
+        raise RuntimeError("mirror is stale: last success %ds ago (%s), limit %ds"
+                           % (age, which, al.OWNER_MIRROR_MAX_AGE_S))
+    r = subprocess.run(["git", "--git-dir", al.OWNER_MIRROR, "rev-parse", "--verify", "--quiet",
+                        al.OWNER_REF + "^{commit}"],
+                       env=_mirror_git_env(), capture_output=True, text=True, timeout=30)
+    sha = (r.stdout or "").strip()
+    if r.returncode != 0 or not re.fullmatch(r"[0-9a-f]{40}", sha):
+        raise RuntimeError("rev-parse %s exit %d: %r %s" % (al.OWNER_REF, r.returncode, sha[:60],
+                                                            (r.stderr or "").strip()[:200]))
+    return sha, age, which
+
+
+def read_mirror_file(path, sha):
+    """One governed file's text at the PINNED commit `sha` from the Helsinki repo mirror (B-TOKEN-ECONOMY amd-1 P6;
+    Step-4 C-1: never the moving ref, so the three files cannot straddle a sync). RAISES on any failure - the caller
+    escalates the whole batch (R2-4); it never substitutes an empty file."""
+    if not re.fullmatch(r"[0-9a-f]{40}", sha or ""):
+        raise RuntimeError("read_mirror_file needs a pinned 40-hex sha, got %r" % (sha,))
+    r = subprocess.run(["git", "--git-dir", al.OWNER_MIRROR, "show", "%s:%s" % (sha, path)],
+                       env=_mirror_git_env(), capture_output=True, text=True, timeout=30)
     if r.returncode != 0:
-        raise RuntimeError("git show %s exit %d: %s" % (path, r.returncode, (r.stderr or "").strip()[:200]))
+        raise RuntimeError("git show %s:%s exit %d: %s" % (sha[:12], path, r.returncode,
+                                                           (r.stderr or "").strip()[:200]))
     return r.stdout
 
 
@@ -1243,7 +1299,9 @@ def run_alert_batch(batch, task_q):
         # B-TOKEN-ECONOMY amd-1 P6: the owner table, register and plan, read once per batch from the mirror. A failed
         # or unparseable read escalates the WHOLE batch and the lane is not invoked (R2-4) - never the fallback owner.
         try:
-            table, batch_owner = al.owner_routing(read_mirror_file)
+            pin_sha, pin_age, pin_stamp = pin_mirror()
+            table, batch_owner = al.owner_routing(lambda path: read_mirror_file(path, pin_sha))
+            log(f"alert lane: owner routing read at {pin_sha} (mirror last success {pin_age}s ago, {pin_stamp})")
         except Exception as e:
             why = f"the owner table/register/plan could not be read ({type(e).__name__}: {e}) - R2-4"
             log(f"alert lane: {why} - escalating all {len(ided)} alert(s) of this batch to Langston")
@@ -1266,7 +1324,9 @@ def run_alert_batch(batch, task_q):
         rows = read_live_rows([aid for aid, _ in ided])
         troutes = al.table_routes(rows, table, batch_owner)
         nfb = sum(1 for _o, rule in troutes.values() if rule == "fallback")
-        log(f"alert lane: owner table routes {len(troutes)} of {len(ided)} alert(s), {nfb} by the fallback")
+        nesc = sum(1 for tr in troutes.values() if al.aor.is_escalation(tr))
+        log(f"alert lane: owner table routes {len(troutes)} of {len(ided)} alert(s) at {pin_sha}, {nfb} by the "
+            f"fallback, {nesc} escalated (batch owner not a building session)")
         answer, why = invoke_lane(al.build_prompt([(aid, t["content"]) for aid, t in ided], keys, prec, rows,
                                                   troutes))
         if answer is None:

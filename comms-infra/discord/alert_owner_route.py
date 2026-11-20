@@ -20,6 +20,7 @@ Rule order (`_about.order` in the table, approved at Step 4 C-4):
   8. a batch with no table row -> the register, then the plan owner column
   9. a register or plan batch named anywhere in the title
  10. nothing matched -> the table's fallback (CC-INFRA)
+Rules 8 and 9 return (None, 'escalate:...') when the register or plan owner is not one of SESSIONS.
 """
 import collections
 import json
@@ -145,11 +146,29 @@ def table_route(k, c, t, table, batch_owner):
     if row:
         return (row['owner'], f[0] + ':' + f[1])
     if f[0] == 'batch' and f[1] in batch_owner:
-        return (batch_owner[f[1]], 'register/plan:' + f[1])
+        return _batch_route(f[1], batch_owner[f[1]], 'register/plan:' + f[1])
     for b in BATCH_ANY.findall(t or ''):               # a batch the register or plan knows, named anywhere in the title
         if b in batch_owner:
-            return (batch_owner[b], 'title names ' + b)
+            return _batch_route(b, batch_owner[b], 'title names ' + b)
     return (table['fallback'], 'fallback')
+
+
+ESCALATE = 'escalate:'
+
+
+def _batch_route(batch, owner, rule):
+    """Rules 8 and 9 read an owner out of the register or the plan, which can name an owner the alert lane must
+    never route to - PM Claude's register section maps to CC-PM (Step-4 BLOCKER-1, Langston 2026-11-20). Such an
+    owner is an ESCALATION to Langston: (None, 'escalate:<why>'). Never the fallback (that would be a guess) and
+    never the owner verbatim (an alert routed to a non-building session is cleared without waking anyone)."""
+    if owner in SESSIONS:
+        return (owner, rule)
+    return (None, ESCALATE + 'batch %s is owned by %s, not a building session' % (batch, owner))
+
+
+def is_escalation(route):
+    """True when a table_route result is an escalation rather than an owner."""
+    return bool(route) and str(route[1]).startswith(ESCALATE)
 
 
 def load_table(text):

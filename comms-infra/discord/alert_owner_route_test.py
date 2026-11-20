@@ -55,7 +55,8 @@ NL = chr(10)
 REGISTER = NL.join([
     "# Open batch register", "",
     "## Infra Claude (CC-INFRA)", "| batch | step |", "|---|---|", "| B-REG | 7 |", "| ~~B-REGDONE~~ | closed |", "",
-    "## NEW Claude (CC-B)", "| batch | step |", "|---|---|", "| B-BOTH | 3 |", ""])
+    "## NEW Claude (CC-B)", "| batch | step |", "|---|---|", "| B-BOTH | 3 |", "",
+    "## PM Claude (CC-PM)", "| batch | step |", "|---|---|", "| B-PMB | 1 |", ""])
 PLAN = NL.join([
     "| # | batch / reference | owner | note |", "|---|---|---|---|",
     "| 1 | B-PLANB | CC-A | x |",
@@ -63,6 +64,7 @@ PLAN = NL.join([
     "| 3 | B-TWO | CC-A | y |",
     "| 4 | B-TWO | CC-C | z |",
     "| 5 | B-PROSE | a note naming CC-B in passing | w |",
+    "| 7 | B-PMPLAN | CC-PM | x |",
     "| CC-C | **B-LEFT** | left-hand owner cell |", ""])
 
 # ---- 1. alert_owner_route -------------------------------------------------------------------------------------------
@@ -128,6 +130,23 @@ ok("route: a known batch named anywhere in the title",
 ok("route: a two-owner plan batch is not used", R("zz-unknown", "the thing for B-TWO broke") == ("CC-INFRA", "fallback"))
 ok("route: nothing matches -> the fallback, named as such", R("zz-unknown", "Something odd") == ("CC-INFRA", "fallback"))
 ok("route: a keyless row with no stem -> the fallback", R("", "An unheard-of title") == ("CC-INFRA", "fallback"))
+
+# Step-4 BLOCKER-1 (Langston 2026-11-20): the register and the plan can name CC-PM; the lane must never route to it.
+ok("register: a row under the PM Claude section parses as CC-PM", reg.get("B-PMB") == "CC-PM")
+ok("plan: a CC-PM owner cell parses as CC-PM", plan_owner.get("B-PMPLAN") == "CC-PM")
+pm1 = R("gov-staleopen:B-PMB", "Stale open")
+ok("route BLOCKER-1: a register batch owned by CC-PM ESCALATES (no owner), never routes to CC-PM",
+   pm1[0] is None and aor.is_escalation(pm1) and "CC-PM" in pm1[1])
+pm2 = R("zz-unknown", "the thing for B-PMPLAN broke")
+ok("route BLOCKER-1: a plan batch owned by CC-PM named in the title ESCALATES",
+   pm2[0] is None and aor.is_escalation(pm2) and "B-PMPLAN" in pm2[1])
+pm3 = R("deploy-in-window:B-PMB:abc:ts", "In window")
+ok("route BLOCKER-1: a deploy-window key for a CC-PM batch ESCALATES", pm3[0] is None and aor.is_escalation(pm3))
+ok("route BLOCKER-1: a CC-PM title opener is NOT an owner (falls to the rules, not to CC-PM)",
+   R("zz-unknown", "PM Claude: something") == ("CC-INFRA", "fallback"))
+ok("is_escalation: a normal route is not", not aor.is_escalation(("CC-A", "register/plan:B-PLANB")))
+ok("is_escalation: the fallback is not", not aor.is_escalation(("CC-INFRA", "fallback")))
+ok("is_escalation: None is not", not aor.is_escalation(None))
 
 ok("key: top-level dedupe_key", aor.dedupe_key_of({"dedupe_key": "gov-x:B-1"}) == "gov-x:B-1")
 ok("key: metadata.dedupe_key when the top level is null",
@@ -207,6 +226,16 @@ r2, e2, _n, rest2 = al.apply_table({A1: ("Kyle", "x")}, {}, keys, prec, troutes)
 ok("apply_table: the lane routing to Kyle -> escalate, even with a table owner", A1 in e2 and not r2 and not rest2)
 r3, e3, _n, rest3 = al.apply_table({A2: ("Kyle", "x")}, {}, keys, prec, troutes)
 ok("apply_table: the lane routing to Kyle on a fallback row -> escalate", A2 in e3 and not r3 and not rest3)
+PMR = (None, aor.ESCALATE + "batch B-PMB is owned by CC-PM, not a building session")
+for lane_owner in ("CC-A", "CC-INFRA", "Kyle"):
+    r5, e5, _n, rest5 = al.apply_table({A1: (lane_owner, "x")}, {}, keys, prec, {A1: PMR})
+    ok("apply_table BLOCKER-1: an escalation route escalates whatever the lane chose (%s)" % lane_owner,
+       A1 in e5 and not r5 and not rest5 and "CC-PM" in e5[A1] and "Langston decides" in e5[A1])
+r6, e6, _n, rest6 = al.apply_table({A1: ("CC-A", "x"), A2: ("CC-C", "y")}, {}, keys, prec, {A1: PMR, A2: troutes[A2]})
+ok("apply_table BLOCKER-1: every alert still lands exactly once beside an escalation",
+   sorted(list(r6) + list(e6) + list(rest6)) == sorted([A1, A2]) and A1 in e6)
+ok("table line BLOCKER-1: an escalation route says ESCALATE, never an owner",
+   "ESCALATE" in al.owner_table_line(PMR) and "CC-PM" in al.owner_table_line(PMR))
 r4, e4, _n, _r = al.apply_table({A1: ("CC-B", "x")}, {"zz": "already"}, keys, prec, troutes)
 ok("apply_table: an escalation from read_answer is kept", e4.get("zz") == "already")
 
@@ -310,9 +339,24 @@ def task(n, aid, title):
                        "_Category:_ breakage  ·  _Alert ID:_ `%s`" % aid}
 
 
-def run(batch, files):
-    del ESC[:], POSTS[:], INVOKES[:], INBOX[:]
-    b.read_mirror_file = reader(files)
+REAL_PIN, REAL_READ = b.pin_mirror, b.read_mirror_file
+bal.OWNER_MIRROR = os.path.join(SCRATCH, "no-mirror.git")      # never the live mirror, even by accident
+PIN = "a" * 40
+SHAS = []
+
+
+def run(batch, files, real=False):
+    del ESC[:], POSTS[:], INVOKES[:], INBOX[:], SHAS[:]
+    if real:
+        b.pin_mirror, b.read_mirror_file = REAL_PIN, REAL_READ
+    else:
+        b.pin_mirror = lambda now=None: (PIN, 5, "DT_SYNC_PASS")
+        rd = reader(files)
+
+        def read2(path, sha):
+            SHAS.append(sha)
+            return rd(path)
+        b.read_mirror_file = read2
     b.run_alert_batch(batch, None)
 
 
@@ -336,6 +380,7 @@ ok("bridge (ii): an unknown key reaches CC-INFRA, stated as the fallback",
 ok("bridge: a fallback row with a Langston precedent follows his precedent",
    ("[[ALERT id=%s owner=CC-C action=\"look (Langston precedent" % B3) in post)
 ok("bridge: nothing escalated on the clean batch", ESC == [])
+ok("bridge C-1: all three governed reads are taken at the ONE pinned sha", SHAS == [PIN, PIN, PIN])
 ok("bridge: the post is mirrored to the inbox as langston_outbound",
    len(INBOX) == 1 and INBOX[0]["kind"] == "langston_outbound" and INBOX[0]["text"] == post
    and INBOX[0].get("lane") == "alert" and INBOX[0].get("message_id") == 777)
@@ -360,6 +405,132 @@ ok("bridge R2-4: a register that parses to nothing escalates the whole batch", l
 run([{"channel_id": 100, "message_id": 5009, "author_id": 1, "author_name": "d", "content": "no id here"}], FILES)
 ok("bridge: an alert with no id is escalated without reading the mirror's verdict",
    ESC == [(5009, "the alert lane could not read an alert id in it")] and INVOKES == [])
+
+# Step-4 BLOCKER-1 through the shipping entry point: a live row keyed to a CC-PM register batch is escalated.
+C1 = "%08x-0000-4000-8000-%012x" % (19, 19)
+LIVE[C1] = {"id": C1, "metadata": {"dedupe_key": "gov-staleopen:B-PMB"}, "title": "Stale open"}
+PREC.clear()
+ANSWER["v"] = '[[ALERT id=%s owner=CC-A action="look"]]' % C1
+run([task(19, C1, "Stale open")], FILES)
+ok("bridge BLOCKER-1: a CC-PM register batch is ESCALATED to Langston, not routed",
+   [m for m, _r in ESC] == [5019] and "CC-PM" in ESC[0][1])
+ok("bridge BLOCKER-1: no routing marker for it is published", not any(("id=%s owner=" % C1) in p for p in POSTS))
+ok("bridge BLOCKER-1: the lane prompt told Langston it is an escalation",
+   len(INVOKES) == 1 and "OWNER TABLE: ESCALATE" in INVOKES[0])
+
+# ---- 4. the REAL pin and read against a real bare repo (C-1, C-2, C-3, C-5) ----------------------------------------
+import subprocess  # noqa: E402
+import time  # noqa: E402
+
+GENV = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+GENV["HOME"] = SCRATCH
+
+
+def git(*a, cwd=None):
+    r = subprocess.run(["git"] + list(a), cwd=cwd, env=GENV, capture_output=True, text=True)
+    if r.returncode:
+        raise RuntimeError("git %s: %s" % (" ".join(a), r.stderr))
+    return r.stdout.strip()
+
+
+BARE = os.path.join(SCRATCH, "mirror.git")
+WORK = os.path.join(SCRATCH, "work")
+git("init", "--bare", "-q", BARE)
+git("init", "-q", WORK)
+
+
+def commit_files(files, msg):
+    for path, text in files.items():
+        full = os.path.join(WORK, *path.split("/"))
+        os.makedirs(os.path.dirname(full), exist_ok=True)
+        with open(full, "w", encoding="utf-8", newline="") as fh:
+            fh.write(text)
+        git("add", path, cwd=WORK)
+    git("-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-q", "-m", msg, cwd=WORK)
+    git("push", "-q", BARE, "HEAD:" + al.OWNER_REF, cwd=WORK)
+    return git("rev-parse", "HEAD", cwd=WORK)
+
+
+SHA1 = commit_files(FILES, "one")
+bal.OWNER_MIRROR = BARE
+NOW = int(time.time())
+
+
+def stamps(**vals):
+    for name in al.OWNER_MIRROR_STAMPS:
+        p = os.path.join(BARE, name)
+        if os.path.exists(p):
+            os.remove(p)
+    for name, v in vals.items():
+        with open(os.path.join(BARE, name), "w") as fh:
+            fh.write(v)
+
+
+def pin_raises(now):
+    try:
+        REAL_PIN(now)
+    except RuntimeError:
+        return True
+    return False
+
+
+stamps(DT_SYNC_PASS="%d 2026-11-20T00:00:00Z" % NOW + NL)
+sha, age, which = REAL_PIN(NOW + 1790)
+ok("pin: resolves the ref to its full 40-hex commit", sha == SHA1 and age == 1790 and which == "DT_SYNC_PASS")
+ok("pin C-3: 1810 s past the newest stamp RAISES (limit 1800)", pin_raises(NOW + 1810))
+ok("pin: a stamp in the future RAISES (clock skew)", pin_raises(NOW - 60))
+for bad in ("0%d x" % NOW, "abc x", "", " " + NL, "%d.5 x" % NOW):
+    stamps(DT_SYNC_PASS=bad)
+    ok("pin: an unreadable stamp %r RAISES (no other stamp)" % bad[:12], pin_raises(NOW))
+stamps(DT_SYNC_PASS="%d x" % (NOW - 5000), DT_REVIEW_FETCH_OK="%d x" % NOW)
+ok("pin: the NEWEST of the two stamps wins", REAL_PIN(NOW + 10)[2] == "DT_REVIEW_FETCH_OK")
+stamps(DT_SYNC_PASS="%d x" % (NOW - 5000), DT_REVIEW_FETCH_OK="0%d x" % NOW)
+ok("pin: an unreadable newer stamp does not rescue a stale older one", pin_raises(NOW))
+stamps(DT_SYNC_PASS="%d x" % (NOW - 5000))
+open(os.path.join(BARE, "FETCH_HEAD"), "w").close()                        # fresh mtime, as a failed fetch leaves it
+ok("pin: a fresh FETCH_HEAD does not rescue a stale stamp", pin_raises(NOW))
+stamps()
+ok("pin: no stamp at all RAISES", pin_raises(NOW))
+
+stamps(DT_SYNC_PASS="%d x" % (NOW - 5000))
+run(batch, FILES, real=True)
+ok("bridge C-3: a stale mirror escalates the WHOLE batch through run_alert_batch, lane not invoked",
+   sorted(m for m, _r in ESC) == [5001, 5002, 5003] and all("R2-4" in r and "stale" in r for _m, r in ESC)
+   and INVOKES == [])
+stamps(DT_SYNC_PASS="%d x" % int(time.time()))
+ANSWER["v"] = NL.join(['[[ALERT id=%s owner=CC-A action="check the window"]]' % B1,
+                       '[[ALERT id=%s owner=CC-C action="look"]]' % B2,
+                       '[[ALERT id=%s owner=CC-C action="look"]]' % B3])
+PREC.clear()
+PREC[bal.alert_key(batch[2]["content"])] = [(TS(18), "CC-C")]
+run(batch, FILES, real=True)
+ok("bridge: a fresh real mirror routes the batch end to end (no escalation)", ESC == [] and len(POSTS) == 1
+   and ('owner=CC-B action="check the window (owner table: batch:B-TBL)"') in POSTS[0])
+
+pinned = REAL_PIN(int(time.time()))[0]
+SHA2 = commit_files({al.OWNER_TABLE_PATH: json.dumps(dict(TABLE, fallback="CC-A"))}, "two")
+ok("straddle C-1: a sync landing after the pin is NOT seen by a read at the pinned sha",
+   json.loads(REAL_READ(al.OWNER_TABLE_PATH, pinned))["fallback"] == "CC-INFRA" and SHA2 != pinned)
+ok("straddle C-1: the new commit is there at its own sha", json.loads(REAL_READ(al.OWNER_TABLE_PATH, SHA2))["fallback"] == "CC-A")
+ok("read: a non-40-hex sha RAISES (never the moving ref)",
+   raises(REAL_READ, al.OWNER_TABLE_PATH, al.OWNER_REF) and raises(REAL_READ, al.OWNER_TABLE_PATH, SHA1[:12]))
+ok("read: a path missing at the pin RAISES", raises(REAL_READ, "no/such/file", SHA1))
+
+DECOY = os.path.join(SCRATCH, "decoy.git")
+git("init", "--bare", "-q", DECOY)
+saved = {k: os.environ.get(k) for k in ("GIT_DIR", "GIT_OBJECT_DIRECTORY")}
+os.environ["GIT_DIR"] = DECOY
+os.environ["GIT_OBJECT_DIRECTORY"] = os.path.join(DECOY, "objects")
+try:
+    ok("C-5: an inherited GIT_DIR / GIT_OBJECT_DIRECTORY cannot point the pin elsewhere",
+       REAL_PIN(int(time.time()))[0] == SHA2)
+    ok("C-5: nor the read", json.loads(REAL_READ(al.OWNER_TABLE_PATH, SHA1))["fallback"] == "CC-INFRA")
+finally:
+    for k, v in saved.items():
+        if v is None:
+            os.environ.pop(k, None)
+        else:
+            os.environ[k] = v
 
 print("alert_owner_route_test: %d passed, %d failed" % (P, F))
 sys.exit(1 if F else 0)

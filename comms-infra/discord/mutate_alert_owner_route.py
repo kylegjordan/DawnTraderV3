@@ -57,6 +57,20 @@ MUTATIONS = {
                                                       "            escalate += [(t, why) for _, t in ided]\n")],
     "bridge: a failed read escalates nothing": [(BRIDGE, "            escalate += [(t, why) for _, t in ided]\n            ided = []\n",
                                                  "            ided = []\n")],
+    # --- Step-4 verdict 2 (Langston 2026-11-20): BLOCKER-1, C-1, C-3, C-5 ---
+    "register/plan: a CC-PM owner trusted": [(AOR, "    if owner in SESSIONS:\n        return (owner, rule)\n",
+                                              "    if True:\n        return (owner, rule)\n")],
+    "is_escalation always False": [(AOR, "    return bool(route) and str(route[1]).startswith(ESCALATE)\n", "    return False\n")],
+    "apply_table: an escalation route not escalated": [(LANE, "        if aor.is_escalation(tr):", "        if False:")],
+    "mirror age limit back to 15 h": [(LANE, "OWNER_MIRROR_MAX_AGE_S = 1800", "OWNER_MIRROR_MAX_AGE_S = 54000")],
+    "pin: a stale mirror accepted": [(BRIDGE, "    if age > al.OWNER_MIRROR_MAX_AGE_S:\n", "    if False:\n")],
+    "pin: a future stamp accepted": [(BRIDGE, "    if age < 0:\n", "    if False:\n")],
+    "stamps: the first readable wins, not the newest": [(BRIDGE, "        if int(first) > best:\n", "        if not best:\n")],
+    "stamps: a leading zero accepted": [(BRIDGE, ' or first.startswith("0"):', ":")],
+    "read: at the moving ref, not the pinned sha": [(BRIDGE, '"%s:%s" % (sha, path)', '"%s:%s" % (al.OWNER_REF, path)')],
+    "read: a non-40-hex sha accepted": [(BRIDGE, '    if not re.fullmatch(r"[0-9a-f]{40}", sha or ""):\n', "    if False:\n")],
+    "bridge: the reads not given the pin": [(BRIDGE, "read_mirror_file(path, pin_sha))", "read_mirror_file(path, al.OWNER_REF))")],
+    "git env: GIT_* inherited": [(BRIDGE, 'if not k.startswith("GIT_")}', "if True}")],
 }
 
 
