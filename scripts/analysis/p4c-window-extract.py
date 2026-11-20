@@ -155,6 +155,19 @@ def first_stamp(p):
     return None
 
 
+# Langston, r3 review: the prepended rotation's TAIL must reach START too. A rotation dated day(START) whose content stops
+# before START (the intervening rotation deleted, moved, or lost to a one-time gzip or a restore) would otherwise read as
+# covering [START, head). Narrow claim: exact contiguity is not decidable from content (a quiet log emits nothing).
+def last_stamp(p):
+    last = None
+    with open_log(p) as fh:
+        for line in fh:
+            m = TS.match(line)
+            if m:
+                last = m.group(1)
+    return datetime.strptime(last, '%Y-%m-%d %H:%M:%S').replace(tzinfo=timezone.utc) if last else None
+
+
 head = first_stamp(required[0])
 if head is None:
     die(f'{required[0]} holds no stamped line, so it cannot show the window start {START_S} is covered')
@@ -169,6 +182,11 @@ if head > START_S:
     if phead is None or phead > START_S:
         die(f'window start {START_S} is not covered: {os.path.basename(prepended)} starts at {phead} and '
             f'{os.path.basename(required[0])} at {head} — the span [{START_S}, {head}) would go unread')
+    ptail = last_stamp(prepended)
+    if ptail is not None and ptail < START_S:
+        die(f'window start {START_S} is not covered: {os.path.basename(prepended)} ends at {ptail}, before the window '
+            f'start, and {os.path.basename(required[0])} starts at {head} — a rotation between them is missing, so the '
+            f'span [{START_S}, {head}) would go unread')
     required.insert(0, prepended)
 
 

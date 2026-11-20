@@ -191,7 +191,13 @@ check('G0 one rotation dated C reads like CASE A', (code, he.get('cells_graded')
 #   the span — a dated-day(START) rotation that does not itself reach START never reads as covering it.
 # CASE H-empty — the dated-01-06 file holds only an unstamped line. EXPECTED exit 2, "holds no stamped line" — a source
 #   that cannot show coverage refuses; it never reads as covered.
-HS = '[2026-01-05 10:30:00+00:00, 2026-01-05 10:40:01+00:00)'
+# CASE H-gap (Langston, r3 review — expectation written before the check existed) — `head=False` plus
+#   `error__2026-01-05_00-01-40.log` holding 2026-01-04 00:01:45 and 2026-01-05 00:01:39 (head <= START, but content
+#   stops before START: the intervening rotation that held [00:01:40, 10:40) is missing). EXPECTED exit 2, "is not
+#   covered", "ends at 2026-01-05 00:01:39+00:00", "missing", naming the span. Narrow claim only: exact contiguity is not
+#   decidable from content (a quiet log emits nothing); this stops a rotation whose content ends before START reading as
+#   covering [START, head).
+HS ='[2026-01-05 10:30:00+00:00, 2026-01-05 10:40:01+00:00)'
 code, out, err = run([BOOT, RS], head=False)
 check('H exit 2: start not covered, no rotation dated 2026-01-05, span named',
       code == 2 and 'window start 2026-01-05 10:30:00+00:00 is not covered' in err
@@ -215,6 +221,12 @@ check('H-stale exit 2: a dated-day(START) rotation that starts after START does 
       code == 2 and 'is not covered' in err and HS in err, (code, err.strip()[-260:]))
 code, out, err = run([BOOT, RS], lines=['no stamp on this line'])
 check('H-empty exit 2: no stamped line refuses', code == 2 and 'holds no stamped line' in err, (code, err.strip()[-200:]))
+code, out, err = run([BOOT, RS], head=False, files={'error__2026-01-05_00-01-40.log': [
+    '2026-01-04 00:01:45 +00:00: [boot] unrelated process output',
+    '2026-01-05 00:01:39 +00:00: [boot] unrelated process output']})
+check('H-gap exit 2: a prepended rotation whose content ends before START does not cover it',
+      code == 2 and 'is not covered' in err and 'ends at 2026-01-05 00:01:39+00:00' in err and 'missing' in err
+      and HS in err, (code, err.strip()[-300:]))
 
 print('SELFTEST ' + ('FAILED: ' + ', '.join(fails) if fails else 'OK — all expectations met'))
 sys.exit(1 if fails else 0)
