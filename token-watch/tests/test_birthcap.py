@@ -247,6 +247,13 @@ reset(); enable(False); v = Vendor(active=False)
 store.save_state(birthcap.STATE, {"applied": "off", "plan": full})
 r = tick(v, off_time)
 check("flag removed while OFF: the feed is switched back ON", v.puts and v.puts[-1]["active"] is True and r["action"] == "disabled-restored-on", r)
+_jp = os.path.join(config.STATE_DIR, "spend-journal-%s.jsonl" % off_time.strftime("%Y-%m"))
+_journal = open(_jp).read() if os.path.exists(_jp) else ""
+st = store.load_state(birthcap.STATE, {})
+check("... and the billed restore is charged like any vendor call: one `switch` in the ledger journal AND the window "
+      "counter moves by its credits (§9e Part B: a window open across a disable must still pair it)",
+      _journal.count('"kind": "switch"') == 1 and st.get("switch_charged") == config.SWITCH_CREDITS,
+      (_journal, st.get("switch_charged")))
 reset(); enable(False); v = Vendor(active=False)
 store.save_state(birthcap.STATE, {"applied": None, "plan": full})      # what every failure leaves (gate A C-1)
 r = tick(v, off_time)
@@ -536,7 +543,7 @@ W_OFF = next(W_ON + timedelta(minutes=m) for m in range(1, 1440) if birthcap.des
 def window_run(vendor_extra=0, births_n=300, tail=(), late=(), close_after=timedelta(minutes=3), pre=None, new_cycle=None):
     """One planned ON window through the production tick: ON switch, births inside it, OFF switch, then the close.
     The meter moves by births + the two switches' credits (+ vendor_extra). Returns the last tick's result and state."""
-    reset(); enable(); v = Vendor(active=False); v.put_credits = 100; v.webhooks = 50_000
+    reset(); enable(); v = Vendor(active=False); v.put_credits = config.SWITCH_CREDITS; v.webhooks = 50_000
     store.save_state(birthcap.STATE, dict({"applied": "off", "plan": full}, **(pre or {})))
     tick(v, W_ON)
     add_births([W_ON + timedelta(seconds=30 + i * 10) for i in range(births_n)])
@@ -561,6 +568,24 @@ check("a clean window closes after a quiet minute: vendor = births + both switch
       row.get("verdict") == "ok" and row.get("vendor_webhooks") == 500 and row.get("births") == 300
       and row.get("switch_credits") == 200 and not any(p["dedupe_key"].startswith("birthcap-divergence") for p in r2["pages"]), row)
 check("the closed window is gone from state (the next ON opens a fresh one)", "window" not in st2, st2.get("window"))
+# the install transition: a window opened by the previous install has no `sw`. Its close must not throw (on the ON path
+# that would stop the feed coming back), and its switch credits cannot be paired: recorded UNPAIRED, out of the 72 h sum.
+reset(); enable(); v = Vendor(active=False); v.put_credits = config.SWITCH_CREDITS; v.webhooks = 50_000
+store.save_state(birthcap.STATE, {"applied": "off", "plan": full})
+tick(v, W_ON)
+_st = store.load_state(birthcap.STATE, {}); _st["window"].pop("sw", None); store.save_state(birthcap.STATE, _st)
+add_births([W_ON + timedelta(seconds=30 + i * 10) for i in range(300)])
+v.webhooks += 300
+r_a = tick(v, W_OFF)
+r_b = tick(v, W_OFF + timedelta(minutes=3))
+st_u = store.load_state(birthcap.STATE, {})
+row = (st_u.get("windows_checked") or [{}])[-1]
+check("a window opened before the counter existed closes UNPAIRED: no page, switch credits unknown (None), kept out of the "
+      "cumulative leg and counted aside", row.get("verdict") == "unpaired" and row.get("switch_credits") is None
+      and not row.get("paged") and not any(p["dedupe_key"].startswith("birthcap-") and "window" in p["dedupe_key"]
+                                             for p in r_a["pages"] + r_b["pages"])
+      and (st_u.get("cumulative") or {}).get("windows") == 0 and (st_u.get("cumulative") or {}).get("unpaired_windows") == 1,
+      (row, st_u.get("cumulative")))
 r, st1, r2, st2, v = window_run(tail=[timedelta(seconds=20), timedelta(seconds=45)])
 row = (st2.get("windows_checked") or [{}])[-1]
 check("an in-flight tail inside the grace is counted on both sides: clean", row.get("verdict") == "ok" and row.get("births") == 302, row)
@@ -571,7 +596,7 @@ check("vendor charged 2x the births across a WHOLE window: a divergence page for
       any(p["dedupe_key"].startswith("birthcap-divergence-" + W_ON.strftime("%Y%m%dT%H%M%S")) for p in pg)
       and any(w.get("verdict") == "divergent" and w.get("opened_at") == W_ON.isoformat() for w in st2.get("windows_checked", [])),
       (pg, st2.get("windows_checked")))
-reset(); enable(); v = Vendor(active=False); v.put_credits = 100; v.webhooks = 50_000
+reset(); enable(); v = Vendor(active=False); v.put_credits = config.SWITCH_CREDITS; v.webhooks = 50_000
 store.save_state(birthcap.STATE, {"applied": "off", "plan": full})
 tick(v, W_ON)
 add_births([W_ON + timedelta(seconds=30 + i * 10) for i in range(300)])
@@ -594,7 +619,7 @@ row = (store.load_state(birthcap.STATE, {}).get("windows_checked") or [{}])[-1]
 check("... and closes on the next quiet minute with the late birth counted on both sides (clean)",
       row.get("verdict") == "ok" and row.get("births") == 301 and row.get("end") == "off", row)
 # a failed OFF (births every minute) still closes, at the quiet-max age, marked not-quiet
-reset(); enable(); v = Vendor(active=False); v.put_credits = 100; v.webhooks = 50_000
+reset(); enable(); v = Vendor(active=False); v.put_credits = config.SWITCH_CREDITS; v.webhooks = 50_000
 store.save_state(birthcap.STATE, {"applied": "off", "plan": full})
 tick(v, W_ON)
 add_births([W_ON + timedelta(seconds=30 + i * 10) for i in range(300)])
@@ -610,7 +635,7 @@ tick(v, W_OFF + timedelta(seconds=config.BIRTHCAP_WINDOW_QUIET_MAX_S + 30))
 row = (store.load_state(birthcap.STATE, {}).get("windows_checked") or [{}])[-1]
 check("... then it is compared anyway, marked off-not-quiet", row.get("end") == "off-not-quiet", row)
 # the live 11-18 hour-edge split, inside one window: the hourly rows disagree, the window does not
-reset(); enable(); v = Vendor(active=False); v.put_credits = 100; v.webhooks = 50_000
+reset(); enable(); v = Vendor(active=False); v.put_credits = config.SWITCH_CREDITS; v.webhooks = 50_000
 store.save_state(birthcap.STATE, {"applied": "off", "plan": full})
 tick(v, W_ON)
 edge = (W_ON + timedelta(hours=1)).replace(minute=0, second=0)
@@ -649,6 +674,47 @@ check("... and at two blocks it is cut, compared clean, and a new window continu
       and (stc.get("window") or {}).get("web") == 50_400, (row, stc.get("window")))
 check("... and the continuing window carries the billing cycle it was opened in",
       (stc.get("window") or {}).get("cycle") == "2026-11-27", stc.get("window"))
+
+
+# Langston §9e Part A: "a switch whose requested_at equals the compare instant is excluded by opened <= ts < now while the
+# vendor delta has already absorbed it ... worth one Part-B test". A GET is billed like a PUT, so this fake's GET moves the
+# meter; the window must pair each switch charge with the meter delta it landed in, by code order, never by timestamp.
+class GetBills(Vendor):
+    def get(self, wid):
+        self.webhooks += config.SWITCH_CREDITS
+        return Vendor.get(self, wid)
+
+
+reset(); enable(); v = GetBills(active=True); v.webhooks = 50_000
+store.save_state(birthcap.STATE, {"plan": always})            # applied lost: this tick GETs it, then adopts a window
+tick(v, ta)
+w0 = store.load_state(birthcap.STATE, {}).get("window") or {}
+check("applied lost: one GET, billed, then a window adopted at a snapshot taken AFTER the GET's charge",
+      v.gets == 1 and w0.get("reason") == "adopt" and w0.get("web") == 50_000 + config.SWITCH_CREDITS, (v.gets, w0))
+add_births([ta + timedelta(minutes=10 + i) for i in range(400)])
+v.webhooks += 400
+r = tick(v, ta + timedelta(hours=12, minutes=1))
+stc = store.load_state(birthcap.STATE, {})
+row = (stc.get("windows_checked") or [{}])[-1]
+check("... the GET charged BEFORE the adopt snapshot is not counted inside the window: 400 births, 0 switch credits, ok",
+      row.get("vendor_webhooks") == 400 and row.get("births") == 400 and row.get("switch_credits") == 0
+      and row.get("verdict") == "ok" and not any(p["dedupe_key"].startswith("birthcap-divergence") for p in r["pages"]), row)
+# the cut tick itself re-learns a lost applied state: its GET lands in the meter delta at the compare instant
+st_ = store.load_state(birthcap.STATE, {}); st_.pop("applied", None); store.save_state(birthcap.STATE, st_)
+add_births([ta + timedelta(hours=12, minutes=10 + i) for i in range(400)])
+v.webhooks += 400
+r = tick(v, ta + timedelta(hours=24, minutes=2))
+stc = store.load_state(birthcap.STATE, {})
+row = (stc.get("windows_checked") or [{}])[-1]
+check("a GET in the cut's own tick IS in the vendor delta and IS counted: 500 = 400 births + 100, verdict ok",
+      v.gets == 2 and row.get("vendor_webhooks") == 400 + config.SWITCH_CREDITS and row.get("switch_credits") == config.SWITCH_CREDITS
+      and row.get("verdict") == "ok" and not any(p["dedupe_key"].startswith("birthcap-divergence") for p in r["pages"]), row)
+add_births([ta + timedelta(hours=24, minutes=10 + i) for i in range(400)])
+v.webhooks += 400
+r = tick(v, ta + timedelta(hours=36, minutes=3))
+row = (store.load_state(birthcap.STATE, {}).get("windows_checked") or [{}])[-1]
+check("... and the window the cut reopened does not count that GET a second time: 400 births, 0 switch credits, ok",
+      row.get("vendor_webhooks") == 400 and row.get("switch_credits") == 0 and row.get("verdict") == "ok", row)
 # the cumulative leg: one-sided, the money direction
 over = [{"opened_at": (W_ON - timedelta(hours=h + 1)).isoformat(), "closed_at": (W_ON - timedelta(hours=h)).isoformat(),
          "vendor_webhooks": 1_100, "births": 900, "switch_credits": 100, "verdict": "ok", "share": 0.09, "paged": False}
@@ -712,6 +778,32 @@ r, st1, r2, st2, v = window_run(vendor_extra=400, new_cycle=("2026-12-27", "2027
 check("... and that window is kept out of the cumulative leg too",
       st2.get("cumulative", {}).get("windows") == 5 and st2.get("cumulative", {}).get("reset_windows") == 1,
       st2.get("cumulative"))
+
+# NAMED CHECK, NOT A CODE CHANGE (Langston §9e Part A, obligation 1): a window under BIRTHCAP_DIVERGENCE_MIN whose meter
+# did not move is verdict 'small', NOT 'frozen' (the frozen arm is gated on births >= the minimum), so it STAYS in the
+# cumulative leg and its census-only births DILUTE the 72 h overbilling test. Pinned here so the behaviour is a decision
+# on the record: 5 small dead windows (150 births each, meter 0) pull the 9 % overbilling under the 3 % line.
+dead_small = [dict(over[0], opened_at=(W_ON - timedelta(hours=h + 10)).isoformat(), closed_at=(W_ON - timedelta(hours=h + 9)).isoformat(),
+                   vendor_webhooks=0, births=150, switch_credits=0, verdict='small', share=0.0, paged=False) for h in range(5)]
+# an ON window always holds two switches (base >= 200), so on the live path 'small' arises in a window with NO switch
+# inside it: an adopted or cut window. Drive one through the production tick: adopt, 150 births, meter dead, cut.
+reset(); enable(); v = Vendor(active=True); v.webhooks = 50_000
+store.save_state(birthcap.STATE, {'applied': 'on', 'plan': always, 'windows_checked': over})
+tick(v, ta)
+add_births([ta + timedelta(minutes=10 + i) for i in range(150)])
+r = tick(v, ta + timedelta(hours=12, minutes=1))
+st2 = store.load_state(birthcap.STATE, {})
+row = (st2.get('windows_checked') or [{}])[-1]
+check("a small window with a DEAD meter (150 births, vendor +0, no switch) is verdict small: no frozen, divergence or backwards page",
+      row.get('verdict') == 'small' and row.get('vendor_webhooks') == 0 and row.get('births') == 150 and row.get('switch_credits') == 0
+      and not any(p['dedupe_key'].startswith(('birthcap-vendor-meter-frozen', 'birthcap-divergence', 'birthcap-vendor-meter-backwards'))
+                  for p in r['pages']), (row, r['pages']))
+check("... and it STAYS in the cumulative leg (summed, not counted aside as a meter fault)",
+      st2.get('cumulative', {}).get('windows') == 6 and st2.get('cumulative', {}).get('meter_fault_windows') == 0, st2.get('cumulative'))
+r, st1, r2, st2, v = window_run(pre={'windows_checked': over + dead_small})
+check("... so five of them DILUTE the cumulative leg: the 9 % overbilling that pages alone no longer pages (the named residual)",
+      not any(p['dedupe_key'].startswith('birthcap-cumulative-overbill-') for p in r2['pages'])
+      and st2.get('cumulative', {}).get('windows') == 11, (r2['pages'], st2.get('cumulative')))
 
 print("== 10c. the replan join, --replan, --status (Langston §9e (c) and RIDER-2)")
 _s = {}

@@ -309,8 +309,7 @@ def tick(now: datetime | None = None, usage_fn=providers.helius_usage, put=provi
                 rec = do_switch("on", now, put=put)
                 calls[today] = int(calls.get(today, 0)) + 1      # C-2: every vendor call bumps the state counter
                 _append(BIRTHCAP_SWITCHES, rec)
-                if rec.get("credits"):
-                    budget.record_pending("switch", 1, now)
+                _charge_switch(st, rec, now)
                 st["applied"] = "on" if rec.get("ok") else None
                 if rec.get("ok"):
                     st["applied_at"] = now.isoformat()
@@ -399,7 +398,7 @@ def tick(now: datetime | None = None, usage_fn=providers.helius_usage, put=provi
         if records is not None:
             _append(BIRTHCAP_SWITCHES, rec)
             records.append(rec)
-        budget.record_pending("switch", 1, now)               # a GET is charged like a PUT (pre-audit A3)
+        _charge_switch(st, rec, now)                          # a GET is charged like a PUT (pre-audit A3)
         calls[today] = int(calls.get(today, 0)) + 1
         st["applied"] = applied
 
@@ -426,12 +425,11 @@ def tick(now: datetime | None = None, usage_fn=providers.helius_usage, put=provi
             if want == "off":
                 st["off_rate_per_min"] = rate_per_min_before(st, now)
             else:
-                _window_open(st, now, usage_fn, "on", records, pages)  # snapshot BEFORE the ON switch is charged
+                _window_open(st, now, usage_fn, "on", pages)  # snapshot BEFORE the ON switch is charged
             rec = do_switch(want, now, put=put)
             calls[today] = int(calls.get(today, 0)) + 1
             _append(BIRTHCAP_SWITCHES, rec)
-            if rec.get("credits"):
-                budget.record_pending("switch", 1, now)
+            _charge_switch(st, rec, now)
             result["action"] = "switched-%s" % want
             if rec.get("ok"):
                 st["applied"], st["applied_at"] = want, now.isoformat()
@@ -461,7 +459,7 @@ def tick(now: datetime | None = None, usage_fn=providers.helius_usage, put=provi
         try:
             if st.get("applied") == "on" and not st.get("window"):
                 _window_open(st, now, usage_fn, "adopt")       # ON with no window (install, restore): start one here
-            _window_close_check(st, now, records or [], usage_fn, plan, pages)
+            _window_close_check(st, now, usage_fn, plan, pages)
         except Exception as exc:                              # noqa: BLE001 — a missed compare is logged, not fatal
             LOG.error("birthcap: window compare failed: %s", exc)
 
@@ -589,11 +587,20 @@ def _flag_replan(st: dict, reason: str) -> None:
         st["replan"] = prev + "+" + reason
 
 
-def _window_open(st: dict, now: datetime, usage_fn, reason: str, records: list | None = None,
-                 pages: list | None = None) -> None:
+def _charge_switch(st: dict, rec: dict, now: datetime) -> None:
+    """Charge one vendor call that billed credits: the budget ledger AND the running counter the ON window pairs
+    against the vendor meter (§9e Part B). One place, so a charged call can never reach one and miss the other."""
+    cr = int(rec.get("credits", 0))
+    if cr:
+        budget.record_pending("switch", 1, now)
+        st["switch_charged"] = int(st.get("switch_charged", 0)) + cr
+
+
+def _window_open(st: dict, now: datetime, usage_fn, reason: str, pages: list | None = None) -> None:
     """Start an ON window at a vendor snapshot. A window still waiting for its quiet minute after its OFF (a replan that
     switched straight back ON) is compared first, against this same snapshot, so no window is lost. A failed usage read
-    starts no window (nothing to compare against)."""
+    starts no window (nothing to compare against). The window keeps the switch-credit counter as it stood at the snapshot
+    (`sw`): every charge after this line is in both the meter delta and the counter delta, whatever its timestamp."""
     try:
         usage = usage_fn()
         web = int(usage["credits"]["webhooks"])
@@ -604,8 +611,9 @@ def _window_open(st: dict, now: datetime, usage_fn, reason: str, records: list |
     cycle = _cycle_of(usage)
     prev = st.get("window")
     if prev and prev.get("off_at") and pages is not None:
-        _window_compare(st, prev, now, web, cycle, records or [], "reopened", pages)
+        _window_compare(st, prev, now, web, cycle, "reopened", pages)
     st["window"] = {"opened_at": now.isoformat(), "web": web, "cycle": cycle, "reason": reason,
+                    "sw": int(st.get("switch_charged", 0)),
                     "from_min": (now + timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M") if prev and prev.get("off_at") else None}
 
 
@@ -636,7 +644,7 @@ def _quiet_minute(st: dict, since: datetime, now: datetime) -> bool:
     return first_full + timedelta(minutes=1) <= now
 
 
-def _window_close_check(st: dict, now: datetime, records: list[dict], usage_fn, plan: dict, pages: list) -> None:
+def _window_close_check(st: dict, now: datetime, usage_fn, plan: dict, pages: list) -> None:
     """Close and compare the ON window: after its OFF once the census has been quiet for a full minute (or
     BIRTHCAP_WINDOW_QUIET_MAX_S after it), or, with no OFF, once it outlives two plan blocks — then a new window
     continues from the same snapshot."""
@@ -663,32 +671,41 @@ def _window_close_check(st: dict, now: datetime, records: list[dict], usage_fn, 
         LOG.error("birthcap: window close deferred, no usage snapshot: %s", exc)
         return
     cycle_now = _cycle_of(usage)
-    _window_compare(st, w, now, web_now, cycle_now, records, end_reason, pages)
+    _window_compare(st, w, now, web_now, cycle_now, end_reason, pages)
     if reopen:
         st["window"] = {"opened_at": now.isoformat(), "web": web_now, "cycle": cycle_now, "reason": "cut",
+                        "sw": int(st.get("switch_charged", 0)),
                         "from_min": (now + timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M")}
     else:
         st.pop("window", None)
 
 
-def _window_compare(st: dict, w: dict, now: datetime, web_now: int, cycle_now: str | None, records: list[dict],
-                    end_reason: str, pages: list) -> None:
+def _window_compare(st: dict, w: dict, now: datetime, web_now: int, cycle_now: str | None, end_reason: str,
+                    pages: list) -> None:
     """The compare itself: the vendor's webhook delta over the window against the census births in it (minutes from
-    `from_min`, or the ON minute, up to and including this one) plus the switch credits requested inside it."""
+    `from_min`, or the ON minute, up to and including this one) plus the switch credits charged between the two meter
+    reads. Those are paired by CODE ORDER (the counter at each read), never by `requested_at`: a GET or PUT in the tick
+    that takes a read carries that read's own timestamp, so a time filter puts it on the wrong side (§9e Part B, the
+    compare-instant case Langston named)."""
     opened = _ts(w["opened_at"])
     lo, hi = (w.get("from_min") or opened.strftime("%Y-%m-%dT%H:%M")), now.strftime("%Y-%m-%dT%H:%M")
     births = sum(v for k, v in st.get("minutes", {}).items() if lo <= k <= hi)
-    switch_cr = sum(int(r.get("credits", 0)) for r in records
-                    if r.get("requested_at") and opened <= _ts(r["requested_at"]) < now)
+    paired = "sw" in w                                       # False only for a window opened before the counter existed
+    switch_cr = int(st.get("switch_charged", 0)) - int(w["sw"]) if paired else 0
     expected = births + switch_cr
     dv = web_now - int(w["web"])
     base = max(dv, expected)
     row = {"opened_at": w["opened_at"], "closed_at": now.isoformat(), "end": end_reason, "open_reason": w.get("reason"),
-           "vendor_webhooks": dv, "births": births, "switch_credits": switch_cr,
+           "vendor_webhooks": dv, "births": births, "switch_credits": switch_cr if paired else None,
            "share": round(abs(dv - expected) / base, 4) if base else 0.0, "verdict": "small", "paged": False}
     key = opened.strftime("%Y%m%dT%H%M%S")
     row["reset_test"] = _reset_test(dv, w.get("cycle"), cycle_now)
-    if row["reset_test"]:
+    if not paired:
+        # ⛔ A WINDOW OPENED BEFORE THE SWITCH-CREDIT COUNTER EXISTED (the install of §9e Part B lands mid-window): its
+        #    switch credits cannot be paired, so it is recorded UNPAIRED, never paged, never a replan, and kept out of the
+        #    cumulative leg like a reset. One window at most, once; every window after it carries `sw`.
+        row["verdict"], row["share"] = "unpaired", 0.0
+    elif row["reset_test"]:
         # ⛔ A CYCLE RESET INSIDE THE WINDOW (the counter is per billing cycle): the window cannot be compared. Recorded,
         #    never paged, never a replan, and kept OUT of the cumulative leg below — its huge negative would otherwise
         #    cancel every overbilled window for the next 72 h.
@@ -724,11 +741,12 @@ def _window_compare(st: dict, w: dict, now: datetime, web_now: int, cycle_now: s
     #    census counts, summed over the kept windows. This is what makes not paging a single hour safe.
     # ⛔ A METER FAULT IS EXCLUDED LIKE A RESET AND COUNTED ASIDE (Langston §9e RIDER-1): a frozen window's census-only
     #    births, or a backwards window's negative delta, would otherwise bias the 72 h sum the cumulative leg rests on.
-    summed = [r for r in kept if r.get("verdict") not in ("reset", "frozen", "backwards")]
+    summed = [r for r in kept if r.get("verdict") not in ("reset", "frozen", "backwards", "unpaired")]
     cv = sum(r["vendor_webhooks"] for r in summed)
     ce = sum(r["births"] + r["switch_credits"] for r in summed)
     st["cumulative"] = {"at": now.isoformat(), "vendor": cv, "census": ce, "windows": len(summed),
                         "reset_windows": sum(1 for r in kept if r.get("verdict") == "reset"),
+                        "unpaired_windows": sum(1 for r in kept if r.get("verdict") == "unpaired"),
                         "meter_fault_windows": sum(1 for r in kept if r.get("verdict") in ("frozen", "backwards"))}
     if ce >= BIRTHCAP_CUMULATIVE_MIN and (cv - ce) / ce > BIRTHCAP_CUMULATIVE_OVER_SHARE:
         pages.append(_page("birthcap-cumulative-overbill-%s" % now.strftime("%Y-%m-%d"), "critical",
