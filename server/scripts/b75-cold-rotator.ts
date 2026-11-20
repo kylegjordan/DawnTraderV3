@@ -7,8 +7,8 @@
  * `created_at < now() - <warm_retention_days>`, copy the JSONL.gz from the
  * warm bucket to cold tier (Backblaze B2), verify, then delete the warm copy.
  *
- * Cron line:
- *   (root crontab, as installed on staging): 0 3 1 * * su - deploy -c "cd /home/deploy/dawntrader && /usr/bin/npx tsx server/scripts/b75-cold-rotator.ts" >> /var/log/dawntrader/b75-cold-rotator.log 2>&1
+ * Cron line (root crontab, as installed on staging):
+ *   0 3 1 * * su - deploy -c "cd /home/deploy/dawntrader && /usr/bin/npx tsx server/scripts/b75-cold-rotator.ts" >> /var/log/dawntrader/b75-cold-rotator.log 2>&1
  *
  * Until B2 credentials are provisioned (B2_KEY_ID / B2_APPLICATION_KEY /
  * B2_BUCKET) AND `data_lifecycle.cold_rotator_dry_run = false`, this script
