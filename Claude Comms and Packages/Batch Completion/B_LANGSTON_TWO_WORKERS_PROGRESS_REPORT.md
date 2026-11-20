@@ -117,6 +117,16 @@ Excluded just before row 1: `1568022657771905046`, a board note (Review = Approv
 
 > Read /var/log/langston-tasks.jsonl on Helsinki and apply W, q1-q3, q5, q6 per Scope Files/B_LANGSTON_TWO_WORKERS_PRE_REGISTRATION.md section 4, with the q1 BEFORE sample in Batch Completion/B_LANGSTON_TWO_WORKERS_PROGRESS_REPORT.md section 5. W is graded ONLY on a qualifying day (80 or more langston_inbound text arrivals in the UTC day). A non-qualifying day is NOT a W pass: if the 7 days hold no qualifying day, W is NOT-RUN and is reported so, not passed. On a q1 fail or a q5/q6 stop run 'langston-bridge-flag one-worker on --by cc-infra'. switch-on 2026-11-20T18:36:29Z. Owner CC-INFRA. Resolve with evidence, never ack.
 
+## 6b. The Step 9 fold and the observation (Langston C-4, msg `1573419152167665767`)
+
+The Step 9 fold (code `021d015d4`, merged at `2b7396593`) changes which invokes happen: a self-advance now skips an item a real inbound holds, and a self-advance whose item settled or was re-held after the pick is dropped before invoking (`dropped_not_ready`). Its install restarts the bridge, at idle.
+
+- **The observation RESTARTS at the install.** `T'` = the install time, recorded here at install. The three readers above are resolved at the install with evidence citing this section, and re-minted at `T'` +3 d, +7 d and +21 d with the same bodies and `T'` in place of `T`.
+- **Why restart rather than argue per criterion:** W's worker occupancy, q5's per-day invoke denominator and q6's parked-self-advance leg all count invokes, and the fold removes exactly the duplicate invokes they would count. Showing any of them insensitive would need the number of double reviews since `T`, and nothing records that. The restart costs the hours between `T` and the install.
+- **Rows between `T` and `T'` are kept and reported, labelled pre-fold, never graded.** At the read for this report (Helsinki task log, rows with `started >= T`): 11 rows, all `reply`; 6 on `task-worker-1`, 5 on `task-worker-2`; 2 self-advances.
+- **Reader rule added by the fold:** a `dropped_not_ready` row is not an invoke. It is left out of q5's per-day invoke count and reported as its own count. It is not a q6 degraded invoke either: the item was never invoked.
+- **`DEPLOY_WINDOWS.jsonl`: no row needed.** That register guards staging app deploys made by `dt-deploy`. This observation lives in the Langston bridge on Helsinki, which no `dt-deploy` touches. The only thing that disturbs it is a bridge install, and that is this batch's own, owner CC-INFRA.
+
 ## 7. The pre-registered close criterion (quoted from `B_LANGSTON_TWO_WORKERS_PRE_REGISTRATION.md` §4, unchanged)
 
 - **W:** "PASS: under 20 min on the first qualifying day after switch-on"; the 7-day median is reported beside it. Per A-1, a miss is read beside the after-window's shared-lane share.
