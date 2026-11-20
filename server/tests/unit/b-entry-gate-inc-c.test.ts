@@ -5,6 +5,7 @@
  * goes red under the mutation "read the flag class-independently".
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { readFileSync } from 'node:fs';
 
 vi.mock('../../core/logging/skipped-signals-logger.js', () => ({ logSkippedSignal: vi.fn() }));
 
@@ -76,5 +77,27 @@ describe('increment C — the birth switch', () => {
     expect(resolveBirthEntryWindowMode('crypto_spot')).toBe('shadow_absent');
     expect(birth('xstock_spot').refused).toBe(true);
     expect(birth('crypto_spot').refused).toBe(false);
+  });
+});
+
+// Step-4 condition 2 (Langston, 2026-11-20): the tests above prove the resolver, not that the orchestrator's birth call
+// USES it — reverting the call to `entryWindowShadow: true` left all six green. The orchestrator needs its whole graph to
+// run, so the wiring is proved at the source, as in `b-entry-gate-inc-b.test.ts`.
+describe('increment C — the orchestrator birth call is wired to the per-class switch', () => {
+  const stripComments = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+  const src = stripComments(readFileSync('server/services/signal-orchestrator.ts', 'utf-8'));
+  const births = src.match(/signalQualityEvaluator\.evaluate\([^;]*phase: 'birth'[^;]*\)/g) ?? [];
+
+  it('exactly one birth SQE call, and its EntryWindow shadow flag comes from the resolver, never a literal', () => {
+    expect(births).toHaveLength(1);
+    expect(births[0]).toMatch(/entryWindowShadow: _birthEntryWindowShadow\b/);
+    expect(births[0]).not.toMatch(/entryWindowShadow: (true|false)\b/);
+  });
+  it('the flag is "shadow unless the resolver says live", read for the signal\'s own asset class, before the call', () => {
+    const def = src.indexOf("const _birthEntryWindowShadow = resolveBirthEntryWindowMode(String(sqeAssetClass)) !== 'live';");
+    expect(def).toBeGreaterThan(0);
+    expect(births).toHaveLength(1);
+    expect(src.indexOf(births[0] as string)).toBeGreaterThan(def);
+    expect(src.split('_birthEntryWindowShadow').length - 1).toBe(2); // defined once, used once
   });
 });
