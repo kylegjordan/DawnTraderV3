@@ -1,6 +1,6 @@
 # B-XSTOCK-BAR-AVAILABILITY — Step 9 R7 + R7b (+ R7c): change list for the Step-4 diff review
 
-> **R7c (2026-11-20) answers the CHANGES NEEDED verdict. Read the R7c section first; the sections after it describe R7 + R7b as first sent, with the superseded lines marked.**
+> **R7d (2026-11-20, after the R7c PROCEED) is the newest round: read the R7d section first.** R7c answered the CHANGES NEEDED verdict; the sections after it describe R7 + R7b as first sent, with the superseded lines marked.
 
 **Header (Step-4 dispatch fields):**
 - **(i) Declared change-class:** `architecture` (scope header, `Scope Files/B_XSTOCK_BAR_AVAILABILITY_SCOPE.md:3`).
@@ -25,6 +25,66 @@
 | tests | NEW `…-verdict-runner.test.ts` (239), `…-sweep-hold.test.ts` (207); CHANGED `…-gate-read.test.ts` (+59) |
 
 **Verification at my clone:** vitest 19 files / 289 tests pass (the hold, runner and gate-read tests, every `b-b75-*` test, and the B-DISK-FILE-TIERING AP-7 fence test). tsc baseline 324 = 324. CI: see the dispatch.
+
+## R7d — the three carried items (2, 4, 5) from the R7c PROCEED, for their own Step-4 round
+**Code commit:** subject `B-XSTOCK-BAR-AVAILABILITY R7d: verdict-runner liveness check, hold-key clearing on an empty night, process-group kill` (sha as pushed is in the dispatch). Pushed only after OLD Claude's `4456f515d` deploy landed (21:40:57Z), so that deploy carries none of it. Six files, +181/−7, all mine.
+
+| file | change |
+|---|---|
+| `server/scripts/b-xstock-bar-availability-verdict-runner.ts` | +39/−3: Cron-line header block; `started at` / `DONE` lines in `main`; `killProcessGroup`; gate child `detached: true` |
+| `server/scripts/b-storage-archival-health.ts` | +14: CheckSpec `xstock-bar-verdict` |
+| `server/scripts/b75-retention-sweep.ts` | +14/−3: `settleRevisionHold` runs on an empty list; the sweep settles before the empty skip |
+| `server/tests/unit/b-disk-file-tiering-amendment1.test.ts` | +2/−1: the new check in the expected-names list and the Cron-line subject map |
+| `server/tests/unit/b-xstock-bar-availability-verdict-runner.test.ts` | +73 |
+| `server/tests/unit/b-xstock-bar-availability-sweep-hold.test.ts` | +39 |
+
+**Item 2: liveness.** `main` now writes a start line after the root refusal and a DONE line on every terminal result:
+```ts
+  console.log(`${LOG} started at ${new Date().toISOString()}`);
+  const result = await runVerdictRunner({ … });
+  process.exitCode = result === 'ran-no-verdict' ? 1 : 0;
+  console.log(`${LOG} DONE result=${result} failed=${result === 'ran-no-verdict' ? 1 : 0}`);
+```
+The archival-health watchdog grades it like the three B75 subjects:
+```ts
+    name: 'xstock-bar-verdict',
+    logFile: 'xstock-bar-availability-verdict.log',
+    schedule: '15 0 * * *',
+    donePattern: /\[xstock-bar-verdict-runner\] DONE result=\S+ failed=(\d+)/,
+    startPattern: /\[xstock-bar-verdict-runner\] started at (\S+)/,
+    onMissing: 'alert',
+```
+That gives `not_started` (no start line after the fire: cron line gone, lock still held, launcher refused), `incomplete` (start with no DONE: a fatal or a kill), `failed` (ran-no-verdict), and, from `effectiveSchedule` (`b-storage-archival-health.ts:298`), `not_scheduled` / `schedule_drift` when the root crontab has no active line appending to that log or a different expression. The runner header now opens with the installed line (Infra, root crontab line 15 of 15), because the amendment1 Cron-line fence takes the FIRST `* <5 fields> su - deploy` match in the subject's header and requires it to equal the CheckSpec schedule.
+
+**Item 4: the hold key's clearing edge.**
+```ts
+-  if (parent !== XSTOCK_REVISION_PARENT || eligible.length === 0) return { kind: 'not-applicable' };
++  if (parent !== XSTOCK_REVISION_PARENT) return { kind: 'not-applicable' };
+ …
++  if (plan.kind === 'window-unreadable' && plan.held.length === 0) {
++    deps.log(`[B75 sweep] ${parent}: graded window unreadable (${plan.reason}); no eligible partition, nothing held`);
++    return plan;
++  }
+```
+and in `runSweep` the settle call moves above `if (oldPartitions.length === 0)`. Every other table still reads nothing (the parent check is first). Tests: readable + no verdict + empty list resolves `[UNREADABLE, holdKey]` and leaves the cap key; verdict present resolves `[UNREADABLE, hold, cap]`; unreadable + empty raises nothing and resolves nothing; a source check that the settle precedes the empty skip and appears once.
+
+**Item 5: process-group kill.**
+```ts
+-    const child = spawn('npx', ['tsx', GATE_SCRIPT, ...args], { env: process.env, stdio: ['ignore', 'pipe', 'pipe'] });
++    const child = spawn('npx', ['tsx', GATE_SCRIPT, ...args], { env: process.env, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
+ …
+-    const timer = setTimeout(() => child.kill('SIGKILL'), GATE_CHILD_TIMEOUT_MS);
++    const timer = setTimeout(() => killProcessGroup(child.pid, () => child.kill('SIGKILL')), GATE_CHILD_TIMEOUT_MS);
+```
+`killProcessGroup` sends SIGKILL to `-pid`; a throw or no usable pid falls back to `child.kill`. Tests cover all three arms.
+
+**Verification at my clone:** the two runner/hold test files 81/81; tsc 324 = baseline, none in touched files. amendment1 fails 8 tests in its H-2 block on this laptop only: the working copy of `staging-liveness-watchdog.mjs` is CRLF (`git ls-files --eol`: `i/lf w/crlf`), its `#!` line then ends in `\r`, and the import throws. That file is untouched here; CI checks out LF. CI on the pushed head is the evidence, not my clone.
+
+**Judgement calls I want attacked (R7d):**
+1. **A no-verdict night pages twice:** the runner's own `…-runner-failed` key and the watchdog's `failed`. I kept both: the first fires at 00:15Z with the reason, the second at 05:00Z is the independent check that does not trust the runner. The other choice is `failed=0` always, with the watchdog grading liveness only.
+2. **A lock-held night pages `not_started`.** The launcher writes no start line when the previous run still holds the lock. A run alive 24 h later needs a person, so I did not add a "skipped, lock held" DONE line that would grade green.
+3. **Residual, not fixed:** if the runner itself is killed while the gate runs, the detached gate group is not killed with it and lives until its own statement budget ends (at most 1,200 s). Under cron nothing kills the runner early, so I left it.
+4. **Infra's proposed crontab-line check in `dt-install-drift`** (`1573453936608936057`) would duplicate `effectiveSchedule` above for this job. Infra WITHDREW it (`1573458335095718159`). His named residual: an edit to the COMMAND on a line that keeps the same log and schedule is not seen by `effectiveSchedule`. My read: a command that no longer runs this runner stops writing the `started at` line, so the CheckSpec pages `not_started` at 05:00Z; the uncovered case is only a changed command that still runs a runner writing both lines. Accepted, no own check.
 
 ## Step-4 verdict on R7c: PROCEED (Langston `1573342539186966542`, 2026-11-20)
 Code `38af683a6`; graded at `b6428d6ef` (CI `44745580867` 4/4); bytes unchanged at `c0a82132e`. Nothing ruled on reported fact. Two readings and five carried items for the record, each with its disposition:
