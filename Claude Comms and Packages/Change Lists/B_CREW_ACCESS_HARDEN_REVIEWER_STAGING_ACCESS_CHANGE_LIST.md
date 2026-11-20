@@ -155,3 +155,13 @@ pre-existing live differences (`coltrane-size-watch` and the two installed copie
 
 ## 2026-11-13 — one owed install TRANSFERRED to B-SIZE-WATCH-BREACH-ALARM (Infra Claude)
 The `coltrane-size-watch` difference named above (installed `ac244b69…` vs the repo's header-only update) is no longer this batch's to install. `B-SIZE-WATCH-BREACH-ALARM` changed that file and installed it at its reviewed ref `8a2cdefbb594754422fac1b5395d47a7ec8b9e30` (installed blob `ded9da661cb21ae8c5a225febfd8313ed1d2f348`), which carries the header update too. `verify-agent-artifacts.py 8a2cdefbb` now shows it MATCH; the two remaining DIFFERs are the installed copies of `AGENT_AUTHORING_GUIDE.md`, still this batch's. Record: `B_SIZE_WATCH_BREACH_ALARM_CHANGE_LIST.md`, Step 6.
+
+## 2026-11-20 — the daily check refused since 11-17: the psql wrapper (Infra Claude)
+**Symptom.** `reviewer-staging-access.service` failed every day from 2026-11-17 06:20Z; OnFailure pages were not seen. The unit's message was the first 500 characters of `ssh -v` stderr — all debug trace — so the remote refusal never showed.
+**Cause (re-derived on staging 2026-11-20).** `B-DB-READ-TOOL` installed a root-owned wrapper at `/usr/local/bin/psql` (2026-11-16 16:46Z). As deploy, `shutil.which("psql")` returns `/usr/local/bin/psql`, and `verify_remote` refused unless it was `/usr/bin/psql`. The probe itself called `/usr/bin/psql` by absolute path, bypassing the wrapper's lock refusal and its `sslmode=require` default (`.env`'s `DATABASE_URL` carries no `sslmode`, so the probe ran libpq `prefer`: a wrong password sent twice).
+**Fix.**
+1. `STAGING_PSQL = "/usr/local/bin/psql"`; the check requires `which psql` to equal it AND `require_path(STAGING_PSQL, "root", 0o755)` (regular file, one link, not a symlink). Its CONTENT is `dt-install-drift`'s to prove on staging (the wrapper is enrolled there), not this verifier's.
+2. The probe runs `STAGING_PSQL` — the positive control now proves what the reviewer's own `psql` does, and inherits the lock refusal and the one-attempt default.
+3. `failure_text()` drops `OpenSSH_`/`debugN:` lines and shows the last 500 characters of what remains (stdout if nothing remains); the database refusal now carries the probe's stderr tail.
+4. Self-test 20 → 23 checks: the failure text (refusal shown, no trace; stdout fallback) and the probe-uses-wrapper check. Mutants: probe path reverted to `/usr/bin/psql`, the debug filter broken, the `require_path` removed — each REFUSED (exit 2, with its own message).
+**Live proof before commit:** the patched `verify-remote` run on staging as deploy for both actors returned `database_read: ok` (langston, coltrane). The Helsinki install and the full service run follow Langston's review.

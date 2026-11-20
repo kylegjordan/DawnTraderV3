@@ -28,6 +28,8 @@ except ImportError:  # The parser self-test also runs in the Windows owner clone
 
 STAGING_HOST = "188.245.193.8"
 HELSINKI_SOURCE = "204.168.141.77"
+STAGING_PSQL = "/usr/local/bin/psql"   # the B-DB-READ-TOOL wrapper (comms-infra/staging/psql-wrapper)
+NL = chr(10)
 ACTORS = {
     "langston": {
         "home": "/home/langston",
@@ -271,6 +273,16 @@ def validate_accepted_key_trace(
         raise VerificationError("SSH trace did not prove public-key authentication")
 
 
+def failure_text(stderr: str, stdout: str) -> str:
+    """What a failed `ssh -v` run says, without its debug trace: the trace fills the first 500 characters, so the
+    remote verifier's own refusal (its last stderr lines) was never shown — every failure since 2026-11-17 read as
+    ssh debug output alone."""
+    lines = [line for line in (stderr or "").splitlines()
+             if line.strip() and not line.startswith(("debug1:", "debug2:", "debug3:", "OpenSSH_"))]
+    text = NL.join(lines).strip() or (stdout or "").strip()
+    return text[-500:]
+
+
 def require_path(path: str, owner: str, mode: int, *, directory: bool = False) -> None:
     if pwd is None:
         raise VerificationError("live verification requires a Unix host")
@@ -349,8 +361,15 @@ def verify_remote(actor: str) -> int:
             if not handle.read(1):
                 raise VerificationError("reviewer read an empty current log: %s" % path)
         logs[path] = os.stat(path).st_size
-    if shutil.which("psql") != "/usr/bin/psql":
-        raise VerificationError("psql does not resolve to /usr/bin/psql")
+    # B-DB-READ-TOOL (#1259) puts a root-owned wrapper at /usr/local/bin/psql in front of /usr/bin/psql: it refuses
+    # while dt-sql is LOCKED or holds an unfinished attempt, and defaults sslmode to require so a wrong password is
+    # sent once, not twice (Supabase bans an address after two). The reviewer's own `psql` resolves to it, so the
+    # positive control below runs THROUGH it — the check proves what the reviewer will actually use, and this daily
+    # login can no longer be the second wrong password the wrapper exists to stop. Its content is dt-install-drift's
+    # to prove on staging; here: the path, a root-owned 0755 regular file deploy cannot rewrite.
+    if shutil.which("psql") != STAGING_PSQL:
+        raise VerificationError("psql does not resolve to %s" % STAGING_PSQL)
+    require_path(STAGING_PSQL, "root", 0o755)
 
     # The connection URI must not appear in psql's argv: every local account can read argv.
     # Source it into a short-lived Python process, translate it to libpq environment fields,
@@ -384,7 +403,7 @@ for source, target in {
 env["PGOPTIONS"] = (env.get("PGOPTIONS", "") +
                     " -c default_transaction_read_only=on").strip()
 result = subprocess.run(
-    ["/usr/bin/psql", "-Atqc",
+    ["%s", "-Atqc",
      "select current_user,current_database(),"
      "(select count(*) >= 0 from public.users),"
      "current_setting('transaction_read_only')"],
@@ -396,7 +415,7 @@ result = subprocess.run(
 sys.stdout.write(result.stdout)
 sys.stderr.write(result.stderr)
 raise SystemExit(result.returncode)
-'''
+''' % STAGING_PSQL
     encoded_probe = base64.b64encode(database_probe.encode("utf-8")).decode("ascii")
     database = subprocess.run(
         [
@@ -413,7 +432,10 @@ raise SystemExit(result.returncode)
     fields = rows[0].split("|") if len(rows) == 1 else []
     if (database.returncode != 0 or len(fields) != 4
             or fields[2:] != ["t", "on"]):
-        raise VerificationError("read-only database positive control failed")
+        raise VerificationError(
+            "read-only database positive control failed: %s"
+            % (database.stderr.strip()[-300:] or "exit %d" % database.returncode)
+        )
     database_user, database_name = fields[:2]
     print(json.dumps({
         "actor": actor,
@@ -470,7 +492,7 @@ def verify_actor(actor: str) -> int:
     if result.returncode != 0:
         raise VerificationError(
             "%s live verification failed: %s"
-            % (actor, (result.stderr or result.stdout).strip()[:500])
+            % (actor, failure_text(result.stderr, result.stdout))
         )
     try:
         validate_accepted_key_trace(
@@ -688,6 +710,22 @@ def self_test() -> int:
             raise VerificationError(
                 "case-insensitive cert-authority mutation survived: %s" % option
             )
+    # the live failure text: ssh -v's trace must not hide the remote verifier's own refusal (11-17 .. 11-20)
+    trace = "OpenSSH_9.6p1 Ubuntu" + NL + NL.join("debug1: line %d" % i for i in range(40))
+    refusal = "VerificationError: psql does not resolve to /usr/local/bin/psql"
+    shown = failure_text(trace + NL + refusal + NL + "debug1: Exit status 1", "")
+    if refusal not in shown or "debug1:" in shown:
+        raise VerificationError("failure text mutation survived: %r" % shown[:120])
+    checks += 1
+    if failure_text(trace, "only stdout") != "only stdout":
+        raise VerificationError("failure text fallback to stdout mutation survived")
+    checks += 1
+    # the positive control must run the wrapper the reviewer's own `psql` resolves to, never /usr/bin/psql around it
+    import inspect
+    body = inspect.getsource(verify_remote)
+    if '"/usr/bin/psql"' in body or "% STAGING_PSQL" not in body or "require_path(STAGING_PSQL" not in body:
+        raise VerificationError("database probe bypasses the psql wrapper")
+    checks += 1
     print("self-test passed: %d checks" % checks)
     return 0
 
