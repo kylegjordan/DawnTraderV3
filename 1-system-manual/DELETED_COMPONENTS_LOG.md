@@ -6,6 +6,15 @@
 
 ---
 
+## `pm2-logrotate` — the PM2 log-rotation module on staging — UNINSTALLED 2026-11-20 (B-DISK-FILE-TIERING P9, CC-A)
+
+**What:** the `pm2-logrotate` 3.0.0 module (PM2 module id 2, user `deploy`), which rotated `/var/log/dawntrader/error.log` and `out.log`. Not code in the repo: a runtime module installed on the staging box, removed with `pm2 uninstall pm2-logrotate` at 2026-11-20T21:41Z, after the deploy of `4456f515d07a1e7b1310a767bd7e1d645f565411`.
+**Why:** P9 replaces it with `dawntrader-logrotate.timer` (hourly) running logrotate on `/etc/dawntrader/logrotate-app.conf` with its own state file. Two rotators on one file is the failure P9 exists to remove, so the module goes in the same step the timer is enabled. The replacement also covers what the module could not: a per-stream count (error 30 days, out `maxage 7`), the two nightly job logs the storage health check reads, and the SQE rejection diagnostic.
+**Blast radius:** the module's settings were read before removal (below). Its archives (`error__<date>.log`, `out__<date>.log`) keep their names: the new config's `dateformat __%Y-%m-%d_%H-%M-%S` + `extension .log` produces the same shape, so the readers that open them by name (`p4c-window-extract.py`, the `workflow-07-verify-cc` D+1 rule) are unchanged, and the old archives age out under the new counts. Verified after removal: `pm2 ls` lists no `pm2-logrotate` (count 0); the dry run (`logrotate -d`) considered all four stanzas and rotated nothing; a scratch replica forced three times kept exactly 2 archives, compressed one rotation late, and carried the job log's mtime back; `dt-install-drift` PASS with the five new files matching the deployed commit.
+**Restore path:** `su - deploy -c 'pm2 install pm2-logrotate'`, then the settings it ran with — `max_size 1G`, `retain 14`, `compress true`, `dateFormat YYYY-MM-DD_HH-mm-ss`, `workerInterval 30`, `rotateInterval 0 0 * * *`, `rotateModule true` (each as `pm2 set pm2-logrotate:<key> <value>`) — and `systemctl disable --now dawntrader-logrotate.timer` FIRST, so the two never run together.
+**Archive:** none — a runtime module, not repo code; the settings above are its whole configuration.
+**Left intentionally:** `/home/deploy/.pm2/pm2.log` (its reader `scripts/analysis/xs_frame_extract.sh` reads it as one file; a Step-10 review with that reader's owner decides it) and `/home/deploy/.pm2/logs/` (nothing writes there after the uninstall).
+
 ## `server/scripts/b8-5-measurement-override.ts` and `b8-5-tune3-anchor.ts` — the two one-off paper re-anchor scripts — DELETED 2026-11-05 (B-BALANCE-SESSION-PAIRING, `#618` leg 1, CC-C; pre-audit P6, Langston Step-2: "delete, don't flat-check")
 
 **What:** the two 43-line one-off scripts that minted the paper `measurement_override` anchors v2 (2026-07-15, $2,400) and v3 (2026-07-16, $2,250) through `executeReanchor`.
