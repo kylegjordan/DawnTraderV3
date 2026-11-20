@@ -799,5 +799,16 @@ describe('3b item 4 — the residue delete set: our orphans and non-chosen versi
     expect(dlAt).toBeGreaterThan(loopAt);
     expect(addAt).toBeGreaterThan(dlAt);
     expect(matchAt).toBeGreaterThan(addAt);
+    // Step-4 residual 1 (Langston, fold PROCEED): the set is PER ROW, declared inside the decisions loop, not hoisted
+    const decisionsAt = body.indexOf('for (const d of decisions) {');
+    const comparedAt = body.indexOf('const compared = new Set<string>();');
+    expect(decisionsAt).toBeGreaterThan(0);
+    expect(comparedAt).toBeGreaterThan(decisionsAt);
+    expect(loopAt).toBeGreaterThan(comparedAt);
+    // Step-4 residual 2: "not downloaded" is true only because a failed download cannot be caught and carried on from;
+    // the candidate loop has no catch, so a throw ends the row instead of labelling an attempted download "not downloaded"
+    const loopEnd = body.indexOf('} finally {', loopAt);
+    expect(loopEnd).toBeGreaterThan(matchAt);
+    expect(body.slice(loopAt, loopEnd)).not.toMatch(/\bcatch\b/);
   });
 });
