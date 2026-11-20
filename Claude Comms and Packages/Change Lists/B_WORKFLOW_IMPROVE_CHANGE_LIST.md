@@ -129,3 +129,17 @@ Pointers to it: `workflow-02:51` (provenance read), `:60` (census), `workflow-01
 - `history.mjs`: three `not_covered` entries (phase-scoped sub-batch ids such as P19-B8.5l; ledger rows matched by basename; former names proven for one rename only).
 
 Carried to gate 4: the undeclared database enum types; the checker's own marker missing five `**Batch:** … **change-class: …**` lines (nothing mis-graded).
+
+## Gate 2 re-check — C-3 changes needed, C-4 one condition (Langston, Discord `1573183217178124359`); applied, no diff round (he takes them at Step 8)
+
+| item | Langston's measurement | what changed |
+|---|---|---|
+| **C-3** | the candidate set was recursive (`ls-tree -r`) while the checker lists the scope dir non-recursively (`checker.mjs:116`); a nested file with the id and `SCOPE` that sorts first made `git show` throw uncaught, exit 1 | `closeout.mjs` 1.1: scope selection is now a pure `selectScope()`: immediate children of the scope dir only, and an unreadable candidate is skipped (`continue`), as the checker's `showFile` → null skips it. The header comment names the mirror's drift class (listing recursion). |
+| **C-6** (fold-in) | 12 scopes declare a class in a form the marker does not match; UNDECLARED sent authors hunting for a line that is there | three UNDECLAREDs kept apart: `invalid-class` (marker names a token that is not a class), `present-unmatched` ("a declaration is present in a form the checker's marker does not match"), `no-marker`; plus `no-scope`. B-GOV-2 now reads `present-unmatched`. |
+| **C-4 condition** | the `--check` key used the name as written, so re-pointing `workflow-10:5` → `workflow-10-governance:5` gave 2 DISAPPEARED | `skill-cites.mjs` 1.2: `compare()` keys on `c.skill_dir \|\| c.skill`. |
+| C-4 note | the key drops duplicates (drop one of a pair: 0 DISAPPEARED) | `--check` prints a `not covered:` line naming the key, with the count change as the tell. |
+| C-4 note | `--check` resolved a `--ref` it never used | under `--check` the skills are read at `--at` unless `--ref` is given. |
+| self-tests | both measured cases become tests | `closeout.mjs --self-test` 7/7 (nested candidate, unreadable candidate, sort order, mid-line, invalid token, no marker, no scope); `skill-cites.mjs --self-test` 6/6 (3-removed positive control, full-name re-point = 0 DISAPPEARED, stale text, other line, the duplicate limit). |
+
+Real-data runs at `9bca59ced`: `skill-cites --check` against its own listing: 129 before, 129 after, 0 / 0 / 0; `closeout --compare`: every row equal; B-WORKFLOW-IMPROVE reads declared `non_architecture`.
+`readDeclaredClassAt` (Langston's question): asked of CC-A, whose file `checker.mjs` is; until it lands, the mirror stays with both fixes. The 12-scope mid-line marker item: **HOME: an item on `#744` B-GATE-GUARD, owner CC-A** (disposition 2, Langston).

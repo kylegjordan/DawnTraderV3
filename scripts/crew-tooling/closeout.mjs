@@ -15,6 +15,7 @@
 // Usage: node scripts/crew-tooling/closeout.mjs --class <c> [--batch ID --base REF --head REF]
 //          [--census file.json] [--ledger file.json] [--json]
 //        node scripts/crew-tooling/closeout.mjs --compare   (matrix vs workflow-10's table, row by row)
+//        node scripts/crew-tooling/closeout.mjs --self-test (the scope-selection cases, no git)
 // Exit:  0 nothing MISSING (and, for --compare, every row equal), 1 a MISSING row or a compare difference, 2 error.
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -31,6 +32,71 @@ const opt = (k) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : un
 const fail = (m) => { console.error(`ERROR: ${m}`); process.exit(2); };
 const git = (...a) => execFileSync('git', a, { cwd: ROOT, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
 const CLASSES = Object.keys(CLASS_DOCSET);
+
+// Scope selection, mirroring the checker's readDeclaredClass (checker.mjs:570-585), kept pure so --self-test can
+// drive it. MIRRORED, not imported, because the checker's version reads at its own fetched ref, not at --head; the
+// marker itself is imported. The mirror's known drift class is LISTING RECURSION (Langston Step-4 gate 2
+// re-check, C-3): the checker lists the scope dir NON-recursively (lsTreeNamesAt, checker.mjs:116), so only the
+// dir's immediate children are candidates here too, and an unreadable candidate is skipped, as the checker's
+// showFile -> null -> continue (checker.mjs:576-577) skips it, never thrown.
+// treeFiles: every path at the ref; readText(path) returns the text or throws.
+function selectScope(treeFiles, re, readText) {
+  const dir = `${DOCS.scope.dir}/`;
+  const cands = treeFiles.filter((f) => f.startsWith(dir) && !f.slice(dir.length).includes('/'))
+    .map((f) => f.slice(dir.length)).filter((n) => re.test(n) && /SCOPE/i.test(n)).sort();
+  let scope = cands.length ? `${dir}${cands[0]}` : null, m = null, unmatched = null;
+  for (const n of cands) {
+    let text; try { text = readText(`${dir}${n}`); } catch { continue; }
+    const hit = text.match(CHANGE_CLASS_MARKER);
+    if (hit) { scope = `${dir}${n}`; m = hit; break; }
+    if (!unmatched && /change-class/i.test(text)) unmatched = `${dir}${n}`;
+  }
+  const declared = m && CLASSES.includes(m[1].toLowerCase()) ? m[1].toLowerCase() : null;
+  // Gate 2 C-6: three different UNDECLAREDs, kept apart so an author is not sent hunting for a missing line.
+  const why = declared ? 'declared' : m ? 'invalid-class' : unmatched ? 'present-unmatched' : cands.length ? 'no-marker' : 'no-scope';
+  return { scope: why === 'present-unmatched' ? unmatched : scope, token: m ? m[1] : null, declared, why };
+}
+const WHY_TEXT = {
+  'invalid-class': (r) => `UNDECLARED in ${r.scope}: the marker names "${r.token}", which is not a valid class`,
+  'present-unmatched': (r) => `UNDECLARED in ${r.scope}: a declaration is present in a form the checker's marker does not match (for example mid-line, or a bolded colon)`,
+  'no-marker': (r) => `UNDECLARED in ${r.scope}: no change-class line`,
+  'no-scope': () => 'UNDECLARED (no scope file)',
+};
+
+if (args.includes('--self-test')) {
+  const re = batchIdToFileRegex('B-SELF-TEST');
+  const d = `${DOCS.scope.dir}/`;
+  const run = (files, texts) => selectScope(files, re, (p) => { if (!(p in texts)) throw new Error(`no ${p}`); return texts[p]; });
+  const cases = [
+    ['nested candidate sorting first is not a candidate (the measured crash)',
+      run([`${d}A_evidence/B_SELF_TEST_SCOPE_notes.md`, `${d}B_SELF_TEST_SCOPE.md`], { [`${d}B_SELF_TEST_SCOPE.md`]: 'change-class: hotfix\n' }),
+      { why: 'declared', declared: 'hotfix', scope: `${d}B_SELF_TEST_SCOPE.md` }],
+    ['an unreadable candidate is skipped, not thrown',
+      run([`${d}B_SELF_TEST_SCOPE.md`, `${d}B_SELF_TEST_SCOPE_r2.md`], { [`${d}B_SELF_TEST_SCOPE_r2.md`]: '> change-class: sub_batch\n' }),
+      { why: 'declared', declared: 'sub_batch', scope: `${d}B_SELF_TEST_SCOPE_r2.md` }],
+    ['the first marker-carrying candidate in sort order wins',
+      run([`${d}B_SELF_TEST_SCOPE_r2.md`, `${d}B_SELF_TEST_SCOPE.md`], { [`${d}B_SELF_TEST_SCOPE.md`]: 'no class here\n', [`${d}B_SELF_TEST_SCOPE_r2.md`]: '- **change-class**: non_architecture\n' }),
+      { why: 'declared', declared: 'non_architecture', scope: `${d}B_SELF_TEST_SCOPE_r2.md` }],
+    ['a mid-line declaration is reported as present but unmatched',
+      run([`${d}B_SELF_TEST_SCOPE.md`], { [`${d}B_SELF_TEST_SCOPE.md`]: '**Owner:** CC-A · change-class: hotfix\n' }),
+      { why: 'present-unmatched', declared: null, scope: `${d}B_SELF_TEST_SCOPE.md` }],
+    ['an invalid token is invalid-class, not no-marker',
+      run([`${d}B_SELF_TEST_SCOPE.md`], { [`${d}B_SELF_TEST_SCOPE.md`]: 'change-class: wibble\n' }),
+      { why: 'invalid-class', declared: null, scope: `${d}B_SELF_TEST_SCOPE.md` }],
+    ['no change-class text at all is no-marker',
+      run([`${d}B_SELF_TEST_SCOPE.md`], { [`${d}B_SELF_TEST_SCOPE.md`]: 'scope text\n' }),
+      { why: 'no-marker', declared: null, scope: `${d}B_SELF_TEST_SCOPE.md` }],
+    ['no scope file is no-scope', run([`${d}OTHER_SCOPE.md`], {}), { why: 'no-scope', declared: null, scope: null }],
+  ];
+  let pass = 0, failed = 0;
+  for (const [name, got, want] of cases) {
+    const ok = got.why === want.why && got.declared === want.declared && got.scope === want.scope;
+    ok ? pass++ : failed++;
+    console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}  (${got.why}, ${got.declared}, ${got.scope})`);
+  }
+  console.log(`self-test: PASS ${pass} FAIL ${failed}`);
+  process.exit(failed ? 1 : 0);
+}
 
 // The workflow-10 row order and labels; key = the DOCS key, or an overlay key.
 const ROWS = [
@@ -112,16 +178,10 @@ if (batchId) {
   changed = new Set(ns.map(([, p]) => p)); deleted = ns.filter(([s]) => s === 'D').map(([, p]) => p);
   headFiles = git('ls-tree', '-r', '--name-only', head).split('\n').filter(Boolean);
   // The declared class, read from the scope header with the checker's own marker (imported, never copied); undeclared -> the default class, flagged.
-  const re = batchIdToFileRegex(batchId);
-  // Scope selection follows the checker's readDeclaredClass (checker.mjs:570-585): names carrying the batch-id and
-  // SCOPE, sorted, the first whose text holds the marker. That loop is MIRRORED here because the checker's version
-  // reads at its own fetched ref, not at --head; the marker itself is imported.
-  const cands = headFiles.filter((f) => f.startsWith(`${DOCS.scope.dir}/`) && re.test(f.split('/').pop()) && /SCOPE/i.test(f.split('/').pop())).map((f) => f.split('/').pop()).sort();
-  let scope = cands.length ? `${DOCS.scope.dir}/${cands[0]}` : null, m = null;
-  for (const n of cands) { const hit = git('show', `${head}:${DOCS.scope.dir}/${n}`).match(CHANGE_CLASS_MARKER); if (hit) { scope = `${DOCS.scope.dir}/${n}`; m = hit; break; } }
-  const declared = m && CLASSES.includes(m[1].toLowerCase()) ? m[1].toLowerCase() : null;
+  const sel = selectScope(headFiles, batchIdToFileRegex(batchId), (p) => git('show', `${head}:${p}`));
+  const { scope, declared } = sel;
   if (cls && declared && cls !== declared) console.log(`WARNING: --class ${cls} differs from the scope's declared class ${declared} (${scope}); grading --class as asked`);
-  if (!cls) { cls = declared || cfg.DEFAULT_CLASS; classSource = declared ? `declared in ${scope}` : `UNDECLARED${scope ? ` in ${scope}` : ' (no scope file)'} - graded as the default class, as the checker does`; }
+  if (!cls) { cls = declared || cfg.DEFAULT_CLASS; classSource = declared ? `declared in ${scope}` : `${WHY_TEXT[sel.why](sel)} - graded as the default class, as the checker does`; }
 }
 if (!CLASSES.includes(cls)) fail(`--class must be one of ${CLASSES.join(' | ')} (or pass --batch so it is read from the scope)`);
 const readJson = (p) => { if (!p) return null; try { return JSON.parse(readFileSync(p, 'utf8')); } catch (e) { fail(`unreadable ${p}: ${e.message}`); } };
@@ -160,7 +220,7 @@ function verdict(key, c) {
 
 const matrix = ROWS.map(([key, label]) => { const c = cell(cls, key, batchId); return { key, label, ...c, verdict: verdict(key, c) }; });
 const missing = matrix.filter((m) => m.verdict?.state === 'MISSING').length;
-const out = { tool: 'closeout.mjs', tool_version: '1.0', class: cls, class_source: classSource, batch: batchId || null, base: base || null, head, base_sha: baseSha, head_sha: headSha, fetched: false, source: 'scripts/governance-checker/config.mjs (imported) + OVERLAY', rows: matrix, missing,
+const out = { tool: 'closeout.mjs', tool_version: '1.1', class: cls, class_source: classSource, batch: batchId || null, base: base || null, head, base_sha: baseSha, head_sha: headSha, fetched: false, source: 'scripts/governance-checker/config.mjs (imported) + OVERLAY', rows: matrix, missing,
   not_covered: ['whether an UPDATED entry says the right thing (content, not presence)', 'local-state rows (memory, task lists) - the author attests', 'a judged row the diff gives no hint for'] };
 if (args.includes('--json')) { console.log(JSON.stringify(out, null, 2)); process.exit(missing ? 1 : 0); }
 console.log(`CHANGE-CLASS: ${cls} (${classSource})${batchId ? `   batch ${batchId}, ${base} (${baseSha.slice(0, 12)})..${head} (${headSha.slice(0, 12)}); no fetch performed, refs as this clone last fetched them` : ''}`);
