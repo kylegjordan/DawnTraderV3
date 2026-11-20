@@ -54,6 +54,11 @@ MUTATIONS = [
     ("precompact runs over a held lock", replace("    if not take_lock(root):\n        log_line(root, \"precompact\", \"-\", \"SKIPPED — a run is already", "    if not take_lock(root) and False:\n        log_line(root, \"precompact\", \"-\", \"SKIPPED — a run is already")),
     ("no PreCompact floor", replace("    if last is not None and clock() - last < PRECOMPACT_FLOOR_S:", "    if False:")),
     ("a failed run counts as a success for the floor", replace('f[1] in ("nightly", "precompact") and f[2] == "0"', 'f[1] in ("nightly", "precompact")')),
+    ("DETACHED_PROCESS re-introduced (the 2026-11-20 window bug)", replace(
+        'getattr(subprocess, "CREATE_NO_WINDOW", 0)\n', 'getattr(subprocess, "CREATE_NO_WINDOW", 0) | 0x00000008\n')),
+    ("the hidden console dropped", replace(
+        ' | getattr(subprocess, "CREATE_NO_WINDOW", 0)\n', "\n")),
+    ("the real Popen not handed SPAWN_FLAGS", replace("creationflags=SPAWN_FLAGS,", "creationflags=0x00000208,")),
     ("the hook spawns a fixed path, not its own file", replace('args = [sys.executable, "-I", os.path.abspath(__file__), "precompact-run"]',
                                                                  'args = [sys.executable, "-I", "dt_archive_trigger.py", "precompact-run"]')),
     ("the hook's spawn failure not written down", replace("            log_line(root, \"precompact-hook\", \"-\", \"COULD NOT START THE RUN", "            (lambda *a: None)(root, \"precompact-hook\", \"-\", \"COULD NOT START THE RUN")),

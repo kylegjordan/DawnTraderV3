@@ -273,9 +273,13 @@ r = call(tr.precompact_run, "p", root, "s", runner=lambda *a: ran.append(1) or (
          clock=lambda: t_ok + 31 * 60)
 ok("a success 31 min ago: runs, logs, releases the lock", r == (0, "ARCHIVE RUN OK — 1 raw files, 2 lines") and ran == [1]
    and "\tprecompact\t0\t" in runs(root)[-1] and not os.path.exists(os.path.join(root, ".run.lock")), (r, runs(root)))
+# The last success is now the precompact line just written, stamped by log_line with the REAL clock - one second
+# later than t_ok whenever a second boundary fell in between (2 of 25 runs, 2026-11-20). So read it back, not t_ok.
+t_last = tr.last_success(root)
 with open(os.path.join(root, "RUNS.log"), "a", encoding="utf-8", newline=chr(10)) as fh:   # a FAILED run, 1 h LATER
     fh.write("%s\tnightly\t5\tARCHIVE RUN FAILED\n" % tr.utc(t_ok + 3600))
-ok("a FAILED run is not a success for the floor", tr.last_success(root) == t_ok, (tr.last_success(root), t_ok))
+ok("a FAILED run is not a success for the floor", t_last is not None and t_last < t_ok + 3600 and tr.last_success(root) == t_last,
+   (tr.last_success(root), t_last, t_ok))
 ran = []
 r = call(tr.precompact_run, "p", root, "s", runner=lambda *a: ran.append(1) or (0, "x"), clock=lambda: t_ok + 3600 + 5 * 60)
 ok("...so a failure 5 min ago does not suppress the PreCompact run", ran == [1], (r, runs(root)))
@@ -301,6 +305,24 @@ def nospawn(args):
 rc = call(tr.precompact_hook, "not json", root=root, spawn=nospawn)
 ok("a spawn that fails still returns 0 and is written down", rc == 0 and "COULD NOT START THE RUN" in runs(root)[-1], (rc, runs(root)))
 ok("an unparseable input is recorded, not fatal", any("<unparseable stdin>" in l for l in runs(root)), runs(root))
+
+# The REAL start path (no spawn= injected), with Popen recorded instead of run: the flags it is handed are the fence
+# against the window bug. DETACHED_PROCESS (0x8) must never be set - Windows then ignores CREATE_NO_WINDOW and each ssh
+# child of the run opens a visible window (2026-11-20). On Windows the run must get its own group and a hidden console.
+popened = []
+saved_popen = tr.subprocess.Popen
+tr.subprocess.Popen = lambda args, **kw: popened.append(kw)
+try:
+    rc = call(tr.precompact_hook, "{}", root=root)
+finally:
+    tr.subprocess.Popen = saved_popen
+fl = popened[0].get("creationflags") if popened else None
+ok("the real start path calls Popen once, with the module's SPAWN_FLAGS", rc == 0 and len(popened) == 1 and fl == tr.SPAWN_FLAGS, (rc, popened))
+ok("...and never with DETACHED_PROCESS (0x8), which cancels the hidden console", fl is not None and fl & 0x00000008 == 0, fl)
+if os.name == "nt":
+    ok("...and on Windows with exactly NEW_PROCESS_GROUP | CREATE_NO_WINDOW (0x08000200)", fl == 0x08000200, fl)
+else:
+    ok("...and off Windows with no flags at all", fl == 0, fl)
 shutil.rmtree(base)
 
 print("9. the real remote call's shape (no ssh made)")

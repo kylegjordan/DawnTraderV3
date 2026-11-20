@@ -34,10 +34,11 @@
     <Enabled>true</Enabled>
     <Hidden>false</Hidden>
   </Settings>
+  <!-- Starts through ~/.claude/hidden-run.pyw (repo copy: comms-infra/laptop/hidden-run.pyw) so the nightly run and its ssh children show no window; the exit code passes through, output goes to ~/.claude/hidden-run.log. Live task repointed 2026-11-20 on Kyle's yes. -->
   <Actions Context="Author">
     <Exec>
-      <Command>C:\Python313\python.exe</Command>
-      <Arguments>-I "C:\Users\kyleg\.claude\transcript-archive-bin\dt_archive_trigger.py" nightly</Arguments>
+      <Command>C:\Python313\pythonw.exe</Command>
+      <Arguments>"C:\Users\kyleg\.claude\hidden-run.pyw" "C:\Python313\python.exe" -I "C:\Users\kyleg\.claude\transcript-archive-bin\dt_archive_trigger.py" nightly</Arguments>
       <WorkingDirectory>C:\Users\kyleg\.claude\transcript-archive-bin</WorkingDirectory>
     </Exec>
   </Actions>
