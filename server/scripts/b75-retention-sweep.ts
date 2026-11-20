@@ -62,7 +62,22 @@ import {
   deriveModeFromLabels,
   isPartitionEligible,
 } from '../services/data-archive/sweep-slicing.js';
-import { addAlert, resolveAlertsByDedupeKey } from '../services/system-alerts.js';
+import { addAlert, getAlertDedupeState, resolveAlertsByDedupeKey } from '../services/system-alerts.js';
+import {
+  GRADED_WINDOW_START_SQL,
+  heldChildren,
+  holdAlertKey,
+  holdCapAlertKey,
+  HOLD_CAP_DAYS,
+  parseGradedWindowStart,
+  planRevisionHold,
+  registeredWindowEnd,
+  verdictKey,
+  WINDOW_UNREADABLE_ALERT_KEY,
+  XSTOCK_REVISION_PARENT,
+  type RevisionHoldPlan,
+  type VerdictKeyState,
+} from '../services/data-archive/xstock-revision-verdict-hold.js';
 import { NON_OUTCOME_CLOSE_REASONS } from '../services/trade-close-reason.js';
 import {
   assertExactArchiveEquality,
@@ -1581,6 +1596,145 @@ export async function processPartitionAndSettle(
   return res;
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// B-XSTOCK-BAR-AVAILABILITY R7b — hold the revision partitions an open graded window still needs
+// ───────────────────────────────────────────────────────────────────────────
+
+export interface RevisionHoldDependencies {
+  readWindowStart: () => Promise<{ ok: true; start: Date } | { ok: false; reason: string }>;
+  verdictState: (key: string) => VerdictKeyState;
+  raiseAlert: typeof raiseSweepAlert;
+  resolveAlerts: typeof resolveSweepAlerts;
+  log: (line: string) => void;
+}
+
+/** The ONE governed read of the window start (SQL shared with the verdict runner). A failure of any
+ *  kind comes back as a refusal, never a throw: the sweep keeps going for every other table. */
+async function readGradedWindowStartForHold(): Promise<{ ok: true; start: Date } | { ok: false; reason: string }> {
+  const client = new Client({ connectionString: process.env.DATABASE_URL, statement_timeout: 30_000 });
+  try {
+    await client.connect();
+    const { rows } = await client.query(GRADED_WINDOW_START_SQL);
+    return parseGradedWindowStart(rows);
+  } catch (err) {
+    return { ok: false, reason: `governed graded_window_start read failed: ${err instanceof Error ? err.message : String(err)}` };
+  } finally {
+    await client.end().catch(() => undefined);
+  }
+}
+
+const DEFAULT_REVISION_HOLD_DEPS: RevisionHoldDependencies = {
+  readWindowStart: readGradedWindowStartForHold,
+  // Looked up at call time, not at module load, so importing this script never touches the alert store.
+  verdictState: (key) => getAlertDedupeState(key),
+  raiseAlert: raiseSweepAlert,
+  resolveAlerts: resolveSweepAlerts,
+  log: (line) => console.log(line),
+};
+
+const HOLD_BATCH = 'B-XSTOCK-BAR-AVAILABILITY';
+
+/** Decide and announce the R7b hold for one table. Reads nothing for any table but the revision
+ *  table. Returns the plan; the caller skips `heldChildren(plan)` and processes the rest normally. */
+export async function settleRevisionHold(
+  parent: string,
+  eligible: PartitionRow[],
+  deps: RevisionHoldDependencies = DEFAULT_REVISION_HOLD_DEPS,
+): Promise<RevisionHoldPlan> {
+  if (parent !== XSTOCK_REVISION_PARENT || eligible.length === 0) return { kind: 'not-applicable' };
+
+  const window = await deps.readWindowStart();
+  let verdictState: VerdictKeyState | null = null;
+  if (window.ok) {
+    try {
+      verdictState = deps.verdictState(verdictKey(window.start));
+    } catch (err) {
+      // The alert store could not be read: no evidence a verdict exists, so keep holding (capped).
+      deps.log(
+        `[B75 sweep] ${parent}: verdict-key read failed (${err instanceof Error ? err.message : String(err)}); treating as no verdict`,
+      );
+      verdictState = 'absent';
+    }
+  }
+  const plan = planRevisionHold({ parent, eligible, window, verdictState });
+
+  if (plan.kind === 'window-unreadable') {
+    deps.log(
+      `[B75 sweep] ${parent}: HOLD ALL ${plan.held.length} eligible partition(s) — graded window unreadable (${plan.reason})`,
+    );
+    await deps.raiseAlert(
+      'B75 sweep is holding every xStock revision partition: graded window unreadable',
+      `The sweep could not read the governed xStock bar-availability graded window start (${plan.reason}), so it cannot tell ` +
+        `which revision partitions the open window still needs. It held all ${plan.held.length} age-eligible ` +
+        `xstock_bar_revision_event partition(s) (${plan.held.map((p) => p.partitionLabel).join(', ')}) rather than drop data ` +
+        'the verdict may need. The hold has no cap while the window is unreadable: the database disk grows by about ' +
+        '0.7 GiB per held day until the governed row is readable again.',
+      'critical',
+      { batch: HOLD_BATCH, parent, held: plan.held.map((p) => p.partitionLabel), reason: plan.reason },
+      WINDOW_UNREADABLE_ALERT_KEY,
+    );
+    return plan;
+  }
+
+  // The window read worked, so the unreadable condition (if it was ever raised) is over.
+  await deps.resolveAlerts([WINDOW_UNREADABLE_ALERT_KEY], `${parent} graded window readable again`);
+  if (plan.kind === 'not-applicable') return plan;
+
+  const windowStart = plan.windowStart;
+  const end = registeredWindowEnd(windowStart);
+  const key = verdictKey(windowStart);
+  if (plan.kind === 'no-hold') {
+    deps.log(
+      `[B75 sweep] ${parent}: no hold — ${plan.verdictPresent
+        ? `verdict exists on ${key}`
+        : `no eligible partition inside graded window ${windowStart.toISOString()}..${end.toISOString()}`}`,
+    );
+    await deps.resolveAlerts(
+      [holdAlertKey(windowStart)],
+      `${parent} hold ended (${plan.verdictPresent ? 'verdict exists' : 'nothing in window'})`,
+    );
+    return plan;
+  }
+
+  plan.held.forEach((p, i) => {
+    deps.log(
+      `[B75 sweep] ${parent}/${p.partitionLabel}: HELD — inside graded window ${windowStart.toISOString()}..${end.toISOString()}, ` +
+        `no verdict on ${key} (held ${i + 1} of cap ${HOLD_CAP_DAYS})`,
+    );
+  });
+  await deps.raiseAlert(
+    'B75 sweep is holding xStock revision partitions for an open graded window',
+    `No verdict exists yet on ${key}, so the sweep kept the revision partitions the window still needs hot instead of ` +
+      `archiving and dropping them: ${plan.held.map((p) => p.partitionLabel).join(', ')} (cap ${HOLD_CAP_DAYS}). ` +
+      'The hold ends by itself the night after a verdict is written, whatever it says; about 0.7 GiB of database disk per held day.',
+    'warning',
+    {
+      batch: HOLD_BATCH,
+      parent,
+      window_start: windowStart.toISOString(),
+      verdict_key: key,
+      held: plan.held.map((p) => p.partitionLabel),
+    },
+    holdAlertKey(windowStart),
+  );
+  if (plan.capReleased.length > 0) {
+    const released = plan.capReleased.map((p) => p.partitionLabel);
+    deps.log(
+      `[B75 sweep] ${parent}: hold cap ${HOLD_CAP_DAYS} reached — releasing ${released.join(', ')} to normal archive-and-drop`,
+    );
+    await deps.raiseAlert(
+      'B75 sweep released in-window xStock revision partitions past the hold cap',
+      `The open graded window (${key}) still has no verdict and more than ${HOLD_CAP_DAYS} of its revision partitions are past ` +
+        `retention. The oldest — ${released.join(', ')} — go through the normal export-verify-drop path tonight, so this ` +
+        'window can no longer be graded in full. Find why the verdict runner has not written a verdict.',
+      'critical',
+      { batch: HOLD_BATCH, parent, window_start: windowStart.toISOString(), verdict_key: key, released },
+      holdCapAlertKey(windowStart),
+    );
+  }
+  return plan;
+}
+
 export interface PlainArchiveRemovalDependencies {
   deleteBatch: () => Promise<number>;
   markActive: () => Promise<void>;
@@ -2089,8 +2243,11 @@ async function runSweep(options: { snapshotOnly: boolean } = { snapshotOnly: fal
       continue;
     }
 
+    const held = heldChildren(await settleRevisionHold(spec.parent, oldPartitions));
+
     for (const partition of oldPartitions) {
       partitionsExamined++;
+      if (held.has(partition.child)) continue; // R7b: logged and alerted by settleRevisionHold
       console.log(
         `[B75 sweep] ${spec.parent}: processing partition=${partition.partitionLabel} child=${partition.child}`,
       );

@@ -47,27 +47,31 @@ import {
   type AlertDedupeState,
   type SystemAlert,
 } from '../services/system-alerts.js';
+import {
+  GRADED_WINDOW_START_SQL,
+  parseGradedWindowStart,
+  REGISTERED_WINDOW_DAYS,
+  REGISTERED_WINDOW_MS,
+  VERDICT_KEY_PREFIX,
+  verdictKey,
+} from '../services/data-archive/xstock-revision-verdict-hold.js';
 
 const { Client } = pg;
 
 export const VERDICT_RUNNER_ACTOR = 'xstock-bar-verdict-runner';
-export const VERDICT_KEY_PREFIX = 'xstock-bar-availability-capacity-verdict:';
+/** The verdict key and the window length are defined once, in the sweep-hold module (R7b), so the
+ *  writer here and the guard in the B75 sweep cannot drift onto different keys. */
+export { REGISTERED_WINDOW_DAYS, VERDICT_KEY_PREFIX, verdictKey };
 export const RUNNER_FAILURE_KEY_PREFIX = 'xstock-bar-availability-verdict-runner-failed:';
 /** The registered window is nine days; the gate is due ten minutes after it closes. */
-export const REGISTERED_WINDOW_DAYS = 9;
-export const FINAL_GATE_OFFSET_MS = REGISTERED_WINDOW_DAYS * 86_400_000 + 10 * 60_000;
+export const FINAL_GATE_OFFSET_MS = REGISTERED_WINDOW_MS + 10 * 60_000;
 /** The gate's own read budget is 1,200,000 ms; anything past this is a hung child, not a slow read. */
 export const GATE_CHILD_TIMEOUT_MS = 30 * 60_000;
 const GATE_SCRIPT = 'server/scripts/b-xstock-bar-availability-capacity-gate.ts';
-const WILDCARD_SCOPE_SQL = "asset_class='*' AND exchange='*' AND strategy='*' AND regime='*'";
 const LOG = '[xstock-bar-verdict-runner]';
 
 export function finalGateAt(windowStart: Date): Date {
   return new Date(windowStart.getTime() + FINAL_GATE_OFFSET_MS);
-}
-
-export function verdictKey(windowStart: Date): string {
-  return `${VERDICT_KEY_PREFIX}${windowStart.toISOString()}`;
 }
 
 export function runnerFailureKey(windowStart: Date): string {
@@ -307,15 +311,10 @@ async function readGovernedWindowStart(): Promise<Date> {
   await client.connect();
   try {
     await client.query("SET statement_timeout = '30s'");
-    const { rows } = await client.query(
-      `SELECT value #>> '{}' AS start FROM module_constants
-        WHERE module_name='xstock_bar_availability' AND constant_name='graded_window_start'
-          AND ${WILDCARD_SCOPE_SQL}`,
-    );
-    if (rows.length !== 1) throw new Error(`expected exactly one governed graded_window_start row, found ${rows.length}`);
-    const start = new Date(String(rows[0].start));
-    if (!Number.isFinite(start.getTime())) throw new Error('governed graded_window_start is not a timestamp');
-    return start;
+    const { rows } = await client.query(GRADED_WINDOW_START_SQL);
+    const parsed = parseGradedWindowStart(rows);
+    if (!parsed.ok) throw new Error(parsed.reason);
+    return parsed.start;
   } finally {
     await client.end();
   }
