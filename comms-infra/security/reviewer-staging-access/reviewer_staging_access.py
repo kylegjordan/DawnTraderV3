@@ -340,6 +340,54 @@ def private_key_fingerprint(path: str, owner: str) -> str:
     return fingerprint_public_key(public.stdout.strip())
 
 
+def parse_dt_sql_bounds(text: str) -> dict[str, int]:
+    """dt-sql's own two time bounds, read from its source WITHOUT running it: CALL_TIMEOUT_S (the psql call) and the
+    alert subprocess timeout inside alert(). DT_SQL_CALL_BOUND_S is their sum copied by hand; staging reports these so
+    the client refuses the day dt-sql's bounds rise past the copy (Langston F-2 round 3 C-2). Exactly one of each, or REFUSED."""
+    lines = text.split(NL)
+    call = [line for line in lines if line.startswith("CALL_TIMEOUT_S = ")]
+    if len(call) != 1 or not call[0][len("CALL_TIMEOUT_S = "):].strip().isdigit():
+        raise VerificationError("dt-sql source: expected exactly one integer CALL_TIMEOUT_S, found %d" % len(call))
+    start = [i for i, line in enumerate(lines) if line.startswith("def alert(")]
+    if len(start) != 1:
+        raise VerificationError("dt-sql source: expected exactly one alert() function, found %d" % len(start))
+    body = []
+    for line in lines[start[0] + 1:]:
+        if line and not line[0].isspace():
+            break
+        body.append(line)
+    found = []
+    for line in body:
+        rest = line
+        while "timeout=" in rest:
+            rest = rest.split("timeout=", 1)[1]
+            digits = ""
+            for ch in rest:
+                if not ch.isdigit():
+                    break
+                digits += ch
+            if not digits:
+                raise VerificationError("dt-sql source: alert() has a timeout= that is not an integer literal")
+            found.append(int(digits))
+    if len(found) != 1:
+        raise VerificationError("dt-sql source: expected exactly one timeout= in alert(), found %d" % len(found))
+    return {"call_timeout_s": int(call[0][len("CALL_TIMEOUT_S = "):].strip()), "alert_timeout_s": found[0]}
+
+
+def check_dt_sql_bounds(actor: str, payload: dict) -> None:
+    """The client half of C-2: REFUSED unless staging reported dt-sql's bounds and their sum fits DT_SQL_CALL_BOUND_S."""
+    bounds = payload.get("dt_sql_bounds")
+    keys = ("call_timeout_s", "alert_timeout_s")
+    if (not isinstance(bounds, dict) or sorted(bounds) != sorted(keys)
+            or not all(type(bounds[k]) is int and bounds[k] > 0 for k in keys)):
+        raise VerificationError("%s staging did not report dt-sql's call bounds" % actor)
+    reported = bounds["call_timeout_s"] + bounds["alert_timeout_s"]
+    if DT_SQL_CALL_BOUND_S < reported:
+        raise VerificationError(
+            "%s dt-sql on staging can now run %d s per call, above DT_SQL_CALL_BOUND_S %d s: raise the bound, or this "
+            "check's ssh timeout can kill dt-sql mid-attempt and lock it" % (actor, reported, DT_SQL_CALL_BOUND_S))
+
+
 def run_dt_sql(sql: str) -> "subprocess.CompletedProcess[str]":
     """One dt-sql call. Exit 5 (BUSY) means another dt-sql call held the lock and NO login was attempted, so it is
     retried; nothing else is — exit 3 (connection refused, a possible ban) and 4 (LOCKED) fail at once."""
@@ -416,6 +464,7 @@ def verify_remote(actor: str) -> int:
     # names that setting (exit 2), so read-only is re-proved BY BEHAVIOUR instead: a second call attempts a write and
     # must be refused by the database as a read-only transaction (Langston, F-2 install confirmation 2026-11-20).
     require_path(STAGING_DT_SQL, "root", 0o755)
+    dt_sql_bounds = parse_dt_sql_bounds(Path(STAGING_DT_SQL).read_text(encoding="utf-8"))
     query = "select current_user,current_database(),(select count(*) >= 0 from public.users)"
     database = run_dt_sql(query)
     rows = database.stdout.strip().splitlines()
@@ -442,6 +491,7 @@ def verify_remote(actor: str) -> int:
         "readable_log_sizes": logs,
         "database_read": "ok",
         "database_write_refused": "ok",
+        "dt_sql_bounds": dt_sql_bounds,
         "database_user": database_user,
         "database_name": database_name,
     }, sort_keys=True))
@@ -504,6 +554,7 @@ def verify_actor(actor: str) -> int:
     except VerificationError as error:
         raise VerificationError("%s %s" % (actor, error)) from error
     payload = json.loads(result.stdout)
+    check_dt_sql_bounds(actor, payload)
     payload["local_key_fingerprint"] = actual_fingerprint
 
     # A fresh wrong key must fail with every non-public-key method disabled. This proves the
@@ -760,6 +811,11 @@ def self_test() -> int:
     if CLIENT_SSH_TIMEOUT_S <= worst or REMOTE_BUDGET_S <= worst:
         raise VerificationError("client ssh timeout %d s does not cover the remote worst case %d s"
                                 % (CLIENT_SSH_TIMEOUT_S, worst))
+    # the stated invariant itself: the client outlasts the WHOLE remote budget, not only the dt-sql part of it
+    # (Langston C-1: CLIENT = REMOTE_BUDGET_S - 30 passed every comparison above)
+    if CLIENT_SSH_TIMEOUT_S <= REMOTE_BUDGET_S:
+        raise VerificationError("client ssh timeout %d s does not exceed the remote budget %d s"
+                                % (CLIENT_SSH_TIMEOUT_S, REMOTE_BUDGET_S))
     actor_body = inspect.getsource(verify_actor)
     if "timeout=CLIENT_SSH_TIMEOUT_S" not in actor_body or "timeout=60" in actor_body:
         raise VerificationError("the verifier's ssh call is not bounded by the derived client timeout")
@@ -767,6 +823,47 @@ def self_test() -> int:
     # a timeout is a REFUSED line, never a traceback: every bounded call in verify_actor is caught
     if actor_body.count("except subprocess.TimeoutExpired") != actor_body.count("timeout="):
         raise VerificationError("a bounded call in the verifier lets TimeoutExpired escape as a traceback")
+    checks += 1
+    # C-2, staging half: dt-sql's two bounds are read from its source, exactly one of each, never by running it
+    good = NL.join(["CALL_TIMEOUT_S = 300", "", "def alert(arm, detail):", "    x = 1",
+                    "    r = subprocess.run(argv, timeout=150)", "", "def run_psql(argv):",
+                    "    proc.communicate(timeout=CALL_TIMEOUT_S)"])
+    if parse_dt_sql_bounds(good) != {"call_timeout_s": 300, "alert_timeout_s": 150}:
+        raise VerificationError("dt-sql bounds parser misread a known source")
+    for bad, why in (
+        (good.replace("CALL_TIMEOUT_S = 300", "CALL_TIMEOUT_S = 3OO"), "a non-integer call timeout"),
+        (good.replace("CALL_TIMEOUT_S = 300", "# none"), "a missing call timeout"),
+        (good + NL + "CALL_TIMEOUT_S = 900", "a second call timeout"),
+        (good.replace("timeout=150)", "timeout=150, x=timeout=9)"), "two alert timeouts"),
+        (good.replace("timeout=150", "timeout=ALERT_S"), "a named alert timeout"),
+        (good.replace("def alert(", "def alarm("), "a missing alert()"),
+    ):
+        try:
+            parse_dt_sql_bounds(bad)
+        except VerificationError:
+            continue
+        raise VerificationError("dt-sql bounds parser accepted %s" % why)
+    remote_body = inspect.getsource(verify_remote)
+    if ("parse_dt_sql_bounds(Path(STAGING_DT_SQL).read_text(" not in remote_body
+            or '"dt_sql_bounds": dt_sql_bounds' not in remote_body):
+        raise VerificationError("the remote verifier does not report dt-sql's bounds")
+    checks += 1
+    # C-2, client half: refused unless the reported sum fits DT_SQL_CALL_BOUND_S
+    if "check_dt_sql_bounds(actor, payload)" not in actor_body:
+        raise VerificationError("the verifier does not check dt-sql's reported bounds")
+    check_dt_sql_bounds("t", {"dt_sql_bounds": {"call_timeout_s": DT_SQL_CALL_BOUND_S - 150, "alert_timeout_s": 150}})
+    for bounds, why in (
+        ({"call_timeout_s": DT_SQL_CALL_BOUND_S - 149, "alert_timeout_s": 150}, "a sum above the bound"),
+        (None, "no report"),
+        ({"call_timeout_s": 300}, "a missing alert bound"),
+        ({"call_timeout_s": True, "alert_timeout_s": 150}, "a boolean bound"),
+        ({"call_timeout_s": 0, "alert_timeout_s": 0}, "zero bounds"),
+    ):
+        try:
+            check_dt_sql_bounds("t", {"dt_sql_bounds": bounds} if bounds is not None else {})
+        except VerificationError:
+            continue
+        raise VerificationError("dt-sql bounds check accepted %s" % why)
     checks += 1
     print("self-test passed: %d checks" % checks)
     return 0
