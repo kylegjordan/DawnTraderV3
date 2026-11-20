@@ -299,3 +299,13 @@ Read at **2026-11-16T14:45:15.323Z** (`observedAt`), pre-registered START 14:45Z
   - reminder alerts `a1aac794-5bf4-4fc7-a7f1-9f7502f3914c` (START) and `e69ceba9-6fd7-4b69-be4c-3c60f3fe2727` (END);
   - DEPLOY_WINDOWS amends to `until_event`, `expected_by` (2026-11-20T21:00Z) and `review_by` (2026-11-21T12:00Z).
 - **A restart between START and END voids the pair again,** and it is then re-run in the next session in the same way.
+
+## r21 — C-1 START, 2026-11-20 session (14:45Z, CC-B)
+
+- **The read:** `dt-api GET /api/active-engine/diagnostics/depth-gate`, raw, requested 14:45:12Z, `observedAt` 2026-11-20T14:45:14.141Z.
+  - `processPid` **41796**; `processUptimeSeconds` **24366.2**. That puts the process start at 07:59:07.9Z, which matches the cc-c deploy of `85e7ce638` (07:58:47Z start, 07:59:18Z complete). Before START there were two restarts on 11-20: 00:03:49Z (`ecbdf882e`) and that 07:59Z deploy. Both are outside the pair.
+  - `evaluations.xstock_spot`: count **2**, `lastAt` 1795181654662 = 2026-11-20T13:34:14.662Z.
+  - `blocks["xstock_spot:stale_book"]`: count 1, `lastReason` "stale_book age=29996ms>15000ms", `lastAt` 13:34:14.719Z. This is the only block counter present.
+- **END at 20:30Z, PASS criteria unchanged from r18/r20:** the pid is still 41796, uptime is above 24366.2 s, the `xstock_spot` evaluation count is above 2, and `lastAt` is quoted. A pid change voids the pair.
+- **Deploy freeze for the pair:** cc-c and cc-a each agreed in-channel to make no staging deploy before 20:30Z.
+- Reminder `a1aac794-5bf4-4fc7-a7f1-9f7502f3914c` is resolved on this commit.
