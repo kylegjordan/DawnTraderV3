@@ -27,11 +27,18 @@ if args and args[0] == '--until':
 D, REG, PLAN, OUT = args[0], args[1], args[2], args[3]
 DUE = args[4] if len(args) > 4 else None
 
+# Step-4 rider C-1 (Langston 2026-11-20): split on LF only. Text-mode iteration also splits on a bare CR, and
+# one live key ends in CR, which silently dropped a row. Every input line must parse, or the build refuses.
+_lines = [l for l in open(D + '/queue.tsv', encoding='utf-8', newline='').read().split('\n') if l]
 queue = {}
-for l in open(D + '/queue.tsv', encoding='utf-8'):
-    p = l.rstrip('\n').split('\t')
-    if len(p) >= 6:
+for l in _lines:
+    p = l.split('\t')
+    if len(p) == 6:
         queue[p[0]] = p[1:]          # key, category, title, created_at, state
+if len(queue) != len(_lines):
+    print('REFUSED: queue.tsv has %d lines but %d parsed rows (a CR, LF or TAB inside a value?); table not written'
+          % (len(_lines), len(queue)))
+    sys.exit(2)
 keys = {i: v[:3] for i, v in queue.items()}
 
 # Register: batch -> owner, from the session section the row sits in.
@@ -70,6 +77,9 @@ for l in open(PLAN, encoding='utf-8'):
                 _plan[m.group(1)].add(o)
             break
 plan_owner = {b: next(iter(o)) for b, o in _plan.items() if len(o) == 1}
+for b, o in sorted(_plan.items()):
+    if len(o) > 1:
+        print('NOTE plan names two owners for %s: %s (left out of the cross-check)' % (b, sorted(o)))
 for b, o in sorted(plan_owner.items()):
     if b in register and register[b] != o:
         print('NOTE register says %s, plan says %s for %s (register wins)' % (register[b], o, b))
@@ -101,6 +111,7 @@ PREFIX = {
     'vts-shadow-unpriced-': ('B-XSTOCK-BID-TRIGGER-RELAND', 'inc4a tests'),
     'vts-unpriced-close-': ('B-XSTOCK-BID-TRIGGER-RELAND', 'RUNNING_ISSUES:10913, #1144'),
     'xstock-bar-availability-': ('B-XSTOCK-BAR-AVAILABILITY', '#707'),
+    'crypto-spot-shard0-data-dead': (None, 'crypto spot shard 0 data-dead since 10-21; Langston Step-4 2026-11-20: CC-A'),
     'xstock-cold-tick-fill-block': ('B-PRICE-FEED-COVERAGE', 'cold_tick carrier'),
     'xstock-fill-safety-config-missing': (None, 'plan row 3b.f-c, config half of xstock-stale-fill-block'),
     'xstock-stale-fill-block': (None, 'RUNNING_ISSUES:246, :3209, plan row 3b.f-c'),
@@ -158,6 +169,7 @@ SEED = {
     ('prefix', 'langston-index-guard-'): ('CC-INFRA', 'PM: reviewer infrastructure is Infra Claude'),
     ('prefix', 'transcript-archive-deadman-'): ('CC-INFRA', 'PM: plan row 4b, Infra Claude'),
     ('prefix', 'no-trigger-paper-'): ('CC-C', 'PM: B-XSTOCK-BID-TRIGGER-RELAND (register:62)'),
+    ('prefix', 'crypto-spot-shard0-data-dead'): ('CC-A', 'Langston Step-4 check 2026-11-20 (Discord 1573321813814157454); his marker is not in the seed extract'),
     ('prefix', 'gov-fetch-failed'): ('CC-INFRA', 'PM: the governance checker box; colonless gov- key (R2-2 item 1)'),
     ('prefix', 'gov-code-drift'): ('CC-INFRA', 'PM: the governance checker box; colonless gov- key (R2-2 item 1)'),
 }
@@ -201,6 +213,8 @@ def family(k, c, t):
 rows_per = collections.Counter(family(*v) for v in keys.values())
 agg = collections.defaultdict(collections.Counter)
 last, latest, unmapped = {}, {}, 0
+SESSIONS = ('CC-A', 'CC-B', 'CC-C', 'CC-INFRA')
+dropped = collections.Counter()
 for l in open(D + '/markers.tsv', encoding='utf-8'):
     i, o, ts, who = l.rstrip('\n').split('\t')
     if not who.startswith('langston_outbound'):
@@ -209,6 +223,9 @@ for l in open(D + '/markers.tsv', encoding='utf-8'):
     if ts >= latest.get(i, ('', ''))[0]:
         latest[i] = (ts, o)      # the check compares against the LATEST ruling, holdout or not
     if UNTIL and ts >= UNTIL:
+        continue
+    if o not in SESSIONS:        # Step-4 rider C-2: Kyle (or anyone else) is never seated as a family's owner
+        dropped[o] += 1
         continue
     if i not in keys:
         unmapped += 1
@@ -221,15 +238,18 @@ for l in open(D + '/markers.tsv', encoding='utf-8'):
 table = {'_about': {
     'batch': 'B-TOKEN-ECONOMY amendment 1, P6 condition 1 (Langston Step-2 rulings 2026-11-20 12:04Z, 12:38Z)',
     'seed': 'Langston [[ALERT owner=]] markers 2026-11-06..2026-11-20 joined to the whole staging alert queue',
-    'order': 'owner named in title; deploy-window/in-window key -> batch; gov key -> batch; key -> longest '
-             'prefix; keyless -> title; batch with no table row -> register, then plan owner column; a register/plan '
-             'batch named anywhere in the title; none -> fallback',
+    'order': 'session owner named in title (opening alias or display name, or "owner CC-x" anywhere); '
+             'deploy-window-stale/deploy-in-window key -> batch; keyless row whose title opens with a batch-id -> '
+             'batch; keyless -> title stem; gov key with ":" -> batch; key -> longest prefix; keyed row whose title '
+             'opens with a batch-id -> batch; batch with no table row -> register, then plan owner column; a '
+             'register/plan batch named anywhere in the title; none -> fallback',
+    'seed_votes_dropped': 'markers naming anyone but the four building sessions (Step-4 rider C-2)',
     'fallback': 'CC-INFRA, genuinely new keys only',
     'flag': 'agreement below 80%, a real tie (top two equal), n <= 3 markers, or fewer than 1 marker per 20 '
             'queue rows: for Langston to rule',
     'agree': 'share of markers, which count re-triages of resurfacing rows, not distinct decisions; read it '
              'with n and rows',
-    'markers_on_unmapped_ids': unmapped},
+    'markers_on_unmapped_ids': unmapped, 'seed_votes_dropped_by_owner': dict(dropped)},
     'batches': {}, 'prefixes': {}, 'titles': {}, 'fallback': 'CC-INFRA'}
 SECT = {'batch': 'batches', 'prefix': 'prefixes', 'title': 'titles'}
 unfamilied = []
@@ -278,6 +298,8 @@ for f in sorted(fams):
 problems, by_batch = [], collections.defaultdict(set)
 for s in ('batches', 'prefixes', 'titles'):
     for name, row in table[s].items():
+        if row['owner'] not in SESSIONS:
+            problems.append('OWNER %s:%s owner %s is not one of the four building sessions' % (s, name, row['owner']))
         b = name if s == 'batches' else row.get('batch')
         if not b or not b.startswith('B-'):
             continue

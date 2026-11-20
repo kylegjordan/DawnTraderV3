@@ -90,6 +90,13 @@ Langston's ruling (Discord `1573316684633350144`, 2026-11-20 12:38Z): R2-1, R2-3
 
 **R2-6 — the limit at the read site, recorded.** `effective_owner` bites only at 3 or more owners (`alert_lane.py:280`); a clean one-way correction returns `ok=True` with the old owner as `superseded`. The corrections above do not trip it unless an old owner is written back.
 
+**Step-4 riders (Langston, Discord `1573321813814157454`, 2026-11-20: PROCEED on the P6 install with C-1 and C-2 in the install commit), landed in the builder:**
+- **C-1, input completeness.** One live key ends in a carriage return, and text-mode reading split that line and dropped the row silently (3,502 of 3,503 rows reached `family()`). The queue is now split on line feeds only, and the build refuses (exit 2, no table) when input lines and parsed rows differ. `xstock-bar-availability-` now counts 22 rows, not 21. Positive control: one extra tab injected into a copy of the queue gives `3503 lines but 3502 parsed rows`, exit 2, no file.
+- **C-2, only the four building sessions own a family.** Markers naming anyone else are dropped from the seed votes and counted in `_about.seed_votes_dropped_by_owner` (16, all naming Kyle). The refusal also rejects any row whose owner is not CC-A, CC-B, CC-C or CC-INFRA. Positive control: an override seating Kyle on `price-skip-paper-` refuses, exit 2, no file. Consequence: `disk-utilization-` is now 17 of 17 CC-A and unflagged.
+- **C-3.** A plan batch with two owners is printed, not dropped silently: `B-LANGSTON-CONTEXT` (CC-B, CC-INFRA).
+- **C-4.** `_about.order` now names every step, including a keyed row whose title opens with its batch-id.
+- **Added:** `crypto-spot-shard0-data-dead` → CC-A, inferred, on his ruling (his marker is not in the seed extract). 72 rows, 43 flagged; due list 27 of 27 to a session, 0 fallback; new-row fallback unchanged at 3 in 14 days.
+
 **R2-7 — conditions taken.** (a) P4's proof measurement is taken in a session started after the edit lands, never this one. (b) A start above 60,000 is not re-floored: the measured components go to Kyle as a miss against KD-108(b)'s "about 86k" (PREVIOUSLY/NOW row 15).
 
 ## AUDIT

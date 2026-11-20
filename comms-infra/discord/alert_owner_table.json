@@ -2,11 +2,15 @@
  "_about": {
   "batch": "B-TOKEN-ECONOMY amendment 1, P6 condition 1 (Langston Step-2 rulings 2026-11-20 12:04Z, 12:38Z)",
   "seed": "Langston [[ALERT owner=]] markers 2026-11-06..2026-11-20 joined to the whole staging alert queue",
-  "order": "owner named in title; deploy-window/in-window key -> batch; gov key -> batch; key -> longest prefix; keyless -> title; batch with no table row -> register, then plan owner column; a register/plan batch named anywhere in the title; none -> fallback",
+  "order": "session owner named in title (opening alias or display name, or \"owner CC-x\" anywhere); deploy-window-stale/deploy-in-window key -> batch; keyless row whose title opens with a batch-id -> batch; keyless -> title stem; gov key with \":\" -> batch; key -> longest prefix; keyed row whose title opens with a batch-id -> batch; batch with no table row -> register, then plan owner column; a register/plan batch named anywhere in the title; none -> fallback",
+  "seed_votes_dropped": "markers naming anyone but the four building sessions (Step-4 rider C-2)",
   "fallback": "CC-INFRA, genuinely new keys only",
   "flag": "agreement below 80%, a real tie (top two equal), n <= 3 markers, or fewer than 1 marker per 20 queue rows: for Langston to rule",
   "agree": "share of markers, which count re-triages of resurfacing rows, not distinct decisions; read it with n and rows",
-  "markers_on_unmapped_ids": 35
+  "markers_on_unmapped_ids": 35,
+  "seed_votes_dropped_by_owner": {
+   "Kyle": 16
+  }
  },
  "batches": {
   "B-CLOSE-WRITER-COSTS": {
@@ -379,13 +383,12 @@
     "CC-C": 53,
     "CC-B": 16,
     "CC-INFRA": 29,
-    "CC-A": 2,
-    "Kyle": 1
+    "CC-A": 2
    },
-   "n": 101,
+   "n": 100,
    "rows": 57,
    "latest": "CC-C",
-   "agree": 0.52,
+   "agree": 0.53,
    "batch": "B-CRON-MISSED-CATCHUP",
    "ledger": "RUNNING_ISSUES:4039, #691",
    "flag": true
@@ -402,6 +405,19 @@
    "agree": 0.67,
    "batch": "B-CRON-MISSED-CATCHUP",
    "ledger": "clears manually only",
+   "flag": true
+  },
+  "crypto-spot-shard0-data-dead": {
+   "owner": "CC-A",
+   "votes": {},
+   "n": 0,
+   "rows": 1,
+   "latest": null,
+   "agree": null,
+   "batch": null,
+   "ledger": "crypto spot shard 0 data-dead since 10-21; Langston Step-4 2026-11-20: CC-A",
+   "ruling": "Langston Step-4 check 2026-11-20 (Discord 1573321813814157454); his marker is not in the seed extract",
+   "inferred": true,
    "flag": true
   },
   "db-pool-acquire-timeout": {
@@ -520,17 +536,15 @@
   "disk-utilization-": {
    "owner": "CC-A",
    "votes": {
-    "Kyle": 4,
     "CC-A": 16,
     "CC-B": 1
    },
-   "n": 21,
+   "n": 17,
    "rows": 27,
    "latest": "CC-A",
-   "agree": 0.76,
+   "agree": 0.94,
    "batch": "B-DB-SIZE-RELIEF",
-   "ledger": "RUNNING_ISSUES:3823; database disk, 200 GB plan cap",
-   "flag": true
+   "ledger": "RUNNING_ISSUES:3823; database disk, 200 GB plan cap"
   },
   "gov-code-drift": {
    "owner": "CC-INFRA",
@@ -627,14 +641,12 @@
    "votes": {
     "CC-B": 3,
     "CC-INFRA": 6,
-    "CC-A": 1,
-    "Kyle": 2
+    "CC-A": 1
    },
-   "n": 12,
+   "n": 10,
    "rows": 9,
    "latest": "CC-INFRA",
-   "agree": 0.5,
-   "plurality": true,
+   "agree": 0.6,
    "batch": "B-OHLC-FRAME-GUARD",
    "ledger": "#1028, RUNNING_ISSUES:9033",
    "ruling": "Langston round-2 ruling 2026-11-20 12:38Z (Discord 1573316684633350144): register:66; resolve on the guard deploy, never ack",
@@ -684,14 +696,12 @@
    "owner": "CC-A",
    "votes": {
     "CC-B": 4,
-    "CC-INFRA": 8,
-    "Kyle": 4
+    "CC-INFRA": 8
    },
-   "n": 16,
+   "n": 12,
    "rows": 7,
    "latest": "CC-INFRA",
-   "agree": 0.5,
-   "plurality": true,
+   "agree": 0.67,
    "batch": null,
    "ledger": "#705, RUNNING_ISSUES:3954, :3969",
    "ruling": "Langston round-2 ruling 2026-11-20 12:38Z (Discord 1573316684633350144): #705 heading names the ticker writer; last amendment CC-A",
@@ -701,13 +711,12 @@
    "owner": "CC-INFRA",
    "votes": {
     "CC-INFRA": 93,
-    "CC-A": 4,
-    "Kyle": 3
+    "CC-A": 4
    },
-   "n": 100,
+   "n": 97,
    "rows": 1,
    "latest": "CC-INFRA",
-   "agree": 0.93,
+   "agree": 0.96,
    "batch": "B-TOKEN-WATCH-STORAGE",
    "ledger": "#1132"
   },
@@ -821,13 +830,12 @@
     "CC-C": 263,
     "CC-A": 2,
     "CC-B": 6,
-    "CC-INFRA": 1,
-    "Kyle": 1
+    "CC-INFRA": 1
    },
-   "n": 273,
-   "rows": 21,
+   "n": 272,
+   "rows": 22,
    "latest": "CC-C",
-   "agree": 0.96,
+   "agree": 0.97,
    "batch": "B-XSTOCK-BAR-AVAILABILITY",
    "ledger": "#707"
   },
@@ -862,14 +870,12 @@
    "owner": "CC-C",
    "votes": {
     "CC-B": 1,
-    "CC-INFRA": 2,
-    "Kyle": 1
+    "CC-INFRA": 2
    },
-   "n": 4,
+   "n": 3,
    "rows": 1,
    "latest": "CC-INFRA",
-   "agree": 0.5,
-   "plurality": true,
+   "agree": 0.67,
    "batch": null,
    "ledger": "plan row 3b.f-c, config half of xstock-stale-fill-block",
    "ruling": "Langston round-2 ruling 2026-11-20 12:38Z (Discord 1573316684633350144): config half of the 3b.f-c gate",
