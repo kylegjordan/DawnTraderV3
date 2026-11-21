@@ -95,9 +95,9 @@ the mirror. So (v) printed UNREADABLE on every run, a standing false alarm. Fixe
 `DISPOSITION: folded into this batch.`
 
 `REVIEWER: none spawned.` Every load-bearing claim above carries its object and the command that re-derives it —
-**but the recipe needs root on Helsinki** (the bridge journal and `/opt/discord-bridges`). For a reviewer without root,
-every journal-derived claim here (the pins, the per-batch table line, the lane-chose notes, the installed-file
-equality) is reported fact. *(Corrected at Step 8, Langston F-5.)*
+**but the bridge journal needs root on Helsinki.** For a reviewer without root, the journal legs here (the pins, the
+per-batch table line, the lane-chose notes) are reported fact. Installed-file equality is NOT in that set: Langston
+measured that it is readable without root. *(Corrected at Step 8, Langston F-5; narrowed at Step 9.)*
 NOT RE-READ: the pre-install failed-read seed result is cited from the r3 install note and was not re-run for this
 record.
 
@@ -133,4 +133,55 @@ against an unmutated control at exit 0 and judged by exit code: **M8** (every ma
 distinct id (3 groups, all tied); lane-chose notes 0; fallback 1 (the seed); escalations 0 over 2 batches; churn 0;
 due 25; all three installed lane files equal the ref.
 
-**Next:** the daily reads to T'+7d (2026-11-28 00:13Z), each appended here, then Step 10.
+**Next (superseded below):** the daily reads to T'+7d (2026-11-28 00:13Z), each appended here, then Step 10.
+
+## Step 9 — Langston MET on the day-1 conditions (Discord `1573515420814540851`, 01:48:32Z)
+
+He re-derived at `984ae80bb` from ref copies: self-test 27/0/exit 0; M8, M10, M11 exit 1 by assertion; F-1 683 markers
+before 01:39:16Z and 144 in the 7 days, 0 unjoined in both, by his own join; F-4 both pinned commits carry table blob
+`a9f00990f721`, read at the mirror; (v) all three installed lane files equal their ref blobs; the lane-chose regexes
+match the emitters verbatim at `alert_lane.py:459` (rule form) and `:479` (fallback form), and
+`discord_common.py:146-147` supplies the `%Y-%m-%d %H:%M:%S` prefix they anchor on. The bridge `log()` call that
+writes them is `:1435` (`:1434` is the loop).
+
+**M9, corrected to what it proves.** M9 kills only when the mutation is confined to the two regex definitions
+(`CHOSE_RULE`, `CHOSE_FALLBACK`); it then fails `lane_chose expected [...] got []`. Renaming the phrase throughout the
+file also rewrites the self-test's own synthetic journal line, and the test passes at exit 0, because the fixture and
+the regex share one literal. That is not a tool defect, but it means M9 alone cannot show the regex matches what the
+bridge really writes. The real-data control below does.
+
+**F-3 real-data positive control (his, copied into the repo at
+`B_TOKEN_ECONOMY_AMD1_P6_controls/f3_realdata_control.py` and `f3_fb.py`, both pinned to `984ae80bb`).** Each takes a
+real alert row from a whole copy of the staging alerts file, routes it through the real `table_route` at the ref table
+and the real `apply_table`, formats the note with the real `dc.log` prefix, and runs the tool's `journal_counts` on it.
+Only the lane's owner (forced to CC-B) is synthetic, which is the variable under test.
+
+| arm | row | his result | my reproduction (Helsinki, 2026-11-21 ~01:50Z) |
+|---|---|---|---|
+| rule | `1ae9a06b` (`batch:B-PRICE-SIDE-BY-JOB` → CC-C) | parsed 1/1, every field right | parsed 1/1 |
+| fallback | `b83b1e4b` ('B-NEW-40 14-day soak verification due' → CC-INFRA) | parsed 1/1; 489 of 3,539 real rows take the fallback | 3,539 rows, 489 fallback / 3,050 rule; parsed 1/1, exit 0 |
+
+`f3_realdata_control.py` exited **1** in my run, and the reason is its pick rule, not the parse: it wants one *active,
+unacknowledged* row of each kind, and at my read no active unacknowledged row took the fallback, so it picked one row
+and the `== 2` check failed. The rule note it did emit parsed 1/1; `f3_fb.py`, which picks over every row, covers the
+fallback arm at exit 0. Both scripts stamp the note with today's local time and bound the read to 2026-11-21, so they
+are dated controls, valid as run on that day. ⇒ **The day-0 lane-chose zero is a reading, not silence.**
+
+**Unjoined real-data control.** Same inbox, same join: Langston's `langston_outbound` posts *without* `lane=alert` give
+**94** unjoined all-history and **28** in the same 7 days. So the instrument can see an unjoined marker in real data,
+and the lane's 0 of 683 is a reading. *(His measurement; NOT RE-READ by me.)*
+
+**Carries into the daily reads (neither blocked day 1):**
+1. F-5 narrowed to the journal legs only (the REVIEWER paragraph above is corrected).
+2. **Timezone.** `dc.log` stamps local time; the tool compares against UTC bounds and buckets UTC days. The Helsinki
+   box reads `Timezone=Etc/UTC` (`timedatectl`, read at my reproduction), so the reads are sound today, but nothing
+   asserts it. ⇒ **every daily entry below records the box's `timedatectl` Timezone line**; a non-UTC reading voids
+   that day's F-3 and pin legs until the offset is handled.
+
+**Outside P6, surfaced by Langston (§13):** his own hand-typed alert markers (no `lane=alert`) hold 94 unjoined
+all-history / 28 in 7 days over 25 distinct ids; 24 of the 25 share their first 8 hex with a real alert id but differ
+mid-uuid (five zero-padded, one transposed). They are well-formed, so they parse, and they route nothing.
+`DISPOSITION: decision required — no work, on Langston 1573515420814540851; sent to Kyle's list via PM Claude.`
+
+**Next:** the daily reads, day 1 at ~2026-11-22 00:13Z through day 7 at 2026-11-28 00:13Z, each appended here with the
+Timezone line, then Step 10.
