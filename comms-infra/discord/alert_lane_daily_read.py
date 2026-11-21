@@ -102,7 +102,8 @@ def marker_rule(action):
 def compare(markers, rows, table, batch_owner, escalations=()):
     """{day: {'agree': [...], 'differs': [...], 'unjoined': [...], 'fallback_markers': n}} plus churn {id: owners}."""
     days = collections.defaultdict(lambda: {"agree": [], "differs": [], "unjoined": [], "fallback_markers": 0,
-                                            "no_rule_text": 0, "precedent": [], "escalated": []})
+                                            "no_rule_text": 0, "precedent": [], "escalated": [],
+                                            "rule_only": []})
     owners = collections.defaultdict(list)
     for ts, aid, owner, action in markers:
         day = days[ts[:10]]
@@ -124,19 +125,27 @@ def compare(markers, rows, table, batch_owner, escalations=()):
             continue
         same_rule = rule is not None and (rule == t_rule or rule.startswith(t_rule + ";")
                                           or (t_rule == "fallback" and rule.startswith("fallback")))
-        (day["agree"] if owner == t_owner and same_rule else day["differs"]).append(rec)
+        if owner == t_owner and same_rule:
+            day["agree"].append(rec)
+        elif owner == t_owner:
+            day["rule_only"].append(rec)               # right owner, the post does not state the table's rule
+        else:
+            day["differs"].append(rec)
     for ts, aid, reason in escalations:
         days[ts[:10]]["escalated"].append((ts, aid, escalation_kind(reason), reason))
     churn = {aid: os_ for aid, os_ in owners.items() if len(set(os_)) > 1}
     return dict(days), churn
 
 
-def journal_counts(journal_lines):
+def journal_counts(journal_lines, since="", until="9"):
     """{day: {'fallback': n, 'table_escalated': n, 'batches': n, 'escalated': n, 'shas': set}} from the bridge log."""
     out = collections.defaultdict(lambda: {"fallback": 0, "table_escalated": 0, "batches": 0, "escalated": 0,
                                            "shas": set()})
     for line in journal_lines:
         body = line.split("python3[", 1)[-1].split("]: ", 1)[-1] if "]: " in line else line
+        stamp = re.match(r"(\d{4}-\d\d-\d\d) ([\d:]+)", body)
+        if not stamp or not (since <= "%sT%s" % stamp.groups() < until):
+            continue
         m = TABLE_LINE.search(body)
         if m:
             d = out[m.group(1)]
@@ -181,14 +190,16 @@ def report(days, churn, jc, due, table_sha, since, until, inst=None, unjoined_de
     allday = sorted(set(days) | set(jc))
     for day in allday:
         d = days.get(day, {"agree": [], "differs": [], "unjoined": [], "fallback_markers": 0, "no_rule_text": 0,
-                           "precedent": [], "escalated": []})
+                           "precedent": [], "escalated": [], "rule_only": []})
         j = jc.get(day)
-        n = len(d["agree"]) + len(d["differs"]) + len(d["unjoined"]) + len(d["precedent"])
-        print("== %s  lane markers %d: agree %d · DIFFERS %d · fallback-to-precedent %d · unjoined %d (no live row)"
-              " · no rule text %d" % (day, n, len(d["agree"]), len(d["differs"]), len(d["precedent"]),
-                                      len(d["unjoined"]), d["no_rule_text"]))
-        for ts, aid, o, rule, to, tr in d["differs"]:
-            print("   DIFFERS %s %s  lane %s by %r  table %s by %r" % (ts[:19], aid, o, rule, to, tr))
+        n = len(d["agree"]) + len(d["differs"]) + len(d["rule_only"]) + len(d["unjoined"]) + len(d["precedent"])
+        print("== %s  lane markers %d: agree %d · OWNER DIFFERS %d · right owner, rule not stated %d · "
+              "fallback-to-precedent %d · unjoined %d (no live row) · no rule text %d"
+              % (day, n, len(d["agree"]), len(d["differs"]), len(d["rule_only"]), len(d["precedent"]),
+                 len(d["unjoined"]), d["no_rule_text"]))
+        for tag, recs in (("OWNER DIFFERS", d["differs"]), ("RULE NOT STATED", d["rule_only"])):
+            for ts, aid, o, rule, to, tr in recs:
+                print("   %s %s %s  lane %s by %r  table %s by %r" % (tag, ts[:19], aid, o, rule, to, tr))
         if unjoined_detail:
             for ts, aid, o, rule in d["unjoined"]:
                 print("   unjoined %s %s  lane %s by %r" % (ts[:19], aid, o, rule))
@@ -213,12 +224,13 @@ def self_test():
     """Synthetic objects with every count stated BEFORE the run (rider on #744). Exit 1 unless all match."""
     table = {"batches": {"B-X": {"owner": "CC-INFRA"}}, "prefixes": {"pre-": {"owner": "CC-C"}}, "titles": {},
              "fallback": "CC-INFRA"}
-    ids = ["%08d-0000-4000-8000-000000000000" % i for i in range(1, 7)]
+    ids = ["%08d-0000-4000-8000-000000000000" % i for i in range(1, 8)]
     rows = last_rows(json.dumps(r) for r in [
         {"id": ids[0], "title": "B-X: thing", "category": "verification"},                 # table batch:B-X CC-INFRA
         {"id": ids[1], "title": "t", "dedupe_key": "pre-1", "category": "verification"},  # table prefix:pre- CC-C
         {"id": ids[2], "title": "t", "dedupe_key": "zz-1", "category": "verification"},   # table fallback CC-INFRA
         {"id": ids[5], "title": "t", "dedupe_key": "zz-2", "category": "verification"},   # table fallback CC-INFRA
+        {"id": ids[6], "title": "B-X: other", "category": "verification"},                # table batch:B-X CC-INFRA
     ])
     def post(ts, *marks):
         return json.dumps({"ts": ts, "kind": "langston_outbound", "lane": "alert", "text": "Alert lane - x\n" +
@@ -235,25 +247,30 @@ def self_test():
         json.dumps({"ts": "2026-11-21T05:40:00", "kind": "langston_outbound", "lane": "alert", "text":
                     '[[ESCALATE id=%s reason="the owner table says CC-C (prefix:pre-) but Langston’s latest '
                     'routing of t is CC-A - the table or his ruling is stale; he decides"]]' % ids[1]}),
+        json.dumps({"ts": "2026-11-21T05:50:00", "kind": "langston_outbound", "lane": "alert", "text":
+                    '[[ALERT id=%s owner=CC-INFRA action="no rule stated"]]' % ids[6]}),          # right owner, no rule
         post("2026-11-20T23:00:00", (ids[4], "CC-A", "batch:B-X")),                             # before window
         json.dumps({"ts": "2026-11-21T06:00:00", "kind": "langston_outbound", "text":            # not a lane post
                     '[[ALERT id=%s owner=CC-B action="x"]]' % ids[0]}),
     ]
     journal = ["Nov 21 01:00:00 h python3[1]: 2026-11-21 01:00:00 alert lane: owner table routes 1 of 2 alert(s) at "
                + "a" * 40 + ", 1 by the fallback, 1 escalated (batch owner not a building session)",
-               "Nov 21 01:00:09 h python3[1]: 2026-11-21 01:00:09 alert lane: batch of 2 - routed 1, escalated 1"]
+               "Nov 21 01:00:09 h python3[1]: 2026-11-21 01:00:09 alert lane: batch of 2 - routed 1, escalated 1",
+               "Nov 21 00:05:00 h python3[1]: 2026-11-21 00:05:00 alert lane: batch of 3 - routed 0, escalated 3"]
     days, churn = compare(lane_markers(inbox, "2026-11-21T00:13:33", "2026-11-22"), rows, table, {},
                           lane_escalations(inbox, "2026-11-21T00:13:33", "2026-11-22"))
     d = days["2026-11-21"]
-    jc = journal_counts(journal)["2026-11-21"]
+    jc = journal_counts(journal, "2026-11-21T00:13:33", "2026-11-22")["2026-11-21"]   # the 00:05 line is outside
     expect = {"agree": 4, "differs": 1, "unjoined": 1, "fallback_markers": 1, "churn": [ids[1]],
               "journal_fallback": 1, "journal_escalated": 1, "days": ["2026-11-21"], "differs_id": ids[1],
-              "precedent": 1, "escalated_kinds": {"table-vs-precedent": 1}}
+              "precedent": 1, "escalated_kinds": {"table-vs-precedent": 1}, "rule_only": [ids[6]],
+              "journal_batches": 1}
     got = {"agree": len(d["agree"]), "differs": len(d["differs"]), "unjoined": len(d["unjoined"]),
            "fallback_markers": d["fallback_markers"], "churn": sorted(churn), "journal_fallback": jc["fallback"],
            "journal_escalated": jc["escalated"], "days": sorted(days),
            "differs_id": d["differs"][0][1] if d["differs"] else None, "precedent": len(d["precedent"]),
-           "escalated_kinds": dict(collections.Counter(k for _t, _a, k, _r in d["escalated"]))}
+           "escalated_kinds": dict(collections.Counter(k for _t, _a, k, _r in d["escalated"])),
+           "rule_only": [r[1] for r in d["rule_only"]], "journal_batches": jc["batches"]}
     bad = [k for k in expect if expect[k] != got[k]]
     for k in expect:
         print(("ok   " if k not in bad else "FAIL ") + "%s expected %r got %r" % (k, expect[k], got[k]))
@@ -296,7 +313,7 @@ def main():
         jc = {}
         if a.journal:
             with open(a.journal, encoding="utf-8", errors="replace") as fh:
-                jc = journal_counts(fh)
+                jc = journal_counts(fh, since, until)
     except (OSError, subprocess.CalledProcessError, ValueError) as e:
         print("refused: an input could not be read (%s: %s)" % (type(e).__name__, str(e)[:200]), file=sys.stderr)
         return 2
