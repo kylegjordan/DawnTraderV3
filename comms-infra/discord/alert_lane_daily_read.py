@@ -6,7 +6,8 @@ every difference - never a net count. Per UTC day it prints:
   (i)   every lane marker against the table owner: agree / DIFFERS (listed one by one) / unjoined (no live row);
   (iii) fallback routings - from the markers' own rule text AND from the bridge journal's per-batch line;
   (iv)  churn (an alert id the lane routed to more than one owner in the window) and escalations (journal);
-  (v)   the due count now, and whether each installed lane file equals its blob at the ref (with --installed-dir).
+  (v)   the due count now, and whether each installed lane file equals its blob at the ref (with --installed-dir;
+        the owner table is read from the mirror, not installed, so it is not in that list).
 Stated limit (R2-3): a marker whose alert has no live row in the alerts file cannot be joined; it is COUNTED as
 unjoined, never silently dropped, and never read as agreement.
 
@@ -26,7 +27,10 @@ import alert_lane as al            # noqa: E402  - the lane's own marker regex a
 import alert_owner_route as aor    # noqa: E402  - the same table_route the bridge enforces
 
 T_PRIME = "2026-11-21T00:13:33Z"   # the Langston bridge restart that installed P6 (39a3849c2)
-LANE_FILES = ("discord-langston-bridge.py", "alert_lane.py", "alert_owner_route.py", "alert_owner_table.json")
+# The three INSTALLED lane files. The owner table is deliberately absent: the bridge reads it from the mirror at the
+# branch head on every batch (alert_owner_route), never from the install dir, so its sha is the "table read at" line
+# and the journal's per-batch "at <sha>" - listing it here printed UNREADABLE every day (a false alarm, 2026-11-21).
+LANE_FILES = ("discord-langston-bridge.py", "alert_lane.py", "alert_owner_route.py")
 RULE_RE = re.compile(r"\(owner table: (.*)\)\s*$")
 TABLE_LINE = re.compile(r"^(\d{4}-\d\d-\d\d) [\d:]+ alert lane: owner table routes (\d+) of (\d+) alert\(s\) at "
                         r"([0-9a-f]{40}), (\d+) by the fallback, (\d+) escalated")
