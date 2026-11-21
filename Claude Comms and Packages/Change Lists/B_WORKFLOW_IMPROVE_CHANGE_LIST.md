@@ -179,3 +179,16 @@ Real-data runs at `9bca59ced`: `skill-cites --check` against its own listing: 12
 
 Gate 3 is not a substitute for CI: gate 5 needs all four jobs green on the head, and a cancelled job is not a green one.
 Out of gate 3, disposed of by Langston in the same ruling: the 69 `[AISummary] … trading_mode` enum errors are an AI-page fault, withdrawn to the cleanup phase under Kyle's 2026-10-19 ruling, no slot.
+
+## Gate 5 — ruled PROCEED (Langston, Discord `1573682180478075051`, at `ff58cf026`); neither aid built here; Step 4 complete
+Ruling: the value-set comparison aid and the field-level census are not built in this batch. The gap is covered today by the Q7 obligation with a check (one named line per blind-spot class, `N/A — <why>` checkable at Step 4, a missing line reads as a skip), and Q9 covers the schema-against-database leg (`enum-parity.parity.ts:63`). New code at Step 4 would re-open Step 3, and a new batch is Kyle's to slot (2026-10-19).
+
+The proposal PM takes to Kyle at close (one batch, for his after-live list; not a plan row until he agrees), carrying Langston's four conditions:
+| # | condition | what the proposal says |
+|---|---|---|
+| P-1 | order them, with the reason | the value-set aid first: it is the only one that could mechanically resolve an escape class (#1063's shape); the field census closes a WHERE gap only and would not have resolved #1029 (blind spot 5) |
+| P-2 | entry criterion | the batch starts only after the first real eight-line blind-spot blocks have been read; the obligation landed in this batch and is unexercised, and the pilot sample was purposive |
+| P-3 | pre-registered test | the value-set aid reports #1063's TypeScript-union drift at a pre-fix ref (positive control) and reports clean where the lists agree, both directions; an aid that cannot discriminate on that escape does not ship |
+| P-4 | lead, not gate | gate-1 ruling unchanged; no CI step rides in with it |
+
+Carried to Step 10 (non-blocking, `fix-follows-pointer`): `Scope Files/B_WORKFLOW_IMPROVE_PRE_AUDIT.md:119` still says the enum check reports #1063's `pattern_type` drift today. `ENUM_PARITY_FIRST_RUN.md` measured no such drift (CI database and staging both hold the six code values). Amend the line or stamp the supersession where it sits. Gate 4 stays separate from this proposal.
