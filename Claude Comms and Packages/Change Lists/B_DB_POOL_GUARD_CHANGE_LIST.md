@@ -177,3 +177,25 @@ tsc baseline 324 = 324 (`scripts/check-tsc-baseline.mjs`). Tests 22/22.
 - **What the swap does NOT change yet:** the running app loaded the old URL at its last start, so its existing and new connections stay unencrypted until the wiring deploy restarts it. A restart in between (any session) is safe — the deployed pg verifies against the same file, as (b) proved — but must be announced to CC-A (`DEPLOY_WINDOWS` row).
 - **Rollback:** before the wiring deploy, restore the copy over `.env`; after it, deploy the previous sha AND restore the copy (the old URL alone stops the gated app at boot).
 - **Rollback ORDER after the wiring deploy (Langston Step-4 C-2, 2026-11-21): the previous sha FIRST, the `.env` copy SECOND — never the other way round.** The previous code runs happily on the new URL (pg verifies against the same file, T-P3 (b)), so sha-first leaves no broken state between the two moves. `.env`-first leaves the gated code live with the old URL: any restart in that gap — the deploy's own, a crash, another session's — makes the boot check refuse, and pm2 (`max_restarts: 10`, `min_uptime: 30s`) flaps it about ten times and then parks it `errored`, with trading stopped. ⛔ **Never restart with the gated code live and the old URL.**
+
+---
+
+## r4 T-P6 C-1 — the built bundle is booted in CI against the transport gate (2026-11-21, CC-A)
+
+**READY AT:** `2a8af16d0ccce1c9e5b2e85b1f7f4db9857ee4d7` on `origin/migration/aws-supabase`. **One file:** `.github/workflows/ci.yml`, one new Build-job step after "Verify build output". Langston's condition (Step 4 r4): *"your own proof #1 promoted to a CI step: after `npm run build`, `DATABASE_URL=postgresql://x:y@127.0.0.1:1/x node dist/index.js`, assert non-zero exit and `[DB_TLS_BOOT_CHECK] refused: ssl_not_object` as line 1."*
+
+**What the step does:**
+1. **Refusal case.** Runs `node dist/index.js` with `DATABASE_URL=postgresql://x:y@127.0.0.1:1/x` and the four libpq/TLS env vars unset (`PGSSLMODE`, `PGSSLROOTCERT`, `NODE_TLS_REJECT_UNAUTHORIZED`, `PGHOST`), under `timeout 60`. Fails if the exit is 0 or 124 (a timeout means the app started instead of stopping). Fails unless the FIRST line containing `[DB_` contains `[DB_TLS_BOOT_CHECK] refused: ssl_not_object`. Fails if any `[DB_POOL_INIT]` line appears.
+2. **Control case (added; not in the condition).** Same bundle, `DATABASE_URL=postgresql://x:y@localhost:1/x?sslmode=verify-full&sslrootcert=<placeholder file>`. The first two `[DB_` lines must be `[DB_TLS_BOOT_CHECK] passed:` and then `[DB_POOL_INIT]`. Without it, a gate that refused every URL would pass step 1; the control proves the gate can also say yes, and that the pool is built only after it does.
+
+**DEVIATION from the condition, stated:** the refusal is asserted as **the first `[DB_` line, not line 1.** Measured on the local bundle (node v22.18.0) and again on the CI runner: an uncaught throw prints Node's source-location header first (`file:///…/dist/index.js:<line>`, then the code line and a caret), and only then `DatabaseTransportError: [DB_TLS_BOOT_CHECK] refused: ssl_not_object …`. A literal line-1 assertion would fail on every correct bundle. The "no `[DB_POOL_INIT]` anywhere" assertion carries the ordering half: nothing pool-related precedes or follows the refusal.
+
+**Proof the step discriminates (local, before push; extracted from ci.yml by script and run as written):**
+- As committed: rc 0; refusal exit 1, zero `[DB_POOL_INIT]`; control `passed … host=localhost` then `[DB_POOL_INIT] application_name=dawntrader_main`.
+- **Mutation A** — the CJS named import the step exists to catch restored in `server/db-tls-boot-check.ts`: step rc 1, no `[DB_` line in the refusal log (the bundle dies at module load).
+- **Mutation B** — the gate import moved below the database import in `server/index.ts`: step rc 1, first `[DB_` line is `[DB_POOL_INIT]`.
+- Both mutations reverted; `git status` clean apart from the untracked `.claude/launch.json`.
+
+**CI, on Linux:** run `44843574186`, Build job log shows the refusal line, then `[DB_TLS_BOOT_CHECK] passed: verified TLS with a pinned root to host=localhost`, `[DB_POOL_INIT] application_name=dawntrader_main …`, and `Bundle boot verified: refusal before any pool; control passes then builds the pool.`
+
+**Not covered, stated:** the step proves the bundle's ORDER and the gate's two verdicts on synthetic URLs. It does not open a real TLS connection (the control's pool never connects: port 1, placeholder CA), and it does not reach standalone scripts, which do not import the gate (pre-audit T-C4).
