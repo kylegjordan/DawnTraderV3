@@ -51,7 +51,7 @@
 The deployed code sha `2a501de33` passed 4/4 (run `44838992059`, success). Every later run on the branch to 00:35Z was **cancelled** by concurrent pushes (`44843574186` on `2a8af16d0`, `44843916224` on `17ce1d990`, among others) — **a cancelled job is not green.** The per-job result on the final governance sha is recorded in §2a at Step 11.
 
 ### 2a. Final sha
-*(filled at the Step-11 dispatch)*
+Run `44853032767` on `cbfeab87793510bcb995f5119d912e7feaee27b7` (2026-11-21, started 01:56:05Z): **Build success · TypeScript Check (baseline gate) success · Test Suite success · Docker Build success — 4/4 per job.** That sha contains this batch's governance commit `c2bc48286` and the last memory commit `99d75b844` (both checked with `git merge-base --is-ancestor`). The four runs before it on post-governance shas (`44849625293`, `44849761864`, `44851640280`, `44851834583`, `44852792866`) each had at least one job **cancelled** by a newer push (`cancel-in-progress: true` on group `ci-<ref>`); none failed. The commit that fills this section touches only this report.
 
 ---
 
