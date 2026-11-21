@@ -25,7 +25,7 @@ journalctl -u discord-langston-bridge.service --since "2026-11-21 00:13:33" --no
 cd $D; python3 alert_lane_daily_read.py --self-test
 python3 alert_lane_daily_read.py --alerts <alerts copy> --journal $D/journal.txt --installed-dir /opt/discord-bridges
 ```
-Self-test: 13 checks, exit 0. Mutants M6/M7 (the `rule_only` bucket and the journal window) are each killed with exit 1
+Self-test: 13 checks at Step 7 (27 after Step 8, below), exit 0. Mutants M6/M7 (the `rule_only` bucket and the journal window) are each killed with exit 1
 against an unmutated control at exit 0, run with the module path set. A crash is never read as a kill.
 
 ## Positive control — the instrument can see a difference
@@ -74,13 +74,19 @@ resolved at 00:43:04Z / 00:43:05Z with `--by cc-infra --evidence discord:1573498
 | # | criterion | status |
 |---|---|---|
 | i | daily for 7 days: routed owner against table owner, every difference listed | day 0: 3 of 3 agree; **days 1-7 owed** |
+| C-2 | each daily read publishes the largest (template → owner) group (Langston, Step 8) | tool prints it from day 1 |
+| F-3 | each daily read lists every "lane chose X, table sets Y" note (Langston, Step 8) | tool prints it from day 1; day 0: 0 |
+| F-4 | each marker recomputed at its batch's pinned commit, table blob beside the sha | tool does it from day 1 |
 | ii | seeds: batch key → its owner; unknown key → CC-INFRA; failed read → escalation | **PASS** (all three) |
 | iii | fallback ≤ 2/day | day 0: 1 (the seed); **owed** |
 | iv | churn 0; interleave escalations < 3.6/day | day 0: churn 0, escalations 0; **owed** |
 | v | each day: deploy reflog, due count, installed lane sha | day 0: due 25, installed = ref; deploy reflog carried in each daily entry |
 
 Stated limit (R2-3): a marker with no live alert row cannot be joined. It is counted as unjoined, never read as
-agreement. The historical join blind spot is 247 of 838 markers.
+agreement. Measured with this tool over every lane marker in the inbox: **0 of 683 unjoined all-history, 0 of 144 in
+the 7 days to 2026-11-21T01:39:16Z** (Langston's F-1 figures, re-derived; the self-test's synthetic unjoined marker is
+the positive control). *(Corrected at Step 8: this line read "247 of 838", which is Langston's precedent-join figure,
+a different object.)*
 
 ## Finding folded in
 
@@ -88,9 +94,43 @@ The (v) leg listed `alert_owner_table.json` as an installed file. The bridge nev
 the mirror. So (v) printed UNREADABLE on every run, a standing false alarm. Fixed in `5ae34287d`.
 `DISPOSITION: folded into this batch.`
 
-`REVIEWER: none spawned. Every load-bearing claim above carries its object and the command that re-derives it.`
+`REVIEWER: none spawned.` Every load-bearing claim above carries its object and the command that re-derives it —
+**but the recipe needs root on Helsinki** (the bridge journal and `/opt/discord-bridges`). For a reviewer without root,
+every journal-derived claim here (the pins, the per-batch table line, the lane-chose notes, the installed-file
+equality) is reported fact. *(Corrected at Step 8, Langston F-5.)*
 NOT RE-READ: the pre-install failed-read seed result is cited from the r3 install note and was not re-run for this
 record.
 
-**Next:** Step 8, Langston's independent pass on this record and the day-0 read. Then the daily reads to T'+7d
-(2026-11-28 00:13Z), each appended here.
+## Step 8 — Langston PROCEED (Discord `1573510997195362315`), and what it changed
+
+**Day 0, restated as he ruled it (F-3):** the read shows **no table, row or code drift between the two batches and
+the read, and each post stated the table's rule in 3 of 3.** It does NOT show the lane choosing independently of the
+table and agreeing: the bridge also logs a note when the lane's owner differs from the table's, and day 0 has **0**
+such notes (read from the journal; the tool now lists them).
+
+**Table blob beside the sha (F-4 interim, now done in the tool):** both pinned commits the lane read on day 0,
+`1f9435020e47` (1 marker) and `bb5760e31bce` (2 markers), carry owner-table blob **`a9f00990f721`** — the same table,
+so day 0 spans no table edit.
+
+**Tool changes (`alert_lane_daily_read.py`), each a condition he set before day 1:**
+- **C-2:** per day, the largest (template → owner) group of distinct alert ids, the number of groups, and ties.
+- **F-3:** per day, every "lane chose X … table sets Y" note, listed one by one; without `--journal` it prints
+  UNREAD, never zero.
+- **F-4:** each marker's table owner is recomputed at the commit its batch pinned (the journal's
+  `owner routing read at <sha>` line), labelled with that commit's table blob; with no pin it falls back to the ref
+  head and says `PIN UNKNOWN`.
+- **Empty day:** a day with no markers, no escalations and no journal lines prints `EMPTY READ` — a silent day is
+  not a passing one.
+
+**Proof:** self-test now 27 checks, exit 0 (adds two shas with different tables, two synthetic lane-chose notes, the
+largest group, the template key, the day list, and the printed EMPTY READ / C-2 / UNREAD lines). Mutants, each run
+against an unmutated control at exit 0 and judged by exit code: **M8** (every marker recomputed at the latest pin, the
+"moving head" F-4 names) exit 1 · **M9** (lane-chose regex broken) exit 1 · **M10** (empty-day check removed) exit 1 ·
+**M11** (group sort reversed) exit 1. All four fail by assertion, not by crash (a first M8 that crashed was discarded).
+
+**Re-run on real data, Helsinki, 2026-11-21 ~01:39Z** (window [00:13:33, 01:39:16)): 3 markers, 3 agree, 0 differs,
+0 unjoined; recomputed at `1f9435020e47` ×1 and `bb5760e31bce` ×2, both table blob `a9f00990f721`; largest group 1
+distinct id (3 groups, all tied); lane-chose notes 0; fallback 1 (the seed); escalations 0 over 2 batches; churn 0;
+due 25; all three installed lane files equal the ref.
+
+**Next:** the daily reads to T'+7d (2026-11-28 00:13Z), each appended here, then Step 10.
