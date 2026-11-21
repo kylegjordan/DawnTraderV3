@@ -10,7 +10,8 @@ and only the daily size watch saw it.
 WHAT. A Claude Code PreToolUse hook, installed root-owned in /etc/claude-code/managed-settings.json with matcher "*",
 so it sees every tool call on the box. It acts only when a call's target realpaths to the index; every other call exits
 0 at once, with no log row and no import. On a call that targets the index:
-  - a tool not in WRITERS (enumerated at the installed CLI version, C-5) is REFUSED - fail closed, never assumed safe;
+  - a tool in READ_ONLY (enumerated beside WRITERS) cannot change the file, so it is allowed and logged;
+  - a tool in neither list (enumerated at the installed CLI version, C-5) is REFUSED - fail closed, never assumed safe;
   - the bytes after the call are predicted (Write: the content; Edit: the replacement applied to the bytes
     on disk, `replace_all` honoured, C-5); an edit the tool itself would reject (old_string absent, or not unique
     without replace_all) passes through, since the tool refuses it before writing;
@@ -37,6 +38,12 @@ CLI_VERSION_ENUMERATED = "2.1.318"
 # lists 25 tools; the ones that write a file are Write, Edit and NotebookEdit. MultiEdit is NOT in the set. NotebookEdit
 # edits notebooks, so a NotebookEdit aimed at the index is refused below as an unmeasurable write.
 WRITERS = ("Write", "Edit")
+# The tools that name a path and only READ it, from the same 25-tool enumeration (B-TOKEN-ECONOMY amd-1, alert 875456c7):
+# Read takes file_path; Grep and Glob take path. None of them can change the index, so refusing them measured nothing and
+# cost Langston reads of his own index (two refused Reads, log rows 17 and 19, 2026-11-20 and 11-21). Allowed and logged
+# as `allowed-read-only`. A tool is added here only if it cannot write a file at the enumerated version; anything outside
+# both lists is still refused (bump checklist item 1 re-checks both).
+READ_ONLY = ("Read", "Grep", "Glob")
 # The running CLI version, read only on a matched call and stamped on its row, so a bump is visible in the log. A bump is
 # NOT refused: a NEW writing tool is already refused above as unenumerated, and refusing every save after a bump would
 # be Option B's cost arriving unannounced. A mismatch is flagged on the row (`cli_mismatch`); langston-size-watch reads
@@ -150,6 +157,9 @@ def decide(event):
         return 0
     row = {"tool": tool, "realpath": real, "cli_enumerated": CLI_VERSION_ENUMERATED, "cli_running": cli_running()}
     row["cli_mismatch"] = row["cli_running"] != CLI_VERSION_ENUMERATED
+    if tool in READ_ONLY:
+        row["verdict"] = "allowed-read-only"
+        return allow(row)
     if tool not in WRITERS:
         return block(row, "REFUSED by langston-index-guard: %r is not a tool this guard was enumerated for (Claude Code "
                           "%s), so its effect on the auto-memory index cannot be measured. Use Write or Edit.%s"

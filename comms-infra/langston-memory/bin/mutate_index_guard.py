@@ -23,6 +23,11 @@ MUTANTS = [
     ("old bytes decoded eagerly", "guard", "= predict(tool, ti, old)", "= predict(tool, ti, old.decode(\"utf-8\") and old)"),
     ("unenumerated tool allowed", "guard", "    if tool not in WRITERS:\n        return block(",
      "    if False:\n        return block("),
+    ("read-only tool refused", "guard", "    if tool in READ_ONLY:\n", "    if False:\n"),
+    ("read-only list admits a writer", "guard", 'READ_ONLY = ("Read", "Grep", "Glob")',
+     'READ_ONLY = ("Read", "Grep", "Glob", "NotebookEdit")'),
+    ("read-only call not logged", "guard", '        row["verdict"] = "allowed-read-only"\n        return allow(row)',
+     '        return 0'),
 ]
 
 

@@ -825,8 +825,9 @@ def run(quiet=False, injected_total=None, injected_archive_bytes=None, drill_sto
             str(len(guard["unenumerated"])) + " refusal(s) since the last run, first " +
             json.dumps(guard["unenumerated"][:3]) + ", in " + GUARD_LOG + " (re-read it from byte " +
             str(guard["offset_from"]) + ": this row's body is frozen at first mint, later refusals are not in it). A tool aimed at his auto-memory index "
-            "that the guard cannot size was refused, so a save he tried did not land. Run the bump checklist; add "
-            "the tool to WRITERS only if its effect can be predicted. Resolve this row by hand: a quiet day says "
+            "that the guard has not enumerated was refused, so that call did not run (a save did not land; a read "
+            "returned nothing). Run the bump checklist; add the tool to WRITERS only if its effect can be predicted, "
+            "or to READ_ONLY only if it cannot write a file. Resolve this row by hand: a quiet day says "
             "nothing about the tool." + stamp, ev)
         alerts["guard_unestablished"] = condition_alert(
             st, "guard_unestablished", bool(guard["unestablished"]), False,
