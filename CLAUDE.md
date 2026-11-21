@@ -200,6 +200,8 @@ Only ONE `Claude Comms and Packages/` exists — inside the repo; do not create 
     Langston's reviewer obligation (a number with no object and population is ruled unevidenced; `RULED ON REPORTED FACT` disqualifies a PROCEED on its leg) lives in HIS auto-loaded file, which is authoritative. *(Mirror copy: `CLAUDE_MD_RULE_HISTORY.md` · `P5-22`.)*
     **★ WHERE POSSIBLE, PREFER IMPOSSIBLE OVER INTERCEPTED (Langston):** section 7.1's backup push URL is a deliberately invalid `DISABLED://…` value — *"a push from it fails at git, not at somebody's memory."* That is stronger than a hook: it makes the wrong action impossible rather than caught. **Hooks are the fallback, not the first choice.**
 
+30. **Delegate big reads, not small lookups (B-TOKEN-ECONOMY P4).** A helper starts at tens of thousands of tokens: use one for a big self-contained read with a short answer; do a few-call lookup yourself.
+
 ---
 
 ## 6. Three-Way Communication Protocol (Kyle ↔ Langston ↔ Claude Code)
