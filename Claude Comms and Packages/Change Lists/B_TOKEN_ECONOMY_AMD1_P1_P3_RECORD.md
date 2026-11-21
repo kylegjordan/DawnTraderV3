@@ -151,4 +151,22 @@ Langston's memory content stays on Helsinki and is not copied here. Every figure
   | `P2C3` | his replies wake the sessions they name | every reply he posts after install (the bridge does the naming; the rule is his model of it) |
   | `P2C4` | the wake-file summon, name routing, closed sessions | seeded at Step 8: ask him how he would summon a closed session, without naming the file, and check he follows the pointer to `P2C4` |
 
+- **Install order — Langston ruled HOLD (msg `1573672336627081260`, 2026-11-21 12:12Z, replying to `1573671756248522815`).** Item 3 is not installed on its own. It is reviewed with P1+P2+P3 in one combined Step-4 change list after the 03:50Z trim.
+  - **Binding condition:** P3's ceiling is stamped from a fresh `langston-size-watch --status` `measured_total`, read after item 3 is installed and in the same close. It is never taken from the stored state block.
+  - **The trap he measured that turn:** `measured_total` was 143,125 against a ceiling of 143,856. The state block still read `last_total_bytes` 144,648 / `BREACH` from 05:40:52Z. Stamping from the state block would have set the ceiling 1,523 B loose.
+  - **His expected post-install figure is 141,646.** It is a prediction, not the stamp. The stamp is whatever `--status` reads at the time.
+
+## Folded-in fix — the index guard refused Langston's Reads of his own index (alert 875456c7) — 2026-11-21
+
+- **What happened.** `langston-index-guard` refused every tool outside `WRITERS` that named the index, including tools that only read. Its Helsinki log held 75 rows when read. Rows 17 and 19 are two `Read` calls (2026-11-20 and 11-21), refused as "not a tool this guard was enumerated for". A Read cannot change the file, so those refusals measured nothing and cost him two reads of his own index. Size-watch raised `langston-index-guard-unenumerated-tool` as alert `875456c7`.
+- **Intent read.** The fail-closed branch was built for an unmeasurable WRITE (B-LANGSTON-CLAUDEMD-RESIDUAL, #1197 rider, C-5: "a tool outside it that targets the index is refused"). The 11-14 enumeration it records lists Write, Edit and NotebookEdit as the file-writing tools. Read-only tools were never assessed, so refusing them was over-reach, not design (rule 24 outcome 1).
+- **Fix, commit `a5a8739cc`:**
+  - New `READ_ONLY = ("Read", "Grep", "Glob")` from the same 2.1.318 enumeration. These are allowed and logged as `allowed-read-only`. Anything in neither list is still refused.
+  - The size-watch alert text no longer says "a save did not land", which was wrong for a read.
+  - Tests: case 8b (Read/Grep/Glob exit 0, three rows, bytes unchanged) and case 8c (an unknown tool stays refused). The guard suite gives 32 pass / 0 fail on Helsinki.
+  - Mutation check: three new mutants. 11 of 11 are killed, and the baseline passes.
+  - `test_size_watch_alerts.py` gives 134 passed / 0 failed.
+- **Not installed.** It rides the combined Step-4 review. After that comes `install-index-guard.sh`, then the size-watch install. `875456c7` is then resolved by hand with `--by cc-infra --evidence`. It is never acked.
+- **DISPOSITION:** added to B-TOKEN-ECONOMY amd-1 P1–P3 (this record; the combined Step-4 change list carries it as its own section).
+
 ## P3 — lower the ceiling to the measured post-trim total; Coltrane the same — not started
