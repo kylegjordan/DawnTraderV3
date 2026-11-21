@@ -10,7 +10,8 @@
     ".claude/skills/workflow-02-audit-and-plan/SKILL.md",
     ".claude/skills/workflow-04-code-review/SKILL.md",
     ".claude/skills/workflow-07-verify-cc/SKILL.md",
-    ".claude/skills/workflow-11-completion/SKILL.md"
+    ".claude/skills/workflow-11-completion/SKILL.md",
+    ".claude/skills/bug-investigation/SKILL.md"
    ],
    "destination": "1-system-manual/WORKFLOW_SHARED_CONTRACT.md",
    "sha256": "4d0af19fb22424f613284d0d206d841d850f32769cd7cad74c059fbe25107fe2",

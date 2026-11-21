@@ -156,3 +156,26 @@ Carried to gate 4: the undeclared database enum types; the checker's own marker 
 
 Real-data runs at `9bca59ced`: `skill-cites --check` against its own listing: 129 before, 129 after, 0 / 0 / 0; `closeout --compare`: every row equal; B-WORKFLOW-IMPROVE reads declared `non_architecture`.
 `readDeclaredClassAt` (Langston's question): asked of CC-A, whose file `checker.mjs` is; until it lands, the mirror stays with both fixes. The 12-scope mid-line marker item: **HOME: an item on `#744` B-GATE-GUARD, owner CC-A** (disposition 2, Langston).
+
+## Gate 3 — ruled PROCEED (Langston, Discord `1573662327868235786`, at `b3bde2575`); fixes in one commit, two record conditions applied, no diff round (he takes them at Step 8)
+| item | file | what changed | proof | review path |
+|---|---|---|---|---|
+| C-7 | `workflow-10-governance` | the open `GOVERNANCE_EXCEPTIONS` row obligation for a batch held in observation is live text inside the progress-report block (`:69`, block ends `:74`); the draft bullet at `:270` points back to it | Langston read `:69`/`:74`/`:270` at the ref | Step 8 |
+| C-8 | `workflow-09-iterate` | `:29` names `scripts/crew-tooling/ledger-validate.mjs` for what it is: it validates the batch ledger, is not the governance checker, and is reported, not gated | Langston read `:29` at the ref | Step 8 |
+| Q10 (a) | this change list, citations note | the moved-text citations are split: 27 entries in frozen records, 6 in three live governed files, each named | Langston enumerated the 6 live entries in 3 files and the 27 frozen | Step 8 |
+| Q10 (b) | this change list, move ledger | the populations are stated: 31 tool records vs 33 ledger entries (13 moved + 20 pre_existing), collapsing to 27 / 28 distinct keys; the two extra entries cite `bug-investigation:49` | Langston re-derived 33 → 28 distinct, and 31 → 27 without the two `:49` entries (`B_GOV_REPORTING_REVIEWER_ROUNDS_r6.md:48`, `:53`); every figure lands | Step 8 |
+| Q10 (c) | move ledger, reconciliation | provenance re-stamped to `b75aeba60` at both sites; the two remaining `eb12f019b` mentions are marked historical | Langston grep at the ref | Step 8 |
+| Q10 (d) | `B_WORKFLOW_IMPROVE_RECONCILIATION.md` | the re-check at the graded ref closes 5 of 9 (wf-01 M16/M17, wf-10 M8/M12/M13); totals PRESENT 55 / PARTIAL 15 / MISSING 4, the four left are archive material | Langston spot-checked `workflow-01:32` (M16+M17) and `workflow-10:208` (M8+M12+M13) | Step 8 |
+| Q10 (e) | `bug-investigation`, `WORKFLOW_SHARED_CONTRACT.md`, `move-ledger-check.mjs` | the six duplicated one-pass bullets and the precedence clause are gone from `bug-investigation`, replaced by one pointer to contract §1 block `WI-F1`; the contract's row 1 names it as a pointer; the checker states its cannot-see (`--dupes` searches declared sources only) at `:25-27` and in the OK line at `:160` | 0 of 6 bullets left, exact and whitespace-collapsed (Langston); all 6 present verbatim in the contract (`grep -xF`, 6/6) | Step 8 |
+| Q7 snippet | this change list `:88-101` | regenerated verbatim from `workflow-02:83-96` at the carrying commit; the heading names the commit, not a sha | 3,495 B each, `cmp` equal with `> ` stripped; control: a one-character change differs (Langston) | Step 8 |
+| Q7 gap (Langston's fold-in) | `workflow-02-audit-and-plan`, `workflow-10-governance` | `closeout.mjs` added to THE AUDIT AIDS at `workflow-02:90` with its own cannot-see line (reads the change-class marker as the checker does; an omitted update is silent); `workflow-10:14` names it as a pointer only | all six pointers resolve by heading, one home (Langston) | Step 8 |
+| the whole ledger | `B_WORKFLOW_IMPROVE_MOVE_LEDGER.json` | (no change at gate 3 beyond the re-stamp) | Langston re-ran `check()` at the ref: 14/14 moves, sha256 and bytes match, gone from every declared source, pointer kept, `--dupes` total 1, 0 failures; control: an altered `WI-S1` hashes differently | Step 8 |
+
+**Record conditions (applied after the ruling):**
+| item | file | what changed | proof | review path |
+|---|---|---|---|---|
+| D-1 | this change list | this gate-3 section added; until now the only record of gate 3 was the corrected body text, and PM's dispatch described a section that did not exist | — | Step 8 |
+| D-2 | `B_WORKFLOW_IMPROVE_MOVE_LEDGER.json` | `.claude/skills/bug-investigation/SKILL.md` added to `WI-F1`'s `sources`, so a future re-paste there fails `--dupes` instead of sitting in the documented blind spot | `move-ledger-check --ledger <this ledger> --dupes`: OK, 14 moves; the passage occurs 0 times in `bug-investigation` and its `WI-F1` pointer is at `:41` | Step 8 |
+
+Gate 3 is not a substitute for CI: gate 5 needs all four jobs green on the head, and a cancelled job is not a green one.
+Out of gate 3, disposed of by Langston in the same ruling: the 69 `[AISummary] … trading_mode` enum errors are an AI-page fault, withdrawn to the cleanup phase under Kyle's 2026-10-19 ruling, no slot.
