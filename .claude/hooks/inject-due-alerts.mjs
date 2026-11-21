@@ -106,9 +106,19 @@ const REMOTE = [
 // runaway context injection. Everything past this is summarised as a count, never dropped silently.
 const MAX_INJECT = 25;
 const LOST_TAIL_BYTES = 64 * 1024;   // #1142 (Langston C5): the lost-routing record is read from its tail only
+const PM_CLONE = 'DawnTraderV3-pm';   // P7: PM's alerts come from the hourly follow-up, not this hook
 
 function main() {
   const t0 = Date.now();
+  // B-TOKEN-ECONOMY amendment 1, P7 (Kyle KD-108(d)): the PM clone gets NO per-prompt list. PM checks alerts quietly
+  // once an hour with scripts/pm/alert-followup.mjs (its own COUNT control; CHECK FAILED is never "nothing due") and
+  // speaks only for an urgent follow-up. No SSH here. The hook's own record gets a row showing zero alerts shown; the
+  // shadow delta is NOT advanced, since an empty set would read as every alert resolved. Owner sets are unchanged.
+  if (basename(process.env.CLAUDE_PROJECT_DIR || '') === PM_CLONE) {
+    note({ decided: true, reason: 'pm_hourly', alias: 'CC-PM', shown: 0, ms: 0 });
+    emit('§10.5 (PM): no per-prompt alert list. PM checks alerts hourly with scripts/pm/alert-followup.mjs (its COUNT line proves the check ran; CHECK FAILED means do it by hand with scripts/due-alerts.py).');
+    return;
+  }
   let r;
   try {
     // The script travels on STDIN (`python3 -`), never as an argument. ssh joins argv with
