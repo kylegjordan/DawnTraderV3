@@ -1,6 +1,6 @@
 # B-TOKEN-ECONOMY amendment 1 — P1 to P3 implementation record (Langston's and Coltrane's always-loaded notes)
 
-**Owner:** Infra Claude (CC-INFRA) · **STEP: 3 of 11** · **NEXT STEP: 4 of 11** (P1+P2+P3 as one change list to Langston, after the trims)
+**Owner:** Infra Claude (CC-INFRA) · **STEP: 3 of 11** · **NEXT STEP: 4 of 11** (P1+P2+P3 as one change list to Langston, after the 03:50Z trim; P2 item 3 built at the ref, install held for that review unless Langston clears it sooner)
 **Plan rows:** `Claude Comms and Packages/Scope Files/B_TOKEN_ECONOMY_AMENDMENT_1_PRE_AUDIT.md`, rows P1, P2 and P3 (lines 334-336 at this commit's parent).
 **Requested by:** PM Claude, Discord `1573658836009619527` (P6 is in its 7-day read meanwhile).
 
@@ -92,6 +92,7 @@ Langston's memory content stays on Helsinki and is not copied here. Every figure
 - **Command:** `langston-memory-write --part 00-legacy.md --expect-sha 9f7699f7c35d… --ledger-delta -7 --retractions-delta 0 --by langston --reason …`, with no `--allow-growth`.
 - **Tool output:** `WRITTEN part 00-legacy.md (9f7699f7c35d->6403341ff652)`, `MEMORY.md 73722 -> 73360 B`, `ledger bullets 38 -> 31`, `loaded set 143125 B vs ceiling 143856 B (under by 731 B; row 2.8b)`. Exit 0.
   The 731 B is a reading at this moment, not a balance to spend. The auto-memory index (12,716 B at this write) moves whenever Langston saves a memory, so headroom is read again at each write (Langston's correction).
+  **Only 488 B of that is this batch's (Langston FINDING-1, msg `1573670751121313833`, re-derived by him):** P1+P2 took his memory file 73,848 -> 73,360 B. The other 1,035 B came from the auto-memory index shrinking on its own (13,751 -> 12,716 B). The Step-4 change list states **488 B** as P1+P2's result, not 731.
 - **Trim dry-run, right after:** `would evict 5 section(s) [B-FILTER-DIAG-STANDARDIZE, B-CODEX-FAILOVER, B-TOKEN-ECONOMY-AMD1-P2, B-ARM-REMOVAL, B-DEPLOY-DRIFT-LINE], 7 open stay; part 73158 -> 68491 B`.
 - **Move-ledger proof, pre-registered.** The tool is `scripts/crew-tooling/move-ledger-check.mjs`, run on Helsinki against a check folder that links the live part and the live archive. Its ledger lists the two moves above, destination `MEMORY-ARCHIVE.md`.
 
@@ -105,7 +106,7 @@ Langston's memory content stays on Helsinki and is not copied here. Every figure
 
 ### Item 3 — the §5.1-§5.3 mechanics move — 2026-11-21
 
-- **Object:** `comms-infra/langston/LANGSTON_CLAUDE.md`, taken from ref `1e22a5d6e` (its live installed copy at `/home/langston/CLAUDE.md` is sha `36dbd2e9…f791`, equal to that blob). Destination: the new file `comms-infra/langston/LANGSTON_COMMS_MECHANICS.md`, which Langston reads on demand with `dt-review show <sha> comms-infra/langston/LANGSTON_COMMS_MECHANICS.md`. Ledger: `Change Lists/B_TOKEN_ECONOMY_AMD1_P2_MOVE_LEDGER.json` (marker `P2-MOVED`).
+- **Object:** `comms-infra/langston/LANGSTON_CLAUDE.md`, taken from ref `1e22a5d6e` (its live installed copy at `/home/langston/CLAUDE.md` is sha `36dbd2e9…f791`, equal to that blob). Destination: the new file `comms-infra/langston/LANGSTON_COMMS_MECHANICS.md`, which Langston reads on demand with `dt-review show` at the REVIEW SOURCE stamp (no stamp: `dt-review ref`), as the top of his rules file says. The pointer names the path, never a sha (his condition 3). Ledger: `Change Lists/B_TOKEN_ECONOMY_AMD1_P2_MOVE_LEDGER.json` (marker `P2-MOVED`).
 - **What moves, word for word, as four marked blocks:**
 
   | id | passage | source lines at `1e22a5d6e` | sha256 (LF) |
@@ -115,9 +116,17 @@ Langston's memory content stays on Helsinki and is not copied here. Every figure
   | `P2C3` | §5.3 intro and item 1 (replies wake the sessions) | 168-170 | `c2f3e3662555a8e4a254fe6720526b9dc4be5e6fc8d26a505e5e4935cb9534e1` |
   | `P2C4` | §5.3 item 3 (wake file), name routing, the limitation | 172-176 | `9a29c00d149d40ab7130ad05e30ad595029aa3b8193c37197512140271b6aa5b` |
 
-- **What stays loaded, as the plan row says:** the §5 roles and live-channel paragraph (the stateless boundary), the Telegram-decommissioned block, the escalation criteria, and §5.3 item 2 (the dead alert-log line, a false-absence guard). The three headings become one pointer heading, `### 5.1–5.3 … the mechanics are on demand`, which names the file, the four ids, when to read it, and the `dt-review show` command. The §5 intro's citations of "§5.3" and "(§5.1, §12)" now land on that heading.
-- **Bytes:** source 57,049 -> 55,241 B, **−1,808 B** on the rules file. The new file is 3,620 B and is not loaded.
-  PREVIOUSLY STATED: about 2.5-3 KB off the loaded set. NOW: −1,808 B. REASON: item 2, the §5 intro and the pointer text stay loaded.
+- **What stays loaded, as the plan row says:** the §5 roles and live-channel paragraph (the stateless boundary), the Telegram-decommissioned block, the escalation criteria, and §5.3 item 2 (the dead alert-log line, a false-absence guard). The three headings become one pointer heading, `### 5.1–5.3 … the mechanics are on demand`, which names the file, the four ids, when to read it, how to read it, and what to do when the read is refused. The §5 intro's citations of "§5.3" and "(§5.1, §12)" now land on that heading.
+- **Bytes (blob at the ref):** source 57,049 -> 55,570 B, **−1,479 B** on the rules file. The new file is 3,620 B and is not loaded.
+  PREVIOUSLY STATED: about 2.5-3 KB off the loaded set (my plan), and Langston's estimate of about 2.0-2.3 KB (his condition 4, written before the move). THEN, at `61b8db3eb`: −1,808 B. NOW: −1,479 B. REASON: the refusal branch his condition 3 asks for adds 329 B; item 2, the §5 intro and the pointer text stay loaded. **The result is below his estimated range, and is stated here as it is.**
+- **Langston's four conditions on this item (msg `1573670751121313833`):**
+
+  | # | condition | how it is met |
+  |---|---|---|
+  | 1 | keep the §5.3 item 2 guard loaded | kept verbatim under the pointer, still numbered 2 |
+  | 2 | mirror byte-identical; mechanics in a new repo path installed by `langston-rules-install` from the reviewed commit | the mirror is the file that installs; the new file is read through `dt-review`, so the install carries no second copy |
+  | 3 | name the refusal branch; never "proceed without the protocol"; a path, never a sha | the pointer says a REFUSED read or exit 2/3 means nothing was read: retry once at `dt-review ref`; if that refuses, say so and do not do the part of the task that needs it. No sha in the pointer |
+  | 4 | state the expected net | stated above, with the gap to his range |
   The saving counts only once the file is installed (`langston-rules-install <sha>`, after Step 4). Until then `langston-size-watch` notes `pending`, which is a note, not an alert.
 - **Move-ledger check** (`node scripts/crew-tooling/move-ledger-check.mjs --ledger "<P2_MOVE_LEDGER.json>" --root . --dupes`):
 

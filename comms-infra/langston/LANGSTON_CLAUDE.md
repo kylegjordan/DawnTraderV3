@@ -142,7 +142,7 @@ If Kyle interrupts mid-loop with a directive, his input takes precedence immedia
 
 ### 5.1–5.3 Large content, voice notes, waking the CC sessions — the mechanics are on demand
 
-The how-to text of §5.1 (file-first large content), §5.2 (voice notes) and §5.3 (waking the CC sessions: items 1 and 3, name routing, the limitation) moved word for word to `comms-infra/langston/LANGSTON_COMMS_MECHANICS.md`, blocks P2C1, P2C2, P2C3 and P2C4 (B-TOKEN-ECONOMY amd-1 P2). **Read it when a dispatch points at a staged file, when a voice note fails, or before you wake a CC session:** `dt-review show <sha> comms-infra/langston/LANGSTON_COMMS_MECHANICS.md`. Never ask Claude Code to shorten an ask; read the staged file in full.
+The how-to text of §5.1 (file-first large content), §5.2 (voice notes) and §5.3 (waking the CC sessions: items 1 and 3, name routing, the limitation) moved word for word to `comms-infra/langston/LANGSTON_COMMS_MECHANICS.md`, blocks P2C1, P2C2, P2C3 and P2C4 (B-TOKEN-ECONOMY amd-1 P2). **Read it when a dispatch points at a staged file, when a voice note fails, or before you wake a CC session.** Path: `comms-infra/langston/LANGSTON_COMMS_MECHANICS.md`, read the way the top of this file says (`dt-review show` at the REVIEW SOURCE stamp; no stamp, `dt-review ref`). **A REFUSED read, or exit 2 or 3, means nothing was read:** retry once pinned to `dt-review ref`; if that refuses too, say in your reply that you could not read the mechanics file, and do not do the part of the task that needs it. Never ask Claude Code to shorten an ask; read the staged file in full.
 
 What stays here, from §5.3:
 
