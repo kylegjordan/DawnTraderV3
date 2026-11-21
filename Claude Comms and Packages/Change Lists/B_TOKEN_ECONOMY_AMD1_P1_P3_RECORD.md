@@ -69,7 +69,39 @@ Langston's memory content stays on Helsinki and is not copied here. Every figure
 ## P2 — split the REVIEWER LEDGER; move CLAUDE.md §5.1-§5.3 mechanics — in progress
 
 - **Item 1, the two R2-8b class lifts: DONE in P1 write 2** (above; `ledger bullets 36 -> 38`).
-- Item 2, the ledger split (class rulings stay, instances move verbatim): not started.
+- **Item 2, the ledger split: DONE** (below; `ledger bullets 38 -> 31`).
+### Item 2 — the ledger split — 2026-11-21 ~12:10Z
+
+- **Object:** the same part, `/home/langston/memory-parts/00-legacy.md`, from sha `9f7699f7c35d…` to `6403341ff652d5cb12c35b8a2b6582753c44c881e3563c9e0318ae007ea44d7e`.
+- **What stays in the REVIEWER LEDGER:** the "Rulings of mine that GENERALISE" subsection, whole (it holds the class rulings, including the two lifted in write 2); the `### CC-A errors I logged` heading; and the "WHAT IS IN FLIGHT IS A READ-SITE" bullet (ledger line 105 before this write). That bullet is a standing rule about how to read headroom, not an instance, so it stays loaded.
+- **What moves, verbatim, as two marked blocks** in a new closed section `## Ledger instances moved 2026-11-21 (B-TOKEN-ECONOMY amd-1 P2)`, which tonight's trim carries to `MEMORY-ARCHIVE.md`:
+
+  | id | the bullets | passage sha256 (bullets joined with LF) |
+  |---|---|---|
+  | `P2L1` | the 3 CC-A error notes under `### CC-A errors I logged` | `da5964cf58ad2e91d90e6ca636656bc4933304f4cc4aa19b1abec93c0593ea8a` |
+  | `P2L2` | the 4 state lines that sat below them (Phase-19 tail, Recently CLOSED, Fee reality, Governance-checker LIVE) | `e86952af52fdba09ee07c1e5cee4ea1e613c814113de93a9c88dea907de56673` |
+
+  The section's STATE line is `closed · batch: B-TOKEN-ECONOMY-AMD1-P2 · superseded-by:` this record. Under the CC-A heading a one-line pointer names both ids and `langston-recall B-TOKEN-ECONOMY-AMD1-P2`.
+- **Also removed:** the 1,013 B "REVIEW HOLD on #675" note in the closed B-FILTER-DIAG-STANDARDIZE section (Langston's suggestion). It is already homed at `RUNNING_ISSUES.md` line 3810, and line 10571 (row 93). Without this cut the write grew by 556 B, which is more than the 369 B left under the ceiling.
+- **Disclosures:**
+  - The two `### P2L1 —` / `### P2L2 —` block titles are new text, needed by the move-ledger format. The bullets under them are byte-for-byte.
+  - The CC-A subsection is now its heading plus the pointer. The heading stays because the write tool's ledger-integrity guard requires it (below).
+  - Correction: I told Langston and PM that five status lines move. It is four. Line 105 stays, as above.
+- **First attempt refused, exit 5:** `ledger subsection '### CC-A errors I logged' absent from the composed file`. My first draft moved the heading along with its bullets. The tool restored the part and `MEMORY.md` byte-identical, and the fix was to keep the heading in the ledger. The guard did its job.
+- **Command:** `langston-memory-write --part 00-legacy.md --expect-sha 9f7699f7c35d… --ledger-delta -7 --retractions-delta 0 --by langston --reason …`, with no `--allow-growth`.
+- **Tool output:** `WRITTEN part 00-legacy.md (9f7699f7c35d->6403341ff652)`, `MEMORY.md 73722 -> 73360 B`, `ledger bullets 38 -> 31`, `loaded set 143125 B vs ceiling 143856 B (under by 731 B; row 2.8b)`. Exit 0.
+  The 731 B is a reading at this moment, not a balance to spend. The auto-memory index (12,716 B at this write) moves whenever Langston saves a memory, so headroom is read again at each write (Langston's correction).
+- **Trim dry-run, right after:** `would evict 5 section(s) [B-FILTER-DIAG-STANDARDIZE, B-CODEX-FAILOVER, B-TOKEN-ECONOMY-AMD1-P2, B-ARM-REMOVAL, B-DEPLOY-DRIFT-LINE], 7 open stay; part 73158 -> 68491 B`.
+- **Move-ledger proof, pre-registered.** The tool is `scripts/crew-tooling/move-ledger-check.mjs`, run on Helsinki against a check folder that links the live part and the live archive. Its ledger lists the two moves above, destination `MEMORY-ARCHIVE.md`.
+
+  | run | expected | result |
+  |---|---|---|
+  | before the trim (control 1) | FAIL: no blocks in the archive yet | `FAIL P2L1: 0 blocks in MEMORY-ARCHIVE.md (want 1)` and the same for P2L2. Exit 1. |
+  | before the trim, destination pointed at the part itself (control 2) | FAIL: the passage is still in the source | `FAIL P2L1: passage is still in memory-parts/00-legacy.md` and the same for P2L2. Exit 1. |
+  | after the 2026-11-22 03:50Z trim, with `--dupes` | OK, 2 of 2 moves, no duplicates | owed |
+
+  Control 2 shows the checker can see the passage where it is now, so the post-trim OK cannot be produced by a checker that is blind to the passage.
+
 - Item 3, the CLAUDE.md §5.1-§5.3 mechanics move with a pointer: not started.
 
 ## P3 — lower the ceiling to the measured post-trim total; Coltrane the same — not started
