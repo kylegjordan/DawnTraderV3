@@ -19,7 +19,7 @@ Use ordinary language before file or component names. Explain why the work matte
 
 If sources conflict, say `status uncertain`, name both sources and identify which owner must reconcile them. If a source is old, include its timestamp. Forecast only a gate or observable next condition; do not invent completion dates.
 
-Default output tells Kyle only what changed, what is at risk and what needs him. A requested full report may include all owners, batches, steps and next batches. PM Claude mirrors substantive reports to Discord as required by its rules; PM Codex uses the fixed outbox sender and does so only when the operating instruction calls for a Discord copy.
+Default output tells Kyle only what changed, what is at risk and what needs him. A requested full report may include all owners, batches, steps and next batches. A status report Kyle asks for is answered in the chat where he asked and is NOT posted to Discord (Kyle, 2026-11-21: "When I ask for a status update, I just want it within this session"). PM Codex likewise answers in its own chat.
 
 ## Full status reports requested by Kyle
 
