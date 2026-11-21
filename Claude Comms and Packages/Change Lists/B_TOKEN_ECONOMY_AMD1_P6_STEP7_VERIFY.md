@@ -11,7 +11,7 @@ bridge journal, and the five sessions' wake-filter owner records. All three are 
 
 ## The instrument — `comms-infra/discord/alert_lane_daily_read.py`
 
-Commits: `bb5760e31` (tool), `6cd4198e1` (OWNER DIFFERS split from RULE NOT STATED; journal windowed), `910b2a122`
+Commits: `bb5760e31` (tool), `6cd4198e1` (OWNER DIFFERS split from RULE NOT STATED; journal windowed), `5ae34287d`
 (the owner table removed from the installed-file check; see the finding below). It recomputes every lane marker's owner
 from the table, independently of the bridge, and lists every difference one by one. It never reports a net count.
 
@@ -85,7 +85,7 @@ agreement. The historical join blind spot is 247 of 838 markers.
 ## Finding folded in
 
 The (v) leg listed `alert_owner_table.json` as an installed file. The bridge never installs it; it reads the table from
-the mirror. So (v) printed UNREADABLE on every run, a standing false alarm. Fixed in `910b2a122`.
+the mirror. So (v) printed UNREADABLE on every run, a standing false alarm. Fixed in `5ae34287d`.
 `DISPOSITION: folded into this batch.`
 
 `REVIEWER: none spawned. Every load-bearing claim above carries its object and the command that re-derives it.`
