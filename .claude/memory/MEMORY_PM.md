@@ -26,7 +26,7 @@
 - Archived 2026-11-16 · nudge-11-16-1131z → `1-system-manual/pm/archive/memory/2026-11.md`
 - Archived 2026-11-16 · kd-96-db-tool-recorded → `1-system-manual/pm/archive/memory/2026-11.md`
 - Archived 2026-11-16 · kd-100-db-security-recorded → `1-system-manual/pm/archive/memory/2026-11.md`
-- **FOR KYLE (Infra 11-21 ~01:5xZ, Discord 1573516769706905701): B-ALERT-MARKER-RETIRE** — retire/validate Langston's hand-typed alert markers (94 name no real alert; auto lane 0/683). Slot check FRESH `pm/slot-checks/20261121T015429Z_CC-INFRA_retire-or-validate-the-alert-markers-lan.md` (UNCOMMITTED; commit with the KD row). Rec A: after-live list per KD-15 (pushes back nothing); B: Infra proposed after P6 (slips 5a1-5a3 DB rows, 4a, 5b, 6, 12). Asked Kyle in Desktop.
+- **KD-109 (Kyle 11-21): B-ALERT-MARKER-RETIRE after live** (PRE_LIVE_SPRINT, after B-ALERT-LANE-LEDGER-OWNER), CONDITIONAL on no delay/excess tokens; Infra confirms in its ACK, else back to Kyle (option B after P6). Collect Infra ACK.
 - **Small-items bundle +1 (ANALYST 11-16 ~16Z):** Settings "config snapshot" view 500s (route calls removed storage.getPortfolioBalance; repoint vs remove undecided). Not paper/VTS. Bundle ids in archive 2026-11: small-items-bundle-1/2-pending-kyle.
 - Archived 2026-11-16 · nudge-11-16-1623z → `1-system-manual/pm/archive/memory/2026-11.md`
 - Archived 2026-11-16 · usage-87-safe-stop-superseded → `1-system-manual/pm/archive/memory/2026-11.md`
