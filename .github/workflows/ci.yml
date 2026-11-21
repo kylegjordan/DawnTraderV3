@@ -314,6 +314,38 @@ jobs:
           test -d dist/public || (echo "ERROR: dist/public/ not found" && exit 1)
           echo "Build output verified: dist/index.js + dist/public/"
 
+      # B-DB-POOL-GUARD r4 C-1 (Langston, Step 4, 2026-11-21): LOAD the built bundle, do not just check it exists.
+      # A named import of a CommonJS package passed every unit test (vitest rewrites imports) and failed to load in
+      # dist/ with "Named export not found" -- caught only by hand before the push. This step boots dist/index.js
+      # against the database transport gate, which server/index.ts imports first, so no network is ever touched:
+      #   1. an unencrypted URL must exit non-zero, its first [DB_ line must be the refusal, and no pool may be built;
+      #   2. the control: a TLS-shaped URL must log the pass and THEN the pool init, proving step 1's
+      #      "no [DB_POOL_INIT]" is a silence this instrument can break. The placeholder CA is never used to connect
+      #      (port 1 refuses first). Node prints the throw's source location above it, so "first [DB_ line", not line 1.
+      - name: Boot the built bundle against the database transport gate
+        run: |
+          clean() { env -u PGSSLMODE -u PGSSLROOTCERT -u NODE_TLS_REJECT_UNAUTHORIZED -u PGHOST "$@"; }
+          out="$RUNNER_TEMP"
+          set +e
+          clean DATABASE_URL='postgresql://x:y@127.0.0.1:1/x' timeout 60 node dist/index.js > "$out/refuse.log" 2>&1
+          rc=$?
+          set -e
+          cat "$out/refuse.log" | head -20
+          if [ "$rc" -eq 0 ] || [ "$rc" -eq 124 ]; then echo "ERROR: unencrypted URL did not stop the app (exit $rc)"; exit 1; fi
+          first=$(grep -m1 -F '[DB_' "$out/refuse.log" || true)
+          case "$first" in *'[DB_TLS_BOOT_CHECK] refused: ssl_not_object'*) ;; *) echo "ERROR: first [DB_ line is not the refusal: $first"; exit 1;; esac
+          if grep -qF '[DB_POOL_INIT]' "$out/refuse.log"; then echo "ERROR: a pool was built before the gate refused"; exit 1; fi
+          printf 'placeholder\n' > "$out/ca.crt"
+          set +e
+          clean DATABASE_URL="postgresql://x:y@localhost:1/x?sslmode=verify-full&sslrootcert=$out/ca.crt" timeout 30 node dist/index.js > "$out/pass.log" 2>&1
+          set -e
+          lines=$(grep -F '[DB_' "$out/pass.log" | head -2 || true)
+          echo "$lines"
+          l1=$(printf '%s\n' "$lines" | sed -n 1p); l2=$(printf '%s\n' "$lines" | sed -n 2p)
+          case "$l1" in '[DB_TLS_BOOT_CHECK] passed:'*) ;; *) echo "ERROR: control did not log the pass first: $l1"; exit 1;; esac
+          case "$l2" in '[DB_POOL_INIT]'*) ;; *) echo "ERROR: control did not build a pool after the pass: $l2"; exit 1;; esac
+          echo "Bundle boot verified: refusal before any pool; control passes then builds the pool."
+
   docker:
     name: Docker Build
     runs-on: ubuntu-latest
