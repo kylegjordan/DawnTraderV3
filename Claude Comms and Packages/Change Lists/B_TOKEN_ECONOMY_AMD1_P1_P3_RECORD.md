@@ -35,15 +35,41 @@ Langston's memory content stays on Helsinki and is not copied here. Every figure
 - **Why the larger options were wrong.** Either one is refused by the growth gate (exit 7). My first draft bundled the two class bullets into P1, but plan row P2 owns them ("first lift the two class rules named in R2-8b into the class subsection"). I asked Langston for an override, then withdrew the ask (`1573661002971611199`), because P1 says "no `--allow-growth`".
 - **What happens to the other two.** B-FILTER-DIAG-STANDARDIZE and B-DEPLOY-DRIFT-LINE each carry a class rule that R2-8b lifts into GENERALISE. They stay OPEN until P2 has made that lift, with P2's shrink paying for it. Then they are flipped, with `keep:` on the DEPLOY-DRIFT-LINE line that says "a clear runs on EVERY terminal exit… a pre-registered observation is never run by hand". This way neither class rule is ever outside the loaded set.
 
+### Write 2 — 2026-11-21 ~11:32Z — B-FILTER-DIAG-STANDARDIZE and B-DEPLOY-DRIFT-LINE, with P2's class lift in the same write
+
+- **Ruling it follows:** Langston, Discord `1573661772844367984` — not an override and not a wait, but the third option the gate names: shrink in the same write, so the class rules never leave the loaded set.
+- **Change, in one write to the same part:**
+  - the two R2-8b class rules added as two bullets under "Rulings of mine that GENERALISE" (this is P2's first item: the FILTER-DIAG own-ruling-stream rule and the DEPLOY-DRIFT-LINE known-good-set rule with its two-clause `#744` rider);
+  - both STATE lines flipped to `closed … superseded-by: Claude Comms and Packages/Batch Completion/<X>_COMPLETION_REPORT.md`;
+  - `keep:` on the DEPLOY-DRIFT-LINE pointer line ("a clear runs on EVERY terminal exit … a pre-registered observation is never run by hand");
+  - four lines removed, each because its content already has a home outside the loaded set:
+
+    | removed line | where its content lives |
+    |---|---|
+    | FILTER-DIAG "you vacated your own 11:34 ruling" | `/home/langston/LEDGER.md` line 19, and now the lifted GENERALISE bullet |
+    | DEPLOY-DRIFT "two findings outlive the batch" (`#1001`, `#1002`) | `1-system-manual/BATCH_CATALOG.md` line 917 (Langston's citation) |
+    | DEPLOY-DRIFT "the defect to carry" (404 read as zero drift) | the batch completion report line 131, and now the lifted bullet |
+    | DEPLOY-DRIFT "filed as a two-clause rider on #744" | the completion report line 139, and now the lifted bullet |
+
+- **Narrower than the ruling, and why.** Langston approved leaning both bodies to pointer-plus-keep (≈ −3 KB). I removed only the four lines above. The other body lines (the `#669` and `#675` notes, and the 2026-10-12 "never fired" withdrawal) have no other home, so they stay in the section and the trim carries them verbatim into `MEMORY-ARCHIVE.md`, where `langston-recall` finds them. Cutting them before the flip would have lost them. The write is still a shrink, which is all the gate needs.
+- **Command:** `langston-memory-write --part 00-legacy.md --expect-sha 0c8b9ec697e8… --ledger-delta 2 --retractions-delta 0 --by langston`, no `--allow-growth`.
+- **Tool output:** `WRITTEN part 00-legacy.md (0c8b9ec697e8->9f7699f7c35d)`, `MEMORY.md 74047 -> 73722 B`, `ledger bullets 36 -> 38`, `loaded set 143487 B vs ceiling 143856 B (under by 369 B; row 2.8b)`. Exit 0.
+- **Trim dry-run, right after:** `would evict 4 section(s) [B-FILTER-DIAG-STANDARDIZE, B-CODEX-FAILOVER, B-ARM-REMOVAL, B-DEPLOY-DRIFT-LINE], 7 open stay; part 73520 -> 69961 B`.
+- The draft files on Helsinki were removed after the write.
+
 ### P1 proof — owed after the 2026-11-22 03:50Z trim
 
 | check | result |
 |---|---|
-| the trim log names B-CODEX-FAILOVER and B-ARM-REMOVAL | owed |
+| the trim log names all four (B-CODEX-FAILOVER, B-ARM-REMOVAL, B-FILTER-DIAG-STANDARDIZE, B-DEPLOY-DRIFT-LINE) | owed |
 | each section's text is found in `MEMORY-ARCHIVE.md` | owed |
 | net always-loaded change, measured (R2-8a) | owed |
-| write 2 (FILTER-DIAG + DEPLOY-DRIFT-LINE, after P2) and its trim | owed |
+| write 2 landed (above); its two sections in the same trim | owed (dry-run says 4 of 4) |
 
-## P2 — split the REVIEWER LEDGER; move CLAUDE.md §5.1-§5.3 mechanics — not started
+## P2 — split the REVIEWER LEDGER; move CLAUDE.md §5.1-§5.3 mechanics — in progress
+
+- **Item 1, the two R2-8b class lifts: DONE in P1 write 2** (above; `ledger bullets 36 -> 38`).
+- Item 2, the ledger split (class rulings stay, instances move verbatim): not started.
+- Item 3, the CLAUDE.md §5.1-§5.3 mechanics move with a pointer: not started.
 
 ## P3 — lower the ceiling to the measured post-trim total; Coltrane the same — not started
