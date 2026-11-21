@@ -192,3 +192,7 @@ The proposal PM takes to Kyle at close (one batch, for his after-live list; not 
 | P-4 | lead, not gate | gate-1 ruling unchanged; no CI step rides in with it |
 
 Carried to Step 10 (non-blocking, `fix-follows-pointer`): `Scope Files/B_WORKFLOW_IMPROVE_PRE_AUDIT.md:119` still says the enum check reports #1063's `pattern_type` drift today. `ENUM_PARITY_FIRST_RUN.md` measured no such drift (CI database and staging both hold the six code values). Amend the line or stamp the supersession where it sits. Gate 4 stays separate from this proposal.
+
+## Step 5 and Step 6
+- **Step 5 (CI):** all four jobs green on `29303adff` (run 44907099007: TypeScript Check, Test Suite, Build, Docker Build), which contains every commit of this batch through the gate-5 record. The two runs on `8ec7ab0f1` and `64a4d1a61` were cancelled by the newer push, not failed.
+- **Step 6 (deploy): none owed by this batch.** Population: every file touched by a `B-WORKFLOW-IMPROVE` commit since 2026-11-15 (`git log --grep`, `--name-only`): skills, CI, `scripts/crew-tooling`, `server/tests/enum-parity`, its vitest config, governance and records. None is server runtime code and none is `scripts/governance-checker`, so staging runs nothing this batch changed; the enum check runs in CI. A deploy would restart trading for no change.
