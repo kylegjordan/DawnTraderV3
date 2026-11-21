@@ -1,4 +1,4 @@
-# CC-A (OLD Claude) — SESSION TASK LIST — plain language, as of 2026-11-20
+# CC-A (OLD Claude) — SESSION TASK LIST — plain language, as of 2026-11-21
 
 > 📁 **Lives in `1-system-manual/` since 2026-09-11** (moved from `Scope Files/` — `B-TASK-LIST-SLOT` P3; the convention is written in `workflow-10-governance`'s Tier-1 task-list row).
 
@@ -15,7 +15,7 @@
 
 | # | item | status | decision |
 |---|---|---|---|
-| 1 | `B-DB-POOL-GUARD` (`#1239`, absorbs `#1062`) — guard the app's 10 shared database connections | IN FLIGHT. Increments 1-3b and P5 live; UI leg held on row 119 / `#1037`. **r4 = B-DB-APP-TLS (KD-100):** T-P1 (the unencrypted-connection page) live 2026-11-20 at `ecbdf882e`, Step 8 PROCEED; next T-P2 boot check + T-P3 switch to verify-full in one window, then T-P5 | KD-2 order 3, KD-100 |
+| 1 | `B-DB-POOL-GUARD` (`#1239`, absorbs `#1062`) — guard the app's 10 shared database connections | AT STEP 10 (2026-11-21). Increments 1-3b, P5 and r4 = B-DB-APP-TLS (KD-100) all live; r4 switched every app connection to verified TLS at `2a501de33` 00:08:05Z, Langston Step 8 PROCEED. Closes at Step 11 with `Claude Comms and Packages/Batch Completion/B_DB_POOL_GUARD_COMPLETION_REPORT.md`; UI leg held on row 119 / `#1037` | KD-2 order 3, KD-100 |
 | 2 | `B-DISK-FILE-TIERING` (`#1233`) with the price-feed debug-log trim (`#1240`) folded in | IN FLIGHT, 3d step 5 (2026-11-20): narrow key live, lifecycle proof PASS on both arms; rotator fix `dee8a01e4` at Langston Step 4; wide-key delete awaits Kyle; then the rule-18 removal and Step 10 | KD-2 order 5 |
 | 3 | `B-STATUS-BOARD` (`#1227`) — RETIRED under Kyle's KD-35 (the phone board is not kept) | ✅ CLOSED 2026-11-13 (Step 11 CONFIRMED by Langston; report `Claude Comms and Packages/Batch Completion/B_STATUS_BOARD_COMPLETION_REPORT.md`) | already agreed |
 | 4 | `#527` — the xStock VTS records carry their cost split (fee, slippage, spread) | ✅ CLOSED 2026-11-05: already done 2026-07-17, measured complete since 2026-09-03 | KD-13 |

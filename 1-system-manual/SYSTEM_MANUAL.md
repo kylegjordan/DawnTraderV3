@@ -47,7 +47,7 @@ This manual documents both **what the system currently does** and **what it is d
 
 DawnTrader is an algorithmic cryptocurrency trading platform for the Kraken exchange. It supports paper and live trading modes, operating as a single-tenant, single-user system with mode isolation at the database row level. The system implements a full trading pipeline: market scanning → signal generation → scoring → risk management → execution → monitoring.
 
-The codebase is a TypeScript monorepo with a React frontend, Express API server, PostgreSQL database (Neon Serverless), and Drizzle ORM. It comprises approximately 160 database tables (of which ~71 are legacy), ~750 API endpoints (of which ~460 have no frontend consumer), and 60 test files.
+The codebase is a TypeScript monorepo with a React frontend, Express API server, PostgreSQL database (Supabase PostgreSQL 17.6, Frankfurt, reached only over verified TLS since B-DB-POOL-GUARD r4, 2026-11-21; the original Neon Serverless database was retired in the 2026 migration), and Drizzle ORM. It comprises approximately 160 database tables (of which ~71 are legacy), ~750 API endpoints (of which ~460 have no frontend consumer), and 60 test files.
 
 ### Audit Summary
 
@@ -9455,7 +9455,7 @@ QueryClientProvider
 
 1. **KillSwitchBanner** — Fixed red banner when `settings.killSwitchTripped === true`. Polls `/api/settings` every 15 seconds.
 2. **WalterFloatingAssistant** — Appears on ALL authenticated pages except `/walter`. Context-aware chat widget.
-3. **DatabaseAlert** — Warns when Neon database storage exceeds 50%/70% thresholds. Polls hourly.
+3. **DatabaseAlert** — Warns when Neon database storage exceeds 50%/70% thresholds. Polls hourly. *(Historical, noted 2026-11-21 by B-DB-POOL-GUARD r4: the client component `client/src/components/database/database-alert.tsx` still carries the Neon / 10 GB wording, but the database is Supabase and the real size alarm is the server-side monitor in Chapter 11 §11. This is main-Dashboard furniture, which is off-limits until the cleanup phase, so it is documented here, not changed.)*
 
 ### RequireAuth Guard
 
@@ -11048,28 +11048,35 @@ The 80+ diagnostic reports in `diagnostic-reports/` represent valuable QA histor
 
 | Component | Technology | Version | Config File |
 |-----------|-----------|---------|-------------|
-| **Database** | PostgreSQL (Neon Serverless) | — | `DATABASE_URL` env var |
+| **Database** | Supabase PostgreSQL (Frankfurt, project `vqqyisaudwenrdhnmjwt`) | 17.6 | `DATABASE_URL` env var (`sslmode=verify-full` + `sslrootcert=`) |
 | **ORM** | Drizzle ORM | ^0.39.1 | `server/db.ts` |
 | **Schema Validation** | drizzle-zod | ^0.7.0 | `shared/schema.ts` |
 | **Migration Tool** | Drizzle Kit | ^0.31.4 | `drizzle.config.ts` |
-| **Connection Pool** | @neondatabase/serverless | ^0.10.4 | `server/db.ts` |
-| **WebSocket Transport** | ws | ^8.18.0 | `server/db.ts` |
+| **Connection Pool** | pg (node-postgres) `Pool`, via `drizzle-orm/node-postgres` | ^8.13.1 | `server/db.ts` |
+| **Transport** | TCP + TLS (verify-full against a pinned root); `pg-connection-string` 2.7.0 parses the URL | — | `server/db-tls-boot-check.ts` (the `ws` package is no longer used by the database connection) |
 | **Vector Extension** | pgvector | — | Used for `semantic_memory.embedding` |
 
 ### Connection Configuration
 
-**File**: `server/db.ts` (16 lines)
+*(Rewritten 2026-11-21 by B-DB-POOL-GUARD r4 — the 16-line Neon WebSocket pool described here before was retired in the Supabase migration; the old text is in git history.)*
 
-```
-neonConfig.webSocketConstructor = ws;  // WebSocket for Neon serverless
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-const db = drizzle({ client: pool, schema });
-```
+**File**: `server/db.ts` — two `pg` pools, each wrapped by Drizzle:
 
-- **Pool type**: Neon Serverless Pool (built-in connection pooling for edge/serverless)
-- **No explicit pool settings**: max connections, idle timeout, etc. are all Neon defaults
-- **Single export**: `db` instance used throughout the application
-- **No pool monitoring**: Pool stats are not exposed to the health monitor (health monitor checks DB via query, not pool metrics)
+| setting | main pool `dawntrader_main` (`db`) | diagnostics pool `dawntrader_diag` (`diagDb`) |
+|---|---|---|
+| `max` | 10 | 4 |
+| `connectionTimeoutMillis` (wait for a free connection) | 10 s | 5 s |
+| `query_timeout` (client side) | 30 s | 30 s |
+| `statement_timeout` (server side) | 25 s | 25 s |
+| `idle_in_transaction_session_timeout` (server side) | 60 s | 60 s |
+| `idleTimeoutMillis` | 30 s | 30 s |
+| keepAlive | on, first probe after 10 s | on, first probe after 10 s |
+
+- **Boot invariant:** `statement_timeout` must be below `query_timeout`, so the server cancels a long query before the client abandons it; `server/db.ts` throws `[DB_POOL_INIT] statement_timeout must be below query_timeout` at boot otherwise (B-DB-POOL-GUARD P3).
+- **What the diagnostics pool is for:** the two archive-status reads (`computeDataArchiveStatus`, `computePassiveArchiveStatus`) run on it so a slow diagnostics read cannot take a trading connection; the ablation and factor-calibration panels stay on the main pool. Its saturation is not paged.
+- **Other app pools on the same `DATABASE_URL`:** `dawntrader_pool_monitor` (the pool monitor, `server/db-pool-alerts.ts`), `dawntrader_xstock_snapshot` (`server/services/passive-archive/xstock-db-snapshot.ts`) and the small unnamed crew-coordination pool (`server/services/crew-coordination.ts`, max 2).
+- **Pool monitoring (replaces "no pool monitoring"):** `attachPoolInstrument` and `attachPoolGuards` are attached to both pools. Every minute the app logs a `[B-DB-POOL-GUARD][POOL_MINUTE_V2]` line per pool (checkouts, waits, timeouts, idle-in-transaction), and five §10.5 alert families page for the main pool only (the diagnostics pool is not paged; its failures show only in its own minute line, its client-error line and the panels themselves), raised and resolved by the actor `db-pool-monitor` and never acked by the crew: `db-pool-wait:<pool>` (three or more waits over 1 s, or any wait over 5 s, in five minutes of covered time; clears after ten quiet minutes), `db-pool-acquire-timeout:<pool>` (an incident), `db-pool-idle-in-tx:<pool>` (a connection idle inside a transaction for over 30 s, polled every 25 s; clears after two clean reads), `db-pool-idle-in-tx-ended:<pool>` (the server ended one, error 25P03) and `app-unplanned-restart:<time>` (resolved at the next deploy). Each family also has a `:blind` key that pages when the monitor itself cannot read. **Reach, stated:** it cannot report a crash loop or an event-loop stall, and a connection leaked outside a transaction is invisible to it.
+- **Transport — verified TLS, checked before any pool exists (B-DB-POOL-GUARD r4 = B-DB-APP-TLS, KD-100, live 2026-11-21 at `2a501de33`):** `server/db-tls-boot-gate.ts` is the first import of `server/index.ts` and runs `server/db-tls-boot-check.ts`, which parses `DATABASE_URL` with the same parser `pg` uses and refuses the boot unless it yields `sslmode=verify-full`, a readable pinned root, verification on, and a host name rather than an IP address; it also refuses if `PGSSLMODE`, `PGSSLROOTCERT` or `NODE_TLS_REJECT_UNAUTHORIZED` is set. The pinned root is `/etc/dawntrader/supabase-ca.crt` (Supabase Root 2021 CA, valid until 2031-04-26). A separate page, `db-unencrypted-connection:<app>` (with `db-unencrypted-blind`), reads `pg_stat_ssl` every ~25 s and pages if any app connection is unencrypted. **Reach, stated:** the boot check does not check the certificate dates, so a rotated root shows up as connection failures after boot rather than a refusal; standalone scripts do not import the gate. Operations and rollback order: `REPO_TOPOLOGY_AND_SYNC_RUNBOOK.md`, "Database transport".
 
 ### Architecture: Single-Tenant with Mode Isolation
 
@@ -11430,17 +11437,18 @@ users → one-to-many → tradingSettings, aiReports, aiConversations, killSwitc
 
 ## 11. Database Monitoring
 
-**File**: `server/services/database-monitor.ts` (77 lines)
+**File**: `server/services/database-monitor.ts`
 
 | Setting | Value |
 |---------|-------|
 | Check interval | 24 hours |
-| Warning threshold | 6.5 GB (65% of 10 GB Neon limit) |
-| Critical threshold | 8 GB (80% of 10 GB limit) |
+| Plan cap | `module_constants` `database_monitor.plan_cap_mb` = 204800 (200 GB, the Supabase Pro auto-expand cap) |
+| Warning threshold | `warning_threshold_pct` = 0.65 of the plan cap |
+| Critical threshold | `critical_threshold_pct` = 0.80 of the plan cap |
 | Query | `pg_database_size(current_database())` |
-| Storage | Logs to `database_size_logs` table |
+| Storage | Logs to `database_size_logs` table; raises §10.5 system alerts (B-STORAGE-HARDEN OBJ-5) |
 
-The 10 GB limit is a Neon free/starter tier constraint. With ~71 legacy tables potentially accumulating data, monitoring database growth is important.
+The thresholds come from the database and fail hard if the rows are missing (no hard-coded fallback, B75). *(Updated 2026-11-21 by B-DB-POOL-GUARD r4: this section previously described a 6.5 / 8 GB alarm against a 10 GB Neon limit, which was retired with Neon.)*
 
 ---
 
@@ -11484,7 +11492,7 @@ At 4,580 lines, `storage.ts` is the **third-largest file in the codebase** (afte
 1. **Monolithic**: Single file with all data operations for all domains
 2. **Limited transaction usage**: Transactions exist in the codebase but are limited — most operations are individual queries without multi-table transactional guarantees. Critical financial paths (trade execution, position updates) should be verified for proper transaction wrapping.
 3. **Walter methods still present**: Storage methods for Walter tables will become dead code on Wave 3 removal
-4. **No connection pool tuning**: Uses Neon defaults without explicit pool size or timeout configuration
+4. ~~**No connection pool tuning**: Uses Neon defaults without explicit pool size or timeout configuration~~ *(Superseded: the `pg` pools now carry explicit sizes and timeouts and are monitored — see §1 "Connection Configuration", B-DB-POOL-GUARD.)*
 5. **Storage layer coupling risk**: storage.ts must be modularized BEFORE legacy tables are dropped. Dropping tables while storage methods still reference them will cause runtime errors. The safe order is: (1) modularize storage.ts → (2) remove legacy storage methods → (3) drop tables from schema → (4) drop tables from database.
 
 ---
@@ -11506,7 +11514,7 @@ There is no mechanism to:
 - Drop legacy tables safely
 - Identify which tables have zero rows (to confirm they're truly dead)
 
-Given the 10 GB Neon limit, this is a capacity planning concern.
+Given the 10 GB Neon limit, this is a capacity planning concern. *(Historical: written against the retired Neon database; the current cap is the 200 GB Supabase Pro plan cap in §11.)*
 
 ### 14.3 Push-Based Migration Workflow
 
@@ -11591,8 +11599,8 @@ There is no defined data retention policy for any table. Every row ever written 
 | Migration files | 9 (across 2 directories) |
 | Tracked migrations | 2 (in journal) |
 | Storage layer | `server/storage.ts` (4,580 lines) |
-| Database limit | 10 GB (Neon) |
-| Connection pool | Neon serverless defaults |
+| Database limit | 200 GB Supabase Pro plan cap (`database_monitor.plan_cap_mb`); was 10 GB on Neon |
+| Connection pool | `pg` pools: main max 10, diagnostics max 4, with explicit timeouts and verified TLS (B-DB-POOL-GUARD) |
 | FK cascade deletes | Selective (6 tables) |
 | Vector columns | 1 (semantic_memory, 1536d HNSW) |
 

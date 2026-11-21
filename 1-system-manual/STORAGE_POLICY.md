@@ -104,6 +104,7 @@ Operationally: **30-day rolling hot is the DEFAULT for every table.** A hot wind
 
 ## 6. Important distinctions (avoid these traps)
 
+- **A restored or rebuilt server needs the database root certificate before the app starts.** The app connects to the database only over verified TLS and refuses to boot without the pinned root at `/etc/dawntrader/supabase-ca.crt` (`root:deploy`, `0640`, valid until 2031-04-26). A database restore does not carry it, because it lives on the server, not in the database. Procedure, logs and rollback order: `REPO_TOPOLOGY_AND_SYNC_RUNBOOK.md`, "Database transport" (B-DB-POOL-GUARD r4, 2026-11-21).
 - **Quote snapshots ≠ price bars.** `xstock_spot_ticker_snap` is the raw bid/ask *quote* stream (feeds spread, order-book depth, price-freshness). The strategies' **decision bars (15-min / 60-min / 240-min) are rolled up from `xstock_spot_ohlc_1m`** (a separate WebSocket-fed 1-minute table). Reducing quote-snapshot capture does NOT affect the decision bars.
 - **The 15-second freshness gate ≠ the 15-minute decision bar.** `xstock_fill_safety.active_fill_max_age_ms = 15000` (15 s) is how fresh the *latest quote* must be for an active fill. The 15-minute bar is the *evaluation timeframe*. Unrelated.
 - **Freshness gates are per-asset-class** (`fill_depth_gate.warmth_max_age_ms`: crypto_spot = 5 s, xstock_spot = 15 s — resolved most-specific-wins; NOT a duplicate).
