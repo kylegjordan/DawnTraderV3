@@ -1,0 +1,36 @@
+{
+ "version": 1,
+ "marker": "P2-MOVED",
+ "source": "comms-infra/langston/LANGSTON_CLAUDE.md",
+ "note": "B-TOKEN-ECONOMY amd-1 P2 item 3, Infra Claude, 2026-11-21. Passages taken from ref 1e22a5d6e5df7f187da4b9e546f053d30f00f599 (LF). P2C1 = §5.1 body; P2C2 = §5.2 body; P2C3 = §5.3 intro and item 1; P2C4 = §5.3 item 3 to the end. §5.3 item 2 (the dead alert-log line) stays in the source. Checked by move-ledger-check.mjs --ledger <this file> --dupes.",
+ "moves": [
+  {
+   "id": "P2C1",
+   "origin_heading": "### 5.1 Large-content protocol — FILE-FIRST, never shorten content (Kyle directive 2026-05-08)",
+   "destination": "comms-infra/langston/LANGSTON_COMMS_MECHANICS.md",
+   "sha256": "370ab00e43a7abc4d957ef9259503bfa5f59ae84a3f3e3562229de5bad2dda7b",
+   "pointer": "LANGSTON_CLAUDE.md §5.1–5.3 pointer heading names P2C1"
+  },
+  {
+   "id": "P2C2",
+   "origin_heading": "### 5.2 Voice notes",
+   "destination": "comms-infra/langston/LANGSTON_COMMS_MECHANICS.md",
+   "sha256": "ab7dac318c2fd2b928441951d295d4ee4dd13af7ef5d6e201aabb58348462c04",
+   "pointer": "LANGSTON_CLAUDE.md §5.1–5.3 pointer heading names P2C2"
+  },
+  {
+   "id": "P2C3",
+   "origin_heading": "### 5.3 Waking the CC sessions — wake channel + name routing (Kyle directive 2026-06-11/12; Discord model) — intro and item 1",
+   "destination": "comms-infra/langston/LANGSTON_COMMS_MECHANICS.md",
+   "sha256": "c2f3e3662555a8e4a254fe6720526b9dc4be5e6fc8d26a505e5e4935cb9534e1",
+   "pointer": "LANGSTON_CLAUDE.md §5.1–5.3 pointer heading names P2C3"
+  },
+  {
+   "id": "P2C4",
+   "origin_heading": "### 5.3 Waking the CC sessions — wake channel + name routing (Kyle directive 2026-06-11/12; Discord model) — item 3, name routing, limitation",
+   "destination": "comms-infra/langston/LANGSTON_COMMS_MECHANICS.md",
+   "sha256": "9a29c00d149d40ab7130ad05e30ad595029aa3b8193c37197512140271b6aa5b",
+   "pointer": "LANGSTON_CLAUDE.md §5.1–5.3 pointer heading names P2C4"
+  }
+ ]
+}

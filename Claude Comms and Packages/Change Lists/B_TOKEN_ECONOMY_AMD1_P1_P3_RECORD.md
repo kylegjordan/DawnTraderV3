@@ -70,6 +70,7 @@ Langston's memory content stays on Helsinki and is not copied here. Every figure
 
 - **Item 1, the two R2-8b class lifts: DONE in P1 write 2** (above; `ledger bullets 36 -> 38`).
 - **Item 2, the ledger split: DONE** (below; `ledger bullets 38 -> 31`).
+- **Item 3, the CLAUDE.md §5.1-§5.3 mechanics move: BUILT and checked; installs only after Langston's Step-4 review** (below).
 ### Item 2 — the ledger split — 2026-11-21 ~12:10Z
 
 - **Object:** the same part, `/home/langston/memory-parts/00-legacy.md`, from sha `9f7699f7c35d…` to `6403341ff652d5cb12c35b8a2b6582753c44c881e3563c9e0318ae007ea44d7e`.
@@ -102,6 +103,43 @@ Langston's memory content stays on Helsinki and is not copied here. Every figure
 
   Control 2 shows the checker can see the passage where it is now, so the post-trim OK cannot be produced by a checker that is blind to the passage.
 
-- Item 3, the CLAUDE.md §5.1-§5.3 mechanics move with a pointer: not started.
+### Item 3 — the §5.1-§5.3 mechanics move — 2026-11-21
+
+- **Object:** `comms-infra/langston/LANGSTON_CLAUDE.md`, taken from ref `1e22a5d6e` (its live installed copy at `/home/langston/CLAUDE.md` is sha `36dbd2e9…f791`, equal to that blob). Destination: the new file `comms-infra/langston/LANGSTON_COMMS_MECHANICS.md`, which Langston reads on demand with `dt-review show <sha> comms-infra/langston/LANGSTON_COMMS_MECHANICS.md`. Ledger: `Change Lists/B_TOKEN_ECONOMY_AMD1_P2_MOVE_LEDGER.json` (marker `P2-MOVED`).
+- **What moves, word for word, as four marked blocks:**
+
+  | id | passage | source lines at `1e22a5d6e` | sha256 (LF) |
+  |---|---|---|---|
+  | `P2C1` | §5.1 body (file-first large content) | 145-155 | `370ab00e43a7abc4d957ef9259503bfa5f59ae84a3f3e3562229de5bad2dda7b` |
+  | `P2C2` | §5.2 body (voice notes) | 163 | `ab7dac318c2fd2b928441951d295d4ee4dd13af7ef5d6e201aabb58348462c04` |
+  | `P2C3` | §5.3 intro and item 1 (replies wake the sessions) | 168-170 | `c2f3e3662555a8e4a254fe6720526b9dc4be5e6fc8d26a505e5e4935cb9534e1` |
+  | `P2C4` | §5.3 item 3 (wake file), name routing, the limitation | 172-176 | `9a29c00d149d40ab7130ad05e30ad595029aa3b8193c37197512140271b6aa5b` |
+
+- **What stays loaded, as the plan row says:** the §5 roles and live-channel paragraph (the stateless boundary), the Telegram-decommissioned block, the escalation criteria, and §5.3 item 2 (the dead alert-log line, a false-absence guard). The three headings become one pointer heading, `### 5.1–5.3 … the mechanics are on demand`, which names the file, the four ids, when to read it, and the `dt-review show` command. The §5 intro's citations of "§5.3" and "(§5.1, §12)" now land on that heading.
+- **Bytes:** source 57,049 -> 55,241 B, **−1,808 B** on the rules file. The new file is 3,620 B and is not loaded.
+  PREVIOUSLY STATED: about 2.5-3 KB off the loaded set. NOW: −1,808 B. REASON: item 2, the §5 intro and the pointer text stay loaded.
+  The saving counts only once the file is installed (`langston-rules-install <sha>`, after Step 4). Until then `langston-size-watch` notes `pending`, which is a note, not an alert.
+- **Move-ledger check** (`node scripts/crew-tooling/move-ledger-check.mjs --ledger "<P2_MOVE_LEDGER.json>" --root . --dupes`):
+
+  | run | expected | result |
+  |---|---|---|
+  | the new files | OK, 4 of 4, one home each | OK, exit 0 |
+  | control: the same ledger against the PRE-move source (ref `1e22a5d6e`) | FAIL | 12 FAILs (each passage still in the source, each pointer missing, each passage in two homes), exit 1 |
+
+  The control shows the check can see each passage where it used to sit, so its OK on the new files is not a blind check passing.
+- **Disclosures, for Langston to attack:**
+  - Each block's `### ` title line is new text, added so the file can be searched. The passage between the title and the closing marker is the moved text.
+  - §5.3 is split into two blocks (`P2C3`, `P2C4`) because its item 2 stays loaded between them.
+  - The pointer keeps one restated rule: "Never ask Claude Code to shorten an ask; read the staged file in full." It is the one line of §5.1 that changes his behaviour without the file open, so it stays loaded on purpose (about 80 B).
+  - The kept item 2 now opens a list that starts at "2.", on purpose, so the number still matches every citation of "§5.3 item 2".
+  - `SECTION_CENSUS.md` is a dated snapshot and is left as it was.
+- **Per-rule exercise list (what will use each moved rule after install):**
+
+  | id | the rule | the case that will exercise it |
+  |---|---|---|
+  | `P2C1` | read a staged file in full; inbox before the Drive mount; the canonical committed home | this batch's own Step-4 dispatch, staged at `/home/langston/inbox/B-TOKEN-ECONOMY/`; the pointer's "when a dispatch points at a staged file" fires on it |
+  | `P2C2` | a voice note naming him arrives as text; a failure is a `*_voice_failed` row | no seeded case: the first natural voice failure after install. Unexercised until then |
+  | `P2C3` | his replies wake the sessions they name | every reply he posts after install (the bridge does the naming; the rule is his model of it) |
+  | `P2C4` | the wake-file summon, name routing, closed sessions | seeded at Step 8: ask him how he would summon a closed session, without naming the file, and check he follows the pointer to `P2C4` |
 
 ## P3 — lower the ceiling to the measured post-trim total; Coltrane the same — not started

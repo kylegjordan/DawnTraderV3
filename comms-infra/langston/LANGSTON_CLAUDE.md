@@ -140,40 +140,13 @@ If Kyle interrupts mid-loop with a directive, his input takes precedence immedia
 ---
 
 
-### 5.1 Large-content protocol — FILE-FIRST, never shorten content (Kyle directive 2026-05-08)
+### 5.1–5.3 Large content, voice notes, waking the CC sessions — the mechanics are on demand
 
-When Claude Code sends you a substantive design ask, scope draft, diff review, or multi-question request, the full content arrives as a **staged file**, referenced from the Discord post — because you are stateless per-invoke and Discord messages get truncated at relay for long bodies. The fix is content-on-disk, not content-cutting.
+The how-to text of §5.1 (file-first large content), §5.2 (voice notes) and §5.3 (waking the CC sessions: items 1 and 3, name routing, the limitation) moved word for word to `comms-infra/langston/LANGSTON_COMMS_MECHANICS.md`, blocks P2C1, P2C2, P2C3 and P2C4 (B-TOKEN-ECONOMY amd-1 P2). **Read it when a dispatch points at a staged file, when a voice note fails, or before you wake a CC session:** `dt-review show <sha> comms-infra/langston/LANGSTON_COMMS_MECHANICS.md`. Never ask Claude Code to shorten an ask; read the staged file in full.
 
-**What you do when a dispatch points at a file:**
+What stays here, from §5.3:
 
-1. Use the **Read tool** to load it. **Preferred location: `/home/langston/inbox/<batch>/` (local disk, fast).** A gdrive-mount path (`/mnt/gdrive/...`) also works but can hang when the mount wedges (§18) — prefer inbox staging.
-2. Process the full content — Q1, Q2, ... QN, all of it. NO size cap on what you read.
-3. Reply normally in-channel (your Discord reply posts automatically).
-
-**Why NEVER ask Claude Code to shorten the ask:** when content gets cut, details get missed, architectural decisions get rushed, scope gets contaminated. Cutting content is a patch (against CLAUDE.md §8 #11 NO PATCHES); reading from disk is the proper solution.
-
-**Canonical committed home:** `Claude Comms and Packages/Langston Design Asks/<batch-id>_<topic>_<rev>.md` in the DawnTrader repo (committed = reviewable + versioned), staged to your inbox for the actual read.
-
-
----
-
-
-### 5.2 Voice notes
-
-A voice note in `#general` is transcribed on the box; if it names you it arrives as your prompt like text. A failure appears in the inbox log as a `*_voice_failed` row.
-
----
-### 5.3 Waking the CC sessions — wake channel + name routing (Kyle directive 2026-06-11/12; Discord model)
-
-Each OPEN CC desktop session runs a watcher that wakes it on:
-
-1. **Your Discord replies** — the watcher tails `/var/log/cc-discord-inbox.jsonl`, and your bridge auto-leads every reply with the addressee's name, so naming "OLD Claude" / "NEW Claude" in your post IS the wake. The normal path.
 2. **Your alert work** reaches CC through the SAME inbox (`kind='langston_alert_inbound'`), not through a log of your own. ⛔ `/var/log/langston-alert-invokes.log` is DEAD (0 bytes since 2026-06-28) — **never read it as "no alerts"** (the false-absence class, #453; `#1049`).
-3. **The wake file** (backup summon): `echo "OLD Claude: <reason + file pointer>" >> /var/log/cc-wake.log`.
-
-**Name routing (`#1241`):** a session's post wakes only the sessions in its opening list; Kyle's post wakes any he names, all if none. Bindings are permanent, in `.claude/cc-session-roster.json`; names never transfer without Kyle.
-
-**Limitation:** only OPEN desktop sessions wake. No response in ~10 min → assume it is closed; your post stays in `#general` and the session reads the inbox at its next start.
 
 ## 6. Management philosophy
 
