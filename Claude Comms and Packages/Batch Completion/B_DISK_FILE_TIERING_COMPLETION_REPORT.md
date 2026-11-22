@@ -4,7 +4,7 @@
 - **CHANGE-CLASS: architecture** (scope header r7)
 - **Record:** `Scope Files/B_DISK_FILE_TIERING_SCOPE.md` r7 · `Scope Files/B_DISK_FILE_TIERING_PRE_AUDIT.md` · `Change Lists/B_DISK_FILE_TIERING_CHANGE_LIST.md`
 - **Live:** deployed `4456f515d07a1e7b1310a767bd7e1d645f565411` 2026-11-21 (rollback `85e7ce638`); Step 4 PROCEED at `b08323b86`; Step 9 rotation proofs at `d24bc86f8`; Step 10 governance `f0c3083d5` + `f02439ae3` (Langston confirmed, Discord `1574017339178094613`).
-- **Status: CLOSED 2026-11-22** — Langston confirmed Step 11 (Discord `1574023561394266153`). Carried: the wide Backblaze key's deletion (§0 item 1, plan row 5a).
+- **Status: CLOSED 2026-11-22** — Langston confirmed Step 11 (Discord `1574023561394266153`). Carried item done 2026-11-22: the wide Backblaze key's deletion (§0 item 1) — see §0 item 1.
 
 > **No scaffolding.** Every objective marked YES is live on staging and ran there. OBJ-2 and OBJ-3 are marked PARTIAL because the case they guard has not yet occurred on staging, not because a later batch must switch them on.
 
@@ -16,7 +16,7 @@
 
 | # | item | why it is open | home (owner) | closes when / fails when |
 |---|---|---|---|---|
-| 1 | **The old wide Backblaze key `…0001` is retired but NOT deleted at Backblaze** | it is off the server (moved to `/root/b2-wide-key.retired`) and the app runs on the narrow no-delete key `…0003`; deleting an access key needs Kyle's yes in CC-A's chat. KD-107 authorizes it in principle (`pm/DECISIONS.md:131`) | carried item on `SPRINT_TO_LIVE_PLAN.md` row 5a (CC-A) — no new row | closes on Kyle's yes in CC-A's chat, then: delete at Backblaze, shred `/root/b2-wide-key.retired`, and one call showing the key no longer authorizes; fails if the call still authorizes after the delete |
+| 1 | **The old wide Backblaze key `…0001` is retired but NOT deleted at Backblaze** | it is off the server (moved to `/root/b2-wide-key.retired`) and the app runs on the narrow no-delete key `…0003`; deleting an access key needs Kyle's yes in CC-A's chat. KD-107 authorizes it in principle (`pm/DECISIONS.md:131`) | carried item on `SPRINT_TO_LIVE_PLAN.md` row 5a (CC-A) — no new row | **DONE 2026-11-22:** Kyle said yes in CC-A's chat; key …0001 deleted at Backblaze (`b2_delete_key`), `/root/b2-wide-key.retired` shredded, and a fresh authorize with it returns 401 `unauthorized`; positive control: the app's narrow key …0003 still authorizes, without `deleteFiles`. Original condition: closes on Kyle's yes in CC-A's chat, then: delete at Backblaze, shred `/root/b2-wide-key.retired`, and one call showing the key no longer authorizes; fails if the call still authorizes after the delete |
 | 2 | **OBJ-2's moved-day alert has never fired on real traffic** | only `cohort_latest` can reach a moved day, and only after about 34 days without a restart (change list :44, O6); proven by fence only | standing; no work placed | closes the first time it fires (or resolves) on staging; fails if a window reaches an archived day and no alert is raised |
 | 3 | **No real 365-day warm → cold hop of a disk file yet** | the first disk files reach 365 days in about a year; the cold path was proven on existing B75 objects (AP-5) | the cold rotator's monthly run; no work placed | closes on the first rotator DONE line that moves a `disk-files/` object with no failure row; fails on a `data_archive_cold_upload_failure` row for one |
 | 4 | **The cold account's whole daily download is not measured** | the 1 GB/day allowance in `STORAGE_POLICY.md` §4.6 is a design figure; the cold audit budgets only its own read-back (500 MB/day) | stated in `STORAGE_POLICY.md` §4.6; no work placed | — |
@@ -112,4 +112,4 @@
 - The moved-day check and the 365-day disk-file hop have not met their real case (items 0.2, 0.3).
 - The disk headroom figure is a snapshot with several contributors, not a measured share for any one objective.
 - The cold account's total daily download is not instrumented (item 0.4).
-- The wide key still exists at Backblaze until Kyle's yes (item 0.1).
+- The wide key was deleted at Backblaze on 2026-11-22 after Kyle's yes (item 0.1).
