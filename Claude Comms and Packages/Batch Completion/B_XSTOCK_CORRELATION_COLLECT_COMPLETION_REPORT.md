@@ -4,7 +4,7 @@
 - **CHANGE-CLASS: architecture** (scope header)
 - **Record:** `Scope Files/B_XSTOCK_CORRELATION_COLLECT_SCOPE.md` · `Scope Files/B_XSTOCK_CORRELATION_COLLECT_PRE_AUDIT.md` · `Change Lists/B_XSTOCK_CORRELATION_COLLECT_CHANGE_LIST.md`
 - **Live:** deployed `0f4835b5a4fe3af461113b52f626017b01dbafa9` 2026-11-05 14:40:02Z (rollback `0abfd7102`). Step 4 PROCEED on `c74ff4dbf` (Discord `1567830296206901349`), re-landed with his conditions at `bd76492b4` → `0f4835b5a`. Step 8 PROCEED (Discord `1574059564003754106`); Step 9 not needed. Step 10 governance `369cb70fd`.
-- **Status: AWAITING LANGSTON'S STEP-11 CONFIRM.**
+- **Status: CLOSED 2026-11-22** — Langston Step 11 CONFIRMED (Discord `1574087675890114686`).
 
 > **No scaffolding.** The xStock correlation record is being written on staging today, one row per real xStock VTS trade. It is deliberately record-only: the factor is computed and stored, never applied to an xStock decision. Applying it is roadmap `25-9`'s later calibration call, not a switch this batch left half-built.
 
@@ -43,9 +43,9 @@ Neither item has a placed home yet: each would be a new plan row, which needs Ky
 | run | sha | TypeScript Check | Test Suite | Build | Docker Build |
 |---|---|---|---|---|---|
 | `42007695325` | `0f4835b5a` (the deployed sha) | success | success | success | success |
-| `42006857513` | `bd76492b4` (the re-land) | cancelled | cancelled | cancelled | cancelled |
+| `42006857513` | `bd76492b4` (the re-land) | success | cancelled | success | cancelled |
 
-The re-land run was cancelled when the next push started a new run (three sessions push minutes apart). The deployed sha `0f4835b5a` is the graded, all-green run.
+On the re-land run, Test Suite and Docker Build were cancelled when the next push started a new run (three sessions push minutes apart); TypeScript Check and Build finished green. The deployed sha `0f4835b5a` is the graded, all-green run.
 
 ---
 
@@ -66,7 +66,7 @@ The re-land run was cancelled when the next push started a new run (three sessio
 
 ## 5. RECORD NOTE AND HONEST RESIDUAL
 
-- **Commit `469d3ee06` (2026-11-07) carries this batch's Step-3 subject but touches only `token-watch/tests/test_measure_followup_memory.py`.** It is not part of this batch's change set; a reader grepping the batch id will find it.
+- **Commit `469d3ee06` (2026-11-07) carries this batch's Step-3 subject but touches only `token-watch/tests/test_measure_followup_memory.py`.** It is not part of this batch's change set; a reader grepping the batch id will find it. The mismatch also runs the other way: the deployed sha `0f4835b5a` carries the subject *"B-DISK-FILE-TIERING Step-7 OBJ-10..."*, so a reader grepping this batch id will not find the deploy sha.
 - **Not established:** whether the correlation predicts xStock per-pair win rate. That is what the collection is for; it is roadmap `25-9`'s calibration read, later.
 - **Not established:** whether the crypto replay records join their trades — crypto ids do not join `vts_open_trades` (0 of 420); unmeasured, carried with `#1265`.
 - **Weekend and holiday hours:** xStocks are closed at the weekend, so records accrue Sunday–Friday only; the 24-hour Sunday read showed crypto rows alone, as expected.
