@@ -43,6 +43,8 @@ MUTANTS = [
      [("tier.py", "    if done.astimezone(UTC).date() >= now.astimezone(UTC).date():", "    if False:")]),
     ("C-3 the tail passes the run-start now", T,
      [("follow_up.py", "        tnow = _clock()                 # C-3", "        tnow = now                 # C-3")]),
+    ("the summary is stamped with the run-start now", T,
+     [("follow_up.py", "summary.build(_clock())", "summary.build(now)")]),
     ("C-2 a promote fault is not a stage error", T,
      [("follow_up.py", "            stats[\"stage_errors\"].append(\"promote\")", "            pass")]),
     ("C-2 a summary fault is not a stage error", T,

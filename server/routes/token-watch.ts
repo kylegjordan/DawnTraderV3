@@ -36,6 +36,9 @@ const SUMMARY_PATH = process.env.TOKEN_WATCH_SUMMARY
 
 // The publishing job runs hourly. Past roughly two hours the figures are stale
 // enough that the page should say so rather than present them as current.
+// `generated_at` is stamped when the follow-up PUBLISHES (07eba4b2), so a
+// healthy age peaks at about one run; the same 2 h threshold, and the reason
+// it is not widened, is SKIP_STALE_AFTER in token-watch/summary.py.
 const STALE_AFTER_MS = 2 * 60 * 60 * 1000;
 
 tokenWatchRouter.get('/summary', async (_req, res) => {

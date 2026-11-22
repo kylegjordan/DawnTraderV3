@@ -453,9 +453,14 @@ def _follow_up_lag_s(now: datetime):
 
     ⚠️ A LAGGING CURSOR HIDES AN UNCOVERED DAY AS "NOT YET READ" -- which is why it is published beside the
     coverage counts rather than inferred from them.
-    BASELINE (07eba4b2): the follow-up now builds the summary at publish time, so a healthy reading is about one
-    run length, ~1-1.3 h -- the last consumed hour ends around the run's start. Stamped at run start it read
-    slightly NEGATIVE (published 2026-11-22 09:59Z: -214 s). Well above ~3 h means the cursor is falling behind.
+    BASELINE (07eba4b2; Langston C-1 `1574013031460110468`): the follow-up builds the summary at publish time and
+    its last consumed hour is the run-START hour, so a healthy reading is
+        run_length + run_start_minute - 60 min
+    i.e. a band of roughly 0-80 min (Langston measured 3-79 min over run lengths 63/71/80 min x start minutes
+    0-59 with the real `_buckets_to_read` / `_advance_cursor`). It is NOT "about one run": a reading of a few
+    minutes is healthy. Stamped at run start it read slightly NEGATIVE (published 2026-11-22 09:59Z: -214 s).
+    It leaves the band only when the follow-up SKIPS an hour or the timer builds the summary alone -- the signal
+    this gauge exists for; well above ~2 h means the cursor is falling behind.
     """
     last = load_state("follow_up_cursor", {}).get("last_bucket")
     try:
@@ -701,10 +706,16 @@ def build(now: datetime = None) -> dict:
 
 # A skipped summary run pages (exit 75) only when the PUBLISHED file is older than this: 2 h of staleness. The
 # follow-up publishes inside its own lock at the END of each run, stamped with the publish time (07eba4b2: it was
-# stamped with the run's START, an hour early). Runs take 63-80 min back to back (measured from the follow-up's
-# journal 2026-11-22), so a skip at :12 sees a file at most one run old -- a 40-57 min margin to 2 h. NOT widened:
-# a wider threshold would hide a genuinely lost publish for longer. RESIDUAL, stated: a page is ambiguous between a
-# missed publish and a single run longer than 2 h -- `store.last_refusal()` names the lock holder, which tells them apart.
+# stamped with the run's START, an hour early). Runs took 63-80 min back to back in the follow-up's journal on
+# 2026-11-22 (3 runs), so a skip at :12 then sees a file at most one run old -- a 40-57 min margin to 2 h. That is
+# TODAY's margin, not a design margin: this batch's change list also records ~95-min runs and one 3 h 01 m 28 s run.
+# NOT widened: a wider threshold would hide a genuinely lost publish for longer. RESIDUAL, stated and already
+# realised once: a page is ambiguous between a missed publish and a single run longer than 2 h --
+# `store.last_refusal()` names the lock holder, which tells them apart.
+# SECOND READER of `generated_at` (Langston C-2): `server/routes/token-watch.ts` STALE_AFTER_MS (2 h) drives the
+# page's "stale" banner. Stamped at run start, the age just before a publish was previous run + current run
+# (>= 125 min at the run lengths measured), so the banner false-fired on a healthy cycle; stamped at publish it
+# peaks at one run. It reads the published file, so it changes with the token-watch install, not an app deploy.
 # A skip behind any other holder (tier, a one-time tool) with no recent publish is a lost hour and must not read
 # as a publish at the supervisor (Langston, P6 Step 4 CHANGES-1). Unconditional 75 would page every hour the
 # sweep holds the lock past :12.

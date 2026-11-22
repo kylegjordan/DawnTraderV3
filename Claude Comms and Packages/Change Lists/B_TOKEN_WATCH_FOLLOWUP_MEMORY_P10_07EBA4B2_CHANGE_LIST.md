@@ -32,9 +32,15 @@ AFTER: publishes at the END of each run, stamped at publish time; runs 63-80 min
 07:39:16→08:56:25 = 77 min, 08:56:25→09:59:08 = 63 min); a skip at :12 sees a file at most one run old, a 40-57 min
 margin to 2 h; **NOT widened**; residual stated — a page is ambiguous between a missed publish and a single run over
 2 h, and `store.last_refusal()` (`store.py:219`) names the holder.
+**Population, corrected at Step 4 (Langston):** 63-80 min is the 3-run journal of 2026-11-22 only. This change list's
+own record has ~95-min runs (`:841`) and one 3 h 01 m 28 s run (`:845`), so the 40-57 min margin is today's, not a
+design margin, and the stated residual has already happened once. The comment now says so.
 
 ### 3. `token-watch/summary.py` — condition 2, `_follow_up_lag_s` docstring
-New baseline: about one run length (~1-1.3 h). Measured: the live published file today carries
+~~New baseline: about one run length (~1-1.3 h).~~ **Corrected at Step 4 (Langston C-1):** the gauge is
+`run_length + run_start_minute − 60 min`, a healthy band of ~3-79 min (Langston: L ∈ {63, 71, 80} × m ∈ {0..59});
+it leaves the band only when the follow-up skips or the timer builds alone. +3548 s is the top of the band
+(m=56, L=63). Measured: the live published file today carries
 `follow_up_lag_s = -214` at `generated_at 08:56:25Z` with the cursor's consumed hour ending 09:00Z — negative, as
 ruled. Rebuilt at 09:59:08Z the same cursor gives +3548 s.
 
@@ -48,9 +54,19 @@ got 09:59 and the published stamp is 09:59. **Mutant** (revert to `build(now)`) 
 killed; restored.
 
 ## Tests
-`test_p10_tier_tail` 29/0 · `test_summary` 41/0 · `test_p7_obs_fold`, `test_p7_states`, `test_p4_lock`,
+`test_p10_tier_tail` 29/0 · `test_summary` 41/0 on the laptop with 2 skipped (the two directory-mode checks; NTFS reports 0o777), **43/0 on the box** (corrected at Step 4) · `test_p7_obs_fold`, `test_p7_states`, `test_p4_lock`,
 `test_p5_error_requeue`, `test_p7_birth_stamp` exit 0. Full run on the laptop: 32 of 38 exit 0; the other 6 fail
 identically at HEAD with this change stashed (Windows file locks, box-only paths) — not this change.
+
+## Step-4 ride-along (Langston PROCEED at `9475e0879`, no new review round)
+- **C-1** — `_follow_up_lag_s` docstring rewritten to the formula and band above.
+- **C-2** — the second 2 h reader of `generated_at`, `server/routes/token-watch.ts` `STALE_AFTER_MS` (the page's
+  stale banner), is named beside `SKIP_STALE_AFTER`, with a comment-only cross-reference at its own definition.
+  Before the fix its age just before a publish was previous run + current run (≥ 125 min), so it false-fired on
+  healthy cycles; it now peaks at one run, and it changes with the token-watch install (it reads the file).
+- **C-3** — 14th mutant *"the summary is stamped with the run-start now"* added to `mutate_p10_tier_tail.py`
+  (anchor `summary.build(_clock())`, count 1). Harness: 14 KILLED, exit 0.
+- Records: the population note and `test_summary` 43/0 above.
 
 ## Judgement calls to attack
 1. **Render vs drop** — rendered in the header line, not in the rose banner, so it shows when healthy too.
