@@ -8646,7 +8646,7 @@ Alert `81135510` (`deploy-drift-rung-2`, `2026-09-07T20:23:32Z`) fired correctly
 ★ **THE MITIGATION IS ACCIDENTAL, NOT DESIGNED:** we now deploy often and every deploy restarts the process, so *"restarts are rare"* — true when written — **is now false in the direction that happens to help us.** ⚠️ **Depending on an accident is not the same as having a mechanism, and the drift is invisible while it is small.**
 ✅ **MEASURED TODAY:** computed universe **443** · distinct symbols written in the last hour **428** · over 24 h **464**. **The universe ranges 388-469 across the last ten runs with no configuration change** — so *"we archive 465 coins"* was a 24-hour distinct count of a moving number, never a subscription size.
 
-**HOME:** `B-UNIVERSE-REFRESH-ACTS`, owner **CC-C**, placed in `PHASE_19_PLAN.md` at **row 3b.h-2**, after `B-TICKER-BBO-TRIGGER`. No date.
+~~**HOME:** `B-UNIVERSE-REFRESH-ACTS`, owner **CC-C**, placed in `PHASE_19_PLAN.md` at **row 3b.h-2**, after `B-TICKER-BBO-TRIGGER`. No date.~~ **SUPERSEDED by the KD-26 home above (Kyle 2026-11-04): owner CC-A, `SPRINT_TO_LIVE_PLAN.md` row 18.** Step 1 opened 2026-11-22 — scope `Scope Files/B_UNIVERSE_REFRESH_ACTS_SCOPE.md` (proposes covering `#1072`'s three legs, §6).
 **Evidence:** `PRICING_DATA_ARCHITECTURE.md` §5b.1.
 
 ---
