@@ -61,10 +61,10 @@ Langston's memory content stays on Helsinki and is not copied here. Every figure
 
 | check | result |
 |---|---|
-| the trim log names all four (B-CODEX-FAILOVER, B-ARM-REMOVAL, B-FILTER-DIAG-STANDARDIZE, B-DEPLOY-DRIFT-LINE) | owed |
-| each section's text is found in `MEMORY-ARCHIVE.md` | owed |
-| net always-loaded change, measured (R2-8a) | owed |
-| write 2 landed (above); its two sections in the same trim | owed (dry-run says 4 of 4) |
+| the trim log names all four (B-CODEX-FAILOVER, B-ARM-REMOVAL, B-FILTER-DIAG-STANDARDIZE, B-DEPLOY-DRIFT-LINE) | PASS. `journalctl -u langston-memory-trim.service`, 2026-11-22 03:50:34Z: `TRIM: evicted 5 section(s) [B-FILTER-DIAG-STANDARDIZE, B-CODEX-FAILOVER, B-TOKEN-ECONOMY-AMD1-P2, B-ARM-REMOVAL, B-DEPLOY-DRIFT-LINE] to MEMORY-ARCHIVE.md; 7 open stay` |
+| each section's text is found in `MEMORY-ARCHIVE.md` | PASS for placement: each is a `## <batch>` section at `MEMORY-ARCHIVE.md` lines 445, 453, 482, 489 (P2's at 460), each under an `evicted 2026-11-22T03:50:34Z … --trim` marker. Byte-identity is proved only for the P2 passages (move-ledger check below); for the four P1 sections no pre-trim copy was kept, so their text identity rests on the trim tool, not on a separate check. The remaining mentions in the part are the two lifted class rulings (lines 69-70), the P2 pointer (87) and a `keep:` pointer (234), as intended. |
+| net always-loaded change, measured (R2-8a) | Langston's `MEMORY.md` 73,848 B before P1 -> 73,360 B after the P1+P2 writes (-488 B, FINDING-1) -> 68,693 B after the trim (-4,667 B); loaded set 138,458 B vs ceiling 143,856 B, under by 5,398 B (trim tool's own line). Read again 2026-11-22 ~10:45Z: `MEMORY.md` 68,836 B (Langston's own saves since); the ceiling for P3 is read fresh at P3, not from here. |
+| write 2 landed (above); its two sections in the same trim | PASS: all four P1 sections plus the P2 section went in the one 03:50:34Z run. |
 
 ## P2 — split the REVIEWER LEDGER; move CLAUDE.md §5.1-§5.3 mechanics — in progress
 
@@ -100,7 +100,7 @@ Langston's memory content stays on Helsinki and is not copied here. Every figure
   |---|---|---|
   | before the trim (control 1) | FAIL: no blocks in the archive yet | `FAIL P2L1: 0 blocks in MEMORY-ARCHIVE.md (want 1)` and the same for P2L2. Exit 1. |
   | before the trim, destination pointed at the part itself (control 2) | FAIL: the passage is still in the source | `FAIL P2L1: passage is still in memory-parts/00-legacy.md` and the same for P2L2. Exit 1. |
-  | after the 2026-11-22 03:50Z trim, with `--dupes` | OK, 2 of 2 moves, no duplicates | owed |
+  | after the 2026-11-22 03:50Z trim, with `--dupes` | OK, 2 of 2 moves, no duplicates | PASS, run 2026-11-22 ~10:42Z in `/root/p2check`: `OK — p2_ledger.json: 2 moves, each present once at its destination, unchanged, gone from every source, one home each` |
 
   Control 2 shows the checker can see the passage where it is now, so the post-trim OK cannot be produced by a checker that is blind to the passage.
 
