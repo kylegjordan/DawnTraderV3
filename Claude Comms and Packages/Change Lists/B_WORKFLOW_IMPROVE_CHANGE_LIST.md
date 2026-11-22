@@ -196,3 +196,22 @@ Carried to Step 10 (non-blocking, `fix-follows-pointer`): `Scope Files/B_WORKFLO
 ## Step 5 and Step 6
 - **Step 5 (CI):** all four jobs green on `29303adff` (run 44907099007: TypeScript Check, Test Suite, Build, Docker Build), which contains every commit of this batch through the gate-5 record. The two runs on `8ec7ab0f1` and `64a4d1a61` were cancelled by the newer push, not failed.
 - **Step 6 (deploy): none owed by this batch.** Population: every file touched by a `B-WORKFLOW-IMPROVE` commit since 2026-11-15 (`git log --grep`, `--name-only`): skills, CI, `scripts/crew-tooling`, `server/tests/enum-parity`, its vitest config, governance and records. None is server runtime code and none is `scripts/governance-checker`, so staging runs nothing this batch changed; the enum check runs in CI. A deploy would restart trading for no change.
+
+
+## Step 8 — ruled PROCEED (Langston, Discord `1573704029442412579`, 2026-11-21T14:18Z, at `53a56b3db`)
+Leg 1: every instrument in the Step 7 record re-derived and matched. Leg 2: three of the four challenges run and passed (OBJ-4 red mutation 66/64; OBJ-7 first-commit control on B-FEED-HEALTH-GRADE-ARM; `skill-cites --check` against a planted before listing, 3 DISAPPEARED). The fourth, the real Codex canary, could not be run here and stays with B-TOKEN-ECONOMY OBJ-3. No objective failed, so Step 9 has nothing to iterate.
+
+Carried, none a Step 8 failure:
+| # | item | goes to |
+|---|---|---|
+| F-1 | closeout's diff legs are not filtered to the batch and the tool does not say so (`closeout.mjs:177-178`, `:214-215`); on B-FEED-HEALTH-GRADE-ARM the range holds 1,877 commits, 29 carrying the id, and 48 deleted paths, none its own. Measured direction: a doc can read `UPDATED` from another batch's touch. The false-`UPDATED` from an earlier id mention is a hypothesis, instance not produced. Fix: one `not_covered` entry plus the Q7 closeout cannot-see row | Step 10 |
+| F-2 | the advisory enum step reports `success` in run metadata even when its test found drift (run 44907099007), so nothing distinguishes drift / clean / database unreachable without opening the log, and nobody opens it | one line in the gate-4 proposal to Kyle; no new slot |
+| F-3 | C-7 cites `workflow-10-governance:270`; the draft bullet is at `:269` (same at `b3bde2575` and the graded ref) | Step 10, with the pre-audit `:119` correction |
+| F-4 | the B55 positive control (`history server/jobs/formula-auto-audit.ts --ref 36126033e`) is not in the evidence file, which promises every command verbatim; Langston re-derived it and it passes | named here; no further work |
+
+Tags for the completion report:
+- **OBJ-10 drift CONTENT: `RULED ON REPORTED FACT`** — the 73-vs-85 figures and per-type lists sit in an Actions log his token cannot read (HTTP 403). OBJ-10's own deliverable (the check at the ref, controls, narrowed header, advisory, not skipped on a red suite, ran in the 4/4 run) he verified.
+- **OBJ-8: CARRIED, labelled** — a Claude-walked Codex document path, never a Codex run; the Codex session read is B-TOKEN-ECONOMY OBJ-3.
+- **OBJ-12: CLOSED-UNPROVEN unless row 5b delivers** (condition 6).
+- **OBJ-4 count:** 65 uses includes the import specifier; it is not 65 call sites.
+- **OBJ-1:** schema and validator with no live instance; its 10/10 is seeded cases and may never be cited as evidence that any batch ledger exists or conforms.
