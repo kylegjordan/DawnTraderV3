@@ -1,0 +1,19 @@
+# /etc/sudoers.d/dtsql — B-DB-READONLY-ROLE (row 5a1, KD-100), pre-audit plan row P4.
+#
+# INSTALL (never edit in place):
+#   visudo -cf <this file>                                    # must say "parsed OK"
+#   install -m 0440 -o root -g root <this file> /etc/sudoers.d/dtsql
+# ⛔ THE INSTALLED NAME HAS NO DOT: sudo silently SKIPS a file in sudoers.d whose name contains
+#    a '.' or ends in '~' — the rule would look installed and do nothing.
+# Evidence: `sudo -l -U deploy`, before and after, stored in the change list.
+#
+# ⛔ THE "" IS LOAD-BEARING. In sudoers a command named with NO arguments may be run with ANY
+#    arguments; `""` means "exactly no arguments". So the two entries allow exactly two calls:
+#    `dt-sql-login` and `dt-sql-login --csv` — the same two the helper itself accepts (it refuses
+#    anything else with exit 64). (The pre-audit's row P4 wrote the first entry without the "";
+#    that form would have allowed any argument list.)
+# ⚠️ An accident guard, not a boundary, until #1102 removes deploy's `NOPASSWD: ALL`: today deploy
+#    can already become dtsql by other means. What this file buys is that dt-sql's normal path needs
+#    no broader rule than these two calls.
+
+deploy ALL=(dtsql) NOPASSWD: /usr/local/bin/dt-sql-login "", /usr/local/bin/dt-sql-login --csv

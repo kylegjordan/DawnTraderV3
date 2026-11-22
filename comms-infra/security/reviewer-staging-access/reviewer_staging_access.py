@@ -62,6 +62,7 @@ DT_SQL_EXIT = {
     3: "connection refused - possible address ban",
     4: "dt-sql is LOCKED - see dt-sql --status",
     5: "dt-sql BUSY on every try",
+    6: "the session failed its TLS check - the SQL did not run",
 }
 # A write the database must refuse inside a read-only session. If it ever succeeded it would create a temporary table
 # that vanishes with the session, so the probe cannot leave anything behind. It names no setting, so dt-sql's guard
@@ -502,6 +503,12 @@ def verify_remote(actor: str) -> int:
             % (database.returncode, DT_SQL_EXIT.get(database.returncode, "unexpected exit"),
                database.stderr.strip()[-300:] or "no stderr"))
     database_user, database_name = fields[:2]
+    # B-DB-READONLY-ROLE (F-10): dt-sql logs in as its own read-only role. Any other login here means it has regressed
+    # to a credential that can write, which the read-only session setting alone would hide from the probe below.
+    if database_user != "dt_reader":
+        raise VerificationError(
+            "dt-sql logged in as %r, not the read-only role dt_reader: it may be using a login that can write"
+            % database_user)
     probe = run_dt_sql(DT_SQL_WRITE_PROBE)
     if probe.returncode != 1 or READ_ONLY_REFUSAL not in probe.stderr:
         raise VerificationError(

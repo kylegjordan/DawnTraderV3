@@ -368,6 +368,19 @@ check("r2: a grant in the MAIN sudoers file is flagged", "%s/etc/sudoers also me
 check("r3: a file pulled in by @include is followed and flagged", "%s/etc/sudoers.extra also mentions" % T in o, o)
 check("r3: a rule for ALL users (in an @includedir file) is flagged", "zz-everyone has a rule for ALL users" in o, o)
 check("r3: /etc/sudoers.d/dtapi itself is NOT flagged for naming dtapi", "sudoers.d/dtapi also mentions" not in o, o)
+# B-DB-READONLY-ROLE: dtsql gets the same two checks — its own drop-in may name it, nothing else may
+shutil.copy(os.path.join(HERE, "..", "sudoers-dtsql"), T + "/etc/sudoers.d/dtsql")
+open(T + "/etc/sudoers.d/zz-dtsql-extra", "w").write("dtsql ALL=(root) NOPASSWD: ALL" + NL)
+open(T + "/etc/shadow", "a").write("dtsql:$6$usable:1::::::" + NL)
+c, o = run()
+check("5a1: the real /etc/sudoers.d/dtsql (installed from the repo) is NOT flagged", "sudoers.d/dtsql also mentions" not in o, o)
+check("5a1: another sudoers file naming dtsql IS flagged", "zz-dtsql-extra also mentions dtsql" in o, o)
+check("5a1: a usable dtsql password hash is flagged", "dtsql's password field is a usable hash" in o, o)
+os.unlink(T + "/etc/sudoers.d/zz-dtsql-extra")
+open(T + "/etc/shadow", "w").write("dtmint:!:1::::::" + NL + "dtapi:!$6$abc:1::::::" + NL + "dtsql:*:1::::::" + NL)
+c, o = run()
+check("5a1: ... and with no stray file and dtsql '*', neither is reported (control)",
+      "mentions dtsql" not in o and "dtsql's password field" not in o, o)
 check("a YOUNG setter marker (a run in progress) is not flagged", "interrupted setter run" not in o, o)
 os.utime(mk, (time.time() - 3 * 3600, time.time() - 3 * 3600))
 c, o = run()
@@ -378,9 +391,10 @@ check("an unreadable source still runs the page and marker checks, and says so",
 cl = classes()
 check("the page's own class reaches the classes file (a new class = a new alert)",
       ("PAGE-token-refused", "page") in cl and ("MARKER", "marker") in cl, str(cl))
-open(T + "/etc/shadow", "w").write("dtmint:*:1::::::" + NL + "dtapi::1::::::" + NL)
+open(T + "/etc/shadow", "w").write("dtmint:*:1::::::" + NL + "dtapi::1::::::" + NL + "dtsql::1::::::" + NL)
 c, o = run()
 check("r3: an EMPTY dtapi password field (a usable empty password) is flagged", "dtapi's password field is EMPTY" in o, o)
+check("5a1: an EMPTY dtsql password field (a usable empty password) is flagged", "dtsql's password field is EMPTY" in o, o)
 os.unlink(T + "/var/lib/dt-api/page.json")
 os.mkfifo(T + "/var/lib/dt-api/page.json")
 c, o = run(timeout=60)
@@ -403,8 +417,9 @@ os.makedirs(_root + "/etc")
 open(_root + "/etc/shadow", "w").write("dtapi:*:1:0:99999:7:::" + NL + "dtmint:*:1:0:99999:7:::" + NL)
 DM.ROOT = _root
 _users = {"dtapi": types.SimpleNamespace(pw_shell="/usr/sbin/nologin", pw_gid=2001),
-          "dtmint": types.SimpleNamespace(pw_shell="/bin/sh", pw_gid=2002)}
-_groups = {2001: "dtapi", 2002: "staff"}                # dtmint's primary group is NOT its own
+          "dtmint": types.SimpleNamespace(pw_shell="/bin/sh", pw_gid=2002),
+          "dtsql": types.SimpleNamespace(pw_shell="/usr/sbin/nologin", pw_gid=2003)}
+_groups = {2001: "dtapi", 2002: "staff", 2003: "dtsql"}  # dtmint's primary group is NOT its own
 DM.pwd = types.SimpleNamespace(getpwnam=lambda n: _users[n])
 DM.grp = types.SimpleNamespace(getgrall=lambda: [], getgrgid=lambda g: types.SimpleNamespace(gr_name=_groups[g]))
 
@@ -444,7 +459,28 @@ check("Gate 1-2 r3: a second group name (staff) sharing dtapi's primary gid is R
 _grall[1] = types.SimpleNamespace(gr_name="staff", gr_gid=3000, gr_mem=[])
 pr = _accounts_problems()
 check("... and with staff on its own gid nothing is reported (control)", not any("ALSO named" in x for x in pr), str(pr))
+# 5a1: dtsql in a supplementary group, and a second name on its own primary gid - both reach it by a %group rule
+_grall = [types.SimpleNamespace(gr_name="dtsql", gr_gid=2003, gr_mem=[]),
+          types.SimpleNamespace(gr_name="wheel", gr_gid=10, gr_mem=["dtsql"]),
+          types.SimpleNamespace(gr_name="ops", gr_gid=2003, gr_mem=[])]
+DM.grp.getgrall = lambda: _grall
+pr = _accounts_problems()
+check("5a1: dtsql as a member of group wheel is flagged",
+      any("dtsql is a member of group wheel" in x for x in pr), str(pr))
+check("5a1: a second group name (ops) on dtsql's primary gid is flagged",
+      sum("PRIMARY gid 2003 is ALSO named ops" in x and "dtsql" in x for x in pr) == 1, str(pr))
 DM.grp.getgrall = lambda: []
+pr = _accounts_problems()
+check("5a1: a nologin dtsql with its own primary group raises nothing about dtsql (control)",
+      not any("dtsql" in x for x in pr), str(pr))
+_users["dtsql"].pw_shell = "/bin/bash"
+_groups[2003] = "staff"
+pr = _accounts_problems()
+check("5a1: dtsql with a login shell is flagged", any("dtsql has a login shell (/bin/bash)" in x for x in pr), str(pr))
+check("5a1: dtsql's primary group not its own is flagged", any("dtsql's PRIMARY group is staff" in x for x in pr), str(pr))
+del _users["dtsql"]
+pr = _accounts_problems()
+check("5a1: a missing dtsql account is reported", any("the dtsql account does not exist" in x for x in pr), str(pr))
 shutil.rmtree(_root)
 
 # ── B-DEPLOY-WINDOW-GUARD (#1249): the deploy_windows check, in-process. Langston BLOCKER-2 / C-15 / C-16: a stale

@@ -1,0 +1,412 @@
+#!/usr/bin/python3
+"""dt-sql-role-setup — creates, re-keys and proves the read-only database login `dt_reader` (B-DB-READONLY-ROLE,
+row 5a1, KD-100; pre-audit F-1, F-2, F-4, F-6, F-9).
+
+USAGE (root, by hand, at Step 6 — never scheduled):
+    dt-sql-role-setup --create     # make dt_reader, write /etc/dt-sql/reader.env (refuses if it exists)
+    dt-sql-role-setup --rotate     # give dt_reader a new password, replace reader.env
+    dt-sql-role-setup --recover    # reader.env was LOST: give dt_reader a new password, write reader.env afresh
+    dt-sql-role-setup --verify     # log in AS dt_reader and prove what it can and cannot do
+
+WHAT IT DOES, AND WHAT IT NEVER DOES:
+  * --create, --rotate and --recover log in ONCE as the app's own login (DATABASE_URL in the app's .env — the one account that
+    may create roles; postgres holds ADMIN on pg_read_all_data and pg_monitor, measured 2026-11-22 on PG 17.6).
+    The new password is made here (secrets.token_urlsafe(32), 43 characters from reader.env's alphabet) and sent to
+    the database ONLY as its SCRAM-SHA-256 verifier (F-4) — the plaintext never leaves this box. It is written to
+    reader.env.new (0600, owner dtsql, fsynced) BEFORE the login, so a password the database may have accepted is
+    never one that exists nowhere; the .new file becomes reader.env only after the database said yes.
+  * --verify logs in as dt_reader with reader.env alone — NEVER .env (no fallback: if reader.env is missing or
+    malformed, nothing logs in). It turns the session's read-only setting OFF for this one session so that every
+    write probe is refused by the ROLE (SQLSTATE 42501), which is the boundary being proved (F-9 Q8); one probe
+    turns it back on for one statement to show the second layer answers 25006. Everything runs inside a transaction
+    that is rolled back. Expected answers are fixed below; any other answer fails the verify.
+  * EVERY login — all three modes — goes through dt-sql's own `locked_attempt` (F-6), loaded from the installed
+    /usr/local/bin/dt-sql: the same lock, the same INTENT written before the attempt, the same timeout, the same
+    TLS check inside the session, the same lock-on-a-refused-password and the same alerts. One implementation, not
+    a copy — a wrong password here spends the same two-wrong-passwords budget (#1259) and stops the same way.
+  * It never prints a password, the verifier, or DATABASE_URL. psql runs with VERBOSITY=terse so an error does not
+    echo the statement, and everything it prints passes through a redaction of the verifier anyway.
+
+TRANSPORT: verify-full against the Supabase root CA copy dt-sql-login uses (its CA_FILE), the address resolved once
+and pinned (`hostaddr`), connect_timeout=15, the password in the child's environment only (never argv), every other
+PG* variable stripped. The three-line in-session TLS check from dt-sql-login runs first, so a session that is not
+TLS fails with dt-sql's TRANSPORT exit (6) and runs none of the SQL.
+
+EXIT CODES:
+    0 done (and for --verify: every check passed)
+    1-6 dt-sql's own outcome of the one login (1 the SQL failed, 3 Connection refused — maybe BANNED, 4 LOCKED,
+        5 BUSY, 6 TRANSPORT); see `dt-sql --help`. On 4 after --create/--rotate/--recover, reader.env.new is KEPT: the
+        database may have taken the new password, and that file is then the only copy of it.
+    64 arguments other than exactly one of --create, --rotate, --recover, --verify
+    65 not run as root
+    66 reader.env is in the wrong state for this mode (exists on --create or --recover; missing on --rotate;
+       reader.env.new left over; dt-sql LOCKED or holding a left-over INTENT — read `dt-sql --status` first)
+    67 the app's .env cannot be read, or its DATABASE_URL is missing, repeated or unusable
+    68 the database host did not resolve
+    69 the CA file cannot be read
+    70 psql is not executable
+    71 reader.env cannot be read, is malformed, names another login, or has the wrong mode or owner (--verify)
+    72 --verify: logged in, but an answer was not the expected one (each mismatch is printed)
+"""
+import base64
+import hashlib
+import hmac
+import importlib.machinery
+import importlib.util
+import os
+import pwd
+import re
+import secrets
+import socket
+import stat
+import sys
+import urllib.parse
+
+# ── CONSTANTS (the test harness substitutes ONLY this block) ──
+DT_SQL = "/usr/local/bin/dt-sql"
+DT_SQL_LOGIN = "/usr/local/bin/dt-sql-login"
+APP_ENV = "/home/deploy/dawntrader/.env"
+PSQL = "/usr/bin/psql"
+ROLE = "dt_reader"
+FILE_OWNER = "dtsql"                 # reader.env's owner; None = leave it (the test has one account)
+STATE_OWNER = "deploy"               # dt-sql's state files' owner; None = leave them
+ALERT_AS = ["/usr/sbin/runuser", "-u", "deploy", "--"]   # dt-sql's alert command runs as deploy, not root
+REQUIRE_ROOT = True
+RESOLVE = None                       # None = socket.getaddrinfo; a test substitutes a function host, port -> address
+# ── END CONSTANTS ──
+
+
+def load(path, name):
+    ldr = importlib.machinery.SourceFileLoader(name, path)
+    mod = importlib.util.module_from_spec(importlib.util.spec_from_loader(name, ldr))
+    ldr.exec_module(mod)
+    return mod
+
+
+ds = load(DT_SQL, "dt_sql")               # the lock, INTENT, classification, lock arms and alerts: dt-sql's own
+dl = load(DT_SQL_LOGIN, "dt_sql_login")   # reader.env's path and parser, the CA path, the in-session TLS check
+ds.ALERT_NPM = ALERT_AS + ds.ALERT_NPM
+NEW_ENV = dl.READER_ENV + ".new"
+TAGS = {"", "BEGIN", "DO", "ROLLBACK", "COMMIT"}
+
+
+class Refusal(Exception):
+    def __init__(self, code, reason):
+        super().__init__(reason)
+        self.code = code
+
+
+def scram_verifier(password, salt, iterations=4096):
+    """The SCRAM-SHA-256 verifier Postgres stores (RFC 5802/7677 form), so the database never sees the plaintext."""
+    salted = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, iterations)
+    stored = hashlib.sha256(hmac.new(salted, b"Client Key", hashlib.sha256).digest()).digest()
+    server = hmac.new(salted, b"Server Key", hashlib.sha256).digest()
+    b64 = lambda b: base64.b64encode(b).decode()
+    return "SCRAM-SHA-256$%d:%s$%s:%s" % (iterations, b64(salt), b64(stored), b64(server))
+
+
+def resolve(host, port):
+    try:
+        return (RESOLVE or (lambda h, p: socket.getaddrinfo(h, p, proto=socket.IPPROTO_TCP)[0][4][0]))(host, port)
+    except (OSError, IndexError) as exc:
+        raise Refusal(68, "the database host did not resolve (%s)" % type(exc).__name__)
+
+
+def preflight():
+    if not os.access(dl.CA_FILE, os.R_OK):
+        raise Refusal(69, "the CA file cannot be read")
+    if not os.access(PSQL, os.X_OK):
+        raise Refusal(70, "psql is not executable")
+    if os.path.exists(ds.LOCKED_FILE) or os.path.exists(ds.INTENT_FILE):
+        raise Refusal(66, "dt-sql is LOCKED or holds a left-over INTENT — read `dt-sql --status` first")
+
+
+def app_login():
+    """The app's own login, from DATABASE_URL in .env: (host, port, dbname, user, password). Never printed."""
+    try:
+        with open(APP_ENV, encoding="utf-8") as fh:
+            text = fh.read()
+    except (OSError, UnicodeDecodeError) as exc:
+        raise Refusal(67, "the app's .env cannot be read (%s)" % type(exc).__name__)
+    found = re.findall(r"^DATABASE_URL=(.*)$", text, re.M)
+    if len(found) != 1:
+        raise Refusal(67, "the app's .env must set DATABASE_URL exactly once (it sets it %d times)" % len(found))
+    raw = found[0].strip()
+    if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in "'\"":
+        raw = raw[1:-1]
+    try:
+        u = urllib.parse.urlsplit(raw)
+        port = u.port or 5432
+    except ValueError:
+        raise Refusal(67, "DATABASE_URL is unusable (not a URL with a valid port)")
+    host = u.hostname or ""
+    user = urllib.parse.unquote(u.username or "")
+    password = urllib.parse.unquote(u.password or "")
+    dbname = urllib.parse.unquote(u.path.lstrip("/")) or "postgres"
+    if u.scheme not in ("postgres", "postgresql"):
+        raise Refusal(67, "DATABASE_URL is unusable (scheme is not postgres)")
+    for part, value, key in (("host", host, "DT_READER_HOST"), ("database name", dbname, "DT_READER_DBNAME"),
+                             ("user", user, "DT_READER_USER")):
+        if not dl.FIELDS[key].fullmatch(value):
+            raise Refusal(67, "DATABASE_URL is unusable (its %s is missing or holds characters reader.env refuses)" % part)
+    if not password:
+        raise Refusal(67, "DATABASE_URL is unusable (no password)")
+    return host, port, dbname, user, password
+
+
+def child_env(password, options):
+    env = {k: v for k, v in os.environ.items() if not k.startswith("PG")}
+    env.update(PGPASSWORD=password, PGCLIENTENCODING="UTF8", PGOPTIONS=options)
+    return env
+
+
+def psql_argv(host, addr, port, dbname, user):
+    conninfo = ("host=%s hostaddr=%s port=%d dbname=%s user=%s sslmode=verify-full sslrootcert=%s connect_timeout=15 "
+                "application_name=dt-sql-role-setup" % (host, addr, port, dbname, user, dl.CA_FILE))
+    return [PSQL, conninfo, "-X", "-v", "ON_ERROR_STOP=1", "-v", "VERBOSITY=terse", "-At", "-F", "|", "-f", "-"]
+
+
+def chown_state():
+    """root made or touched dt-sql's state files during the attempt; give them back to the account dt-sql runs as."""
+    if STATE_OWNER is None:
+        return
+    pw = pwd.getpwnam(STATE_OWNER)
+    for path in (ds.LOCK_FILE, ds.INTENT_FILE, ds.LOCKED_FILE, ds.LOG_FILE, ds.INTENT_FILE + ".tmp",
+                 ds.LOCKED_FILE + ".tmp"):
+        try:
+            os.chown(path, pw.pw_uid, pw.pw_gid)
+        except FileNotFoundError:
+            pass
+
+
+def attempt(argv, sql, env, redact=()):
+    """ONE login through dt-sql's locked_attempt. Returns (dt-sql exit code, stdout text, stderr text), redacted."""
+    got = {}
+
+    def emit(out, err):
+        got["out"], got["err"] = out, err
+
+    try:
+        rc = ds.locked_attempt(argv, dl.TRANSPORT.decode() + sql, env=env, emit=emit, direct=True)
+    finally:
+        chown_state()
+    out = got.get("out", b"").decode("utf-8", "replace")
+    err = got.get("err", b"").decode("utf-8", "replace")
+    for secret in redact:
+        out, err = out.replace(secret, "<redacted>"), err.replace(secret, "<redacted>")
+    return rc, out, err
+
+
+def write_new(host, port, dbname, password, mode):
+    """reader.env.new: 0600, owner FILE_OWNER, fsynced, O_EXCL — written BEFORE the login that sets the password."""
+    values = {"DT_READER_HOST": host, "DT_READER_PORT": str(port), "DT_READER_DBNAME": dbname,
+              "DT_READER_USER": ROLE, "DT_READER_PASSWORD": password}
+    for key, value in values.items():
+        if not dl.FIELDS[key].fullmatch(value):
+            raise Refusal(67, "DATABASE_URL is unusable (%s would be invalid in reader.env)" % key)
+    body = "# %s - written by dt-sql-role-setup %s at %s. 0600 %s. Never copy this file.\n" % (
+        dl.READER_ENV, mode, ds.now(), FILE_OWNER or "(test)")
+    body += "".join("%s=%s\n" % kv for kv in values.items())
+    fd = os.open(NEW_ENV, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        if FILE_OWNER is not None:
+            pw = pwd.getpwnam(FILE_OWNER)
+            os.fchown(fd, pw.pw_uid, pw.pw_gid)
+        os.write(fd, body.encode("ascii"))
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def fsync_dir(path):
+    fd = os.open(os.path.dirname(path) or ".", os.O_RDONLY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def set_password(mode):
+    """--create / --rotate / --recover: one login as the app, the verifier sent, reader.env.new promoted only on
+    success. --recover is --rotate for the one case --rotate refuses: the role exists but reader.env was lost."""
+    exists = os.path.exists(dl.READER_ENV)
+    if mode == "--create" and exists:
+        raise Refusal(66, "reader.env already exists — --create makes the role once; use --rotate to re-key")
+    if mode == "--rotate" and not exists:
+        raise Refusal(66, "reader.env does not exist — nothing to rotate; --create first, or --recover if the role "
+                          "already exists and only the file was lost")
+    if mode == "--recover" and exists:
+        raise Refusal(66, "reader.env exists — --recover is only for a lost file; use --rotate to re-key")
+    if os.path.exists(NEW_ENV):
+        raise Refusal(66, "reader.env.new is left over from an earlier run — find out why before running again")
+    preflight()
+    host, port, dbname, user, app_password = app_login()
+    addr = resolve(host, port)
+    password = secrets.token_urlsafe(32)
+    if not dl.FIELDS["DT_READER_PASSWORD"].fullmatch(password):
+        raise Refusal(67, "the generated password does not fit reader.env's alphabet")   # cannot happen; fail closed
+    verifier = scram_verifier(password, secrets.token_bytes(16))
+    if mode == "--create":
+        sql = ("BEGIN;\n"
+               "CREATE ROLE %s LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD '%s';\n"
+               "GRANT pg_read_all_data, pg_monitor TO %s;\n"
+               "ALTER ROLE %s SET default_transaction_read_only = on;\n"
+               "COMMIT;\n" % (ROLE, verifier, ROLE, ROLE))
+    else:
+        sql = "ALTER ROLE %s PASSWORD '%s';\n" % (ROLE, verifier)
+    write_new(host, port, dbname, password, mode)
+    rc, out, err = attempt(psql_argv(host, addr, port, dbname, user), sql,
+                           child_env(app_password, "-c statement_timeout=60s"), redact=(verifier, password))
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+    if rc == 0:
+        if mode in ("--create", "--recover"):
+            try:
+                os.link(NEW_ENV, dl.READER_ENV)          # never clobbers: fails if reader.env appeared meanwhile
+            except FileExistsError:
+                print("dt-sql-role-setup: the database took the new password, but reader.env appeared meanwhile — "
+                      "the new password is in reader.env.new; move it by hand after finding out why", file=sys.stderr)
+                return 66
+            os.unlink(NEW_ENV)
+        else:
+            os.replace(NEW_ENV, dl.READER_ENV)
+        fsync_dir(dl.READER_ENV)
+        print("dt-sql-role-setup: %s done — reader.env written. Next: dt-sql-role-setup --verify" % mode[2:])
+        return 0
+    if rc == 4:
+        print("dt-sql-role-setup: LOCKED — reader.env.new is KEPT: the database may have taken the new password and "
+              "that file is then its only copy. Read `dt-sql --status`; do not run this again until the cause is known.",
+              file=sys.stderr)
+        return 4
+    os.unlink(NEW_ENV)                                   # the database did not take it: the file would be a lie
+    print("dt-sql-role-setup: %s did not complete (dt-sql exit %d) — nothing was changed; reader.env.new removed"
+          % (mode[2:], rc), file=sys.stderr)
+    return rc
+
+
+def probe(name, body, declare=""):
+    """One write attempt, caught inside its own sub-transaction; prints NOTICE probe|<name>|<SQLSTATE>. A statement
+    that SUCCEEDS reaches the RAISE and reports P0001."""
+    return ("DO $p$ %sBEGIN %s; RAISE EXCEPTION 'probe-reached'; EXCEPTION WHEN OTHERS THEN "
+            "RAISE NOTICE 'probe|%s|%%', SQLSTATE; END $p$;\n" % (("DECLARE %s " % declare) if declare else "", body, name))
+
+
+PROBES = [
+    ("insert", "42501", probe("insert", "INSERT INTO public.users DEFAULT VALUES")),
+    ("update", "42501", probe("update", "SELECT attname INTO c FROM pg_attribute WHERE attrelid = 'public.users'::regclass "
+                                        "AND attnum > 0 AND NOT attisdropped ORDER BY attnum LIMIT 1; "
+                                        "EXECUTE format('UPDATE public.users SET %I = %I WHERE false', c, c)",
+                              declare="c name;")),
+    ("delete", "42501", probe("delete", "DELETE FROM public.users WHERE false")),
+    ("truncate", "42501", probe("truncate", "TRUNCATE public.users")),
+    ("create", "42501", probe("create", "CREATE TABLE public.dt_reader_probe (x int)")),
+    # nextval is NOT rolled back with the transaction: if this ever answered P0001 it consumed one sequence value.
+    ("nextval", "42501", probe("nextval", "SELECT format('%I.%I', n.nspname, c.relname) INTO s FROM pg_class c JOIN "
+                                          "pg_namespace n ON n.oid = c.relnamespace WHERE c.relkind = 'S' AND "
+                                          "n.nspname = 'public' ORDER BY c.relname LIMIT 1; IF s IS NULL THEN "
+                                          "RAISE NOTICE 'probe|nextval|none'; RETURN; END IF; PERFORM nextval(s::regclass)",
+                               declare="s text;")),
+    # PUBLIC holds EXECUTE on it and it is SECURITY INVOKER (both measured 2026-11-22), so the refusal is not at the
+    # call: its body (drizzle/migrations/2026-10-14-b-xstock-bar-availability-aggregate.sql:95-96) takes
+    # `SELECT ... FROM xstock_bar_clock_guard ... FOR UPDATE`, which needs UPDATE — 42501 before its nextval or write.
+    # Settled from the migration at the ref; the live body is not re-read here — a body that differs fails this probe.
+    ("function", "42501", probe("function","PERFORM public.observe_xstock_bar_read('xstock-bar-availability/v1')")),
+    # A stated residual (pre-audit D-5): a TEMP table is the role's own scratch space and is allowed.
+    ("temp", "P0001", probe("temp", "CREATE TEMP TABLE dt_reader_probe_tmp (x int)")),
+    # The second layer: the read-only setting back on for one statement answers 25006 before any privilege check.
+    ("ro_layer", "25006", probe("ro_layer", "EXECUTE 'SET LOCAL transaction_read_only = on'; "
+                                            "INSERT INTO public.users DEFAULT VALUES")),
+]
+PROBE_LINE = re.compile(r"NOTICE:  probe\|(\w+)\|(\w+)")
+
+
+def verify():
+    """--verify: log in as the reader with reader.env alone and compare every answer with the expected one."""
+    if os.path.exists(NEW_ENV):
+        raise Refusal(66, "reader.env.new is left over from an earlier run — find out why before verifying")
+    try:
+        cfg = dl.read_reader_env()                     # NO fallback to .env: missing or malformed = nothing logs in
+    except dl.Refusal as exc:
+        raise Refusal(71, str(exc))
+    if cfg["DT_READER_USER"] != ROLE:
+        raise Refusal(71, "reader.env names a login other than %s" % ROLE)
+    st = os.stat(dl.READER_ENV)
+    if stat.S_IMODE(st.st_mode) != 0o600:
+        raise Refusal(71, "reader.env has mode %o, not 600" % stat.S_IMODE(st.st_mode))
+    if FILE_OWNER is not None and st.st_uid != pwd.getpwnam(FILE_OWNER).pw_uid:
+        raise Refusal(71, "reader.env is not owned by %s" % FILE_OWNER)
+    preflight()
+    port = int(cfg["DT_READER_PORT"])
+    addr = resolve(cfg["DT_READER_HOST"], port)
+    dbname = cfg["DT_READER_DBNAME"]
+    sql = ("BEGIN;\n"
+           "SELECT 'who', current_user;\n"
+           "SELECT 'ro', current_setting('transaction_read_only');\n"
+           "SELECT 'ssl', ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid();\n"
+           "SELECT 'roledefault', array_to_string(s.setconfig, ',') FROM pg_db_role_setting s JOIN pg_roles r "
+           "ON r.oid = s.setrole WHERE r.rolname = current_user AND s.setdatabase = 0;\n"
+           "SELECT 'attrs', rolsuper, rolcreatedb, rolcreaterole, rolreplication, rolbypassrls FROM pg_roles "
+           "WHERE rolname = current_user;\n"
+           "SELECT 'members', string_agg(g.rolname, ',' ORDER BY g.rolname) FROM pg_auth_members m JOIN pg_roles g "
+           "ON g.oid = m.roleid JOIN pg_roles u ON u.oid = m.member WHERE u.rolname = current_user;\n"
+           "SELECT 'read', current_user, current_database(), count(*) > 0 FROM public.users;\n"
+           + "".join(p[2] for p in PROBES) +
+           "ROLLBACK;\n")
+    options = "-c default_transaction_read_only=off -c statement_timeout=60s -c lock_timeout=5s"
+    rc, out, err = attempt(psql_argv(cfg["DT_READER_HOST"], addr, port, dbname, ROLE), sql,
+                           child_env(cfg["DT_READER_PASSWORD"], options), redact=(cfg["DT_READER_PASSWORD"],))
+    if rc != 0:
+        sys.stdout.write(out)
+        sys.stderr.write(err)
+        print("dt-sql-role-setup: verify could not complete (dt-sql exit %d)" % rc, file=sys.stderr)
+        return rc
+    expected = {"who": ROLE, "ro": "off", "ssl": "t", "roledefault": "default_transaction_read_only=on",
+                "attrs": "f|f|f|f|f", "members": "pg_monitor,pg_read_all_data", "read": "%s|%s|t" % (ROLE, dbname)}
+    seen, problems = {}, []
+    for line in out.split("\n"):
+        key, sep, value = line.partition("|")
+        if sep and key in expected:
+            seen.setdefault(key, []).append(value)
+        elif line.strip() not in TAGS:
+            problems.append("unexpected output line: %r" % line[:120])
+    for key, want in expected.items():
+        got = seen.get(key, [])
+        if got != [want]:
+            problems.append("%s: expected %r, got %r" % (key, want, got))
+    probes = {}
+    for m in PROBE_LINE.finditer(err):
+        probes.setdefault(m.group(1), []).append(m.group(2))
+    for name, want, _ in PROBES:
+        if probes.get(name) != [want]:
+            problems.append("probe %s: expected SQLSTATE %s, got %r" % (name, want, probes.get(name)))
+    extra = sorted(set(probes) - {p[0] for p in PROBES})
+    if extra:
+        problems.append("unexpected probes: %r" % extra)
+    for p in problems:
+        print("dt-sql-role-setup: VERIFY FAIL — %s" % p)
+    if problems:
+        return 72
+    print("dt-sql-role-setup: VERIFY PASS — %s logs in over TLS, reads (%s), and every write probe was refused by the "
+          "role (42501); the read-only layer answers 25006; TEMP tables are allowed (stated residual)." % (ROLE, dbname))
+    return 0
+
+
+def main(args):
+    if len(args) != 1 or args[0] not in ("--create", "--rotate", "--recover", "--verify"):
+        raise Refusal(64, "give exactly one of --create, --rotate, --recover, --verify")
+    if REQUIRE_ROOT and os.geteuid() != 0:
+        raise Refusal(65, "run as root")
+    return verify() if args[0] == "--verify" else set_password(args[0])
+
+
+def entry(args):
+    try:
+        return main(args)
+    except Refusal as exc:
+        print("dt-sql-role-setup: refused (%s)" % exc, file=sys.stderr)
+        return exc.code
+
+
+if __name__ == "__main__":
+    os.umask(0o077)
+    sys.exit(entry(sys.argv[1:]))

@@ -1,12 +1,18 @@
 #!/usr/bin/env python3
-"""dt-sql and the psql wrapper — B-DB-READ-TOOL (KD-96, #1259). POSIX only (flock, process groups, sh).
+"""dt-sql, its login step dt-sql-login, and the psql wrapper — B-DB-READ-TOOL (KD-96, #1259) and B-DB-READONLY-ROLE
+(KD-100, row 5a1). POSIX only (flock, process groups, sh).
 
-Each case runs a COPY of the committed file that differs ONLY in its CONSTANTS block (asserted), with a stand-in psql
-(fakepsql_outcomes.py) that plays one outcome and logs what it was given. Where real psql and openssl exist, the
+Each case runs COPIES of the committed dt-sql and dt-sql-login that differ ONLY in their CONSTANTS blocks (asserted).
+dt-sql's LOGIN runs the dt-sql-login copy directly (no sudo: the test has one account), and that copy runs a stand-in
+psql (fakepsql_outcomes.py) that plays one outcome and logs what it was given. Where real psql and openssl exist, the
 one-attempt guarantee is also proved against a local fake Postgres server (fakepg_server.py) that counts connections:
-dt-sql 1, raw psql on the same URL 2 (the positive control that the counter sees libpq's non-SSL retry).
+dt-sql 1 with verify-full passing (a credential lock proves the TLS check got as far as the password), 0 with the
+wrong CA (the control that verify-full really verifies), raw psql on the same server 2 (the control that the counter
+sees libpq's non-SSL retry), the wrapper 1. The helper's own refusals are proved in dt_sql_login_tests.py.
 Run:  python3 comms-infra/staging/tests/dt_sql_tests.py        (exit 0 = every check passed)
 """
+import importlib.machinery
+import importlib.util
 import json
 import os
 import shutil
@@ -20,11 +26,12 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 STAGING = os.path.dirname(HERE)
 SRC = os.path.join(STAGING, "dt-sql")
+LOGIN_SRC = os.path.join(STAGING, "dt-sql-login")
 WRAPPER = os.path.join(STAGING, "psql-wrapper")
 FAKE = os.path.join(HERE, "fakepsql_outcomes.py")
 FAKEPG = os.path.join(HERE, "fakepg_server.py")
 PASS = FAIL = 0
-PASSWORD = "p@ss/w:rd%x"                                    # every character that must be percent-encoded
+PASSWORD = "Rd7_kQ2-xV9pL4mN8sT1wY6zB3cF5hJ0aE2gU7iO"   # 40 characters from the reader.env alphabet [A-Za-z0-9_-]
 
 
 def check(label, cond, detail=""):
@@ -43,38 +50,78 @@ if os.name != "posix":
 
 work = tempfile.mkdtemp(prefix="dt-sql-tests-")
 state = os.path.join(work, "state")
-env_file = os.path.join(work, ".env")
+reader_env = os.path.join(work, "reader.env")
+ca_file = os.path.join(work, "ca.crt")
 mode_file = os.path.join(work, "mode")
 psql_log = os.path.join(work, "psql.jsonl")
 alert_log = os.path.join(work, "alerts.jsonl")
 alert_rec = os.path.join(work, "alert_recorder.py")
 with open(alert_rec, "w") as fh:
     fh.write("import json,sys\nopen(%r,'a').write(json.dumps(sys.argv[1:])+'\\n')\n" % alert_log)
-enc = "".join("%%%02X" % ord(c) if c in "@/:%" else c for c in PASSWORD)
 
 
-def write_env(host="db.example.supabase.co", port=5432):
-    with open(env_file, "w") as fh:
-        fh.write('NODE_ENV=production\nDATABASE_URL="postgresql://postgres:%s@%s:%d/postgres"\nOTHER=1\n' % (enc, host, port))
+def write_reader_env(host="db.example.supabase.co", port=5432, password=PASSWORD):
+    with open(reader_env, "w") as fh:
+        fh.write("# test reader.env\nDT_READER_HOST=%s\nDT_READER_PORT=%d\nDT_READER_DBNAME=postgres\n"
+                 "DT_READER_USER=dt_reader\nDT_READER_PASSWORD=%s\n" % (host, port, password))
 
 
-src = open(SRC, encoding="utf-8").read()
 START, END = "# ── CONSTANTS (the test harness substitutes ONLY this block) ──", "# ── END CONSTANTS ──"
-head, rest = src.split(START)
-_, tail = rest.split(END)
 
 
-def build(psql=FAKE, timeout=300, resolve="lambda h, p: '127.0.0.1'"):
-    block = "\n".join([
-        "ENV_FILE = %r" % env_file, "STATE_DIR = %r" % state, "PSQL = %r" % psql, "RUN_AS = ''",
-        "RUNUSER = '/bin/false'", "CALL_TIMEOUT_S = %d" % timeout, "STATEMENT_TIMEOUT = '60s'", "APP_DIR = %r" % work,
-        "ALERT_NPM = [%r, %r]" % (sys.executable, alert_rec), "RESOLVE = %s" % resolve])
-    path = os.path.join(work, "dt-sql")
+def split_src(path):
+    text = open(path, encoding="utf-8").read()
+    h, rest = text.split(START)
+    _, t = rest.split(END)
+    return h, t
+
+
+head, tail = split_src(SRC)
+lhead, ltail = split_src(LOGIN_SRC)
+
+
+def write_copy(path, h, block, t):
     with open(path, "w", encoding="utf-8") as fh:
-        fh.write(head + START + "\n" + block + "\n" + END + tail)
+        fh.write(h + START + "\n" + block + "\n" + END + t)
     copy = open(path, encoding="utf-8").read()
-    assert copy.split(START)[0] == head and copy.split(END)[1] == tail, "the copy differs outside CONSTANTS"
+    assert copy.split(START)[0] == h and copy.split(END)[1] == t, "the copy of %s differs outside CONSTANTS" % path
     return path
+
+
+# The stand-in psql is launched through a shim this suite writes and marks executable itself: a checkout's file mode
+# is not to be trusted (CI's Linux checkout stores the .py 0644, and exec'ing it failed every call — 2026-11-16).
+FAKE_SHIM = os.path.join(work, "fakepsql")
+with open(FAKE_SHIM, "w") as fh:
+    fh.write('#!/bin/sh' + chr(10) + 'exec %s %s "$@"' % (sys.executable, FAKE) + chr(10))
+os.chmod(FAKE_SHIM, 0o755)
+
+
+def build_login(psql=FAKE_SHIM, ca=None, resolve="lambda h, p: '127.0.0.1'", name="dt-sql-login"):
+    block = "\n".join([
+        "READER_ENV = %r" % reader_env, "STATE_DIR = %r" % state, "CA_FILE = %r" % (ca or ca_file), "PSQL = %r" % psql,
+        "STATEMENT_TIMEOUT = '60s'", "RESOLVE = %s" % resolve])
+    return write_copy(os.path.join(work, name), lhead, block, ltail)
+
+
+login_copy = build_login()
+
+
+def build(timeout=300, login_argv=None, grace=1, login=None):
+    block = "\n".join([
+        "STATE_DIR = %r" % state, "LOGIN = %r" % (login_argv or [sys.executable, login or login_copy]), "RUN_AS = ''",
+        "RUNUSER = '/bin/false'", "CALL_TIMEOUT_S = %d" % timeout, "TERM_GRACE_S = %d" % grace, "APP_DIR = %r" % work,
+        "ALERT_NPM = [%r, %r]" % (sys.executable, alert_rec)])
+    return write_copy(os.path.join(work, "dt-sql"), head, block, tail)
+
+
+def load(path, name):
+    ldr = importlib.machinery.SourceFileLoader(name, path)
+    mod = importlib.util.module_from_spec(importlib.util.spec_from_loader(name, ldr))
+    ldr.exec_module(mod)
+    return mod
+
+
+TRANSPORT = load(login_copy, "dt_sql_login_copy").TRANSPORT.decode()
 
 
 def reset(mode="ok"):
@@ -85,7 +132,9 @@ def reset(mode="ok"):
             os.remove(p)
     with open(mode_file, "w") as fh:
         fh.write(mode)
-    write_env()
+    write_reader_env()
+    with open(ca_file, "w") as fh:
+        fh.write("not a real CA; the stand-in psql never reads it\n")
 
 
 def setmode(mode):
@@ -118,50 +167,65 @@ def intent():
     return os.path.exists(os.path.join(state, "INTENT"))
 
 
-# The stand-in psql is launched through a shim this suite writes and marks executable itself: a checkout's file mode
-# is not to be trusted (CI's Linux checkout stores the .py 0644, and exec'ing it failed every call — 2026-11-16).
-FAKE_SHIM = os.path.join(work, "fakepsql")
-with open(FAKE_SHIM, "w") as fh:
-    fh.write('#!/bin/sh' + chr(10) + 'exec %s %s "$@"' % (sys.executable, FAKE) + chr(10))
-os.chmod(FAKE_SHIM, 0o755)
-tool = build(psql=FAKE_SHIM)
-print("== 1. the credential, the connection string, and what reaches psql")
-reset("ok")
-r = run(tool, "-c", "select 1")
-c = calls()
-check("a clean read exits 0 and prints the row", r.returncode == 0 and r.stdout.strip() == "1", (r.returncode, r.stdout, r.stderr))
-check("the password is URL-DECODED (%40 %2F %3A %25) and reaches psql only through PGPASSWORD",
-      c and c[0]["PGPASSWORD"] == PASSWORD, c)
-check("the password is in NO argument", c and not any(PASSWORD in a or enc in a for a in c[0]["argv"]), c and c[0]["argv"])
-conninfo = c[0]["argv"][0] if c else ""
-check("ONE attempt: sslmode=require, hostaddr pinned, connect_timeout set",
-      "sslmode=require" in conninfo and "hostaddr=127.0.0.1" in conninfo and "connect_timeout=15" in conninfo, conninfo)
-check("the caller's PGSSLMODE/PGPASSWORD do not leak into the child (PG* stripped)", c and c[0]["PGSSLMODE"] is None, c)
-check("read-only by default: PGOPTIONS sets default_transaction_read_only=on and a statement timeout",
-      c and "default_transaction_read_only=on" in c[0]["PGOPTIONS"] and "statement_timeout=" in c[0]["PGOPTIONS"], c)
-check("-c SQL goes in through stdin with -f - (psql exits 1 for a SQL error under -c, 3 under -f)",
-      c and "-c" not in c[0]["argv"] and c[0]["argv"][-2:] == ["-f", "-"] and c[0]["stdin"].strip() == "select 1;", c)
-check("a clean read leaves no INTENT and no LOCKED", not intent() and locked() is None)
-
-print("== 2. read-only SQL refusal (before connecting), and ONE input mode")
-reset("ok")
-r = run(tool, "-c", "set default_transaction_read_only = off; delete from x")
-check("SQL naming the read-only setting is refused, exit 2, psql never called", r.returncode == 2 and calls() == [], (r.returncode, calls()))
-
-
 def logrows():
     p = os.path.join(state, "log.jsonl")
     return [json.loads(l) for l in open(p)] if os.path.exists(p) else []
 
 
+def alerts():
+    return open(alert_log).read() if os.path.exists(alert_log) else ""
+
+
+tool = build()
+print("== 1. the reader credential, the connection string, and what reaches psql")
+reset("ok")
+r = run(tool, "-c", "select 1")
+c = calls()
+check("a clean read exits 0 and prints the row", r.returncode == 0 and r.stdout.strip() == "1", (r.returncode, r.stdout, r.stderr))
+check("the reader password (from reader.env, nowhere else) reaches psql only through PGPASSWORD",
+      c and c[0]["PGPASSWORD"] == PASSWORD, c)
+check("the password is in NO argument", c and not any(PASSWORD in a for a in c[0]["argv"]), c and c[0]["argv"])
+conninfo = c[0]["argv"][0] if c else ""
+check("ONE attempt, VERIFIED: sslmode=verify-full against the CA copy, hostaddr pinned, host kept for the name check, "
+      "connect_timeout set", "sslmode=verify-full" in conninfo and ("sslrootcert=%s " % ca_file) in conninfo
+      and "hostaddr=127.0.0.1" in conninfo and "host=db.example.supabase.co" in conninfo
+      and "connect_timeout=15" in conninfo and "user=dt_reader" in conninfo, conninfo)
+check("the caller's PGSSLMODE/PGPASSWORD do not leak into psql (PG* stripped by the login step)",
+      c and c[0]["PGSSLMODE"] is None, c)
+check("read-only by default: PGOPTIONS sets default_transaction_read_only=on and a statement timeout",
+      c and "default_transaction_read_only=on" in c[0]["PGOPTIONS"] and "statement_timeout=" in c[0]["PGOPTIONS"], c)
+check("the SQL goes in through stdin with -f -, AFTER the 3-line TLS check (so it starts on stdin line 4)",
+      c and "-c" not in c[0]["argv"] and c[0]["argv"][-2:] == ["-f", "-"] and c[0]["stdin"] == TRANSPORT + "select 1;"
+      and TRANSPORT.count("\n") == 3, c)
+check("the login step's ready line is stripped from what the caller sees", "dt-sql-login: ready" not in r.stderr, r.stderr)
+check("a clean read leaves no INTENT and no LOCKED, and logs ok with psql's code", not intent() and locked() is None
+      and any(e["event"] == "ok" and e.get("psql_rc") == 0 for e in logrows()), logrows())
+reset("ok")
+r = run(tool, "--csv", "-c", "select 1")
+c = calls()
+check("--csv reaches psql as --csv (and not the unaligned -At form)", r.returncode == 0 and c and "--csv" in c[0]["argv"]
+      and "-At" not in c[0]["argv"], c)
+
+print("== 2. read-only SQL refusal (before connecting), and ONE input mode")
+reset("ok")
+r = run(tool, "-c", "set default_transaction_read_only = off; delete from x")
+check("SQL naming the read-only setting is refused, exit 2, psql never called", r.returncode == 2 and calls() == [], (r.returncode, calls()))
 lr = logrows()
-check("a refused attempt is AUDITED: a refused_readonly_sql row with the SQL's head, and an exit row with exit 2 (F-1)",
-      any(e["event"] == "refused_readonly_sql" and "default_transaction_read_only" in e.get("sql_head", "") for e in lr)
-      and any(e["event"] == "exit" and e.get("exit") == 2 for e in lr), lr)
+check("a refused attempt is AUDITED by dt-sql itself: a refused_readonly_sql row with the SQL's head, and an exit row "
+      "with exit 2 (F-1)", any(e["event"] == "refused_readonly_sql" and "default_transaction_read_only" in e.get("sql_head", "")
+                               for e in lr) and any(e["event"] == "exit" and e.get("exit") == 2 for e in lr), lr)
 for stmt in ("BEGIN READ WRITE; delete from x", "START TRANSACTION READ WRITE", "BEGIN TRANSACTION READ WRITE"):
     reset("ok")
     r = run(tool, "-c", stmt)
-    check("refused before connecting: %r" % stmt, r.returncode == 2 and calls() == [], (r.returncode, calls()))
+    check("refused by dt-sql before the login step: %r" % stmt, r.returncode == 2 and calls() == []
+          and any(e["event"] == "refused_readonly_sql" for e in logrows()), (r.returncode, calls(), logrows()))
+reset("ok")
+r = run(tool, "-c", "select 1; \\! id")
+check("a backslash (psql's \\! runs a shell as dtsql) is refused by the login step BEFORE connecting: exit 2, psql "
+      "never called, nothing locked, INTENT cleared", r.returncode == 2 and calls() == [] and locked() is None
+      and not intent() and "dt-sql-login: refused" in r.stderr, (r.returncode, calls(), r.stderr))
+check("... and logged as login_refused with the helper's code (68)",
+      any(e["event"] == "login_refused" and e.get("login_rc") == 68 for e in logrows()), logrows())
 evil = os.path.join(work, "evil.sql")
 with open(evil, "w") as fh:
     fh.write("BEGIN READ WRITE; delete from x;")
@@ -170,7 +234,8 @@ r = run(tool, "-c", "select 1", "-f", evil)
 check("D-1: -c and -f together are REFUSED (exit 2), psql never called", r.returncode == 2 and calls() == [], (r.returncode, calls()))
 reset("ok")
 r = run(tool, "-f", evil)
-check("a -f file that switches read-only off is refused (exit 2)", r.returncode == 2 and calls() == [], (r.returncode, calls()))
+check("a -f file that switches read-only off is refused by dt-sql (exit 2)", r.returncode == 2 and calls() == []
+      and any(e["event"] == "refused_readonly_sql" for e in logrows()), (r.returncode, calls()))
 good = os.path.join(work, "good.sql")
 with open(good, "w") as fh:
     fh.write("select 1;")
@@ -178,7 +243,7 @@ reset("ok")
 r = run(tool, "-f", good)
 c = calls()
 check("D-1: a -f file's CHECKED BYTES go to psql on stdin (-f -), never the path", r.returncode == 0 and c
-      and c[0]["argv"][-2:] == ["-f", "-"] and c[0]["stdin"] == "select 1;" and good not in c[0]["argv"], c)
+      and c[0]["argv"][-2:] == ["-f", "-"] and c[0]["stdin"] == TRANSPORT + "select 1;" and good not in c[0]["argv"], c)
 reset("ok")
 r = run(tool, "-c", "select 1", stdin="delete from x;")
 check("SQL piped in AND given with -c is refused (exit 2), never silently dropped", r.returncode == 2 and calls() == [],
@@ -204,7 +269,7 @@ reset("sql_error")
 r = run(tool, "-c", "select from")
 check("logged in, SQL failed: exit 1, NOT locked, intent cleared", r.returncode == 1 and locked() is None and not intent(),
       (r.returncode, locked(), intent()))
-lr = [json.loads(l) for l in open(os.path.join(state, "log.jsonl"))]
+lr = logrows()
 check("the log keeps psql's code as psql_rc (3) and the tool's REAL exit as exit (1) — never one read as the other (F-2)",
       any(e["event"] == "sql_error" and e.get("psql_rc") == 3 and "rc" not in e for e in lr)
       and any(e["event"] == "exit" and e.get("exit") == 1 for e in lr), lr)
@@ -212,9 +277,8 @@ reset("credential")
 r = run(tool, "-c", "select 1")
 lk = locked()
 check("a wrong password: exit 4, LOCKED arm 'credential'", r.returncode == 4 and lk and lk["arm"] == "credential", (r.returncode, lk))
-check("... and a critical alert is raised", os.path.exists(alert_log) and "critical" in open(alert_log).read()
-      and "dt-sql-credential-locked" in open(alert_log).read())
-lr = [json.loads(l) for l in open(os.path.join(state, "log.jsonl"))]
+check("... and a critical alert is raised", "critical" in alerts() and "dt-sql-credential-locked" in alerts(), alerts()[:300])
+lr = logrows()
 check("the alert row carries npm's code as alert_rc, never as rc", any(e["event"] == "alert" and "alert_rc" in e and "rc" not in e
       for e in lr), lr)
 n = len(calls())
@@ -229,10 +293,28 @@ check("Connection refused (a ban): exit 3, NOT locked, intent cleared, 'do not r
 reset("fatal")
 r = run(tool, "-c", "select 1")
 lk = locked()
-al = open(alert_log).read() if os.path.exists(alert_log) else ""
+al = alerts()
 check("an unclassifiable failure (rc 1): exit 4, LOCKED arm 'ambiguous', and a WARNING alert (never silent, §5.1)",
       r.returncode == 4 and lk and lk["arm"] == "ambiguous" and "dt-sql-ambiguous-locked" in al and "warning" in al
       and "critical" not in al, (r.returncode, lk, al[:200]))
+reset("transport")
+r = run(tool, "-c", "select 1")
+al = alerts()
+check("the session failed its own TLS check: exit 6, NOT locked, INTENT cleared (no password was judged, no ban risk)",
+      r.returncode == 6 and locked() is None and not intent(), (r.returncode, locked(), intent(), r.stderr))
+check("... a CRITICAL transport alert carrying psql's line, and psql's line reaches the caller",
+      "dt-sql-transport" in al and "critical" in al and "dt-sql-transport: not TLS" in al
+      and "dt-sql-transport: not TLS" in r.stderr, (al[:300], r.stderr))
+check("... logged as transport with psql's code (3), and the exit row says 6",
+      any(e["event"] == "transport" and e.get("psql_rc") == 3 for e in logrows())
+      and any(e["event"] == "exit" and e.get("exit") == 6 for e in logrows()), logrows())
+reset("ok")
+os.remove(reader_env)
+r = run(tool, "-c", "select 1")
+check("no reader.env: the login step refuses BEFORE any attempt — exit 2, psql never called, not locked, INTENT cleared",
+      r.returncode == 2 and calls() == [] and locked() is None and not intent(), (r.returncode, calls(), r.stderr))
+check("... logged as login_refused with the helper's code (69)",
+      any(e["event"] == "login_refused" and e.get("login_rc") == 69 for e in logrows()), logrows())
 
 print("== 4. a call that dies mid-attempt leaves its INTENT, and the next call locks")
 reset("hang")
@@ -243,7 +325,15 @@ while not intent() and time.time() < deadline:
 check("the INTENT is written BEFORE the attempt", intent())
 while not calls() and time.time() < deadline:
     time.sleep(0.05)
-os.killpg(p.pid, signal.SIGKILL)                              # dt-sql and its psql, dead without a word
+c0 = calls()[0] if calls() else {}
+check("the login step runs in its OWN process group (so a timeout can kill it whole)",
+      c0 and c0["pgid"] != os.getpgid(p.pid), (c0, p.pid))
+os.killpg(p.pid, signal.SIGKILL)                              # dt-sql dead without a word ...
+if c0:
+    try:
+        os.killpg(c0["pgid"], signal.SIGKILL)                 # ... and its login step and psql with it
+    except ProcessLookupError:
+        pass
 p.wait()
 setmode("ok")
 n = len(calls())
@@ -264,8 +354,8 @@ check("a second call while one runs: exit 5 BUSY (not 4), no attempt", r.returnc
 p.wait()
 check("the first call still completes (exit 0)", p.returncode == 0, p.returncode)
 
-print("== 6. the timeout kills the whole process group, then locks 'ambiguous'")
-tool_t = build(psql=FAKE_SHIM, timeout=1)
+print("== 6. the timeout stops the whole login group, then locks 'ambiguous'")
+tool_t = build(timeout=1, grace=1)
 reset("hang")
 marker = os.path.join(work, "grandchild")
 t0 = time.time()
@@ -275,10 +365,27 @@ time.sleep(4)
 lk = locked()
 check("a hung call is cut at CALL_TIMEOUT_S and locks 'ambiguous'", r.returncode == 4 and lk and lk["arm"] == "ambiguous"
       and took < 6, (r.returncode, lk, took))
-check("its grandchild is killed too (the whole group, not the child alone)", not os.path.exists(marker))
-tool = build(psql=FAKE_SHIM)
+check("SIGTERM reaches the whole group: psql's grandchild dies too (not the login step alone)", not os.path.exists(marker))
+stubborn = os.path.join(work, "stubborn.py")
+marker2 = os.path.join(work, "grandchild2")
+with open(stubborn, "w") as fh:                                # a login step that IGNORES SIGTERM, with a grandchild
+    fh.write("import signal, subprocess, sys, time\n"
+             "signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
+             "subprocess.Popen([sys.executable, '-c', \"import signal, time; signal.signal(signal.SIGTERM, "
+             "signal.SIG_IGN); time.sleep(4); open(%r, 'w').write('alive')\"])\n"
+             "time.sleep(100)\n" % marker2)
+reset("ok")
+t0 = time.time()
+r = run(build(timeout=1, grace=1, login_argv=[sys.executable, stubborn]), "-c", "select 1")
+took = time.time() - t0
+time.sleep(5)
+lk = locked()
+check("a login step that ignores SIGTERM is SIGKILLed after TERM_GRACE_S, and the call locks 'ambiguous'",
+      r.returncode == 4 and lk and lk["arm"] == "ambiguous" and took < 6, (r.returncode, lk, took))
+check("... the SIGKILL takes the whole group: the SIGTERM-proof grandchild dies too", not os.path.exists(marker2))
+tool = build()
 
-print("== 7. --unlock")
+print("== 7. --unlock, and failures before any attempt")
 reset("credential")
 run(tool, "-c", "select 1")
 r = run(tool, "--unlock", "--by", "someone")
@@ -288,25 +395,23 @@ check("--unlock --by cc-infra clears LOCKED", r.returncode == 0 and locked() is 
 setmode("ok")
 r = run(tool, "-c", "select 1")
 check("after unlocking, a read works again", r.returncode == 0, r.returncode)
-log = [json.loads(l) for l in open(os.path.join(state, "log.jsonl"))]
 check("the unlock is logged with who CLAIMED to do it (by_claimed: --by is unauthenticated)",
-      any(e["event"] == "unlocked" and e.get("by_claimed") == "cc-infra" for e in log))
+      any(e["event"] == "unlocked" and e.get("by_claimed") == "cc-infra" for e in logrows()))
 reset("ok")
-with open(env_file, "w") as fh:
-    fh.write("NODE_ENV=production\n")                        # no DATABASE_URL: a pre-attempt failure
+with open(reader_env, "w") as fh:
+    fh.write("DT_READER_HOST=db.example.supabase.co\n")         # malformed: four keys missing
 r = run(tool, "-c", "select 1")
-check("a failure BEFORE any attempt exits 2, never 1 (1 means only 'logged in, the SQL failed')", r.returncode == 2
-      and calls() == [], (r.returncode, r.stderr[-200:]))
+check("a malformed reader.env: exit 2 (never 1), psql never called, not locked, INTENT cleared", r.returncode == 2
+      and calls() == [] and locked() is None and not intent(), (r.returncode, r.stderr[-200:]))
 reset("ok")
-r = subprocess.run([sys.executable, build(psql=os.path.join(work, "no-such-psql")), "-c", "select 1"], capture_output=True,
-                   text=True, timeout=60)
-check("psql that cannot even start: exit 2 (not 1), and its INTENT stays so the next call locks 'ambiguous'",
+r = run(build(login_argv=["/bin/false"]), "-c", "select 1")
+check("a login step that fails WITHOUT its ready line (as sudo refusing would): exit 2, INTENT cleared, not locked",
+      r.returncode == 2 and not intent() and locked() is None and "no attempt was made" in r.stderr, (r.returncode, r.stderr))
+reset("ok")
+r = run(build(login_argv=[os.path.join(work, "no-such-sudo")]), "-c", "select 1")
+check("a login step that cannot even start: exit 2 (not 1), and its INTENT stays so the next call locks 'ambiguous'",
       r.returncode == 2 and intent(), (r.returncode, intent(), r.stderr[-200:]))
-import importlib.machinery
-import importlib.util
-_ldr = importlib.machinery.SourceFileLoader("dt_sql_copy", build(psql=FAKE_SHIM))
-_mod = importlib.util.module_from_spec(importlib.util.spec_from_loader("dt_sql_copy", _ldr))
-_ldr.exec_module(_mod)
+_mod = load(build(), "dt_sql_copy")
 
 
 def _raise_exit1(args):
@@ -316,7 +421,7 @@ def _raise_exit1(args):
 _mod.main = _raise_exit1
 check("a SystemExit(1) from anywhere is reported as 2, never 1 (1 means only 'logged in, the SQL failed')",
       _mod.entry([]) == 2)
-tool = build(psql=FAKE_SHIM)
+tool = build()
 
 print("== 8. the psql wrapper")
 wdir = os.path.join(work, "wrap")
@@ -361,31 +466,45 @@ r = wrun({})
 check("D-2: an unfinished attempt (INTENT, no LOCKED) also makes the wrapper refuse, psql not run",
       r.returncode == 4 and len(calls()) == n, (r.returncode, r.stderr))
 
-print("== 9. ONE attempt, proved against a fake Postgres server (real psql + openssl)")
+print("== 9. ONE verified attempt, proved against a fake Postgres server (real psql + openssl)")
 real_psql, openssl = shutil.which("psql"), shutil.which("openssl")
 if not (real_psql and openssl and os.path.exists("/usr/bin/psql")):
     print("  skip: no real psql/openssl on this host (runs on staging and in CI; Helsinki has neither)")
 else:
-    subprocess.run([openssl, "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", os.path.join(work, "k.pem"),
-                    "-out", os.path.join(work, "c.pem"), "-days", "1", "-subj", "/CN=localhost"], capture_output=True)
+    def mkcert(name):
+        return subprocess.run([openssl, "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout",
+                               os.path.join(work, name + "-k.pem"), "-out", os.path.join(work, name + "-c.pem"), "-days",
+                               "1", "-subj", "/CN=localhost", "-addext", "subjectAltName=DNS:localhost"],
+                              capture_output=True, text=True)
+    mk, mk2 = mkcert("srv"), mkcert("other")
+    check("test certificates made (server's, and an unrelated one for the wrong-CA control)",
+          mk.returncode == 0 and mk2.returncode == 0, (mk.stderr[-200:], mk2.stderr[-200:]))
     s = socket.socket()
     s.bind(("127.0.0.1", 0))
     port = s.getsockname()[1]
     s.close()
     count = os.path.join(work, "count.txt")
-    srv = subprocess.Popen([sys.executable, FAKEPG, str(port), os.path.join(work, "c.pem"), os.path.join(work, "k.pem"),
-                            count])
+    srv = subprocess.Popen([sys.executable, FAKEPG, str(port), os.path.join(work, "srv-c.pem"),
+                            os.path.join(work, "srv-k.pem"), count])
     time.sleep(1)
-    try:
+
+    def attempt(ca, name):
         reset("ok")
-        write_env(host="127.0.0.1", port=port)
+        write_reader_env(host="localhost", port=port)
         open(count, "w").close()
-        r = subprocess.run([sys.executable, build(psql="/usr/bin/psql"), "-c", "select 1"], capture_output=True,
-                           text=True, timeout=60)
-        n_tool = len(open(count).read().split())
-        lk = locked()
-        check("dt-sql with a wrong password: exactly ONE connection reaches the server, and it locks 'credential'",
-              n_tool == 1 and r.returncode == 4 and lk and lk["arm"] == "credential", (n_tool, r.returncode, lk, r.stderr[-200:]))
+        login = build_login(psql="/usr/bin/psql", ca=ca, name=name)
+        r = run(build(login=login), "-c", "select 1")
+        return r, open(count).read().split(), locked()
+
+    try:
+        r, seen, lk = attempt(os.path.join(work, "srv-c.pem"), "dt-sql-login-real")
+        check("dt-sql with a wrong password and the RIGHT CA: exactly ONE connection, over TLS, and it locks "
+              "'credential' (verify-full passed: the server got as far as judging the password)",
+              seen == ["ssl"] and r.returncode == 4 and lk and lk["arm"] == "credential", (seen, r.returncode, lk, r.stderr[-300:]))
+        r, seen, lk = attempt(os.path.join(work, "other-c.pem"), "dt-sql-login-wrongca")
+        check("CONTROL: the WRONG CA — the server never receives a startup message (no password sent), and dt-sql locks "
+              "'ambiguous' (it cannot classify an unverified server)",
+              seen == [] and r.returncode == 4 and lk and lk["arm"] == "ambiguous", (seen, r.returncode, lk, r.stderr[-300:]))
         open(count, "w").close()
         subprocess.run(["/usr/bin/psql", "postgresql://postgres@127.0.0.1:%d/postgres" % port, "-c", "select 1"],
                        env={"PATH": "/usr/bin:/bin", "PGPASSWORD": "wrong"}, capture_output=True, timeout=60)

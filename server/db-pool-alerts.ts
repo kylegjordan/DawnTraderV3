@@ -120,8 +120,10 @@ export function parseIdleRow(rows: unknown): IdleRead | IdleFail {
 // address: that selects the app pools, this monitor and every script (scripts set no application_name → '(unnamed)'),
 // and excludes every Supabase-internal backend, which all arrive over loopback under other roles (measured with
 // dt-sql, 2026-11-16). `postgres_exporter` (Supabase's, unencrypted, loopback) is ALSO excluded by name, not by luck.
-// ⚠️ `dt-sql` (Infra's query tool) sits inside the role + address filter and is excluded only by its own
-// `sslmode=require`: if that is ever dropped this page fires on it, correctly — it is not a false positive.
+// ⚠️ `dt-sql` (Infra's query tool) logs in as its own read-only role `dt_reader` (B-DB-READONLY-ROLE), so it is
+// OUTSIDE this page's view: the role filter cannot see it. It asserts its own encryption on every call instead —
+// `sslmode=verify-full` against the pinned Supabase CA, plus an in-session pg_stat_ssl check that fails the call
+// (dt-sql exit 6 + a `dt-sql-transport` alert) before any of its SQL runs.
 // ⚠️ REACH (T-C4): a 25 s sample cannot see a connection shorter than the interval, and the '(unnamed)' scripts are
 // the short-lived ones. A quiet '(unnamed)' key is NOT evidence that no unencrypted script connected.
 export const UNENCRYPTED_PREFIX = 'db-unencrypted-connection:';
@@ -395,7 +397,7 @@ export function startDbPoolAlerts(opts: MonitorOptions): { stop: () => void; onF
               + `encrypted (pg_stat_ssl.ssl = false), as first seen. They cross the internet to Supabase in clear: the password `
               + `is protected by SCRAM, the query traffic is not, and an on-path attacker could alter it. '(unnamed)' is a `
               + `connection with no application_name, usually a script. Excluded by construction: Supabase's own loopback `
-              + `backends and postgres_exporter; dt-sql is excluded only by its own sslmode, so a page on it is real. REACH: `
+              + `backends and postgres_exporter; dt-sql logs in under its own read-only role and checks its own encryption. REACH: `
               + `sampled every ${IDLE_IN_TX_POLL_MS / 1000} s, so a connection shorter than that can be missed; a quiet `
               + `'(unnamed)' is not evidence that no unencrypted script connected; and only connections under the app's own `
               + `database role are seen, so one made under any other role is invisible to this page. RESOLVE this row (never acknowledge it); `

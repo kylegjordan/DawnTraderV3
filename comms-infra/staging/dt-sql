@@ -2,6 +2,8 @@
 """dt-sql — the ONE way a session or reviewer reads the staging database. It can never send a wrong password twice.
 
 B-DB-READ-TOOL (Kyle KD-96, 2026-11-16; `#1259`). Scope `Scope Files/B_DB_READ_TOOL_SCOPE.md`, pre-audit and plan r2.
+B-DB-READONLY-ROLE (Kyle KD-100, row 5a1): the login moved to the read-only role `dt_reader`, made by
+/usr/local/bin/dt-sql-login. Scope `Scope Files/B_DB_READONLY_ROLE_SCOPE.md`, pre-audit and plan.
 
 WHY IT EXISTS: on 2026-11-16 a reviewer's hand-built `psql` sent the password still URL-encoded (it carries a `%40`),
 and libpq's default `sslmode=prefer` retried every failed login WITHOUT SSL — two wrong passwords per call (measured
@@ -19,33 +21,44 @@ USAGE (as root or deploy; as root it re-runs itself as deploy):
 EXIT CODES
     0  the query ran
     1  logged in, but the SQL failed (syntax, a read-only refusal from the server, a timeout): NOT a login problem
-    2  REFUSED by dt-sql's own rules before connecting (usage, or SQL that tries to switch read-only off)
+    2  REFUSED before any login attempt: by dt-sql's own rules (usage, or SQL that tries to switch read-only off), or by
+       the login step before it connected (no reader file, a backslash in the SQL, sudo refused ...). Nothing is locked
     3  "Connection refused": the address may be BANNED — do not retry; no password was judged
     4  LOCKED: an earlier call failed its login, or ended without a result. `dt-sql --status` says which; unlock by hand
     5  BUSY: another dt-sql call is running right now (one at a time, never queued)
+    6  TRANSPORT: the session failed its own TLS check, so the SQL did not run. NOT locked (no password was judged
+       wrong, no ban risk); a critical alert is raised, and every call fails the same way until it is fixed
     (anything unexpected BEFORE an attempt exits 2, never 1: 1 means only "logged in, the SQL failed")
 
-ONE ATTEMPT PER CALL: `sslmode=require` (no non-SSL retry), `hostaddr` pinned to ONE resolved address,
-`connect_timeout=15`. The password goes to psql through PGPASSWORD in the child's environment, never argv.
+THE LOGIN IS NOT HERE (B-DB-READONLY-ROLE). dt-sql keeps the lock, the INTENT record and LOCKED; it reads no .env and
+no password. It runs `sudo -n -u dtsql /usr/local/bin/dt-sql-login [--csv]` with the checked SQL on stdin. That
+helper, as the locked account `dtsql`, reads /etc/dt-sql/reader.env (deploy cannot), refuses unless this call's lock
+is held and its INTENT exists, and makes ONE psql attempt: `sslmode=verify-full` against the Supabase CA copy in
+/etc/dt-sql, `hostaddr` pinned to one resolved address, `connect_timeout=15`, the password in its own environment
+(never argv) — then checks IN THE SESSION that the connection is TLS before the SQL runs. Just before psql starts it
+writes `dt-sql-login: ready` to stderr (dt-sql strips that line): no ready line means no attempt was made, so the
+INTENT is removed and nothing locks. A call that reaches CALL_TIMEOUT_S ALWAYS locks `ambiguous`, ready line or not.
 
 FAIL CLOSED (scope OBJ-3, Langston A-1/C-1/C-2): under an exclusive, NON-BLOCKING lock it writes an INTENT record
-BEFORE the attempt and removes it only on a clean result (a run that logged in, or a "Connection refused" before any
-password was judged). A wrong password locks the arm `credential` and raises a critical alert; anything it cannot
-classify — a timeout, a signal, an unparsed failure — locks the arm `ambiguous`. A call killed mid-attempt leaves its
-INTENT behind, and the next call reads that as LOCKED (`ambiguous`). Every later call refuses until --unlock.
+BEFORE the attempt and removes it only on a clean result (a run that logged in, a "Connection refused" before any
+password was judged, a TLS-check refusal, or the login step refusing before it connected). A wrong password locks the
+arm `credential` and raises a critical alert; anything it cannot classify — a timeout, a signal, an unparsed failure —
+locks the arm `ambiguous`. A call killed mid-attempt leaves its INTENT behind, and the next call reads that as LOCKED
+(`ambiguous`). Every later call refuses until --unlock.
 ⚠️ The guarantee is dt-sql's own: LOCKED is dt-sql's state, and the ban is per address, shared with the app, ~50
 helper scripts and any hand-run psql. The `/usr/local/bin/psql` wrapper (same batch) refuses while LOCKED or INTENT
-exists — FOR ROOT AND DEPLOY ONLY: /var/lib/dt-sql is 0750 deploy, so another account's `[ -e ]` cannot see in and
-fails open (only root and deploy run psql on staging today).
+exists. /var/lib/dt-sql is 0755 (B-DB-READONLY-ROLE: the helper, as dtsql, must see the lock and the INTENT), so
+every account's `[ -e ]` now sees in; log.jsonl is 0640.
 Both arms raise an alert — `credential` critical, `ambiguous` warning — through `npm run system-alerts`, whose code
 (`scripts/system-alerts.ts` -> `server/services/system-alerts.ts`) imports only fs/path/crypto and touches NO database,
 so raising a page can never itself spend a login attempt.
 
-⛔ READ-ONLY IS AN ACCIDENT GUARD, NOT A BOUNDARY (stated, the dt-api C11 form): PGOPTIONS sets
-`default_transaction_read_only=on` and a statement timeout, and SQL naming `transaction_read_only` is refused before
-connecting. The credential is the app's own `postgres` login — on Supabase NOT a Postgres superuser (Langston measured
-`rolsuper = f`, `rolbypassrls = t`) but able to write — and `deploy` can read `.env`; the refusal list is not complete.
-A read-only database role is the boundary (proposed to Kyle, not built here).
+READ-ONLY IS NOW A BOUNDARY (B-DB-READONLY-ROLE): `dt_reader` is NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION
+NOBYPASSRLS, granted pg_read_all_data and pg_monitor, with default_transaction_read_only on; the helper sets it again
+in PGOPTIONS with a statement timeout, and SQL naming the read-only setting is still refused before connecting.
+Two limits, stated: `deploy` can still read the app's WRITE login in .env, so this binds dt-sql, not the deploy
+account; and row-level security makes 26 tables (16 in `auth`, 10 in `storage`) read as EMPTY to this role — an
+empty result there is NOT an absence.
 """
 
 import datetime
@@ -55,24 +68,20 @@ import os
 import pwd
 import re
 import signal
-import socket
 import subprocess
 import sys
-import urllib.parse
 
 # ── CONSTANTS (the test harness substitutes ONLY this block) ──
-ENV_FILE = "/home/deploy/dawntrader/.env"
 STATE_DIR = "/var/lib/dt-sql"
-PSQL = "/usr/bin/psql"
+LOGIN = ["/usr/bin/sudo", "-n", "-u", "dtsql", "/usr/local/bin/dt-sql-login"]   # the login step (B-DB-READONLY-ROLE)
 RUN_AS = "deploy"
 RUNUSER = "/usr/sbin/runuser"
 CALL_TIMEOUT_S = 300
-STATEMENT_TIMEOUT = "60s"
+TERM_GRACE_S = 5                 # after a timeout's SIGTERM, how long the login step gets to stop psql before SIGKILL
 APP_DIR = "/home/deploy/dawntrader"
 # raising the alert: as deploy, a clean env, under `timeout -k` so a wedged npm/node dies with its whole group
 ALERT_NPM = ["/usr/bin/timeout", "-k", "10", "120", "/usr/bin/env", "-i", "HOME=/home/deploy", "PATH=/usr/bin:/bin",
              "/usr/bin/npm", "--prefix", APP_DIR, "run", "-s", "system-alerts", "--"]
-RESOLVE = None                   # None = socket.getaddrinfo; a test substitutes a function host, port -> address
 # ── END CONSTANTS ──
 
 LOCK_FILE = os.path.join(STATE_DIR, "lock")
@@ -86,6 +95,12 @@ ACTORS = ("cc-a", "cc-b", "cc-c", "cc-infra", "cc-pm", "kyle", "langston", "colt
 READONLY_SWITCH = re.compile(r"transaction_read_only|default_transaction_read_only|\bread\s+write\b", re.IGNORECASE)
 CREDENTIAL = re.compile(r"password authentication failed|no pg_hba\.conf entry", re.IGNORECASE)
 REFUSED = re.compile(r"Connection refused", re.IGNORECASE)
+READY = b"dt-sql-login: ready\n"
+# The helper's in-session TLS check failed. Its 3-line prefix puts the check on stdin line 2 (the DO block), so the error
+# reads `psql:<stdin>:2: ERROR:  dt-sql-transport: ...` with psql exit 3 (Langston C1, measured on staging 2026-11-22
+# 13:39Z with the check inverted, through the installed dt-sql e56fb089; the passing check printed only `1`). The
+# caller's SQL starts on line 4.
+TRANSPORT_FAIL = re.compile(rb"^psql:<stdin>:2: ERROR:  dt-sql-transport: ", re.M)
 
 
 def now():
@@ -98,7 +113,8 @@ def caller():
 
 def log(event, **kw):
     try:
-        with open(LOG_FILE, "a") as fh:
+        # 0640 (Langston C4): the state dir is 0755 now, so the log's own mode is what keeps other accounts out
+        with os.fdopen(os.open(LOG_FILE, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o640), "a") as fh:
             fh.write(json.dumps(dict(kw, event=event, at=now(), caller=caller())) + "\n")
     except OSError:
         pass
@@ -121,22 +137,6 @@ def read_json(path):
         return {"unreadable": True}
 
 
-def connection():
-    """(conninfo, password) from the app's .env, decoded — never a copy, so a rotation reaches this at once."""
-    with open(ENV_FILE) as fh:
-        m = re.search(r"^DATABASE_URL=(.*)$", fh.read(), re.M)
-    if not m:
-        raise SystemExit("dt-sql: no DATABASE_URL in %s" % ENV_FILE)
-    u = urllib.parse.urlsplit(m.group(1).strip().strip('"').strip("'"))
-    port = u.port or 5432
-    resolve = RESOLVE or (lambda h, p: socket.getaddrinfo(h, p, proto=socket.IPPROTO_TCP)[0][4][0])
-    addr = resolve(u.hostname, port)
-    dbname = urllib.parse.unquote(u.path.lstrip("/")) or "postgres"
-    conninfo = ("host=%s hostaddr=%s port=%d dbname=%s user=%s sslmode=require connect_timeout=15 application_name=dt-sql"
-                % (u.hostname, addr, port, dbname, urllib.parse.unquote(u.username or "")))
-    return conninfo, urllib.parse.unquote(u.password or "")
-
-
 def lock_state(arm, reason, detail=""):
     write_json(LOCKED_FILE, {"arm": arm, "at": now(), "caller": caller(), "reason": reason, "detail": detail[:500]})
     try:
@@ -146,24 +146,30 @@ def lock_state(arm, reason, detail=""):
     log("locked", arm=arm, reason=reason)
 
 
+LOCKED_TAIL = (" dt-sql is now LOCKED: it will make no further attempt, and the psql wrapper refuses too, until "
+               "someone runs `dt-sql --unlock --by <actor>`. Before unlocking, find out why (a rotated reader password? "
+               "an edited /etc/dt-sql/reader.env? the network?): a second wrong password from this address gets it "
+               "banned by Supabase.")
 ALERTS = {
     "credential": ("critical", "dt-sql-credential-locked", "dt-sql locked: the staging database refused its password",
-                   "dt-sql made one login attempt to the staging database and it was REFUSED as a wrong password."),
+                   "dt-sql made one login attempt to the staging database and it was REFUSED as a wrong password."
+                   + LOCKED_TAIL),
     "ambiguous": ("warning", "dt-sql-ambiguous-locked", "dt-sql locked: a login attempt ended without a result",
                   "dt-sql made a login attempt that ended without a classifiable result (a timeout, a signal, or an "
-                  "unexpected failure) — it may or may not have been judged a wrong password."),
+                  "unexpected failure) — it may or may not have been judged a wrong password." + LOCKED_TAIL),
+    "transport": ("critical", "dt-sql-transport", "dt-sql refused a session that was not verified TLS",
+                  "dt-sql's login reached the staging database, but the session's own TLS check failed, so the SQL did "
+                  "not run. dt-sql is NOT locked: no password was judged wrong, and this carries no ban risk. Every "
+                  "call will fail the same way until it is fixed — check the CA file in /etc/dt-sql, the pinned "
+                  "address, and anything proxying the connection."),
 }
 
 
 def alert(arm, detail):
-    """A page for either arm (Langston §5.1: an ambiguous lock takes the only sanctioned read path away from every
-    session, so it may not be silent). Best-effort: the LOCKED state is already written. DB-free (see the docstring)."""
+    """A page for each arm (Langston §5.1: an ambiguous lock takes the only sanctioned read path away from every
+    session, so it may not be silent). Best-effort: any LOCKED state is already written. DB-free (see the docstring)."""
     severity, key, title, lead = ALERTS[arm]
-    body = (lead + " dt-sql is now LOCKED: it will make no further attempt, and the psql wrapper refuses too, until "
-            "someone runs `dt-sql --unlock --by <actor>`. Before unlocking, find out why (a rotation? an edited .env? "
-            "the network?): a second wrong password from this address gets it banned by Supabase.\n\npsql said: %s\n\n"
-            "Owner: Infra Claude (CC-INFRA). Source: /usr/local/bin/dt-sql (B-DB-READ-TOOL). Resolve with evidence, "
-            "never ack." % detail[:400])
+    body = lead + "\n\npsql said: %s\n\nOwner: Infra Claude (CC-INFRA). Source: /usr/local/bin/dt-sql (B-DB-READ-TOOL, B-DB-READONLY-ROLE). Resolve with evidence, never ack." % detail[:400]
     argv = ALERT_NPM + ["add", "--triggers-at", datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
                         "--category", "health_check", "--severity", severity, "--dedupe-key", key,
                         "--title", title, "--body", body]
@@ -174,21 +180,44 @@ def alert(arm, detail):
         log("alert", error=str(exc)[:200])
 
 
-def run_psql(argv, env, stdin_data):
-    """psql in its own session; on timeout the whole process group is killed (a group-kill, not the child alone)."""
-    with subprocess.Popen(argv, env=env, stdin=subprocess.PIPE if stdin_data is not None else subprocess.DEVNULL,
-                          stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True) as proc:
+def run_login(argv, stdin_data, env=None):
+    """The login step (sudo -> dt-sql-login -> psql) in its own session. dt-sql passes no env, so the child gets
+    os.environ as it is: the PG* strip lives in the helper, the one place a password is set. `env` exists for
+    dt-sql-role-setup alone (B-DB-READONLY-ROLE F-6), whose app login runs psql directly and must hand it a stripped
+    environment carrying the app password — the same function, so the same timeout and group-kill. On timeout, SIGTERM to the group FIRST — sudo relays it to
+    the helper (the sender is outside the command's process group) and the helper stops psql; this account cannot
+    SIGKILL the dtsql-owned helper or psql itself. After TERM_GRACE_S, SIGKILL whatever this account may kill.
+    UNAUDITED: the relay is measured on staging at Step 6, not here."""
+    with subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                          start_new_session=True, env=env) as proc:
         try:
-            out, err = proc.communicate(input=stdin_data.encode() if stdin_data is not None else None,
-                                        timeout=CALL_TIMEOUT_S)
+            out, err = proc.communicate(input=stdin_data.encode(), timeout=CALL_TIMEOUT_S)
         except subprocess.TimeoutExpired:
             try:
-                os.killpg(proc.pid, signal.SIGKILL)
+                os.killpg(proc.pid, signal.SIGTERM)
             except (ProcessLookupError, PermissionError):
-                proc.kill()
-            proc.wait()
+                pass
+            try:
+                proc.communicate(timeout=TERM_GRACE_S)
+            except subprocess.TimeoutExpired:
+                try:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                except (ProcessLookupError, PermissionError):
+                    proc.kill()
+                proc.wait()
             return None, b"", b"dt-sql: timed out after %d s" % CALL_TIMEOUT_S
         return proc.returncode, out, err
+
+
+def split_ready(err):
+    """(ready, err without the ready line). Only the FIRST `dt-sql-login: ready` that starts a line counts — at the
+    very start, or after a newline (sudo could print first); the line is removed, nothing else is."""
+    if err.startswith(READY):
+        return True, err[len(READY):]
+    i = err.find(b"\n" + READY)
+    if i < 0:
+        return False, err
+    return True, err[:i + 1] + err[i + 1 + len(READY):]
 
 
 def classify(rc, err):
@@ -315,7 +344,18 @@ def main(args):
               "boundary)", file=sys.stderr)
         log("refused_readonly_sql", sql_head=sql.strip()[:160])     # the attempt is audited too (Langston Step 8 F-1)
         return 2
+    return locked_attempt(LOGIN + (["--csv"] if opts["csv"] else []), stdin_data)   # the checked bytes (D-1)
 
+
+def locked_attempt(argv, stdin_data, env=None, emit=None, direct=False):
+    """ONE login attempt under dt-sql's whole fail-closed protocol: the non-blocking flock, the LOCKED and left-over
+    INTENT checks, the INTENT written BEFORE the attempt, the timeout, the TLS-check reading, the classification, the
+    lock arms and their alerts. Returns dt-sql's exit code (0-6, as the docstring's table).
+    main passes the login step (LOGIN). dt-sql-role-setup (B-DB-READONLY-ROLE F-6) imports this file and calls this
+    function for each of its own logins, so every login it makes takes the same protocol — one implementation, not a
+    copy: `env` is the child's environment (its own stripped one carrying the app password), `emit(out, err)` receives
+    the output instead of this process's stdout/stderr, and `direct=True` says argv is psql itself, which prints no
+    ready line — so a non-zero exit is ALWAYS read as a real attempt (it locks), never as a refusal before one."""
     with open(LOCK_FILE, "a") as lf:
         try:
             fcntl.flock(lf, fcntl.LOCK_EX | fcntl.LOCK_NB)        # one at a time, NEVER queued (pre-audit P1d)
@@ -334,19 +374,33 @@ def main(args):
             print("dt-sql: LOCKED (ambiguous) — a previous call left its attempt unrecorded: %s" % json.dumps(prior),
                   file=sys.stderr)
             return 4
-        conninfo, password = connection()
         write_json(INTENT_FILE, {"at": now(), "caller": caller(), "pid": os.getpid()})   # BEFORE the attempt
-        env = {k: v for k, v in os.environ.items() if not k.startswith("PG")}
-        env.update(PGPASSWORD=password,
-                   PGOPTIONS="-c default_transaction_read_only=on -c statement_timeout=%s" % STATEMENT_TIMEOUT)
-        argv = [PSQL, conninfo, "-X", "-v", "ON_ERROR_STOP=1", "-At", "-F", "|"]
-        if opts["csv"]:
-            argv = [PSQL, conninfo, "-X", "-v", "ON_ERROR_STOP=1", "--csv"]
-        argv += ["-f", "-"]                                      # always the checked bytes, on stdin (D-1)
-        rc, out, err = run_psql(argv, env, stdin_data)
-        kind = classify(rc, err)
-        sys.stdout.buffer.write(out)
-        sys.stderr.buffer.write(err)
+        rc, out, err = run_login(argv, stdin_data, env)
+        ready, err = split_ready(err)
+        ready = ready or direct                      # psql run directly: there is no ready line, the attempt is real
+        if emit is None:
+            sys.stdout.buffer.write(out)
+            sys.stderr.buffer.write(err)
+        else:
+            emit(out, err)
+        if rc is None:
+            kind = "ambiguous"                       # a timeout ALWAYS locks: the attempt may have been judged
+        elif not ready and rc != 0:
+            os.remove(INTENT_FILE)                   # no ready line: the login step refused before any attempt
+            log("login_refused", login_rc=rc)
+            print("dt-sql: the login step refused before connecting (rc %s) — no attempt was made; not locked" % rc,
+                  file=sys.stderr)
+            return 2
+        elif rc == 3 and TRANSPORT_FAIL.search(err):
+            os.remove(INTENT_FILE)                   # logged in, failed its own TLS check: not a login failure
+            log("transport", psql_rc=rc)
+            m = TRANSPORT_FAIL.search(err)
+            alert("transport", err[m.start():].split(b"\n")[0].decode("utf-8", "replace"))
+            print("dt-sql: TRANSPORT — the session failed its TLS check and the SQL did not run. Not locked; an alert "
+                  "is raised.", file=sys.stderr)
+            return 6
+        else:
+            kind = classify(rc, err)
         if kind in ("ok", "sql_error"):
             os.remove(INTENT_FILE)
             log(kind, psql_rc=rc)                              # psql's own code; the tool's exit is the "exit" line
@@ -382,8 +436,8 @@ def entry(args):
     except Exception as exc:                                       # noqa: BLE001
         print("dt-sql: unexpected error before or around the attempt: %s: %s" % (type(exc).__name__, exc), file=sys.stderr)
         code = 2
-    # ⛔ ONE "exit" line for EVERY call BY ROOT OR DEPLOY (another account cannot write the 0750 state dir; log()
-    #    swallows that — such a call also achieves nothing) — refusals, busy, locked, usage errors included — carrying the tool's real exit
+    # ⛔ ONE "exit" line for EVERY call BY ROOT OR DEPLOY (another account cannot write the deploy-owned state dir or
+    #    the 0640 log; log() swallows that — such a call also achieves nothing) — refusals, busy, locked, usage errors included — carrying the tool's real exit
     #    code (Langston Step 8 F-1/F-2: the log showed what ran but not what was attempted and blocked, and its psql
     #    rc 3 read as an exit code that is really 1). Reaches here only in the process that did the work (as root the
     #    first process execv's into deploy and never returns).

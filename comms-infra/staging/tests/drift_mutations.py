@@ -73,7 +73,8 @@ MUTATIONS = [
     ("drift", "r3: the probe instance, not the paging one", '"agent-unit-failure@dt-install-drift.service": (SS', '"agent-unit-failure@probe.service": (SS'),
     ("drift", "r3: a FIFO page blocks the run", "    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)",
      "    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)"),
-    ("drift", "r3: an empty dtapi password field passes", 'not (f[1] == "*" or f[1].startswith("!"))', 'not (f[1] in ("*", "") or f[1].startswith("!"))'),
+    ("drift", "r3: an empty dtapi password field passes", 'if f[0] == "dtapi" and len(f) > 1 and not (f[1] == "*" or f[1].startswith("!")):', 'if f[0] == "dtapi" and len(f) > 1 and not (f[1] in ("*", "") or f[1].startswith("!")):'),
+    ("drift", "5a1: an empty dtsql password field passes", 'if f[0] == "dtsql" and len(f) > 1 and not (f[1] == "*" or f[1].startswith("!")):', 'if f[0] == "dtsql" and len(f) > 1 and not (f[1] in ("*", "") or f[1].startswith("!")):'),
     ("drift", "r3: a git error in PENDING is skipped", "        if a is None or b is None:", "        if False:"),
     ("drift", "dtmint '!' accepted", '        if f[0] == "dtmint" and len(f) > 1 and f[1] != "*":', '        if f[0] == "dtmint" and len(f) > 1 and f[1] not in ("*", "!"):'),
     ("alert", "the %N name never matches (the r2 blocker)", "  dt-install-drift|dt-install-drift.service)", "  dt-install-drift.service)"),
@@ -86,6 +87,21 @@ MUTATIONS = [
      "                if prim_gid.get(who) == g.gr_gid and g.gr_name != who:", "                if False:"),
     ("drift", "Gate 1-2 r2: an orphan primary gid is skipped", "                    \"apply to it\" % (who, gid, gid), \"SUDO\", who)\n                continue",
      "                    \"apply to it\" % (who, gid, gid), \"SUDO\", who) if False else None\n                continue"),
+    # B-DB-READONLY-ROLE (5a1, pre-audit P5): the dtsql account and sudoers checks
+    ("drift", "5a1: a dtsql login shell passes", '            if pwd.getpwnam("dtsql").pw_shell not in', "            if False and None not in"),
+    ("drift", "5a1: a missing dtsql account is silent", '            out("STATE", "the dtsql account does not exist", "ACCOUNT", "dtsql")', "            pass"),
+    ("drift", "5a1: a usable dtsql password passes", 'if f[0] == "dtsql" and len(f) > 1', "if False and len(f) > 1"),
+    ("drift", "5a1: dtsql dropped from the supplementary-member loop",
+     '            for who in ("dtapi", "dtmint", "dtsql"):\n                if who in g.gr_mem:',
+     '            for who in ("dtapi", "dtmint"):\n                if who in g.gr_mem:'),
+    ("drift", "5a1: dtsql dropped from the primary-gid map",
+     '        for who in ("dtapi", "dtmint", "dtsql"):\n            try:\n                gid0',
+     '        for who in ("dtapi", "dtmint"):\n            try:\n                gid0'),
+    ("drift", "5a1: dtsql dropped from the primary-group check",
+     '        for who in ("dtapi", "dtmint", "dtsql"):\n            try:\n                gid = pwd',
+     '        for who in ("dtapi", "dtmint"):\n            try:\n                gid = pwd'),
+    ("drift", "5a1: dtsql's own drop-in is not its home", '"dtsql": P("/etc/sudoers.d/dtsql")}', '"dtsql": None}'),
+    ("drift", "5a1: dtsql is not policed in sudoers at all", ', "dtsql": P("/etc/sudoers.d/dtsql")}', "}"),
 ]
 
 bad = 0

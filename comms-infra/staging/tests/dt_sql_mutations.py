@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
-"""dt-sql mutants (B-DB-READ-TOOL): each safety rule of dt-sql and the psql wrapper, broken on purpose, must make
-dt_sql_tests.py fail WITH a FAIL line. Refuses to report unless the unmutated suite passes; a crash (non-zero with no
-FAIL line) counts as a problem, never as a kill; a mutation whose anchor is not found exactly once is NOT-APPLIED and
-fails the run. Works on a scratch copy of comms-infra/staging; never edits the checkout.
+"""dt-sql mutants (B-DB-READ-TOOL; B-DB-READONLY-ROLE): each safety rule of dt-sql, the psql wrapper and the login
+step dt-sql-login and the role tool dt-sql-role-setup, broken on purpose, must make the suites fail WITH a FAIL line.
+All three suites run for every mutant: dt_sql_tests.py (dt-sql + wrapper), dt_sql_login_tests.py (the helper) and
+dt_sql_role_setup_tests.py (the role tool); rc is OR-ed and FAIL lines are joined.
+Refuses to report unless the unmutated suites pass; a crash (non-zero with no FAIL line) counts as a problem, never
+as a kill; a mutation whose anchor is not found exactly once is NOT-APPLIED and fails the run. Works on scratch copies
+of comms-infra/staging; never edits the checkout.
 Run:  python3 comms-infra/staging/tests/dt_sql_mutations.py     (exit 0 = every mutant killed)
 """
 import os
@@ -16,16 +19,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 STAGING = os.path.dirname(HERE)
 NL = chr(10)
 MUTANTS = [
-    ("sslmode=prefer (libpq's non-SSL retry back on)", "dt-sql", "sslmode=require connect_timeout=15", "sslmode=prefer connect_timeout=15"),
-    ("hostaddr not pinned", "dt-sql", "host=%s hostaddr=%s port=%d", "host=%s hostaddr_unused=%s port=%d"),
-    ("password not decoded", "dt-sql", 'urllib.parse.unquote(u.password or "")', '(u.password or "")'),
-    ("password in argv instead of PGPASSWORD", "dt-sql", '    return conninfo, urllib.parse.unquote(u.password or "")',
-     '    return conninfo + " password=" + urllib.parse.unquote(u.password or ""), urllib.parse.unquote(u.password or "")'),
-    ("the caller's PG* variables pass through", "dt-sql", 'if not k.startswith("PG")}', "}"),
-    ("read-only not set", "dt-sql", '"-c default_transaction_read_only=on -c statement_timeout=%s"', '"-c statement_timeout=%s"'),
+    # ── dt-sql: the gate, the lock, the record, and how it reads the login step's result ──
     ("read-only SQL not refused", "dt-sql", "    if READONLY_SWITCH.search(sql):", "    if False:"),
-    ("SQL through -c again (a typo would lock)", "dt-sql", '        argv += ["-f", "-"]                                      # always',
-     '        argv += ["-c", sql]                                      # always'),
     ("INTENT not written before the attempt", "dt-sql",
      '        write_json(INTENT_FILE, {"at": now(), "caller": caller(), "pid": os.getpid()})   # BEFORE the attempt' + NL, ""),
     ("a left-over INTENT is ignored", "dt-sql", "        if os.path.exists(INTENT_FILE):" + NL + "            prior",
@@ -40,8 +35,6 @@ MUTANTS = [
      '            pass  # lock_state("ambiguous", "psql ended without a classifiable result'),
     ("an ambiguous lock is silent", "dt-sql", '            alert("ambiguous", "rc %s: %s" % (rc, detail[0]))', '            pass'),
     ("D-1: -c and -f together are accepted", "dt-sql", '    if opts["sql"] is not None and opts["file"] is not None:', '    if False:'),
-    ("D-1: psql re-reads the -f path", "dt-sql", '        argv += ["-f", "-"]                                      # always',
-     '        argv += ["-f", opts["file"]] if opts["file"] else ["-f", "-"]  # always'),
     ("BEGIN READ WRITE slips the guard", "dt-sql", r'|\bread\s+write\b"', r'|transaction\s+read\s+write"'),
     ("an unexpected error around the attempt exits 1", "dt-sql", "        code = 2" + NL + "    # ⛔ ONE", "        code = 1" + NL + "    # ⛔ ONE"),
     ("an int SystemExit(1) passes through as 1", "dt-sql", "        if isinstance(exc.code, int) and exc.code != 1:",
@@ -54,24 +47,120 @@ MUTANTS = [
      '        if False:' + NL + '            print("dt-sql: no SQL given"'),
     ("the stdin peek blocks (a read, not a peek)", "dt-sql", "        ready, _, _ = select.select([sys.stdin], [], [], 0)" + NL,
      "        ready = [sys.stdin.read()]" + NL),
-    ("D-2: the wrapper ignores an unfinished attempt", "psql-wrapper", ' || [ -e /var/lib/dt-sql/INTENT ]', ''),
     ("a refused connection locks instead of exiting 3", "dt-sql", '    if rc == 2 and REFUSED.search(text) and not CREDENTIAL.search(text):', '    if False:'),
-    ("the timeout kills only the child", "dt-sql", "                os.killpg(proc.pid, signal.SIGKILL)", "                proc.kill()"),
+    ("the timeout signals only the child, not its group", "dt-sql", "                os.killpg(proc.pid, signal.SIGTERM)", "                proc.terminate()"),
+    ("the timeout's SIGKILL reaches only the child", "dt-sql", "                    os.killpg(proc.pid, signal.SIGKILL)", "                    proc.kill()"),
+    ("the login step not in its own session", "dt-sql", "                          start_new_session=True, env=env) as proc:",
+     "                          start_new_session=False, env=env) as proc:"),
+    ("the ready line is passed on to the caller", "dt-sql", "        ready, err = split_ready(err)", "        ready, _ = split_ready(err)"),
+    ("a refusal before any attempt is treated as an attempt", "dt-sql", "        elif not ready and rc != 0:", "        elif False:"),
+    ("a failed TLS check is read as a SQL error", "dt-sql", "        elif rc == 3 and TRANSPORT_FAIL.search(err):", "        elif False:"),
+    ("a failed TLS check raises no alert", "dt-sql",
+     r'            alert("transport", err[m.start():].split(b"\n")[0].decode("utf-8", "replace"))', "            pass"),
+    ("C1: a failed TLS check LOCKS (it must not: no password was judged)", "dt-sql",
+     '"is raised.", file=sys.stderr)' + NL + "            return 6",
+     '"is raised.", file=sys.stderr)' + NL + '            lock_state("ambiguous", "transport", "")' + NL + "            return 6"),
+    ("--csv is not passed to the login step", "dt-sql", 'locked_attempt(LOGIN + (["--csv"] if opts["csv"] else []), stdin_data)',
+     "locked_attempt(LOGIN, stdin_data)"),
     ("a refused attempt is not audited", "dt-sql", '        log("refused_readonly_sql", sql_head=sql.strip()[:160])', '        pass'),
     ("no exit row (the tool's real exit is not logged)", "dt-sql",
      '    log("exit", exit=code, mode=("status" if "--status" in args else "unlock" if "--unlock" in args else "query"))', '    pass'),
     ("the alert row calls npm's code rc again", "dt-sql", '        log("alert", alert_rc=r.returncode)', '        log("alert", rc=r.returncode)'),
     ("the log calls psql's code rc again", "dt-sql", "            log(kind, psql_rc=rc)", "            log(kind, rc=rc)"),
     ("--unlock takes any actor", "dt-sql", "    if by not in ACTORS:", "    if False:"),
+    # ── the psql wrapper ──
+    ("D-2: the wrapper ignores an unfinished attempt", "psql-wrapper", ' || [ -e /var/lib/dt-sql/INTENT ]', ''),
     ("the wrapper keeps libpq's default sslmode", "psql-wrapper", ': "${PGSSLMODE:=require}"', ': "${PGSSLMODE:=}"'),
     ("the wrapper ignores dt-sql's LOCKED", "psql-wrapper", '[ -e /var/lib/dt-sql/LOCKED ] ||', 'false ||'),
+    # ── dt-sql-login: the one login step ──
+    ("login: any argument accepted", "dt-sql-login", '    if args not in ([], ["--csv"]):', "    if False:"),
+    ("login: LOCKED not checked", "dt-sql-login", "    if os.path.exists(LOCKED_FILE):", "    if False:"),
+    ("login: runs without an INTENT record", "dt-sql-login", "    if not os.path.exists(INTENT_FILE):", "    if False:"),
+    ("login: runs without dt-sql's lock held", "dt-sql-login", "    if not lock_is_held():", "    if False:"),
+    ("login: creates the lock file it checks", "dt-sql-login", "fd = os.open(LOCK_FILE, os.O_RDONLY)",
+     "fd = os.open(LOCK_FILE, os.O_RDONLY | os.O_CREAT)"),
+    ("login: empty SQL accepted", "dt-sql-login", "    if not sql.strip():", "    if False:"),
+    ("login: a backslash reaches psql", "dt-sql-login", r'    if b"\\" in sql:', "    if False:"),
+    ("login: read-only SQL accepted", "dt-sql-login", "    if READONLY_SWITCH.search(sql):", "    if False:"),
+    ("login: a reader.env value is not checked", "dt-sql-login", "        if not FIELDS[key].fullmatch(value):", "        if False:"),
+    ("login: a reader.env key may repeat", "dt-sql-login", "        if key in seen:", "        if False:"),
+    ("login: a reader.env key may be missing", "dt-sql-login", "    if missing:", "    if False:"),
+    ("login: a port above 65535 accepted", "dt-sql-login", '    if int(seen["DT_READER_PORT"]) > 65535:', "    if False:"),
+    ("login: a resolver OSError is not a refusal", "dt-sql-login", "    except (OSError, IndexError) as exc:", "    except (IndexError,) as exc:"),
+    ("login: an empty resolver answer is not a refusal", "dt-sql-login", "    except (OSError, IndexError) as exc:", "    except (OSError,) as exc:"),
+    ("login: the default resolver pins the wrong field", "dt-sql-login", "[0][4][0])", "[0][4][1])"),
+    ("login: the CA file not checked", "dt-sql-login", "    if not os.access(CA_FILE, os.R_OK):", "    if False:"),
+    ("login: psql not checked executable", "dt-sql-login", "    if not os.access(PSQL, os.X_OK):", "    if False:"),
+    ("login: sslmode=require (no certificate check)", "dt-sql-login", "sslmode=verify-full sslrootcert", "sslmode=require sslrootcert"),
+    ("login: the CA copy is not named", "dt-sql-login", "sslrootcert=%s connect_timeout", "sslrootcert_unused=%s connect_timeout"),
+    ("login: the address is not pinned", "dt-sql-login", "host=%s hostaddr=%s port=%d", "host=%s hostaddr_unused=%s port=%d"),
+    ("login: no connect timeout", "dt-sql-login", 'sslrootcert=%s connect_timeout=15 "', 'sslrootcert=%s "'),
+    ("login: the password goes into the connection string", "dt-sql-login",
+     '    env = {k: v for k, v in os.environ.items() if not k.startswith("PG")}',
+     '    conninfo += " password=" + cfg["DT_READER_PASSWORD"]' + NL + '    env = {k: v for k, v in os.environ.items() if not k.startswith("PG")}'),
+    ("login: the caller's PG* variables pass through", "dt-sql-login", 'if not k.startswith("PG")}', "}"),
+    ("login: read-only not set", "dt-sql-login", 'PGOPTIONS="-c default_transaction_read_only=on -c statement_timeout=%s"',
+     'PGOPTIONS="-c statement_timeout=%s"'),
+    ("login: no ready line", "dt-sql-login", "sys.stderr.buffer.write(READY)", 'sys.stderr.buffer.write(b"")'),
+    ("login: the TLS check is not sent first", "dt-sql-login", "proc.communicate(input=TRANSPORT + sql)", "proc.communicate(input=sql)"),
+    ("login: a signal death is not 128+N", "dt-sql-login", "128 - proc.returncode", "proc.returncode"),
+    ("login: a SIGTERM does not stop psql", "dt-sql-login", "        CHILD.terminate()", "        pass"),
+    ("login: a SIGTERM before psql does not exit", "dt-sql-login", "        raise SystemExit(128 + signum)", "        pass"),
+    # dt-sql-role-setup (B-DB-READONLY-ROLE): the tool that makes the reader role, re-keys it and proves it
+    ("dt-sql: a direct psql run is not treated as a real attempt", "dt-sql", "ready = ready or direct", "ready = ready"),
+    ("role-setup: the login bypasses dt-sql's one-attempt lock", "dt-sql-role-setup",
+     "        rc = ds.locked_attempt(argv, dl.TRANSPORT.decode() + sql, env=env, emit=emit, direct=True)",
+     "        rc0, o, e = ds.run_login(argv, dl.TRANSPORT.decode() + sql, env); emit(o, e); rc = rc0"),
+    ("role-setup: the TLS check is not sent first", "dt-sql-role-setup",
+     "ds.locked_attempt(argv, dl.TRANSPORT.decode() + sql,", "ds.locked_attempt(argv, sql,"),
+    ("role-setup: the server certificate is not verified", "dt-sql-role-setup",
+     "sslmode=verify-full sslrootcert", "sslmode=require sslrootcert"),
+    ("role-setup: the new password goes straight to reader.env", "dt-sql-role-setup",
+     "fd = os.open(NEW_ENV, os.O_WRONLY", "fd = os.open(dl.READER_ENV, os.O_WRONLY"),
+    ("role-setup: verify falls back to the app login", "dt-sql-role-setup", "        raise Refusal(71, str(exc))",
+     '        h, p, d, u, pw = app_login(); cfg = {"DT_READER_HOST": h, "DT_READER_PORT": str(p), '
+     '"DT_READER_DBNAME": d, "DT_READER_USER": ROLE, "DT_READER_PASSWORD": pw}'),
+    ("role-setup: the plaintext password is sent", "dt-sql-role-setup",
+     "% (ROLE, verifier, ROLE, ROLE))", "% (ROLE, password, ROLE, ROLE))"),
+    ("role-setup: the password is written AFTER the database takes it", "dt-sql-role-setup",
+     NL.join(['    write_new(host, port, dbname, password, mode)',
+             '    rc, out, err = attempt(psql_argv(host, addr, port, dbname, user), sql,',
+             '                           child_env(app_password, "-c statement_timeout=60s"), redact=(verifier, password))']),
+     NL.join(['    rc, out, err = attempt(psql_argv(host, addr, port, dbname, user), sql,',
+             '                           child_env(app_password, "-c statement_timeout=60s"), redact=(verifier, password))',
+             '    write_new(host, port, dbname, password, mode)'])),
+    ("role-setup: a lock deletes reader.env.new", "dt-sql-role-setup", "    if rc == 4:", "    if False:"),
+    ("role-setup: --recover runs over an existing reader.env", "dt-sql-role-setup",
+     '    if mode == "--recover" and exists:', "    if False:"),
+    ("role-setup: --recover makes the role again", "dt-sql-role-setup",
+     '    if mode == "--create":', '    if mode in ("--create", "--recover"):'),
+    ("role-setup: --recover overwrites a reader.env that appeared", "dt-sql-role-setup",
+     '        if mode in ("--create", "--recover"):', '        if mode == "--create":'),
+    ("role-setup: the promote replaces instead of linking", "dt-sql-role-setup",
+     "                os.link(NEW_ENV, dl.READER_ENV)", "                os.replace(NEW_ENV, dl.READER_ENV)"),
+    ("role-setup: no redaction", "dt-sql-role-setup",
+     '        out, err = out.replace(secret, "<redacted>"), err.replace(secret, "<redacted>")', "        pass"),
+    ("role-setup: verify keeps the read-only default on", "dt-sql-role-setup",
+     "-c default_transaction_read_only=off ", ""),
+    ("role-setup: an unasked probe passes", "dt-sql-role-setup", "    if extra:", "    if False:"),
+    ("role-setup: runs while dt-sql is LOCKED", "dt-sql-role-setup",
+     "    if os.path.exists(ds.LOCKED_FILE) or os.path.exists(ds.INTENT_FILE):", "    if False:"),
+    ("role-setup: verify accepts a readable reader.env", "dt-sql-role-setup",
+     "    if stat.S_IMODE(st.st_mode) != 0o600:", "    if False:"),
 ]
 
 
+SUITES = ("dt_sql_tests.py", "dt_sql_login_tests.py", "dt_sql_role_setup_tests.py")
+
+
 def run_suite(root):
-    p = subprocess.run([sys.executable, os.path.join(root, "tests", "dt_sql_tests.py")], capture_output=True, text=True,
-                       timeout=600)
-    return p.returncode, [l.strip() for l in p.stdout.splitlines() if l.strip().startswith("FAIL")]
+    rc, fails = 0, []
+    for suite in SUITES:
+        p = subprocess.run([sys.executable, os.path.join(root, "tests", suite)], capture_output=True, text=True,
+                           timeout=600)
+        rc = rc or p.returncode
+        fails += [l.strip() for l in p.stdout.splitlines() if l.strip().startswith("FAIL")]
+    return rc, fails
 
 
 # Mutants run CONCURRENTLY, each in its OWN copy of comms-infra/staging. The suite makes its own state dir, so the
@@ -108,7 +197,7 @@ try:
     shutil.copytree(STAGING, base, ignore=shutil.ignore_patterns("__pycache__"))
     rc, fails = run_suite(base)
     if rc != 0:
-        print("REFUSED: the unmutated suite does not pass (rc %d) %s" % (rc, fails[:2]))
+        print("REFUSED: the unmutated suites do not pass (rc %d) %s" % (rc, fails[:2]))
         sys.exit(2)
     with ThreadPoolExecutor(max_workers=WORKERS) as pool:
         results = list(pool.map(run_mutant, range(len(MUTANTS))))    # map keeps MUTANTS order in the report

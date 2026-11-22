@@ -171,8 +171,11 @@ jobs:
           python3 token-watch/tests/mutate_p10_tier_tail.py
           python3 token-watch/tests/test_birthcap.py
           python3 token-watch/tests/mutate_birthcap.py
-          # B-DB-READ-TOOL (KD-96): dt-sql and the psql wrapper, + mutants (the one-attempt listener check runs where psql exists)
+          # B-DB-READ-TOOL (KD-96) + B-DB-READONLY-ROLE (KD-100): dt-sql, its login step dt-sql-login, the psql wrapper,
+          # + mutants over all three (the one-attempt listener check runs where psql exists)
           python3 comms-infra/staging/tests/dt_sql_tests.py
+          python3 comms-infra/staging/tests/dt_sql_login_tests.py
+          python3 comms-infra/staging/tests/dt_sql_role_setup_tests.py
           python3 comms-infra/staging/tests/dt_sql_mutations.py
           python3 token-watch/tests/test_p11_cold_census.py
           python3 token-watch/tests/test_p8_census.py

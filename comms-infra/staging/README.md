@@ -31,14 +31,21 @@ Exit 0 = the app answered 2xx (body on stdout) · 1 = it answered otherwise · 2
 | `staging/dtmint-authorized_keys` | `/home/dtmint/.ssh/authorized_keys` | 0640 root:dtmint |
 | `staging/dt-install-drift` | `/usr/local/sbin/dt-install-drift` | 0700 root:root |
 | `staging/dt-unit-failure-alert` | `/usr/local/bin/dt-unit-failure-alert` | 0755 root:root |
+| `staging/dt-sql` (B-DB-READ-TOOL; the one hand-run database read) | `/usr/local/bin/dt-sql` | 0755 root:root |
+| `staging/psql-wrapper` (**shadows** `/usr/bin/psql` in root's and deploy's PATH) | `/usr/local/bin/psql` | 0755 root:root |
+| `staging/dt-sql-login` (B-DB-READONLY-ROLE; runs as `dtsql`, logs in as the read-only role) | `/usr/local/bin/dt-sql-login` | 0755 root:root |
+| `staging/dt-sql-role-setup` (makes, re-keys or recovers the read-only role's password) | `/usr/local/sbin/dt-sql-role-setup` | 0700 root:root |
+| `staging/supabase-ca.crt` (what `sslmode=verify-full` checks the server against) | `/etc/dt-sql/supabase-ca.crt` | 0644 root:root |
+| `staging/sudoers-dtsql` | `/etc/sudoers.d/dtsql` (**no dot in the name**) | 0440 root:root |
 | `staging/systemd/dt-install-drift.{service,timer}`, `dt-unit-failure@.service` | `/etc/systemd/system/` | 0644 |
 | `staging/systemd/dt-install-drift.service.d/onfailure.conf` | `/etc/systemd/system/dt-install-drift.service.d/` | 0644 |
 | `staging/logrotate-dawntrader-app.conf` (B-DISK-FILE-TIERING P9 — **not** in `/etc/logrotate.d/`, so the distribution's daily logrotate never runs it) | `/etc/dawntrader/logrotate-app.conf` | 0644 root:root |
 | `staging/systemd/dawntrader-logrotate.{service,timer}` | `/etc/systemd/system/` | 0644 |
 | `staging/systemd/dawntrader-logrotate.service.d/onfailure.conf` | `/etc/systemd/system/dawntrader-logrotate.service.d/` | 0644 |
 | *(the install seeds it; logrotate keeps it)* | `/var/lib/logrotate/dawntrader-app.status` — the P9 rotation's own state file | 0644 root:root |
-| *(no file)* | `/etc/dt-api/` 0750 root:dtapi · `/var/lib/dt-api/` 0700 dtapi:dtapi · `/home/dtmint/` **0750 root:dtmint** · `/home/dtmint/.ssh/` 0750 root:dtmint | |
+| *(no file)* | `/etc/dt-api/` 0750 root:dtapi · `/var/lib/dt-api/` 0700 dtapi:dtapi · `/home/dtmint/` **0750 root:dtmint** · `/home/dtmint/.ssh/` 0750 root:dtmint · `/etc/dt-sql/` 0750 root:dtsql · `/var/lib/dt-sql/` 0755 deploy:deploy | |
 | *(the setter writes it)* | `/etc/dt-api/staging-api.env` | 0600 dtapi:dtapi |
+| *(the role setup writes it)* | `/etc/dt-sql/reader.env` — the read-only role's login | 0600 dtsql:dtsql |
 | *(the install writes it, both boxes)* | `/var/lib/dt-install-drift/installed.sha` — line 1 the reviewed sha installed from; then optionally `<sha> <repo path>` for a file another flow installed later (the last line for a path wins) | 0644 root, dir 0755 |
 
 | repo | Helsinki path | mode owner |
@@ -57,7 +64,7 @@ Exit 0 = the app answered 2xx (body on stdout) · 1 = it answered otherwise · 2
 installed sha** (so a change in review is not drift): staging reads the governance checker's clone
 (fetched every 30 min), Helsinki the backup mirror. It also checks the units are loaded, reloaded,
 carry only the expected drop-ins and the timers are enabled and active, that no other sudoers file
-names dtapi/dtmint, that dtmint has no `authorized_keys2`, the accounts' shells and password
+names dtapi/dtmint/dtsql, that dtmint has no `authorized_keys2`, the three accounts' shells and password
 fields, the mint key's pairing and root's known_hosts. A committed change not yet installed is
 PENDING, and fails once it is over a week old. A source is fresh only if its stamp has CONTENT: a
 failed `git fetch` empties `FETCH_HEAD` and still refreshes its time (measured, git 2.43).
@@ -67,13 +74,17 @@ by hand: its PASS is the install's verification** (before the setter the env fil
 
 ## Accounts
 - `dtapi` — system account, shell `/usr/sbin/nologin` (sudo runs dt-api directly, never a shell).
+- `dtsql` (B-DB-READONLY-ROLE) — system account, shell `/usr/sbin/nologin`, no usable password (`*` or locked `!`). It alone
+  reads `/etc/dt-sql/reader.env`, and is reached only through `sudoers-dtsql`'s two calls
+  (`dt-sql-login` with no arguments, or with `--csv`); dt-sql makes that call. Recovery, re-keying and
+  unlocking: `1-system-manual/DT_SQL_RUNBOOK.md`.
 - `dtmint` — shell **`/bin/sh`** (a `nologin` shell would break the forced command), password
   field `*` (no password, not locked — so pubkey login is allowed). **What actually confines it is the
   forced command:** its one key carries `restrict,command=…,from=…`, so a dtmint login can run only
   `dt-api mint`. Its home and `.ssh` are both **root-owned**, so even a shell could not replace that
   command — with a dtmint-owned home it could rename `.ssh` away and bring its own (the README said
   "root-owned `.ssh`" alone was enough; it was not). Staging's sshd has no `AllowUsers`/`AllowGroups`/`Match`
-  (`sshd -T -C user=dtmint,addr=204.168.141.77`, measured 2026-09-29). Neither account may belong to
+  (`sshd -T -C user=dtmint,addr=204.168.141.77`, measured 2026-09-29). None of the three may belong to
   any supplementary group (a `%group` sudoers rule would reach it); the daily check says so if one does.
 
 ## Setting the password (the setter)
@@ -106,7 +117,7 @@ changed by someone else, it touches nothing, raises a page and exits 4. Steps an
 
 ## Tests (run on Helsinki as root)
 `tests/dt_api_tests.py` · `tests/dt_api_mutations.py` · `tests/setter_tests.py` ·
-`tests/setter_mutations.py` · `tests/drift_tests.py` · `tests/alert_tests.py` · `tests/staging_session_tests.py` · `tests/drift_mutations.py` · `tests/dt_sql_tests.py` · `tests/dt_sql_mutations.py` (B-DB-READ-TOOL; these two also run in CI, and the one-attempt check against `tests/fakepg_server.py` runs wherever `psql` and `openssl` exist). Each runs a copy of the committed file that
+`tests/setter_mutations.py` · `tests/drift_tests.py` · `tests/alert_tests.py` · `tests/staging_session_tests.py` · `tests/drift_mutations.py` · `tests/dt_sql_tests.py` · `tests/dt_sql_login_tests.py` · `tests/dt_sql_role_setup_tests.py` · `tests/dt_sql_mutations.py` (B-DB-READ-TOOL, B-DB-READONLY-ROLE; these four also run in CI, the mutation runner runs ALL THREE dt-sql suites against every mutant, and the one-attempt check against `tests/fakepg_server.py` runs wherever `psql` and `openssl` exist). Each runs a copy of the committed file that
 differs ONLY in its CONSTANTS block (asserted). The mutation runners refuse to report unless the
 unmutated suite passes, and count a crash as a problem, never as a kill. `dt_sql_mutations.py` and
 the repo-root `token-watch/tests/mutate_birthcap.py` run their mutants CONCURRENTLY, each in its own scratch copy

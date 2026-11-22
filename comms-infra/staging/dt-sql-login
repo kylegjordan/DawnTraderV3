@@ -1,0 +1,204 @@
+#!/usr/bin/python3
+"""dt-sql-login — the ONE login step of dt-sql, run as the locked account `dtsql` (B-DB-READONLY-ROLE, row 5a1, KD-100).
+
+USAGE (dt-sql runs this; nothing else should):
+    sudo -n -u dtsql /usr/local/bin/dt-sql-login            # SQL on stdin, rows as `a|b|c`
+    sudo -n -u dtsql /usr/local/bin/dt-sql-login --csv      # SQL on stdin, rows as CSV
+
+WHAT IT IS FOR: the database login `dt_reader` can read and cannot write (the role is the boundary; dt-sql's read-only
+session setting is the second layer). Its password lives ONLY in /etc/dt-sql/reader.env (0600 dtsql, dir 0750
+root:dtsql), which no `deploy` caller can read. This helper is the only thing that reads it, and it refuses unless
+dt-sql's own lock is HELD and its INTENT record EXISTS — so every login with the reader password is one dt-sql has
+already recorded (the two-wrong-passwords budget, #1259, is protected by structure, not memory).
+    What it does NOT buy, stated plainly: `deploy` can already read the app's write credential in .env, so this is
+    not privilege separation from `deploy`. A `deploy` caller holding the lock and an INTENT can run this helper
+    itself; it then logs in with the correct password — no ban, no secret exposed, and the role still cannot write.
+
+ONE ATTEMPT, VERIFIED TRANSPORT: one psql session to the pinned address (`hostaddr`, resolved once, so no fallback to
+a second address), `sslmode=verify-full` against the Supabase root CA copy in /etc/dt-sql, `connect_timeout=15`, the
+password in this process's own environment (never argv), read-only + statement timeout in PGOPTIONS.
+    Before the caller's SQL, three lines check IN THE SESSION that the connection really is TLS (pg_stat_ssl for this
+    backend; no row, NULL, or any error in the check raises). A failure there is the error on stdin line 2, carrying
+    the marker `dt-sql-transport:` — dt-sql maps it to exit 6 + an alert, and does NOT lock (it is not a login
+    failure). The caller's SQL therefore runs from stdin line 4: psql's own line numbers are shifted by +3.
+
+THE READY LINE: immediately before psql starts, this writes `dt-sql-login: ready` to stderr. No ready line means no
+attempt was made — dt-sql then removes its INTENT and does not lock (this also covers sudo itself failing).
+
+REFUSALS — before any connection, with the marker `dt-sql-login:` on stderr, and never echoing a value from
+reader.env:
+    64 arguments other than none or --csv          68 the SQL is empty, holds a backslash, or names the read-only setting
+    65 dt-sql is LOCKED                             69 reader.env cannot be read
+    66 no INTENT record                             70 reader.env is malformed
+    67 dt-sql's lock is not held                    71 the database host did not resolve
+    72 the CA file cannot be read                   73 psql is not executable
+After the ready line the exit code is psql's own (0 ok, 1 its fatal error, 2 a bad connection, 3 an error in the
+script — the transport check included), or 128+N if psql died on signal N.
+
+⛔ WHY A BACKSLASH IS REFUSED: psql obeys backslash commands read from its input, and `\\!` runs a shell (psql's
+documented meta-command; NOT measured here) as the psql user — here `dtsql`, the one account that can read reader.env.
+"""
+import fcntl
+import os
+import re
+import signal
+import socket
+import subprocess
+import sys
+
+# ── CONSTANTS (the test harness substitutes ONLY this block) ──
+READER_ENV = "/etc/dt-sql/reader.env"
+STATE_DIR = "/var/lib/dt-sql"
+CA_FILE = "/etc/dt-sql/supabase-ca.crt"
+PSQL = "/usr/bin/psql"
+STATEMENT_TIMEOUT = "60s"
+RESOLVE = None                   # None = socket.getaddrinfo; a test substitutes a function host, port -> address
+# ── END CONSTANTS ──
+
+LOCK_FILE = os.path.join(STATE_DIR, "lock")
+INTENT_FILE = os.path.join(STATE_DIR, "INTENT")
+LOCKED_FILE = os.path.join(STATE_DIR, "LOCKED")
+READY = b"dt-sql-login: ready\n"
+READONLY_SWITCH = re.compile(rb"transaction_read_only|default_transaction_read_only|\bread\s+write\b", re.IGNORECASE)
+# reader.env: exactly these five keys, once each. Each value is checked against a pattern that also keeps it safe
+# inside a libpq conninfo string (no spaces, quotes or backslashes), so nothing needs escaping and nothing is decoded.
+FIELDS = {
+    "DT_READER_HOST": re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?"),
+    "DT_READER_PORT": re.compile(r"[1-9][0-9]{0,4}"),
+    "DT_READER_DBNAME": re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,62}"),
+    "DT_READER_USER": re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,62}"),
+    "DT_READER_PASSWORD": re.compile(r"[A-Za-z0-9_-]{32,128}"),
+}
+# The in-session transport check (pre-audit F-7, Langston C2 form (c); C1 measured 2026-11-22, see dt-sql). Line 2 is the DO block,
+# so its error reads `psql:<stdin>:2: ERROR:  dt-sql-transport: ...`; \o hides the DO command tag from -At output.
+TRANSPORT = (b"\\o /dev/null\n"
+             b"DO $$ DECLARE ok boolean; BEGIN BEGIN SELECT ssl INTO ok FROM pg_stat_ssl WHERE pid = pg_backend_pid(); "
+             b"EXCEPTION WHEN OTHERS THEN RAISE EXCEPTION 'dt-sql-transport: check failed (%)', SQLERRM; END; "
+             b"IF ok IS NOT TRUE THEN RAISE EXCEPTION 'dt-sql-transport: not TLS'; END IF; END $$;\n"
+             b"\\o\n")
+
+
+CHILD = None                     # the running psql, so a relayed SIGTERM/SIGHUP can stop it (dt-sql's timeout)
+
+
+def on_signal(signum, frame):
+    """dt-sql's timeout sends SIGTERM; sudo relays it here. Stop psql (same account) and let communicate() return;
+    before psql exists, just exit. dt-sql locks `ambiguous` on a timeout either way."""
+    if CHILD is not None and CHILD.poll() is None:
+        CHILD.terminate()
+    else:
+        raise SystemExit(128 + signum)
+
+
+class Refusal(Exception):
+    def __init__(self, code, reason):
+        super().__init__(reason)
+        self.code = code
+
+
+def lock_is_held():
+    """True only if some process holds dt-sql's flock. A free lock is taken for an instant and released at once."""
+    try:
+        fd = os.open(LOCK_FILE, os.O_RDONLY)
+    except OSError:
+        return False
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        return True
+    else:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        return False
+    finally:
+        os.close(fd)
+
+
+def read_reader_env():
+    """The five fields, or a Refusal. NO fallback to any other file — if this is missing, nothing logs in."""
+    try:
+        with open(READER_ENV, "rb") as fh:
+            raw = fh.read()
+    except OSError as exc:
+        raise Refusal(69, "reader.env cannot be read (%s)" % type(exc).__name__)
+    try:
+        text = raw.decode("ascii")
+    except UnicodeDecodeError:
+        raise Refusal(70, "reader.env is malformed (not ASCII)")
+    seen = {}
+    for n, line in enumerate(text.split("\n"), 1):
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        key, sep, value = line.partition("=")
+        if not sep or key not in FIELDS:
+            raise Refusal(70, "reader.env is malformed (line %d: not a known KEY=value)" % n)
+        if key in seen:
+            raise Refusal(70, "reader.env is malformed (%s given twice)" % key)
+        if not FIELDS[key].fullmatch(value):
+            raise Refusal(70, "reader.env is malformed (%s has an invalid value)" % key)
+        seen[key] = value
+    missing = [k for k in FIELDS if k not in seen]
+    if missing:
+        raise Refusal(70, "reader.env is malformed (missing %s)" % ", ".join(missing))
+    if int(seen["DT_READER_PORT"]) > 65535:
+        raise Refusal(70, "reader.env is malformed (DT_READER_PORT has an invalid value)")
+    return seen
+
+
+def main(args):
+    if args not in ([], ["--csv"]):
+        raise Refusal(64, "arguments must be none or --csv")
+    if os.path.exists(LOCKED_FILE):
+        raise Refusal(65, "dt-sql is LOCKED")
+    if not os.path.exists(INTENT_FILE):
+        raise Refusal(66, "no INTENT record — run through dt-sql")
+    if not lock_is_held():
+        raise Refusal(67, "dt-sql's lock is not held — run through dt-sql")
+    sql = sys.stdin.buffer.read()
+    if not sql.strip():
+        raise Refusal(68, "no SQL given")
+    if b"\\" in sql:
+        raise Refusal(68, "the SQL holds a backslash — psql would obey it as a command")
+    if READONLY_SWITCH.search(sql):
+        raise Refusal(68, "the SQL names the read-only setting")
+    cfg = read_reader_env()
+    port = int(cfg["DT_READER_PORT"])
+    try:
+        resolve = RESOLVE or (lambda h, p: socket.getaddrinfo(h, p, proto=socket.IPPROTO_TCP)[0][4][0])
+        addr = resolve(cfg["DT_READER_HOST"], port)
+    except (OSError, IndexError) as exc:
+        raise Refusal(71, "the database host did not resolve (%s)" % type(exc).__name__)
+    if not os.access(CA_FILE, os.R_OK):
+        raise Refusal(72, "the CA file cannot be read")
+    if not os.access(PSQL, os.X_OK):
+        raise Refusal(73, "psql is not executable")
+
+    conninfo = ("host=%s hostaddr=%s port=%d dbname=%s user=%s sslmode=verify-full sslrootcert=%s connect_timeout=15 "
+                "application_name=dt-sql" % (cfg["DT_READER_HOST"], addr, port, cfg["DT_READER_DBNAME"],
+                                             cfg["DT_READER_USER"], CA_FILE))
+    env = {k: v for k, v in os.environ.items() if not k.startswith("PG")}
+    env.update(PGPASSWORD=cfg["DT_READER_PASSWORD"], PGCLIENTENCODING="UTF8",
+               PGOPTIONS="-c default_transaction_read_only=on -c statement_timeout=%s" % STATEMENT_TIMEOUT)
+    argv = [PSQL, conninfo, "-X", "-v", "ON_ERROR_STOP=1", "-At", "-F", "|"]
+    if args == ["--csv"]:
+        argv = [PSQL, conninfo, "-X", "-v", "ON_ERROR_STOP=1", "--csv"]
+    argv += ["-f", "-"]                                              # the checked bytes, on stdin
+    sys.stderr.buffer.write(READY)                                   # from here on, an attempt is being made
+    sys.stderr.buffer.flush()
+    global CHILD
+    CHILD = proc = subprocess.Popen(argv, env=env, stdin=subprocess.PIPE)   # stdout and stderr go straight to dt-sql
+    proc.communicate(input=TRANSPORT + sql)
+    return proc.returncode if proc.returncode >= 0 else 128 - proc.returncode
+
+
+def entry(args):
+    try:
+        return main(args)
+    except Refusal as exc:
+        print("dt-sql-login: refused (%s)" % exc, file=sys.stderr)
+        return exc.code
+
+
+if __name__ == "__main__":
+    signal.signal(signal.SIGTERM, on_signal)
+    signal.signal(signal.SIGHUP, on_signal)
+    sys.exit(entry(sys.argv[1:]))

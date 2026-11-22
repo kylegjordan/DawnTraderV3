@@ -107,6 +107,13 @@ BOXES = {
             # hashing, because `psql --version` cannot see it.
             ("comms-infra/staging/dt-sql", "/usr/local/bin/dt-sql", 0o755, "root", "root"),
             ("comms-infra/staging/psql-wrapper", "/usr/local/bin/psql", 0o755, "root", "root"),
+            # B-DB-READONLY-ROLE (row 5a1, KD-100; pre-audit P5): dt-sql logs in as its own read-only database role.
+            # The login helper runs as dtsql under the two-call sudoers rule; the setup tool mints and rotates
+            # the role's password; the CA is what sslmode=verify-full checks the server against.
+            ("comms-infra/staging/dt-sql-login", "/usr/local/bin/dt-sql-login", 0o755, "root", "root"),
+            ("comms-infra/staging/dt-sql-role-setup", "/usr/local/sbin/dt-sql-role-setup", 0o700, "root", "root"),
+            ("comms-infra/staging/supabase-ca.crt", "/etc/dt-sql/supabase-ca.crt", 0o644, "root", "root"),
+            ("comms-infra/staging/sudoers-dtsql", "/etc/sudoers.d/dtsql", 0o440, "root", "root"),
             # B-DISK-FILE-TIERING P9: the app's own log rotation (replaces pm2-logrotate). Its own config path and
             # state file, so the distribution's daily logrotate never processes these files a second time.
             ("comms-infra/staging/logrotate-dawntrader-app.conf", "/etc/dawntrader/logrotate-app.conf", 0o644, "root", "root"),
@@ -117,6 +124,8 @@ BOXES = {
         ],
         "pending_days": {"scripts/dt-deploy.sh": 1, "scripts/obs-windows.py": 1, "comms-infra/staging/dt-deploy-notice-gate": 1,
                          "comms-infra/staging/dt-sql": 1, "comms-infra/staging/psql-wrapper": 1,
+                         "comms-infra/staging/dt-sql-login": 1, "comms-infra/staging/dt-sql-role-setup": 1,
+                         "comms-infra/staging/supabase-ca.crt": 1, "comms-infra/staging/sudoers-dtsql": 1,
                          "comms-infra/staging/logrotate-dawntrader-app.conf": 1,
                          "comms-infra/staging/systemd/dawntrader-logrotate.service": 1,
                          "comms-infra/staging/systemd/dawntrader-logrotate.timer": 1,
@@ -127,12 +136,16 @@ BOXES = {
             ("/home/dtmint", 0o750, "root", "dtmint"),     # r3: root-owned, so .ssh cannot be renamed away
             ("/home/dtmint/.ssh", 0o750, "root", "dtmint"),
             ("/var/lib/dt-install-drift", 0o755, "root", "root"),
-            ("/var/lib/dt-sql", 0o750, "deploy", "deploy"),     # B-DB-READ-TOOL: its lock, INTENT, LOCKED, log
+            # B-DB-READ-TOOL: its lock, INTENT, LOCKED, log. B-DB-READONLY-ROLE: 0755 so dtsql can reach the
+            # LOCKED file dt-sql-login checks; every file inside keeps its own mode.
+            ("/var/lib/dt-sql", 0o755, "deploy", "deploy"),
+            ("/etc/dt-sql", 0o750, "root", "dtsql"),          # B-DB-READONLY-ROLE: the reader login + the CA
         ],
         "private": [("/etc/dt-api/staging-api.env", 0o600, "dtapi", "dtapi"),
                     ("/var/lib/dt-api/login-ledger.jsonl", 0o600, "dtapi", "dtapi"),
                     ("/var/lib/dt-api/lock", 0o600, "dtapi", "dtapi"),
-                    ("/var/lib/dt-install-drift/installed.sha", 0o644, "root", "root")],
+                    ("/var/lib/dt-install-drift/installed.sha", 0o644, "root", "root"),
+                    ("/etc/dt-sql/reader.env", 0o600, "dtsql", "dtsql")],   # B-DB-READONLY-ROLE: the reader password
         # show-name -> (the fragment it must load from, the exact drop-ins it may carry) — services,
         # the timer AND the paging template (r2: a drop-in on any of them can silence the chain)
         "units": {"dt-install-drift.service": (SS + "dt-install-drift.service", [SS + "dt-install-drift.service.d/onfailure.conf"]),
@@ -611,6 +624,14 @@ def check_extra(name, box):
                     % pwd.getpwnam("dtapi").pw_shell, "ACCOUNT", "dtapi")
         except KeyError:
             out("STATE", "the dtapi account does not exist", "ACCOUNT", "dtapi")
+        # B-DB-READONLY-ROLE: dtsql holds the reader login (/etc/dt-sql/reader.env). Same shape as dtapi:
+        # reachable only through the sudoers rule, never by a login of its own.
+        try:
+            if pwd.getpwnam("dtsql").pw_shell not in ("/usr/sbin/nologin", "/sbin/nologin"):
+                out("STATE", "dtsql has a login shell (%s); it must be nologin"
+                    % pwd.getpwnam("dtsql").pw_shell, "ACCOUNT", "dtsql")
+        except KeyError:
+            out("STATE", "the dtsql account does not exist", "ACCOUNT", "dtsql")
         try:
             for ln in open(P("/etc/shadow")):
                 f = ln.split(":")
@@ -621,6 +642,9 @@ def check_extra(name, box):
                 if f[0] == "dtapi" and len(f) > 1 and not (f[1] == "*" or f[1].startswith("!")):
                     out("STATE", "dtapi's password field is %s; it must be '*' or locked ('!')"
                         % ("EMPTY (a usable empty password)" if f[1] == "" else "a usable hash"), "ACCOUNT", "dtapi")
+                if f[0] == "dtsql" and len(f) > 1 and not (f[1] == "*" or f[1].startswith("!")):
+                    out("STATE", "dtsql's password field is %s; it must be '*' or locked ('!')"
+                        % ("EMPTY (a usable empty password)" if f[1] == "" else "a usable hash"), "ACCOUNT", "dtsql")
         except OSError as e:
             out("STATE", "cannot read the shadow file: %s" % e, "ACCOUNT", "shadow")
         # r3: a %group sudoers rule reaches a MEMBER without naming it — dtapi and dtmint must be in
@@ -632,7 +656,7 @@ def check_extra(name, box):
         # Only when the gid's own entry IS the account's group: a foreign or orphan primary is reported once,
         # by the primary check below, not twice.
         prim_gid = {}
-        for who in ("dtapi", "dtmint"):
+        for who in ("dtapi", "dtmint", "dtsql"):
             try:
                 gid0 = pwd.getpwnam(who).pw_gid
                 if grp.getgrgid(gid0).gr_name == who:
@@ -640,7 +664,7 @@ def check_extra(name, box):
             except KeyError:
                 pass                                       # missing account / orphan gid: reported elsewhere
         for g in grp.getgrall():
-            for who in ("dtapi", "dtmint"):
+            for who in ("dtapi", "dtmint", "dtsql"):
                 if who in g.gr_mem:
                     out("STATE", "%s is a member of group %s — a %%%s sudoers rule would apply to it"
                         % (who, g.gr_name, g.gr_name), "SUDO", who)
@@ -649,7 +673,7 @@ def check_extra(name, box):
                         % (who, g.gr_gid, g.gr_name, g.gr_name), "SUDO", who)
         # Gate 1-2 (Langston, an enumerator-blind-spot): gr_mem does NOT list PRIMARY-group members,
         # so `usermod -g staff dtapi` was invisible above. Each account's primary group must be its own.
-        for who in ("dtapi", "dtmint"):
+        for who in ("dtapi", "dtmint", "dtsql"):
             try:
                 gid = pwd.getpwnam(who).pw_gid
             except KeyError:
@@ -670,7 +694,8 @@ def check_extra(name, box):
         # r2: the main file too, not only the drop-in dir. r3: and every file an @include /
         # @includedir (or the older #include / #includedir) pulls in, followed to any depth.
         todo, seen = [P("/etc/sudoers")], set()
-        mine = P("/etc/sudoers.d/dtapi")
+        # B-DB-READONLY-ROLE: each account may be named only by its OWN drop-in (dtmint by none)
+        own = {"dtapi": P("/etc/sudoers.d/dtapi"), "dtmint": None, "dtsql": P("/etc/sudoers.d/dtsql")}
         while todo:
             fp = todo.pop(0)
             if fp in seen:
@@ -693,10 +718,12 @@ def check_extra(name, box):
                 if len(w) >= 2 and w[0] in ("@include", "#include", "@includedir", "#includedir"):
                     todo.append(P(w[1]) if w[1].startswith("/") else os.path.join(os.path.dirname(fp), w[1]))
                 elif w and w[0] == "ALL" and "=" in ln:
-                    out("STATE", "%s has a rule for ALL users (%s) — it would apply to dtapi and dtmint"
+                    out("STATE", "%s has a rule for ALL users (%s) — it would apply to dtapi, dtmint and dtsql"
                         % (fp, ln.strip()[:80]), "SUDO", fp)
-            if fp != mine and ("dtapi" in txt or "dtmint" in txt):
-                out("STATE", "%s also mentions dtapi or dtmint — only /etc/sudoers.d/dtapi may" % fp, "SUDO", fp)
+            for who, home in own.items():
+                if who in txt and fp != home:
+                    out("STATE", "%s also mentions %s — only %s may" % (fp, who, "/etc/sudoers.d/" + who if home else "no sudoers file"),
+                        "SUDO", fp)
     elif name == "no_authorized_keys2":
         p = P("/home/dtmint/.ssh/authorized_keys2")
         if os.path.lexists(p):

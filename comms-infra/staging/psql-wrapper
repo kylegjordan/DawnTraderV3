@@ -7,8 +7,9 @@
 #      caller has not set them; an `sslmode=` in the connection string still wins (0 of the ~50 helpers set one).
 #   2. While dt-sql is LOCKED, or holds an INTENT (an attempt that ended without a result — the window in which this
 #      address may already carry one wrong password), psql refuses too, so no helper or hand-run psql sends the next
-#      wrong password. FOR ROOT AND DEPLOY ONLY: /var/lib/dt-sql is 0750 deploy, so another account cannot see in and
-#      this check fails open for it. Override for a deliberate, single check: DT_SQL_IGNORE_LOCK=1.
+#      wrong password. Since B-DB-READONLY-ROLE /var/lib/dt-sql is 0755 deploy (dtsql's helper must see INTENT and
+#      LOCKED), so every account on the box can see these two files and this check binds them all, not only root and
+#      deploy. Override for a deliberate, single check: DT_SQL_IGNORE_LOCK=1.
 # It reaches psql (libpq) ONLY. A PGSSLMODE in the environment would reach the app too: node `pg` maps it to verified
 # TLS, and the app connects without TLS today (pre-audit A10) — which is why this is a wrapper and not an env default.
 if { [ -e /var/lib/dt-sql/LOCKED ] || [ -e /var/lib/dt-sql/INTENT ]; } && [ "${DT_SQL_IGNORE_LOCK:-}" != "1" ]; then
