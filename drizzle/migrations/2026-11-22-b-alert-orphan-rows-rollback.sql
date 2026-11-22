@@ -6,8 +6,9 @@
 --
 -- Pre-deploy exactness check (Langston Step-2 condition C-2): immediately before deploying
 -- the forward migration, run the generator below on staging (`dt-sql --csv -f <file>`, first column of
--- each row) and compare its output line-for-line with the INSERT statements in this file. Any difference (for example the
--- episode-close sweep re-stamping metadata) means this file is regenerated from that output
+-- each row; drop the leading `format` header line that --csv prints, then expect exactly one statement
+-- per orphan, 12 at authoring) and compare its output line-for-line with the INSERT statements in this file. Any difference (for example a new
+-- orphan since authoring) means this file is regenerated from that output
 -- and re-committed before the deploy. The generator:
 --
 --   select format('INSERT INTO system_alerts (id, user_id, mode, alert_type, severity, category, message, metadata, action_buttons, acknowledged, "timestamp") VALUES (%L, %L, %L, %L, %L, %L, %L, %L::jsonb, %L::jsonb, %L, %L) ON CONFLICT DO NOTHING;',

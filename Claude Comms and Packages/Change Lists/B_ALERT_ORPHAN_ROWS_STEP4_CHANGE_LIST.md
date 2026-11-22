@@ -68,4 +68,4 @@ Header comment (`:1-21`): purpose, the re-open-under-a-dead-user reason (labelle
 No code, no test, no route or service change, no DDL. The writer's re-open-without-changing-`user_id` behaviour (pre-audit A3) is untouched; after this deploy there is no orphan row for it to re-open, and a future orphan needs a user deleted outside the app (no deletion path in code).
 
 ## 5. Deploy and Step 7 (unchanged from scope)
-After 11-23 21:00Z; separate from the shared one-sha deploy unless OLD Claude agrees to fold. Immediately before: re-run C-2; take pre-counts (total, orphans). Step 7: orphans = 0, total = pre − 12, read by `dt-sql`. (The NOTICE is not relied on: `scripts/db-migrate.ts` has no notice handler, so it may not reach the deploy log.)
+After 11-23 21:00Z; separate from the shared one-sha deploy unless OLD Claude agrees to fold. Immediately before: re-run C-2; take pre-counts (total, orphans). Step 7: orphans = 0, total = `pre_total − pre_orphans` from the same pre-deploy read, read by `dt-sql`. (The NOTICE is not relied on: `scripts/db-migrate.ts` has no notice handler, so it may not reach the deploy log.)
