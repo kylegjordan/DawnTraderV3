@@ -61,15 +61,19 @@ try {
   // project dir. If stdin lacks it, fall back to the in-clone git mirror (always present, synced).
   let memText = '';
   let fromMirror = false;
+  // Which read served the memory, named in chunk 0's header so a reader can tell the branches apart
+  // (Langston Step-4 F-B on KD-112: "live file, no MIRROR tag" was true of both live branches).
+  let memSource = '';
   try {
     const input = JSON.parse(readStdin() || '{}');
     if (input && typeof input.transcript_path === 'string' && input.transcript_path) {
       const truthPath = join(dirname(input.transcript_path), 'memory', session.file);
-      try { memText = readFileSync(truthPath, 'utf8'); }
+      try { memText = readFileSync(truthPath, 'utf8'); memSource = 'project memory folder'; }
       catch {
         // KD-112: PM's project folder keeps its own memory dir (not junctioned), so its live file is
         // read from the one shared store directly rather than falling to the git mirror.
         memText = readFileSync(join(dirname(dirname(input.transcript_path)), 'DT-SHARED-MEMORY', session.file), 'utf8');
+        memSource = 'shared memory store';
       }
     }
   } catch { /* fall through to mirror */ }
@@ -77,6 +81,7 @@ try {
     try {
       memText = readFileSync(join(projectDir, '.claude', 'memory', session.file), 'utf8');
       fromMirror = true;
+      memSource = 'in-clone mirror';
     } catch {
       // MAPPED clone (we KNOW who this session is) but the file is unreadable from BOTH the live
       // truth-file AND the in-clone mirror. A silent exit here is the absent-as-valid trap
@@ -84,17 +89,23 @@ try {
       // injected into context, so the breadcrumb MUST go to stdout where the model reads it.
       // Still fail-open — the session runs fine; it is just told loudly that its state is missing.
       // (Langston Step-4, Q1.)
-      process.stdout.write(
+      const crumb =
         `[⚠️ YOUR OWN WORKING MEMORY ${session.file} (${session.name}) COULD NOT BE LOADED — ` +
         `neither the live truth-file nor the in-clone mirror was readable. Read it manually before ` +
-        `relying on prior state; do NOT treat missing state as empty state.]\n`
-      );
-      process.exit(0);
+        `relying on prior state; do NOT treat missing state as empty state.]\n`;
+      // Langston Step-4 F-A on KD-112: a session with a `rules` file must still get its rules when its
+      // notebook is lost, so the breadcrumb becomes the memory text and the rules block below runs.
+      // Sessions without `rules` keep the original write-and-exit.
+      if (!session.rules) { process.stdout.write(crumb); process.exit(0); }
+      memText = crumb;
+      memSource = 'NONE — breadcrumb only';
     }
   }
 
   // KD-112: a session with a `rules` file gets it prepended, so the slices carry rules then memory.
   // An unreadable rules file is said LOUDLY in the text, never silently skipped (#546/#568).
+  // F-D: the rules file is read from the CLONE only and never carries a mirror tag, unlike the memory
+  // read above. That is deliberate: the repo is the record for the rules, and the clone IS the repo copy.
   if (session.rules) {
     let rulesText = '';
     try { rulesText = readFileSync(join(projectDir, session.rules), 'utf8'); } catch { /* flagged below */ }
@@ -136,13 +147,17 @@ try {
   const _sizes = _slices.map((x) => Buffer.byteLength(x, 'utf8'));
   const _mf = `[MEMORY ${CHUNK_INDEX + 1}/${_slices.length} · ${_sizes[CHUNK_INDEX]} B · ${_sizes.join('/')}]\n`;
 
+  // F-C: with a `rules` file, chunk 0's body opens with the RULES, so the header says rules + memory
+  // rather than announcing the body as memory alone.
+  const _what = session.rules ? `your own RULES (${session.rules}) then working memory` : 'your own working memory';
   const _hdr = CHUNK_INDEX === 0
     ? _mf +
-      `[AUTO-LOADED — your own working memory: ${session.file} — ${session.name}` +
-      `${fromMirror ? ' (from in-clone MIRROR; may be one commit behind your live file)' : ''}]\n` +
+      `[AUTO-LOADED — ${_what}: ${session.file} — ${session.name}` +
+      `${fromMirror ? ' (from in-clone MIRROR; may be one commit behind your live file)' : ''}` +
+      `${memSource ? ` · memory read from: ${memSource}` : ''}]\n` +
       `This is YOUR per-session state (auto-injected on every start/resume/compaction). Shared rules ` +
       `are in CLAUDE.md; shared project truths are in MEMORY.md. Write working state ONLY to ${session.file}.\n` + _short
-    : _mf + `[AUTO-LOADED — ${session.file} continued.]${_short}\n`;
+    : _mf + `[AUTO-LOADED — ${session.rules ? `${session.rules} + ` : ''}${session.file} continued.]${_short}\n`;
 
   process.stdout.write(_hdr + '\n' + _body + '\n');
 } catch {
