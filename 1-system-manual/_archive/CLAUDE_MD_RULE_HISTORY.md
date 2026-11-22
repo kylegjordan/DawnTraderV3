@@ -764,3 +764,21 @@ Role, communication style, the plain-language mandate, the two-paragraph default
 
 > **🗄 The legacy Telegram SSH-deliver apparatus is ARCHIVED, not on standby** — the bridges were stopped and their unit files removed (#348). Reverting is a restore-from-archive job, not a switch flip. `1-system-manual/_archive/TELEGRAM_COMMS_APPARATUS_ARCHIVED_2026-07-01.md`.
 <!-- /P5-MOVED id=P5-57 -->
+
+<!-- P5-MOVED id=P5-60 -->
+### P5-60 — moved from CLAUDE.md, under "0.a ⛔⛔ THE WORKFLOW — ELEVEN STEPS"
+
+⛔⛔ **A PAUSE IS NOT A STOP (Kyle, KD-75 2026-11-13, restated 2026-11-22, KD-113).** When your batch is waiting — an observation window, xStock trading to open, a reviewer, a timed read — arm what the wait needs, then **move to your next agreed batch that does not depend on it**, and come back to finish and close the first when the wait ends. Unfinished scoped work is finished, never dropped; only ideas outside the scope become after-live proposals. *"anytime there's a pause in the action, then the session should move on to the next batch that isn't dependent on whatever is being waited on."*
+<!-- /P5-MOVED id=P5-60 -->
+
+<!-- P5-MOVED id=P5-61 -->
+### P5-61 — moved from CLAUDE.md, under "3.2 MEMORY HARD CAP"
+
+(Origin: CC-B's file hit 189KB — ~8× the cap — by retaining full narration of dozens of closed batches; collapsing them to one-liners cut it to 13KB with zero loss.)
+<!-- /P5-MOVED id=P5-61 -->
+
+<!-- P5-MOVED id=P5-62 -->
+### P5-62 — moved from CLAUDE.md, under "5. Critical Rules — rule 17 (xStock trading window)"
+
+(added during B79.0n.CONFIDENCE-CHAIN 2026-05-25 when Memorial Day paused the live xstock signal flow)
+<!-- /P5-MOVED id=P5-62 -->

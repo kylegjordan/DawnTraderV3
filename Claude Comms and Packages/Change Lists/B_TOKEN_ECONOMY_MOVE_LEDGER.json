@@ -441,6 +441,30 @@
    "sha256": "dde06e7608427db8efa00d638f9f02741c69ebac0822646959fd7529504a0915",
    "bytes": 598,
    "pointer": "- **Staging URL: `https://188.245.193.8.sslip.io`** (plain HTTP redirects to it, so no cleartext login exists). Authenticated shell reads use the server-held crew login through `dt-api`; no password belongs in this file or a session. *(`REPO_TOPOLOGY_AND_SYNC_RUNBOOK.md` · `P5-59`)*"
+  },
+  {
+   "id": "P5-60",
+   "origin_heading": "0.a ⛔⛔ THE WORKFLOW — ELEVEN STEPS",
+   "destination": "1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md",
+   "sha256": "f1572666445733c0a3041995cfbb24fc42f864ee291ad61efbb60ee566555a81",
+   "bytes": 606,
+   "pointer": "⛔⛔ **A PAUSE IS NOT A STOP (KD-75, KD-113).** While your batch waits on anything, arm what the wait needs, move to your next agreed batch that does not depend on it, then return and close the first. *(`CLAUDE_MD_RULE_HISTORY.md` · `P5-60`)*"
+  },
+  {
+   "id": "P5-61",
+   "origin_heading": "3.2 MEMORY HARD CAP",
+   "destination": "1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md",
+   "sha256": "7ee957ef8c1d0ac2ee95bee1d4584f976b1df18823d29d85c938e54b3a42ad10",
+   "bytes": 170,
+   "pointer": "*(Origin: `CLAUDE_MD_RULE_HISTORY.md` · `P5-61`.)*"
+  },
+  {
+   "id": "P5-62",
+   "origin_heading": "5. Critical Rules — rule 17 (xStock trading window)",
+   "destination": "1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md",
+   "sha256": "1e285206dfb40b4e19b6a0aa2e653392942a8dbf4afc1e8c8634fdf729186fbc",
+   "bytes": 102,
+   "pointer": " *(`P5-62`)*"
   }
  ],
  "citations": {
