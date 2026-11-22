@@ -101,3 +101,26 @@ BEFORE: `where user_id = $1 and alert_type = 'feed_health' and acknowledged = fa
   - Staging reflog HEAD movements from 7c5b45c67 (21:15:00Z, the deploy) onward: `f8fc53153` (11-15 03:09), `3e2504129` (04:22), `84eeb168e` (11:05), `8fac86e5e` (11-16 03:38, again 06:07). **All carry 7c5b45c67** (`git merge-base --is-ancestor`).
   - Positive control: the four 11-14 movements before the deploy (`9591ba8c2`, `415b3051f`, `65132e2eb`, `cc1a1c2df`) read MISSING.
 - **Next:** the same three legs re-read at the window's end (2026-11-21T21:15Z), then Step 8.
+
+## Step 7 end-of-window leg reads — 2026-11-22 ~12:00Z (CC-B), window 2026-11-14T21:15Z → 11-21T21:15Z (closed)
+
+**This is the Step-8 read.** Every leg re-read after the window closed; the interim reads above stand where this section does not supersede them.
+
+- **Leg 2 — feed health, natural. PASS: the OBJ-4 carrier was observed well inside 7 days, and every alerting cycle completed.**
+  - **Alerting cycles in the window, each read in full by timestamp** (not a fixed-width grep window — an `-A60` window first made 11-18 09:30 look incomplete because noisy lines crowded it; the timestamp read shows it complete):
+    | cycle (UTC) | what it logged | completion |
+    |---|---|---|
+    | 11-14 22:50:14, 23:10:06 | interim read only — see residual (a) | `Check complete`, Grade C (interim) |
+    | 11-15 00:50:14 | create ×2, new ids `1e61157e…` / `186a7bbf…` | `Check complete`, Grade C |
+    | 11-17 08:05:06 | critical; broadcast ×2 | `Check complete in 250ms`, Grade F, critical |
+    | 11-18 09:30:19 | `[AlertsService] refreshed 8bfae336…` (live) + `c13b3d87…` (paper) | `Check complete in 311ms`, Grade F, warning |
+    | 11-18 09:40:05 | same two ids refreshed | `Check complete in 238ms` |
+    | 11-21 02:25:27 | refreshed `1e61157e…` / `186a7bbf…` — **the 11-15 00:50 ids, six days later** (OBJ-1's refresh across a long gap) | `Check complete in 251ms`, Grade C |
+  - **`Check failed`: 0** across every `out` and `error` log from 11-15 through 11-22. Positive control: `error__2026-11-13_00-00-00.log` = 5.
+  - **The occurrence rows (residual from the interim read, now discharged via `dt-sql`, KD-96):** `scheduled_job_occurrences` for `feed_integrity_cron` reads `succeeded` at every five-minute slot spanning each cycle above (11-15 00:45-00:55, 11-17 08:00-08:10, 11-18 09:25-09:45, 11-21 02:20-02:30 — 14 rows, 14 `succeeded`). Whole window: **1,996 rows, all `succeeded`**, against 2,016 five-minute slots — 20 slots carry no row; not on any alerting cycle above, not read further (leg 2 asks about alerting cycles). **Positive control:** the same table holds `failed` ×5 for this job at 2026-11-12 21:00-21:20Z, before the deploy — the five `Check failed` lines in `error__2026-11-13`. The instrument records a failure; none occurred in the window.
+- **Leg 4 — error-log sweep. PASS.** `unique_global_alert` lines after the deploy instant: **0** in every file `error__2026-11-16` through `error__2026-11-22` plus the live `error.log`. Positive control: `error__2026-11-15` (holding 11-14) = 1 line, 2026-11-14 03:00:00Z `[FORMULA-AUDIT]` duplicate, before the deploy; `error__2026-11-14` = 1. Still cannot see the second index (F-5).
+- **Leg 5 — every deploy in the window. PASS.** Staging reflog HEAD movements 2026-11-14T21:15Z → 11-21T21:15Z: `7c5b45c67` (11-14 21:15), `f8fc53153` (11-15 03:09), `3e2504129` (04:22), `84eeb168e` (11:05), `8fac86e5e` (11-16 03:38, again 06:07), `ecbdf882e` (11-20 00:03), `85e7ce638` (07:58), `4456f515d` (21:40), `6a9b6802f` (23:25), `2a501de33` (11-21 00:07), `c21c1502a` (05:08) — **12 movements, 11 distinct shas, every one carries `7c5b45c67`** (`git merge-base --is-ancestor`, rc=0, run on the staging clone). No movement between 11-21 05:08 and window end; HEAD at read time = `c21c1502a…`. **Positive control:** `cc1a1c2df`, `65132e2eb`, `9591ba8c2` (11-14, before the deploy) rc=1.
+- **Residuals, named:**
+  - (a) `out__2026-11-14_12-23-22.log` has **rotated off staging**; the 22:50 and 23:10 cycles rest on the interim read of 11-16 and cannot be re-read.
+  - (b) F-5 unchanged: the error-log sweep cannot see the second unique index.
+- **Next:** Step 8 — Langston's independent read (reflog enumeration, live `error.log`, the occurrence table).
