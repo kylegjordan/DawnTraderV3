@@ -165,7 +165,7 @@ CREW_ALL_RE = re.compile(r"@crew\b|\bALL SESSIONS\b", re.I)
 OTHERS_RE = re.compile(
     r"@?\b(" + "|".join([p for k, v in NAMES.items() if k != ALIAS for p in v] + ["langston"]) + r")\b", re.I)
 # B-ALERT-PROTOCOL (#340): a system-alert triage reply ends with an owner marker
-# [[ALERT id=.. owner=<CC-A|CC-B|CC-C|CC-INFRA|Kyle> action=".."]] — authoritative wake routing.
+# [[ALERT id=.. owner=<one of ALERT_OWNERS below> action=".."]] — authoritative wake routing.
 # ⛔ CC-C AND CC-INFRA ADDED 2026-08-23 (Kyle-directed). The pattern listed only CC-A/CC-B/Kyle.
 # ⚠️ AND THE CAUSAL CLAIM THAT ORIGINALLY STOOD HERE WAS WRONG — STRUCK, NOT SOFTENED (Langston,
 # Step-4, measured on this box). It said the cross-session wake was caused by the missing CC-C
