@@ -3,7 +3,7 @@
 | field | value |
 |---|---|
 | **(i) declared change-class** | `architecture` (scope header) |
-| **(ii) the class's doc set** | scope `Scope Files/B_XSTOCK_CORRELATION_COLLECT_SCOPE.md` — **present** (r3, PROCEED) · pre-audit `Scope Files/B_XSTOCK_CORRELATION_COLLECT_PRE_AUDIT.md` — **present** (r2 + condition, PROCEED) · change list — **this file** · System Manual, System Impact Map, `XSTOCK_CALIBRATION_PLAN.md`, `BATCH_CATALOG`, `PHASE_HISTORY`, `CHANGES_AND_FIXES`, `RUNNING_ISSUES`, task list — **absent, owed at Step 10** · `DELETED_COMPONENTS_LOG.md` — **present** (entry added this commit) · completion report — **absent, Step 11** |
+| **(ii) the class's doc set** | scope `Scope Files/B_XSTOCK_CORRELATION_COLLECT_SCOPE.md` — **present** (r3, PROCEED) · pre-audit `Scope Files/B_XSTOCK_CORRELATION_COLLECT_PRE_AUDIT.md` — **present** (r2 + condition, PROCEED) · change list — **this file** · System Manual, System Impact Map, `XSTOCK_CALIBRATION_PLAN.md`, `BATCH_CATALOG`, `PHASE_HISTORY`, `CHANGES_AND_FIXES`, `RUNNING_ISSUES`, task list — **present (Step 10)** · `DELETED_COMPONENTS_LOG.md` — **present** (entry added this commit) · completion report — **absent, Step 11** |
 | **(iii) Step-2 reference** | `B_XSTOCK_CORRELATION_COLLECT_PRE_AUDIT.md` (PROCEED `1567796287091249224`, condition folded at `00a794cab`) |
 
 ## What changed, by plan item
@@ -45,7 +45,7 @@
 - Tests: batch file 17/17.
 
 ## Step-7 read, clarified before the deploy (2026-11-05 ~13:20Z)
-- The pre-registered control ("crypto `b68_3` rows in the same window keep accruing") counts **VTS-sourced rows only** (`source_type = 'vts_trade'`). Langston measured 13:02Z that the PAPER active-signal path fails every write (`#231`: a string signal id into an integer column), so paper-sourced rows are 0 for a reason outside this batch. This batch's new xStock record also goes through the VTS source (`kind: 'vts_trade'`, `factor-ablation-emitter.ts:224`), so `#231` does not touch it.
+- The pre-registered control ("crypto `b68_3` rows in the same window keep accruing") counts **VTS-sourced rows only** (`source_type = 'vts_trade'`). Langston measured 13:02Z that the PAPER active-signal path fails every write (`#231`: a string signal id into an integer column), so paper-sourced rows are 0 for a reason outside this batch. This batch's new xStock record also goes through the VTS source (`kind: 'vts_trade'`, emitted at `server/asset_classes/xstock_spot/eval-cycle.ts:1407`, inside `if (tradeId)` at `:1396`, after `registerOpenVtsTrade` at `:1388`, at `a61c60f22`), so `#231` does not touch it.
 - **Deploy sha:** `0f4835b5a` (CI 4/4) — before NEW Claude's unreviewed `21c614a0a` and CC-A's unreviewed `e43cae96e`; its range from the deployed `0abfd7102` is this batch only. Held until P-9 (after 14:30Z).
 
 ## P-9 — the US-hours repeat of A-2, PASS (2026-11-05 14:36:52Z, CC-A)
@@ -62,13 +62,43 @@
 
 ## Step 7 — first-pass verification (CC-A, 2026-11-22; reads by `dt-sql`, window 2026-11-05 14:40:02Z → 2026-11-06 14:40:02Z unless stated)
 - **The pre-registered coverage read, quoted as written (Step 4, record item 1):** *"expected magnitude: within a factor of two of the xStock VTS trades OPENED in the same window … Fewer than a quarter of the opened trades ⇒ the emit is failing."* **Result: 417 xStock `b68_3` rows (all `vts_trade`, `factor_applied=false`) against 2,409 xStock `vts_open_trades` rows opened = 17 %. AS WRITTEN, THE CRITERION FAILS.**
-- **Why, stated beside it and not rewritten:** the denominator I pre-registered counts every opened row in `vts_open_trades`; 1,808 of the 2,409 are shadow rows and 184 are twin rows, and the record is emitted only when a real VTS trade registers (`factor-ablation-emitter.ts:224`, `kind: 'vts_trade'`), so those 1,992 can never carry one. **Real xStock VTS trades opened in the window: 417; with a record: 417 (100 %).** From the window's end to 2026-11-22: **3,177 of 3,182**; the 5 misses are TBLL/USD on 2026-11-10, each the designed `[B-XSTOCK-CORRELATION-COLLECT][SKIP]` (its bar interval is 30 minutes, not 15 or 60). ⇒ **Langston rules at Step 8 whether the denominator was mis-specified; the criterion stays as written.**
+- **Why, stated beside it and not rewritten:** the denominator I pre-registered counts every opened row in `vts_open_trades`; 1,808 of the 2,409 are shadow rows and 184 are twin rows, and the record is emitted only when a real VTS trade registers (`server/asset_classes/xstock_spot/eval-cycle.ts:1407`, inside `if (tradeId)` at `:1396`, after `registerOpenVtsTrade` at `:1388`, at `a61c60f22`); shadow ids are minted at `vts-runner.ts:1119` and twins at `:5437` go through `insertOpenTrade`, and neither reaches an emit, so those 1,992 can never carry one. **Real xStock VTS trades opened in the window: 417; with a record: 417 (100 %).** From the window's end to 2026-11-22: **3,177 of 3,182**; the 5 misses are TBLL/USD on 2026-11-10, each the designed `[B-XSTOCK-CORRELATION-COLLECT][SKIP]`. TBLL is a 15-minute instrument with missing bars: `inferIntervalMinutes` (`server/core/metrics/pair-correlation.ts:134`) takes the median gap, and on 11-10 its 13 gaps were 15 ×6, 30 ×3, 45, 60, 75 and 90, so the median was 30 and the symbol was skipped. Its daily medians 11-06 → 11-20 were 15, 15, 30, 225, 75, 15, 45, 15, 15, 30, 15 — not 15 on 5 of those 11 days. A coverage gap on the illiquid tail (5 of 3,182 = 0.16 %; exposure across other thin symbols unmeasured) — `RUNNING_ISSUES` `#1266`. ⇒ **Langston's Step-8 ruling: the criterion is VOID AS SPECIFIED — the 17 % stands as measured and is not a FAIL; the objective is discharged on the named object, 417/417 in the window and 3,177/3,182 after it.**
 - **Control:** crypto `b68_3` rows in the same window: 43, all `vts_trade`, `factor_applied=true` — the unchanged path kept accruing.
 - **Join key:** every xStock record carries a distinct `vts_trade_id` that joins to `vts_open_trades` — 3,594 of 3,594 since the deploy.
 - **OBJ-4 (no xStock decision changes):**
-  - **Confidence:** on all 417 window records, confidence with = confidence without = the trade's real confidence. PASS. The `[B68.3][correlation]` applied-factor 1.0000 lines are in the out stream, which is tiered off the box after about 3.5 days, so they were not read; the record fields are the same fact at the row.
+  - **Confidence:** on all 417 window records the top-level `alternate.confidence` equals the trade's real confidence, `confidence_without_factor` equals it too, and `confidence_with_factor` = without × factor, with the factor between 1.0047 and 1.0500 and never 1.0 — so the record carries the counterfactual while confidence is untouched. PASS (Langston re-measured at Step 8). The `[B68.3][correlation]` applied-factor 1.0000 lines are in the out stream, which is tiered off the box after about 3.5 days, so they were not read; the record fields are the same fact at the row.
   - **xStock VTS opens:** 21.1 real opens an hour in the 24 h before the deploy (506) against 17.4 after (417); weekday daily counts over the month range 174 to 502. Within normal variation — PASS.
   - **xStock paper positions** (`closed_trades` + `active_open_positions` by `opened_at`; the `trades` table has held no rows since 2026-10-20): 37 in the 24 h before, 42 after; daily counts 2026-10-20 → 11-20 range 1 to 70. PASS.
-- **Replay of the new rows** (nightly replay, pre-existing design — it records a decision difference, not P/L), since the deploy: xStock 2,224 `admitted_breakeven` + 1,370 `unreplayable_real_rejected` (3,594, all completed); crypto 252 + 168, 13 pending. Both classes show the same ~38-40 % real-rejected share. **HYPOTHESIS, not a finding:** records are emitted only after a trade registers, so a real-rejected label probably means the replay's lookup misses trades still open at replay time; it is the same in crypto, so it predates this batch. DISPOSITION: review scheduled at Step 8 (asked of Langston with the evidence above).
+- **Replay of the new rows** (nightly replay, pre-existing design — it records a decision difference, not P/L), since the deploy: xStock 2,224 `admitted_breakeven` + 1,370 `unreplayable_real_rejected` (3,594, all completed); crypto 252 + 168, 13 pending. Both classes show the same ~38-40 % real-rejected share. **HYPOTHESIS, not a finding:** records are emitted only after a trade registers, so a real-rejected label probably means the replay's lookup misses trades still open at replay time; it is the same in crypto, so it predates this batch. Measured at Step 8 for xStock (section below): the hypothesis holds. DISPOSITION: decision required — no work, proposed to Kyle via PM Claude (Discord `1574060303736381561`); `RUNNING_ISSUES` `#1265`.
 - **UI (Claude-in-Chrome, `/analytics` → Drift Dashboard, 2026-11-22 13:36Z):** *Factor Ablation Comparison*, 7 d: `b68_3_pair_correlation` 1,209 rows (1,196 replayed, 13 pending) against 193 for each other factor — the extra 1,016 are the xStock record-only rows, counted and replayed, real values, no "--". 24 h on a Sunday: `b68_3` 39 = every other factor (xStocks are closed at the weekend, so only crypto rows). *Factor Calibration*, 7 d: `b68_3` n = 180 = the other factors — the record-only rows are kept OUT of the calibration view, as intended (OBJ-1 readers).
 - ⇒ Step 7 done with one item for Langston's ruling (the denominator) and one scheduled review (the replay label).
+
+## OBJ-2 field census (added at Step 10 — the Step-7 text did not report it)
+Over the 417 window records:
+
+| field | value |
+|---|---|
+| `strategy` | not null on 417 |
+| real confidence | not null on 417 |
+| `is_btc_self_reference` | false on 417 |
+| `btc_reference_available` | true on 417 |
+| `cold_start` | false on 417 |
+| `sample_count` | min = max = 29 |
+| `reference_symbol` | `SPY/USD` (1 distinct) |
+| `interval_minutes` | 15 on 417 |
+| `aligned_by_timestamp` | true on 417 |
+| `factor_applied` | false on 417 |
+| spread | 226 symbols, 390 distinct correlations (bars of ≥10) |
+
+**PASS in full.**
+
+**Sample row** — MRNA/USD `morning_star`, 2026-11-21T00:36:35Z: `source_type` vts_trade · `asset_class` xstock_spot · `exchange` kraken · `signal_id` null · `vts_trade_id` `vts_xstock_spot_…` · `factor_state` alternate_disabled. `real_decision`: confidence 0.54196 · regimeLabel STRUCTURAL_TRANSITION · admissionPossible true · sourcePool xstock-trend · calibrationFrameworkVersion b76_chain_final. `alternate_decision.confidence` 0.54196; its `metadata`: label NEUTRAL · sample_count 29 · lookback_bars 30 · interval_minutes 15 · reference_symbol SPY/USD · correlation_to_btc 0.6158 · decorrelation_score 0.3842 · pair_correlation_factor 1.01921 · confidence_with_factor 0.55237 · confidence_without_factor 0.54196 · factor_applied false · compute_disabled false · aligned_by_timestamp true · is_btc_self_reference false · btc_reference_available true · cold_start false. `replay_outcome` admitted_breakeven.
+- **Naming carry:** on xStock rows `correlation_to_btc`, `btc_reference_available` and `is_btc_self_reference` hold the `SPY/USD` reference's values (single writer `pair-correlation.ts:376`, no non-test reader). Read `reference_symbol` to know which reference a row used.
+
+## Step 8 — Langston PROCEED (Discord `1574059564003754106`)
+- Re-derived at the ref: the three `emitAblationRecord` call sites (`signal-orchestrator.ts:2056`, `vts-runner.ts:3103`, `eval-cycle.ts:1407`); the xStock emit block byte-identical between deployed `0f4835b5a` (`:1345-1378`) and graded `a61c60f22`; the leading-token census shadow 1,808 + vts 601 (184 `_twin`) = 2,409; 0 orphans of 3,594.
+- Ruling on the denominator: **VOID AS SPECIFIED** — the 17 % stands as measured and is not a FAIL; discharged on the named object. Successor gap: the SKIP arm has no counter → `#1266`.
+- Owed and done at Step 10: the two body corrections above (the TBLL cause, the confidence sentence) and this OBJ-2 table.
+- Replay label (answered to PM Claude, Discord `1574061383186784430`): xStock 1,370 `unreplayable_real_rejected`, all join their trade; 1,347 closed after marking, 0 before, 23 still open. Mechanism at `fcd838134`: `server/scripts/replay-ablation.ts:193` selects rows with a null `replay_completed_at` (limit 5,000) and `:233` sets it on marking; `server/services/factor-replay-core.ts:180-182` loads closed, non-shadow trades opened since the cutoff. Crypto ids do not join `vts_open_trades` (0/420) — unmeasured. Re-check after a fix: YES (Discord `1574062181270691952`) — clear both fields, 1,370 is under the cap, provided the fix stops marking a row before its trade closes; the write goes through review. → `#1265`.
+- Both gaps proposed to Kyle via PM Claude (Discord `1574060303736381561`); no work started.
+- Step 9 not needed.

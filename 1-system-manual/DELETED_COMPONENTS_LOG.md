@@ -1414,7 +1414,7 @@ Archive: git history is authoritative (this is a field-retirement within live fi
 **WHY:** unused since B-NEW-33 moved matching into `server/services/factor-replay-core.ts`; the replay's own block imports that module's `buildVtsTradeIndex`, which shadowed this one, and `findVtsTradeByNaturalKey` had no caller. It also carried the class-less key this batch removes from the live matcher (P-6), so leaving it invited re-wiring the defect.
 **BLAST RADIUS / STATE-WRITE CENSUS (§9.5(a-ii)):** both functions were pure reads (log files in, a Map out); they wrote no state, so no reader can be orphaned. Callers: none — `grep -n` in the file shows only the definitions and the shadowing import; neither name was exported. `tsc` on the file: same single pre-existing error before and after.
 **ARCHIVE:** `1-system-manual/_archive/deleted-code/replay-ablation.legacy-vts-index.20261105-B-XSTOCK-CORRELATION-COLLECT.removed` (verbatim).
-**COMMIT:** the batch's Step-3 commit (sha recorded here at Step 10). Record: `Scope Files/B_XSTOCK_CORRELATION_COLLECT_PRE_AUDIT.md`, change list.
+**COMMIT:** `c74ff4dbf` (Step 3), reverted at `ca10b8534` and re-landed exactly at `bd76492b4` (Step 4); live since deploy `0f4835b5a`. Record: `Scope Files/B_XSTOCK_CORRELATION_COLLECT_PRE_AUDIT.md`, change list.
 
 ## 2026-11-05 — the crypto-only pair-correlation config accessor — B-XSTOCK-CORRELATION-COLLECT (row 105, P-3), CC-A
 | removed | where (pre-removal) | what it was |
@@ -1422,7 +1422,7 @@ Archive: git history is authoritative (this is a field-retirement within live fi
 | `getCurrentPairCorrelationConfig()`, the private `pairCorrelationConfig` field, its reset and its assignment in `refreshPairCorrelationConfig` | `server/services/market-context-engine.ts` (`:280`, `:335`, `:849-854`, `:1203-1206` before removal) | B68.3's single global config, kept as "the crypto_spot config for back-compat" after B79.0n made the config per class |
 **WHY:** its only callers were the two `?? getCurrentPairCorrelationConfig()` fallbacks this batch removed (P-3: a class missing from the per-class map must skip the factor, not borrow crypto's apply-on config). With no caller it is legacy (rule 18).
 **BLAST RADIUS / STATE-WRITE CENSUS (§9.5(a-ii)):** the field was written at `:335` (reset) and `:854` (refresh) and read only by the accessor; the accessor had no caller in `server/`, `client/`, `scripts/` or tests after P-3 (`grep`). `tsc` on the file: no errors before or after. The crypto-presence assertion in the refresh is kept.
-**COMMIT:** the batch's Step-3 commit.
+**COMMIT:** `c74ff4dbf` (Step 3), reverted at `ca10b8534` and re-landed exactly at `bd76492b4` (Step 4); live since deploy `0f4835b5a`.
 
 ## 2026-11-05 — the old crew-status page: its six scripts and its Discord poster — B-STATUS-BOARD OBJ-6 (pre-audit P10, `#1227`), CC-A
 | removed | where (pre-removal) | what it was |

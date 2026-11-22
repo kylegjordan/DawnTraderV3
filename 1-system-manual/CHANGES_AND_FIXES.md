@@ -4497,3 +4497,11 @@ Deploys `b8ab812de` (chunk A) + `2c986c231` (chunk B); CI green; Step-8 CONFIRME
 **Fix:** `AlertsService.createAlert` is the single insert path and upserts on the rule (refresh, keep the id, re-open only after a healthy cycle stamps `episodeClosedAt`); one write per mode under the owner admin; the duplicate `storage.createSystemAlert` and the uncalled `cleanupOldAlerts` deleted. Deployed `7c5b45c67` 2026-11-14 (commit `7714d0fdb`).
 
 **Verified:** Step 7 legs 1-5 PASS over seven days (six alerting cycles complete, 0 crash lines, 1,996 occurrences succeeded, 14 conflict-branch writes); Langston Step 8 PROCEED 2026-11-22 (Discord `1574033312454811761`). **Not covered:** the second unique rule (`user_id, mode, timestamp`) is outside the conflict target — a same-transaction double write would still throw (no path does it); the deploy-window row under-covered 10 of 12 later deploys (forward rule recorded in the change list r3).
+
+## FIX-2026-11-22-D — `B-XSTOCK-CORRELATION-COLLECT` (row 105, CC-A): xStock trades now record their correlation to SPY/USD without changing confidence
+
+**Symptom:** xStock pair correlation was switched off and the xStock pipeline never wrote an ablation record, so roadmap 25-9 had no per-pair data to calibrate from; a class missing from the per-class correlation map silently borrowed crypto's config; and `spearmanRankCorrelation` could loop forever on a NaN input.
+
+**Fix:** per-class reference (`resolveCorrelationInputs`: crypto `XBT/USD` positional, xStock `SPY/USD` timestamp-paired at the pair's interval); compute separated from apply (`b68_3_apply_factor`, xStock false; xStock compute on — migration `2026-11-05-b-xstock-correlation-collect.sql`); the crypto fallback removed; one record-only ablation row per real xStock VTS trade (`eval-cycle.ts`); the rank loop advances `j = i + 1` (fix-on-find, rule 23).
+
+**Verified:** deploy `0f4835b5a` 2026-11-05; 417/417 window trades recorded, 3,177/3,182 after; confidence untouched on 417/417; crypto control unchanged; Langston Step 8 PROCEED 2026-11-22 (Discord `1574059564003754106`). **Not covered:** the nightly replay mislabels records whose trades are still open and never re-checks them (`#1265`); correlation skips have no counter (`#1266`) — both with Kyle.

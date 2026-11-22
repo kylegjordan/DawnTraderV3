@@ -11837,3 +11837,18 @@ HOME: B-DISK-FILE-TIERING, owner CC-A, placed in SPRINT_TO_LIVE_PLAN.md pre-spri
 **Reach:** the daily AI brief only, which is an AI-page feature. Nothing in paper-mode trading or the VTS reads it. Failure history before today is UNVERIFIED (the log rotates daily).
 - DISPOSITION: decision required — no work, on Kyle's 2026-10-19 rule (the main Dashboard and AI pages wait for the cleanup phase unless they break paper-mode trading or the VTS). Surfaced to Kyle 2026-11-22.
   ➕ **2026-11-22 Kyle (KD-111):** switch it off now, remove it later. `HOME: B-AI-BRIEF-OFF, owner CC-B, placed in SPRINT_TO_LIVE_PLAN at CC-B list 3b, gap work while B-ENTRY-GATE Step 7 waits`; removal `HOME: after-live list PRE_LIVE_SPRINT.md, legacy cleanup, after B-AI-CHAT-REMOVAL`.
+
+### #1265 OPEN 2026-11-22 (CC-A; found at `B-XSTOCK-CORRELATION-COLLECT` Step 7, measured at Step 8) — THE NIGHTLY REPLAY LABELS ABLATION RECORDS REAL-REJECTED BEFORE THEIR TRADES CLOSE, AND THE LABEL STAYS FOR GOOD
+
+**What was measured:** since the 2026-11-05 deploy, xStock ablation records carry 2,224 `admitted_breakeven` and 1,370 `unreplayable_real_rejected` (3,594, all completed); crypto 252 + 168. Of the 1,370 xStock real-rejected rows, all join their VTS trade: 1,347 closed AFTER the replay marked them, 0 before, 23 still open.
+**Mechanism (cited, at `fcd838134`):** `server/scripts/replay-ablation.ts:193` selects rows with a null `replay_completed_at` (limit 5,000) and `:233` sets it when the row is marked; the trade index loads only closed, non-shadow trades opened since the cutoff (`server/services/factor-replay-core.ts:180-182`). A record written when its trade opens is replayed that night while the trade is still open, misses the index, is labelled real-rejected, and is never selected again.
+**Reach:** the ablation and replay evidence Phase 25 calibrates from — about 38 % of new xStock records mislabelled. Crypto's ids do not join `vts_open_trades` (0/420), so crypto is unmeasured.
+**Recovery:** clearing `replay_completed_at` and `replay_outcome` on the real-rejected rows re-queues them (1,370 is under the 5,000 cap), provided the fix stops marking a row before its trade closes; the reset is a write to existing records and goes through review as part of the fix batch (answered to PM Claude, Discord `1574062181270691952`).
+- DISPOSITION: decision required — no work, proposed to Kyle via PM Claude (Discord `1574060303736381561`).
+
+### #1266 OPEN 2026-11-22 (CC-A; found at `B-XSTOCK-CORRELATION-COLLECT` Step 7, Langston Step 8) — THE CORRELATION SKIP ARM HAS NO COUNTER, AND THE MEDIAN-GAP RULE DROPS THIN XSTOCK SYMBOLS
+
+**What was measured:** 5 of 3,182 real xStock VTS trades (0.16 %) after the Step-7 window carry no correlation record — all TBLL/USD on 2026-11-10, each a designed `[B-XSTOCK-CORRELATION-COLLECT][SKIP]` log line. TBLL is a 15-minute instrument with missing bars; on 11-10 its 13 gaps were 15 ×6, 30 ×3, 45, 60, 75 and 90 minutes.
+**Mechanism (cited):** `inferIntervalMinutes` (`server/core/metrics/pair-correlation.ts:134`) takes the median gap and the pair is skipped unless it is 15 or 60; TBLL's median was 30 that day, and its daily medians 11-06 → 11-20 were not 15 on 5 of 11 days.
+**Reach:** a coverage gap on the illiquid tail; how many other thin symbols it drops is unmeasured, because the skip writes only a log line (the out stream, tiered off the box after about 3.5 days) and no counter.
+- DISPOSITION: decision required — no work, proposed to Kyle via PM Claude (Discord `1574060303736381561`).

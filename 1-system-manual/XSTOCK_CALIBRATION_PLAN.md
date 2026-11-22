@@ -153,6 +153,8 @@ Keep: `b67_2_phase_preference`, `b67_4_outcome_feedback`, `b68_1_multi_tf_agreem
 
 Repurpose: `b68_3_pair_correlation` — sector ETF per symbol via same DRY mapping. **GATED on B-PHASE-E-PRE-1 ship** (sector ETF prices must be available before this factor can compute).
 
+**Started 2026-11-05 — collection only (B-XSTOCK-CORRELATION-COLLECT, roadmap 25-9, deploy `0f4835b5a`).** xStock pair correlation is now computed against `SPY/USD` (not the sector ETF), paired by timestamp, and recorded per real xStock VTS trade without being applied. The xStock pipeline now emits ablation records for this factor (E.2 below is done for correlation only); the sector-ETF reference stays gated on B-PHASE-E-PRE-1.
+
 Add: VIX-derived, DXY-derived, beta-to-SPY rolling, market-breadth, earnings-proximity (if D adopts earnings handling). 4-8 candidates; expect 2-4 to clear decision-grade.
 
 **E.2 — Factor emitter implementation.**

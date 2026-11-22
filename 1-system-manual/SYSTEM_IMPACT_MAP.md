@@ -2093,6 +2093,7 @@ Within 24-48h: drift-dashboard factor calibration table should show non-zero shi
 **Wire-in sites (call hooks for B67.1+ factor producers):**
 - `server/services/signal-orchestrator.ts` — emit hook after `readyToBuyService.queueSQESignal()` in the active-trading path. Today fires with empty alternates (no-op). When B67.1+ ships, each producer adds its `FactorAlternate` to the array.
 - `server/services/vts-runner.ts` — emit hook before `return { signal, tradeRecord }` in the VTS-mirror path. Same empty-alternates pattern.
+- `server/asset_classes/xstock_spot/eval-cycle.ts` — xStock emit (B-XSTOCK-CORRELATION-COLLECT, 2026-11-05): one `regime_factor_alternates` row per real xStock VTS trade (`asset_class=xstock_spot`, `source_type=vts_trade`, `factor_applied=false`, record-only), written after `registerOpenVtsTrade`. Readers: `drift-dashboard-aggregator` `computeAblationComparison` counts it; `computeFactorCalibration` excludes it (`factor_applied IS DISTINCT FROM 'false'`); the nightly `replay-ablation` labels it (see `RUNNING_ISSUES` `#1265`); `scripts/b-new-37-inversion-forensics.ts:318-324` is a manual reader that divides with/without and would misread record-only rows — filter on `factor_applied` before using it.
 
 **New API endpoint:** `GET /api/analytics/ablation-comparison?window=...` (`server/routes.ts`). Reads `regime_factor_alternates` via the aggregator, returns per-factor counterfactual stats. Empty until B67.1+ producers ship.
 
@@ -2494,7 +2495,7 @@ Each modulator is a pure function over OHLC + state, emits an ablation row per s
 | 3 | freshness (regime age) | `server/core/metrics/regime-age-factor.ts` | B68.4 | [0.92, 1.05] | 1.0 (when ageMs undefined) |
 | 4 | outcome feedback | `server/core/metrics/outcome-feedback-store.ts` | B67.4 | [0.85, 1.05] | 1.0 (sample_count<5) |
 | 5 | volume regime | `server/core/metrics/volume-regime.ts` | B68.2 | [0.92, 1.05] | 1.0 (ohlc<30) |
-| 6 | pair correlation | `server/core/metrics/pair-correlation.ts` | B68.3 | [0.95, 1.05] (boost-only) | 1.0 (pair OR BTC ohlc<30; BTC=XBT/USD universal reference) |
+| 6 | pair correlation | `server/core/metrics/pair-correlation.ts` | B68.3; B-XSTOCK-CORRELATION-COLLECT | [0.95, 1.05] (boost-only) | 1.0 (pair OR reference ohlc<30). Reference per class: crypto `XBT/USD` (positional), xStock `SPY/USD` (timestamp-paired). xStock computes but does not apply (`b68_3_apply_factor=false`) — recorded only |
 | 7 | multi-TF agreement | `server/core/metrics/multi-tf-agreement.ts` | **B68.1 (final)** | [0.92, 1.05] | 1.0 (higher-TF samples<30) |
 
 ### MCE 9-group config orchestrator
@@ -2508,7 +2509,7 @@ Each modulator is a pure function over OHLC + state, emits an ablation row per s
 5. regime_age (B68.4)
 6. path_b_sustainability (B68.5 — gate on TFS Path B, not a chain modulator)
 7. volume_regime (B68.2)
-8. pair_correlation (B68.3)
+8. pair_correlation (B68.3) — 10 constants since B-XSTOCK-CORRELATION-COLLECT
 9. multi_tf_agreement (B68.1 — added 2026-05-03)
 
 **First-refresh** uses `Promise.all` with try/catch — hard-fail-on-startup with retry on next timer tick. **Subsequent refreshes** use per-group try/catch — keep-prior-on-failure (one group's missing module_constant doesn't take down the entire MCE refresh). B67.4 hotfix-#2 wrapper inherited unchanged across all subsequent additions.

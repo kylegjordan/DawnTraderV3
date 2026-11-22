@@ -11975,7 +11975,7 @@ raw × macro × phase × freshness × outcome × volume_regime × pair_correlati
 | 3 | freshness (regime age) | `regimePhaseStore.peekAgeMs(symbol, now)` vs `b68_4_target_age_hours` | [0.92, 1.05] | factor=1.0 when ageMs undefined | B68.4 |
 | 4 | outcome feedback | EMA of recent (source, assetClass, regime, strategy) net P&L %. **Writers, corrected B-OUTCOME-FEEDBACK-WIRE #602 (2026-08-06): the VTS close path (vts-service) has written since birth; the ACTIVE close path (active-execution-engine) was DEAD FROM BIRTH (2026-05-01) until #602** — its gate read a regime field the position row never carried, so every active close silently skipped and the store held only `vts_` partitions (13/13 measured at the fix). **Since #602 the active path writes via the `regimeAtOpen` metadata key** (stamped at open from the SAME MCE accessor the read side uses — key parity by construction), **going forward only: positions opened before the 2026-08-06 deploy carry no key and skip VISIBLY (instrumented log line); past trades are NOT backfilled** (back-stamping from the display-consumed `metadata.regime` was refused — it carries strategy-stamped pseudo-labels outside the canonical space). Reads are source-matched per mode (D9): a paper orchestrator peeks only `paper_sim`, so until #602 it always peeked an EMPTY partition. | [0.85, 1.05] | factor=1.0 when sample_count<5 | B67.4 · #602 |
 | 5 | volume regime | `score = SUM(volume × sign(close[i]-close[i-1])) / SUM(volume)` over rolling N=30 bars; `factor = clamp(min, max, 1 + score × sensitivity)` | [0.92, 1.05] | factor=1.0 when ohlc<30 | B68.2 |
-| 6 | pair correlation | Spearman rank correlation pair vs BTC (XBT/USD universal reference); `decorrelationScore = 1 - \|corr\|`; `factor = clamp(min, max, 1 + decorr × sensitivity)` | [0.95, 1.05] (asymmetric — boost only) | factor=1.0 when pair OR BTC ohlc<30 | B68.3 |
+| 6 | pair correlation | Spearman rank correlation of the pair against a per-class reference: crypto = Kraken `XBT/USD` 60 m bars, paired by position; xStock = `SPY/USD` from the xStock bar store at the pair's own interval (median gap 15 or 60 m, else a logged SKIP), paired by timestamp; `decorrelationScore = 1 - \|corr\|`; `factor = clamp(min, max, 1 + decorr × sensitivity)`. Compute and apply are separate per class (`b68_3_compute_correlation_enabled`, `b68_3_apply_factor`): crypto computes and applies; xStock computes and RECORDS only — the factor goes in the ablation row and confidence is untouched (B-XSTOCK-CORRELATION-COLLECT, 2026-11-05). `spearmanRankCorrelation`'s tie loop advances `j = i + 1`, so a NaN input no longer hangs it (same batch) | [0.95, 1.05] (asymmetric — boost only) | factor=1.0 when pair OR reference ohlc<30; a class missing from the per-class map skips the factor, never borrows crypto's config | B68.3; B-XSTOCK-CORRELATION-COLLECT |
 | 7 | multi-TF agreement | `calculatePairRegime(higherTfOhlc, 0, 0, 1.0, regimeConfig)` on 240-min OHLC; three-state CONFIRMED/COMPATIBLE/CONFLICTED; ST is universally COMPATIBLE | [0.92, 1.05] | factor=1.0 when higher-TF samples<30 (= 5 days of 4h) | B68.1 |
 
 ## Three-state agreement classification (B68.1)
@@ -12011,7 +12011,7 @@ The multi-TF agreement modulator (modulator #7) introduces a regime-family abstr
 5. `regime_age` (B68.4) — 4 constants
 6. `path_b_sustainability` (B68.5) — 1 constant (DBS slope min, regime=TFS scoped)
 7. `volume_regime` (B68.2) — 8 constants
-8. `pair_correlation` (B68.3) — 8 constants
+8. `pair_correlation` (B68.3) — 10 constants (8 from B68.3, plus `b68_3_compute_correlation_enabled` from B79.0n and `b68_3_apply_factor` from B-XSTOCK-CORRELATION-COLLECT; the loader reads all 10 and fails hard on a missing one, `market-context-engine.ts:804-825`)
 9. `multi_tf_agreement` (B68.1) — 8 constants
 
 **First refresh** uses `Promise.all` with try/catch — hard-fail-on-startup with retry on next timer tick. **Subsequent refreshes** use per-group try/catch with keep-prior-on-failure semantics — a single missing module_constant in one group does NOT take down the entire MCE refresh. The B67.4 hotfix-#2 wrapper pattern is inherited unchanged across all subsequent additions.
@@ -12088,10 +12088,10 @@ Active windows as of 2026-05-03:
 | regime_age | `server/core/metrics/regime-age-factor.ts` | `buildB68_4Alternate` |
 | path_b_sustainability | `server/core/metrics/regime-age-factor.ts` (`buildB68_5Alternate` re-runs `calculatePairRegime` with slopeMin=-Infinity) | `buildB68_5Alternate` (label counterfactual) |
 | volume_regime | `server/core/metrics/volume-regime.ts` | `buildB68_2Alternate` |
-| pair_correlation | `server/core/metrics/pair-correlation.ts` (uses `spearmanRankCorrelation` from `strategy-helpers.ts`) | `buildB68_3Alternate` |
+| pair_correlation | `server/core/metrics/pair-correlation.ts` (uses `spearmanRankCorrelation` from `strategy-helpers.ts`; `resolveCorrelationInputs` picks the per-class reference and pairing) | `buildB68_3Alternate` |
 | multi_tf_agreement | `server/core/metrics/multi-tf-agreement.ts` (reuses `calculatePairRegime` for higher-TF) | `buildB68_1Alternate` |
 
-Emit hooks live in `server/services/signal-orchestrator.ts` (active path, currently silent-skip due to `MarketContext.ohlcData` any-cast — resolves in B67.5) and `server/services/vts-runner.ts` (VTS path, uses function-scope `ohlcData` parameter — works correctly post-B68.4 hotfix #3).
+Emit hooks live in `server/services/signal-orchestrator.ts` (active path, currently silent-skip due to `MarketContext.ohlcData` any-cast — resolves in B67.5) and `server/services/vts-runner.ts` (VTS path, uses function-scope `ohlcData` parameter — works correctly post-B68.4 hotfix #3). The xStock emit (B-XSTOCK-CORRELATION-COLLECT, 2026-11-05) lives in `server/asset_classes/xstock_spot/eval-cycle.ts`: real VTS trades only, after `registerOpenVtsTrade`, record-only (the top-level confidence is the real confidence).
 
 ## What's still left
 
@@ -12121,7 +12121,7 @@ Emit hooks live in `server/services/signal-orchestrator.ts` (active path, curren
 | b67_4 outcome-feedback | Store keyed `<crypto_spot>_<regime>_<strategy>` *(superseded — see below)* | Store keyed `<xstock_spot>_<regime>_<strategy>` — fully isolated; crypto outcomes do NOT contaminate xstock EMAs *(superseded — see below)* | **F-2** (key isolation required) — **★ ITEM 4 step 2 (2026-06-10) SUPERSEDED the key: now `<source>_<assetClass>_<regime>_<strategy>` with `source` REQUIRED** (`'vts' \| 'paper_sim' \| 'live'`); per-class isolation is preserved as the second key dimension |
 | b68_1 multi-tf | Per-class via B79.0n.MCE (`calculatePairRegime` REQUIRED-assetClass) | Per-class | F-1 math |
 | b68_2 volume | Pure OHLC math | Pure OHLC math; class-invariant by construction | **F-1** |
-| b68_3 pair correlation | Spearman vs `XBT/USD` reference; `computeCorrelationEnabled=true` | Spearman vs `SPY/USD` reference; `computeCorrelationEnabled=false` v1 default pending SPY-relative calibration follow-up — factor short-circuits to 1.0 + `metadata.compute_disabled=true` | **F-2** (reference symbol differs) |
+| b68_3 pair correlation | Spearman vs `XBT/USD` reference; `computeCorrelationEnabled=true`, `b68_3_apply_factor=true` | Spearman vs `SPY/USD` from the xStock bar store, paired by timestamp at the pair's interval; `computeCorrelationEnabled=true` since 2026-11-05, `b68_3_apply_factor=false` — the factor is recorded in the ablation row and confidence is untouched (B-XSTOCK-CORRELATION-COLLECT, roadmap 25-9) | **F-2** (reference symbol differs; xStock record-only) |
 | b68_4 regime-age | freshness factor formula | freshness factor formula (same math) | F-1 |
 | b68_5 path-B sustainability | Per-class via B79.0n.MCE (`calculatePairRegime` REQUIRED-assetClass) | Per-class | F-1 |
 
