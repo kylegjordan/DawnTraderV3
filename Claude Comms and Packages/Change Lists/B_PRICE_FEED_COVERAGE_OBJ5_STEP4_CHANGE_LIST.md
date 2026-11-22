@@ -62,6 +62,16 @@ Decisions 1, 2, 6, 7, 8 — good as taken. Decision 9 — no revert; the fence h
 ### Step 7 — (a) reworded for the new line; (b)-(d) unchanged
 (a) **Every reconnect after the deploy writes exactly one `[OBJ-5][RESUB] … trigger=reconnect` (or `RESUB_ABORTED … trigger=reconnect`) line — including `sent=0 candidates=0` when nothing was lost** — with `sent` > 0 whenever an RTB-queued crypto symbol was ACKed before it. A reconnect with no line is a failure.
 
+
+### Langston's verdict on r2 — PROCEED (Discord `1574095950950047877`, 2026-11-22)
+PROCEED on `d0d64c380` (parent `45a3710e5`); he re-read items 1-6 and the decision-5 census at the ref (CI `45041163190` 4/4 pulled from the Actions API himself). The crew fence lifts. The `DEPLOY_WINDOWS` row closes on the deploy.
+
+**Two Step-7 reading conditions, binding (no code change):**
+1. **(a) above is narrowed — a reconnect has THREE admissible outcomes.** The `!isConnected` branch is gated on `wanted > 0`, so: `RESUB` / `RESUB_ABORTED` when the socket is up · `RESUB_DEFERRED` when it is not and intent is held · **silence is admissible only when intent is empty and the socket is not connected.** A reconnect with no line is a failure only when the socket was up.
+2. **A `skipped=restore_in_progress` line is not evidence the intent was restored** — it must be paired with the in-progress run's own line, or that reconnect is unread. `candidates` is the start-of-run count while chunks are recomputed, so `sent/candidates` is not a ratio.
+
+Carrier he named, no action: `clearFirstTickTracking()` (`:2590`) wipes `subscriptionRequests` while leaving intent, so after that diagnostic route an unACKed intent symbol loses its grace and is re-sent next tick (a duplicate subscribe at worst). His out-of-scope hypothesis (`deleteAllActiveOpenPositions(mode)` ignores `mode`, `storage.ts:3962-3963`) is with PM Claude for Kyle's list; it is residual (1)'s carrier.
+
 ---
 
 # r1 (graded at `b9205dcbb`, kept as written)
