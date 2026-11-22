@@ -720,8 +720,8 @@ app.use((req, res, next) => {
       });
       
       // B-AI-BRIEF-OFF (#1264, KD-111): the AI Summary task is switched off — not registered with
-      // the scheduler. services/ai-summary-task.ts is left in place until the after-live cleanup
-      // line in Claude Comms and Packages/Scope Files/PRE_LIVE_SPRINT.md:171 removes it.
+      // the scheduler. services/ai-summary-task.ts is left in place until the #1264 after-live
+      // cleanup line in Claude Comms and Packages/Scope Files/PRE_LIVE_SPRINT.md removes it.
       
       schedulerRegistry.registerTask({
         name: cleTask.name,

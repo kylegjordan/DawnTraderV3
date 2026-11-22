@@ -82,3 +82,17 @@ After the deploy the discriminating read (P5, 1(b)) is the same call on the new 
 
 ## Deploy (not yet — recorded so the conditions are visible at review)
 Not before the B-ENTRY-GATE increment-C read is TAKEN (after 2026-11-23 21:00Z, C-2). At deploy time: enumerate `c21c1502a..<deploy sha>`, run the A9 effect column on it, and get CC-C's and CC-INFRA's go-ahead for their commits or deploy a sha that excludes them (C-1); respect row 9j's own read window if it ships separately (C-3). `d92423ce` is CC-A's and is not hand-resolved.
+
+## r2 — Langston's Step-4 verdict and what follows from it
+**PROCEED** (Discord `1574070046152462520`, 2026-11-22). He re-measured the P3 baselines himself (`[AISummary]` 14, `[MarketScan]` 15,980 — a live control that grew, schedulers 38 with `AI Summary` present) and ruled tsc / vitest as reported fact covering no leg; CI is the gate at Step 5.
+
+- **Nit, applied in this commit:** the in-code comment no longer hardcodes the `PRE_LIVE_SPRINT.md` line number (that list is re-ordered at every close); it now names "the #1264 after-live cleanup line". Comment only — no behaviour change; the two-hunk shape of the code diff is unchanged.
+- **Step-10 condition 1:** the required running-plan row for this batch is `SPRINT_TO_LIVE_PLAN.md` (sprint item 3b); `PHASE_19_PLAN` is judged, N/A expected.
+- **Step-10 condition 2 — two obligations added to the doc table:** the `PRE_LIVE_SPRINT.md` #1264 line gains the two `'AI Summary'` literal sites (`routes.ts:15758`, `storage.ts:2176`), the cross-check `user_id` 500, and (his §13 surfacing, disposition 2 — folded into the already-placed #1264 line, no new slot) `daily-brief.ts:93 startDailyBriefScheduler()`, which has zero callers but would create briefs and make an OpenAI call if anything ever called it; and the `RUNNING_ISSUES #1264` annotation.
+
+| document | required? | state |
+|---|---|---|
+| `SPRINT_TO_LIVE_PLAN.md` (row 3b) | REQUIRED (running plan) | Step 10 |
+| `PHASE_19_PLAN.md` | judged | N/A expected — not a Phase-19 row |
+| `PRE_LIVE_SPRINT.md` #1264 line | REQUIRED by P6 + his condition 2 | Step 10 |
+| `RUNNING_ISSUES.md` #1264 | REQUIRED by P6 | Step 10 |
