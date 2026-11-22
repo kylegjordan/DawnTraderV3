@@ -329,6 +329,18 @@ export default function TokenWatchPage() {
         <p className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
           <Clock className="h-3.5 w-3.5" />
           Updated {new Date(s.generated_at).toLocaleString()}
+          {/* C-2 / 07eba4b2: how far the follow-up's cursor trails this update. Healthy is about one run (~1 h);
+              published so a lagging cursor is not read as "nobody died". */}
+          {typeof cov?.follow_up_lag_s === 'number' && (
+            <span>
+              · checks read through{' '}
+              {cov.follow_up_lag_s <= 0
+                ? 'the current hour'
+                : cov.follow_up_lag_s < 7200
+                  ? `${Math.round(cov.follow_up_lag_s / 60)} min before this update`
+                  : `${(cov.follow_up_lag_s / 3600).toFixed(1)} h before this update`}
+            </span>
+          )}
           {data.stale && (
             <span className="rounded bg-amber-500/15 px-1.5 py-0.5 font-medium text-amber-600">
               stale — the hourly job may not be running

@@ -65,9 +65,13 @@ def lock_line():
         return None
 
 
+SBUILDS = []   # the `now` each summary.build received (T10)
+
+
 def drive(run_start, clock, tier_fault=None, tier_result=None, promote_fault=False, summary_fault=False):
     """One run_hour with no due bucket. Returns (stats, calls): calls = [(now passed to tier, lock line at the call)]."""
     calls = []
+    SBUILDS.clear()
     real_locked = tier.run_locked
 
     def spy(n):
@@ -84,6 +88,7 @@ def drive(run_start, clock, tier_fault=None, tier_result=None, promote_fault=Fal
         return {}
 
     def s_build(n):
+        SBUILDS.append(n)
         if summary_fault:
             raise RuntimeError("summary exploded")
         return {"generated_at": n.isoformat()}
@@ -166,6 +171,15 @@ st, _ = drive(D + timedelta(hours=7), D + timedelta(hours=7, minutes=50))
 check("T8 POSITIVE CONTROL: no fault -> no stage error, exit 0",
       st.get("stage_errors") == [] and follow_up.exit_code(st) == 0, st.get("stage_errors"))
 check("T8 a skipped cycle still exits 75", follow_up.exit_code({"skipped": True}) == 75)
+
+print(NL + "=== T10. 07eba4b2: THE SUMMARY IS STAMPED WITH THE FRESH CLOCK, NOT THE RUN-START `now`")
+set_record(D)
+st, _ = drive(D + timedelta(hours=8, minutes=56), D + timedelta(hours=9, minutes=59))
+check("T10 summary.build called once", len(SBUILDS) == 1, SBUILDS)
+check("T10 summary.build received the fresh clock (09:59Z), not the run start (08:56Z)",
+      SBUILDS == [D + timedelta(hours=9, minutes=59)], SBUILDS)
+check("T10 the published stamp is the publish time",
+      (st.get("summary") or {}).get("generated_at") == (D + timedelta(hours=9, minutes=59)).isoformat(), st.get("summary"))
 
 print(NL + "=== T9. THE BACKSTOP TIMER READS THE RECORD BEFORE THE LOCK (C-4), AND IS THE TAIL'S WATCHDOG (C-5)")
 calls9 = []

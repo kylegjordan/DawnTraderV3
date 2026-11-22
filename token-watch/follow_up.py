@@ -547,8 +547,14 @@ def run_hour(now: datetime | None = None) -> dict:
         #    switch is outside because a stuck lock must never silence a
         #    watchdog; a summary is not a watchdog, and a skipped refresh is
         #    visible on the page as a stale `generated_at`.
+        # ⛔ THE FRESH CLOCK, NOT THE RUN-START `now` (07eba4b2; Langston 2026-11-22 `1574004423271649361`). A run
+        #    takes 63-80 min, so `now` stamped `generated_at` an hour before the file was written (measured 62m42s:
+        #    mtime 09:59:08Z vs generated_at 08:56:25Z) and the :12 skip check read a publish as stale. The same
+        #    clock also feeds the label states and so exit 4 (`job_fault_exit_code`); safe, because their lookback
+        #    is at least 3 cycles (`_hours_back(now, 3 * cycle_s)`), so only a verdict already one bucket from
+        #    flipping can move. Same pattern as tier below (C-3).
         try:
-            stats["summary"] = {k: v for k, v in summary.build(now).items()
+            stats["summary"] = {k: v for k, v in summary.build(_clock()).items()
                                 if k in ("generated_at",)}
         except Exception as exc:
             LOG.error("summary build failed: %s", exc)

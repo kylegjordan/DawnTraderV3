@@ -453,6 +453,9 @@ def _follow_up_lag_s(now: datetime):
 
     ⚠️ A LAGGING CURSOR HIDES AN UNCOVERED DAY AS "NOT YET READ" -- which is why it is published beside the
     coverage counts rather than inferred from them.
+    BASELINE (07eba4b2): the follow-up now builds the summary at publish time, so a healthy reading is about one
+    run length, ~1-1.3 h -- the last consumed hour ends around the run's start. Stamped at run start it read
+    slightly NEGATIVE (published 2026-11-22 09:59Z: -214 s). Well above ~3 h means the cursor is falling behind.
     """
     last = load_state("follow_up_cursor", {}).get("last_bucket")
     try:
@@ -696,12 +699,15 @@ def build(now: datetime = None) -> dict:
     return payload
 
 
-# A skipped summary run pages (exit 75) only when the PUBLISHED file is older than this: 2 h of staleness (the
-# follow-up publishes at ~:45-:50 and the summary timer skips at :12, so a normal skip sees a ~25-min-old file and
-# the first page lands on the third missed publish). The follow-up publishes inside its own lock every run, so a skip while it holds the lock leaves a fresh
-# file and exits 0; a skip behind any other holder (tier, a one-time tool) with no recent publish is a lost hour and
-# must not read as a publish at the supervisor (Langston, P6 Step 4 CHANGES-1). Unconditional 75 would page every
-# hour the sweep runs past :12.
+# A skipped summary run pages (exit 75) only when the PUBLISHED file is older than this: 2 h of staleness. The
+# follow-up publishes inside its own lock at the END of each run, stamped with the publish time (07eba4b2: it was
+# stamped with the run's START, an hour early). Runs take 63-80 min back to back (measured from the follow-up's
+# journal 2026-11-22), so a skip at :12 sees a file at most one run old -- a 40-57 min margin to 2 h. NOT widened:
+# a wider threshold would hide a genuinely lost publish for longer. RESIDUAL, stated: a page is ambiguous between a
+# missed publish and a single run longer than 2 h -- `store.last_refusal()` names the lock holder, which tells them apart.
+# A skip behind any other holder (tier, a one-time tool) with no recent publish is a lost hour and must not read
+# as a publish at the supervisor (Langston, P6 Step 4 CHANGES-1). Unconditional 75 would page every hour the
+# sweep holds the lock past :12.
 SKIP_STALE_AFTER = timedelta(hours=2)
 
 
