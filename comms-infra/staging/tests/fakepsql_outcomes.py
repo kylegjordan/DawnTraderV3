@@ -49,6 +49,9 @@ if mode == "transport":                          # the helper's in-session TLS c
 if mode == "echo":                               # a script error whose text repeats the script: redaction must hold
     sys.stderr.write(stdin)
     sys.exit(3)
+if mode == "fatal_echo":                         # an UNCLEAR failure (it locks) whose one stderr line repeats the script:
+    sys.stderr.write(" ".join(l for l in stdin.split(chr(10)) if "PASSWORD" in l) + chr(10))   # LOCKED detail + alert: redacted
+    sys.exit(1)
 if mode == "fatal":
     sys.stderr.write("psql: out of memory\n")
     sys.exit(1)

@@ -481,6 +481,69 @@ check("5a1: dtsql's primary group not its own is flagged", any("dtsql's PRIMARY 
 del _users["dtsql"]
 pr = _accounts_problems()
 check("5a1: a missing dtsql account is reported", any("the dtsql account does not exist" in x for x in pr), str(pr))
+
+# ── B-DB-READONLY-ROLE (Langston Step-4 C4 fold): dt-sql's state files in its 0755 dir — log.jsonl always there,
+#    LOCKED and INTENT only sometimes. Driven through check_modes with the SHIPPED rows and fake accounts (this
+#    box has no deploy account), so a wrong mode is told apart from a right one. ──
+_me = types.SimpleNamespace(pw_uid=os.getuid(), pw_gid=os.getgid())
+_mg = types.SimpleNamespace(gr_gid=os.getgid(), gr_name="deploy")
+_pwd0, _grp0 = DM.pwd, DM.grp
+DM.pwd = types.SimpleNamespace(getpwnam=lambda n: _me if n == "deploy" else (_ for _ in ()).throw(KeyError(n)),
+                               getpwuid=lambda u: ("deploy",))      # _name() reads item 0, as on a real struct
+DM.grp = types.SimpleNamespace(getgrnam=lambda n: _mg if n == "deploy" else (_ for _ in ()).throw(KeyError(n)),
+                               getgrgid=lambda g: ("deploy",))
+_sb = DM.BOXES["dawntrader-staging"]
+_dsbox = {"dirs": [], "private": [r for r in _sb["private"] if r[0].startswith("/var/lib/dt-sql/")],
+          "transient": [r for r in _sb.get("transient", []) if r[0].startswith("/var/lib/dt-sql/")]}
+check("C4: the shipped staging rows carry log.jsonl 0640 (private) and LOCKED + INTENT 0640 (transient)",
+      _dsbox["private"] == [("/var/lib/dt-sql/log.jsonl", 0o640, "deploy", "deploy")]
+      and sorted(_dsbox["transient"]) == [("/var/lib/dt-sql/INTENT", 0o640, "deploy", "deploy"),
+                                          ("/var/lib/dt-sql/LOCKED", 0o640, "deploy", "deploy")], str(_dsbox))
+os.makedirs(_root + "/var/lib/dt-sql", exist_ok=True)
+
+
+def _modes(files, dirs=()):
+    for f in ("log.jsonl", "LOCKED", "INTENT"):
+        q = _root + "/var/lib/dt-sql/" + f
+        if os.path.isdir(q) and not os.path.islink(q):
+            shutil.rmtree(q)
+        elif os.path.lexists(q):
+            os.unlink(q)
+    for f in dirs:
+        os.makedirs(_root + "/var/lib/dt-sql/" + f)
+    for f, m in files.items():
+        q = _root + "/var/lib/dt-sql/" + f
+        open(q, "w").write("{}")
+        os.chmod(q, m)
+    DM.PROBLEMS.clear()
+    DM.CLASSES.clear()
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        DM.check_modes(_dsbox)
+    return list(DM.PROBLEMS), buf.getvalue()
+
+
+pr, o = _modes({"log.jsonl": 0o640})
+check("C4 control: log.jsonl 0640 and no LOCKED/INTENT -> nothing reported (absent is the normal state)", pr == [], o)
+pr, o = _modes({"log.jsonl": 0o640, "LOCKED": 0o640, "INTENT": 0o640})
+check("C4 control: LOCKED and INTENT present at 0640 -> nothing reported", pr == [], o)
+pr, o = _modes({"log.jsonl": 0o640, "LOCKED": 0o644})
+check("C4: LOCKED present at 0644 -> PERM naming it", any("PERM" in x and "/var/lib/dt-sql/LOCKED mode/owner is 644" in x for x in pr)
+      and len(pr) == 1, str(pr) + o)
+pr, o = _modes({"log.jsonl": 0o640, "INTENT": 0o666})
+check("C4: INTENT present at 0666 -> PERM naming it", any("PERM" in x and "/var/lib/dt-sql/INTENT mode/owner is 666" in x for x in pr)
+      and len(pr) == 1, str(pr) + o)
+pr, o = _modes({"log.jsonl": 0o644})
+check("C4: log.jsonl at 0644 (today's live mode) -> PERM naming it",
+      any("PERM" in x and "/var/lib/dt-sql/log.jsonl mode/owner is 644" in x for x in pr) and len(pr) == 1, str(pr) + o)
+pr, o = _modes({})
+check("C4: log.jsonl missing -> MISSING (it is always there once dt-sql has run)",
+      any("MISSING" in x and "/var/lib/dt-sql/log.jsonl" in x for x in pr) and len(pr) == 1, str(pr) + o)
+pr, o = _modes({"log.jsonl": 0o640}, dirs=("LOCKED",))
+check("C4: a directory planted at LOCKED -> PERM 'not a regular file'",
+      any("/var/lib/dt-sql/LOCKED not a regular file" in x for x in pr), str(pr) + o)
+os.rmdir(_root + "/var/lib/dt-sql/LOCKED")
+DM.pwd, DM.grp = _pwd0, _grp0
 shutil.rmtree(_root)
 
 # ── B-DEPLOY-WINDOW-GUARD (#1249): the deploy_windows check, in-process. Langston BLOCKER-2 / C-15 / C-16: a stale

@@ -113,7 +113,9 @@ def caller():
 
 def log(event, **kw):
     try:
-        # 0640 (Langston C4): the state dir is 0755 now, so the log's own mode is what keeps other accounts out
+        # 0640 (Langston C4): the state dir is 0755 now, so each file's own mode is what keeps other accounts out.
+        # O_CREAT applies the mode only to a NEW file: the live log predates this, so Step 6 chmods it and the drift
+        # checker's private row for it catches a regression.
         with os.fdopen(os.open(LOG_FILE, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o640), "a") as fh:
             fh.write(json.dumps(dict(kw, event=event, at=now(), caller=caller())) + "\n")
     except OSError:
@@ -121,8 +123,14 @@ def log(event, **kw):
 
 
 def write_json(path, obj):
+    """LOCKED and INTENT, written 0640 whatever the umask (Langston Step-4 C4 fold): the state dir is 0755, LOCKED
+    carries the last line of psql's stderr (host, address, port, role) and the caller. fchmod, not the open mode
+    alone, so a left-over .tmp of any mode cannot carry its mode into the replaced file. `lock` is NOT written here:
+    dt-sql-login opens it read-only as dtsql, so it stays 0644 and holds nothing."""
     tmp = path + ".tmp"
-    with open(tmp, "w") as fh:
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o640)
+    os.fchmod(fd, 0o640)
+    with os.fdopen(fd, "w") as fh:
         json.dump(obj, fh)
         fh.flush()
         os.fsync(fh.fileno())
@@ -347,7 +355,7 @@ def main(args):
     return locked_attempt(LOGIN + (["--csv"] if opts["csv"] else []), stdin_data)   # the checked bytes (D-1)
 
 
-def locked_attempt(argv, stdin_data, env=None, emit=None, direct=False):
+def locked_attempt(argv, stdin_data, env=None, emit=None, direct=False, redact=()):
     """ONE login attempt under dt-sql's whole fail-closed protocol: the non-blocking flock, the LOCKED and left-over
     INTENT checks, the INTENT written BEFORE the attempt, the timeout, the TLS-check reading, the classification, the
     lock arms and their alerts. Returns dt-sql's exit code (0-6, as the docstring's table).
@@ -355,7 +363,9 @@ def locked_attempt(argv, stdin_data, env=None, emit=None, direct=False):
     function for each of its own logins, so every login it makes takes the same protocol — one implementation, not a
     copy: `env` is the child's environment (its own stripped one carrying the app password), `emit(out, err)` receives
     the output instead of this process's stdout/stderr, and `direct=True` says argv is psql itself, which prints no
-    ready line — so a non-zero exit is ALWAYS read as a real attempt (it locks), never as a refusal before one."""
+    ready line — so a non-zero exit is ALWAYS read as a real attempt (it locks), never as a refusal before one.
+    `redact` holds secrets struck from the detail BEFORE it is persisted to LOCKED and sent in the alert (Langston
+    Step-4 JC-1 fold: the caller's own redaction runs after this returns, too late for the file and the queue)."""
     with open(LOCK_FILE, "a") as lf:
         try:
             fcntl.flock(lf, fcntl.LOCK_EX | fcntl.LOCK_NB)        # one at a time, NEVER queued (pre-audit P1d)
@@ -412,6 +422,8 @@ def locked_attempt(argv, stdin_data, env=None, emit=None, direct=False):
                   file=sys.stderr)
             return 3
         detail = err.decode("utf-8", "replace").strip().splitlines()[-1:] or [""]
+        for secret in redact:
+            detail = [d.replace(secret, "<redacted>") for d in detail]
         if kind == "credential":
             lock_state("credential", "the database refused the password", detail[0])
             alert("credential", detail[0])

@@ -401,6 +401,16 @@ check("an error that repeats the script: exit 1, the verifier redacted, no secre
       r.returncode == 1 and "<redacted>" in r.stderr and "SCRAM-SHA-256$" not in r.stderr and APPPW not in r.stderr,
       (r.returncode, r.stderr[-300:]))
 
+reset("fatal_echo")
+r = run(tool, "--create")
+lk = locked()
+al = json.dumps(alerts())
+check("an unclear failure that repeats the script: LOCKED ambiguous, and the verifier is struck from the LOCKED detail"
+      " AND the alert BEFORE they are written (Langston Step-4 fold: redaction used to run after the lock)",
+      r.returncode == 4 and lk is not None and lk.get("arm") == "ambiguous" and "<redacted>" in lk.get("detail", "")
+      and "SCRAM-SHA-256$" not in json.dumps(lk) and "SCRAM-SHA-256$" not in al and "<redacted>" in al
+      and APPPW not in json.dumps(lk) + al, (r.returncode, lk, al[-300:]))
+
 print("create: dt-sql busy")
 reset("ok")
 with open(os.path.join(state, "lock"), "a") as lf:

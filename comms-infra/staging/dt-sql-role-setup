@@ -187,7 +187,7 @@ def attempt(argv, sql, env, redact=()):
         got["out"], got["err"] = out, err
 
     try:
-        rc = ds.locked_attempt(argv, dl.TRANSPORT.decode() + sql, env=env, emit=emit, direct=True)
+        rc = ds.locked_attempt(argv, dl.TRANSPORT.decode() + sql, env=env, emit=emit, direct=True, redact=redact)
     finally:
         chown_state()
     out = got.get("out", b"").decode("utf-8", "replace")

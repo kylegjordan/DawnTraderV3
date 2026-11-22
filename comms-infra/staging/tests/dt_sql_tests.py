@@ -18,6 +18,7 @@ import os
 import shutil
 import signal
 import socket
+import stat
 import subprocess
 import sys
 import tempfile
@@ -122,6 +123,9 @@ def load(path, name):
 
 
 TRANSPORT = load(login_copy, "dt_sql_login_copy").TRANSPORT.decode()
+
+
+os.umask(0o002)                                               # deploy's measured umask: the state-file modes must not depend on it
 
 
 def reset(mode="ok"):
@@ -274,9 +278,18 @@ check("the log keeps psql's code as psql_rc (3) and the tool's REAL exit as exit
       any(e["event"] == "sql_error" and e.get("psql_rc") == 3 and "rc" not in e for e in lr)
       and any(e["event"] == "exit" and e.get("exit") == 1 for e in lr), lr)
 reset("credential")
+_t = os.path.join(state, "LOCKED.tmp")                       # a left-over .tmp at 0666: fchmod, not O_CREAT, must set 0640
+open(_t, "w").close()
+os.chmod(_t, 0o666)
+os.remove(os.path.join(state, "log.jsonl")) if os.path.exists(os.path.join(state, "log.jsonl")) else None
 r = run(tool, "-c", "select 1")
 lk = locked()
 check("a wrong password: exit 4, LOCKED arm 'credential'", r.returncode == 4 and lk and lk["arm"] == "credential", (r.returncode, lk))
+check("LOCKED is written 0640 under deploy's 0002 umask, even over a left-over 0666 .tmp (Langston Step-4 C4: the dir is 0755)",
+      lk is not None and stat.S_IMODE(os.stat(os.path.join(state, "LOCKED")).st_mode) == 0o640,
+      oct(stat.S_IMODE(os.stat(os.path.join(state, "LOCKED")).st_mode)) if lk else None)
+check("log.jsonl is created 0640 under deploy's 0002 umask (Langston C4)",
+      stat.S_IMODE(os.stat(os.path.join(state, "log.jsonl")).st_mode) == 0o640, oct(os.stat(os.path.join(state, "log.jsonl")).st_mode))
 check("... and a critical alert is raised", "critical" in alerts() and "dt-sql-credential-locked" in alerts(), alerts()[:300])
 lr = logrows()
 check("the alert row carries npm's code as alert_rc, never as rc", any(e["event"] == "alert" and "alert_rc" in e and "rc" not in e
@@ -323,6 +336,9 @@ deadline = time.time() + 10
 while not intent() and time.time() < deadline:
     time.sleep(0.05)
 check("the INTENT is written BEFORE the attempt", intent())
+check("INTENT is written 0640 under deploy's 0002 umask (Langston Step-4 C4)",
+      intent() and stat.S_IMODE(os.stat(os.path.join(state, "INTENT")).st_mode) == 0o640,
+      oct(os.stat(os.path.join(state, "INTENT")).st_mode) if intent() else None)
 while not calls() and time.time() < deadline:
     time.sleep(0.05)
 c0 = calls()[0] if calls() else {}

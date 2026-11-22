@@ -109,7 +109,7 @@ MUTANTS = [
     # dt-sql-role-setup (B-DB-READONLY-ROLE): the tool that makes the reader role, re-keys it and proves it
     ("dt-sql: a direct psql run is not treated as a real attempt", "dt-sql", "ready = ready or direct", "ready = ready"),
     ("role-setup: the login bypasses dt-sql's one-attempt lock", "dt-sql-role-setup",
-     "        rc = ds.locked_attempt(argv, dl.TRANSPORT.decode() + sql, env=env, emit=emit, direct=True)",
+     "        rc = ds.locked_attempt(argv, dl.TRANSPORT.decode() + sql, env=env, emit=emit, direct=True, redact=redact)",
      "        rc0, o, e = ds.run_login(argv, dl.TRANSPORT.decode() + sql, env); emit(o, e); rc = rc0"),
     ("role-setup: the TLS check is not sent first", "dt-sql-role-setup",
      "ds.locked_attempt(argv, dl.TRANSPORT.decode() + sql,", "ds.locked_attempt(argv, sql,"),
@@ -147,6 +147,14 @@ MUTANTS = [
      "    if os.path.exists(ds.LOCKED_FILE) or os.path.exists(ds.INTENT_FILE):", "    if False:"),
     ("role-setup: verify accepts a readable reader.env", "dt-sql-role-setup",
      "    if stat.S_IMODE(st.st_mode) != 0o600:", "    if False:"),
+    # ── B-DB-READONLY-ROLE Step-4 r2 (Langston C4 + the redact pass-through) ──
+    ("C4: write_json trusts the open mode (no fchmod)", "dt-sql", "    os.fchmod(fd, 0o640)" + NL, ""),
+    ("C4: LOCKED/INTENT written 0644", "dt-sql", "os.O_TRUNC, 0o640)" + NL + "    os.fchmod(fd, 0o640)",
+     "os.O_TRUNC, 0o644)" + NL + "    os.fchmod(fd, 0o644)"),
+    ("C4: log.jsonl created 0644", "dt-sql", "os.O_CREAT, 0o640), \"a\")", "os.O_CREAT, 0o644), \"a\")"),
+    ("redact: locked_attempt ignores redact", "dt-sql",
+     "        for secret in redact:" + NL + "            detail = [d.replace(secret, \"<redacted>\") for d in detail]" + NL, ""),
+    ("redact: role-setup does not pass its secrets", "dt-sql-role-setup", "direct=True, redact=redact)", "direct=True)"),
 ]
 
 

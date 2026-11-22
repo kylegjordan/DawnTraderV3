@@ -145,7 +145,13 @@ BOXES = {
                     ("/var/lib/dt-api/login-ledger.jsonl", 0o600, "dtapi", "dtapi"),
                     ("/var/lib/dt-api/lock", 0o600, "dtapi", "dtapi"),
                     ("/var/lib/dt-install-drift/installed.sha", 0o644, "root", "root"),
-                    ("/etc/dt-sql/reader.env", 0o600, "dtsql", "dtsql")],   # B-DB-READONLY-ROLE: the reader password
+                    ("/etc/dt-sql/reader.env", 0o600, "dtsql", "dtsql"),    # B-DB-READONLY-ROLE: the reader password
+                    # B-DB-READONLY-ROLE (Langston Step-4 C4 fold): the dir is 0755, so the file's mode keeps others out
+                    ("/var/lib/dt-sql/log.jsonl", 0o640, "deploy", "deploy")],
+        # Files that exist only some of the time: absent is correct, present must match exactly. dt-sql's LOCKED
+        # (psql's last stderr line + the caller) and INTENT, in the 0755 state dir (Langston Step-4 C4 fold).
+        "transient": [("/var/lib/dt-sql/LOCKED", 0o640, "deploy", "deploy"),
+                      ("/var/lib/dt-sql/INTENT", 0o640, "deploy", "deploy")],
         # show-name -> (the fragment it must load from, the exact drop-ins it may carry) — services,
         # the timer AND the paging template (r2: a drop-in on any of them can silence the chain)
         "units": {"dt-install-drift.service": (SS + "dt-install-drift.service", [SS + "dt-install-drift.service.d/onfailure.conf"]),
@@ -846,6 +852,35 @@ def read_installed_shas(box):
     return default, over
 
 
+def check_modes(box):
+    """The dirs, the always-present private files and the sometimes-present transient files, each against
+    its exact mode and owner. A function of its own so the tests can drive it with fake accounts."""
+    for d, mode, user, group in box["dirs"]:
+        try:
+            st = os.lstat(P(d))
+            ok, why = owner_ok(st, mode, user, group) if stat.S_ISDIR(st.st_mode) else (False, "not a directory")
+            if not ok:
+                out("PERM", "%s %s" % (P(d), why), None, d)
+        except FileNotFoundError:
+            out("MISSING", P(d), None, d)
+    for f, mode, user, group in box["private"]:
+        try:
+            st = os.lstat(P(f))
+            ok, why = owner_ok(st, mode, user, group) if stat.S_ISREG(st.st_mode) else (False, "not a regular file")
+            if not ok:
+                out("PERM", "%s %s" % (P(f), why), None, f)
+        except FileNotFoundError:
+            out("MISSING", P(f), None, f)
+    for f, mode, user, group in box.get("transient", []):
+        try:
+            st = os.lstat(P(f))
+        except FileNotFoundError:
+            continue                            # absent is the normal state for these
+        ok, why = owner_ok(st, mode, user, group) if stat.S_ISREG(st.st_mode) else (False, "not a regular file")
+        if not ok:
+            out("PERM", "%s %s" % (P(f), why), None, f)
+
+
 def run():
     if os.geteuid() != 0:
         print("REFUSED: run as root (it must read root-only files and must not run git itself).")
@@ -890,22 +925,7 @@ def run():
         compare_files(box, shas)
         if head:
             pending(box, shas, head)
-    for d, mode, user, group in box["dirs"]:
-        try:
-            st = os.lstat(P(d))
-            ok, why = owner_ok(st, mode, user, group) if stat.S_ISDIR(st.st_mode) else (False, "not a directory")
-            if not ok:
-                out("PERM", "%s %s" % (P(d), why), None, d)
-        except FileNotFoundError:
-            out("MISSING", P(d), None, d)
-    for f, mode, user, group in box["private"]:
-        try:
-            st = os.lstat(P(f))
-            ok, why = owner_ok(st, mode, user, group) if stat.S_ISREG(st.st_mode) else (False, "not a regular file")
-            if not ok:
-                out("PERM", "%s %s" % (P(f), why), None, f)
-        except FileNotFoundError:
-            out("MISSING", P(f), None, f)
+    check_modes(box)
     check_units(box)
     for c in box["checks"]:
         try:

@@ -102,6 +102,21 @@ MUTATIONS = [
      '        for who in ("dtapi", "dtmint"):\n            try:\n                gid = pwd'),
     ("drift", "5a1: dtsql's own drop-in is not its home", '"dtsql": P("/etc/sudoers.d/dtsql")}', '"dtsql": None}'),
     ("drift", "5a1: dtsql is not policed in sudoers at all", ', "dtsql": P("/etc/sudoers.d/dtsql")}', "}"),
+    # B-DB-READONLY-ROLE Step-4 r2 (Langston C4): dt-sql's state files in the 0755 dir
+    ("drift", "C4: the transient rows are never checked", '    for f, mode, user, group in box.get("transient", []):\n',
+     "    for f, mode, user, group in []:\n"),
+    ("drift", "C4: an absent transient file is reported", "            continue                            # absent is the normal state for these\n",
+     '            out("MISSING", P(f), None, f)\n            continue\n'),
+    ("drift", "C4: a transient planted as a directory passes",
+     'if stat.S_ISREG(st.st_mode) else (False, "not a regular file")\n        if not ok:\n            out("PERM", "%s %s" % (P(f), why), None, f)\n\n\ndef run',
+     'if stat.S_ISREG(st.st_mode) else (True, "")\n        if not ok:\n            out("PERM", "%s %s" % (P(f), why), None, f)\n\n\ndef run'),
+    ("drift", "C4: log.jsonl row loosened to 0644", '("/var/lib/dt-sql/log.jsonl", 0o640, "deploy", "deploy")',
+     '("/var/lib/dt-sql/log.jsonl", 0o644, "deploy", "deploy")'),
+    ("drift", "C4: LOCKED row dropped", '"transient": [("/var/lib/dt-sql/LOCKED", 0o640, "deploy", "deploy"),\n                      ("/var/lib/dt-sql/INTENT"',
+     '"transient": [("/var/lib/dt-sql/INTENT"'),
+    ("drift", "C4: INTENT row loosened to 0644", '("/var/lib/dt-sql/INTENT", 0o640, "deploy", "deploy")',
+     '("/var/lib/dt-sql/INTENT", 0o644, "deploy", "deploy")'),
+    ("drift", "C4: run() no longer checks modes", "    check_modes(box)\n    check_units(box)\n", "    check_units(box)\n"),
 ]
 
 bad = 0
