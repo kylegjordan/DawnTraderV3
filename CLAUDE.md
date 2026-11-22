@@ -25,6 +25,8 @@
 ⛔⛔ **YOU ARE ALWAYS *ON* A NUMBERED STEP — SO WRITE IT AS A NUMBER IN YOUR MEMORY FILE’S POSITION BLOCK, AND NEVER AS PROSE (added 2026-08-28).** Form: **`STEP: N of 11` · `NEXT STEP: N+1 of 11`**, naming the batch.
 ⛔⛔ **`STEP: N` IS A NAVIGATION AID, NEVER AN ATTESTATION — no reviewer, Langston included, may cite it as evidence that step N happened.** Numbers make an omitted step visible to the session that wrote them (`1 → 3` is visibly wrong; "then build" is not). *(Measured origin `#754`, the honest limit, and the reconciler deliberately not built: `CLAUDE_MD_RULE_HISTORY.md` · `P5-01`.)*
 
+⛔⛔ **A PAUSE IS NOT A STOP (Kyle, KD-75 2026-11-13, restated 2026-11-22, KD-113).** When your batch is waiting — an observation window, xStock trading to open, a reviewer, a timed read — arm what the wait needs, then **move to your next agreed batch that does not depend on it**, and come back to finish and close the first when the wait ends. Unfinished scoped work is finished, never dropped; only ideas outside the scope become after-live proposals. *"anytime there's a pause in the action, then the session should move on to the next batch that isn't dependent on whatever is being waited on."*
+
 ⛔⛔ **NOT EVERY CHANGE IS A BATCH — an urgent live break runs the HOTFIX PATH, `.claude/skills/workflow-hotfix/SKILL.md`, and Langston still reviews it BEFORE staging. Read its qualifying test before declaring one; if in doubt it is a batch.** *(`CLAUDE_MD_RULE_HISTORY.md` · `P5-43`)*
 
 ★ **This table is the PRIMARY trigger** (it always loads, so reading the step file needs no skill machinery). Each step file is ALSO a skill — a backup trigger that is never relied on, and that registers only at a session start. *(`CLAUDE_MD_RULE_HISTORY.md` · `P5-02`)*
