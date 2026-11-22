@@ -102,8 +102,8 @@ ok("table: zero rows RAISES",
    raises(aor.load_table, json.dumps({"batches": {}, "prefixes": {}, "titles": {}, "fallback": "CC-INFRA"})))
 ok("table: a row owned by Kyle RAISES",
    raises(aor.load_table, json.dumps(dict(TABLE, batches={"B-K": {"owner": "Kyle"}}))))
-ok("table: a row owned by PM RAISES (not a building session)",
-   raises(aor.load_table, json.dumps(dict(TABLE, batches={"B-K": {"owner": "CC-PM"}}))))
+ok("table: a row owned by CC-PM LOADS (KD-115: CC-PM is in SESSIONS)",
+   aor.load_table(json.dumps(dict(TABLE, batches={"B-K": {"owner": "CC-PM"}})))["batches"]["B-K"]["owner"] == "CC-PM")
 ok("table: a fallback of Kyle RAISES", raises(aor.load_table, json.dumps(dict(TABLE, fallback="Kyle"))))
 ok("table: no fallback RAISES", raises(aor.load_table, json.dumps({k: v for k, v in TABLE.items() if k != "fallback"})))
 
@@ -131,19 +131,26 @@ ok("route: a two-owner plan batch is not used", R("zz-unknown", "the thing for B
 ok("route: nothing matches -> the fallback, named as such", R("zz-unknown", "Something odd") == ("CC-INFRA", "fallback"))
 ok("route: a keyless row with no stem -> the fallback", R("", "An unheard-of title") == ("CC-INFRA", "fallback"))
 
-# Step-4 BLOCKER-1 (Langston 2026-11-20): the register and the plan can name CC-PM; the lane must never route to it.
+# KD-115 (Kyle via PM Claude, 2026-11-22) reverses the Step-4 BLOCKER-1 fence (Langston 2026-11-20): CC-PM is in
+# SESSIONS, so a register or plan batch owned by CC-PM now ROUTES to CC-PM. The escalation branch stays, and is driven
+# below with an injected owner outside SESSIONS, because no parser can produce one today.
 ok("register: a row under the PM Claude section parses as CC-PM", reg.get("B-PMB") == "CC-PM")
 ok("plan: a CC-PM owner cell parses as CC-PM", plan_owner.get("B-PMPLAN") == "CC-PM")
 pm1 = R("gov-staleopen:B-PMB", "Stale open")
-ok("route BLOCKER-1: a register batch owned by CC-PM ESCALATES (no owner), never routes to CC-PM",
-   pm1[0] is None and aor.is_escalation(pm1) and "CC-PM" in pm1[1])
+ok("route KD-115: a register batch owned by CC-PM routes to CC-PM", pm1 == ("CC-PM", "register/plan:B-PMB"))
 pm2 = R("zz-unknown", "the thing for B-PMPLAN broke")
-ok("route BLOCKER-1: a plan batch owned by CC-PM named in the title ESCALATES",
-   pm2[0] is None and aor.is_escalation(pm2) and "B-PMPLAN" in pm2[1])
+ok("route KD-115: a plan batch owned by CC-PM named in the title routes to CC-PM", pm2 == ("CC-PM", "title names B-PMPLAN"))
 pm3 = R("deploy-in-window:B-PMB:abc:ts", "In window")
-ok("route BLOCKER-1: a deploy-window key for a CC-PM batch ESCALATES", pm3[0] is None and aor.is_escalation(pm3))
-ok("route BLOCKER-1: a CC-PM title opener is NOT an owner (falls to the rules, not to CC-PM)",
-   R("zz-unknown", "PM Claude: something") == ("CC-INFRA", "fallback"))
+ok("route KD-115: a deploy-window key for a CC-PM batch routes to CC-PM", pm3 == ("CC-PM", "register/plan:B-PMB"))
+ok("route KD-115: a PM Claude title opener is an owner", R("zz-unknown", "PM Claude: something") == ("CC-PM", "owner named in title"))
+ok("route KD-115: a CC-PM title opener is an owner", R("zz-unknown", "CC-PM - something") == ("CC-PM", "owner named in title"))
+ok("route KD-115: 'owner CC-PM' anywhere in the title", R("k", "Thing is stale, owner CC-PM") == ("CC-PM", "owner named in title"))
+KYBO = dict(BO, **{"B-KY": "Kyle"})   # an owner outside SESSIONS, injected: no parser yields one today
+ky1 = aor.table_route("gov-staleopen:B-KY", "breakage", "Stale open", t, KYBO)
+ok("route: a batch owned by a non-session (injected Kyle) ESCALATES, never routes, never the fallback",
+   ky1[0] is None and aor.is_escalation(ky1) and "B-KY" in ky1[1] and "Kyle" in ky1[1])
+ky2 = aor.table_route("zz-unknown", "breakage", "the thing for B-KY broke", t, KYBO)
+ok("route: a non-session batch named in the title ESCALATES", ky2[0] is None and aor.is_escalation(ky2))
 ok("is_escalation: a normal route is not", not aor.is_escalation(("CC-A", "register/plan:B-PLANB")))
 ok("is_escalation: the fallback is not", not aor.is_escalation(("CC-INFRA", "fallback")))
 ok("is_escalation: None is not", not aor.is_escalation(None))
@@ -226,16 +233,26 @@ r2, e2, _n, rest2 = al.apply_table({A1: ("Kyle", "x")}, {}, keys, prec, troutes)
 ok("apply_table: the lane routing to Kyle -> escalate, even with a table owner", A1 in e2 and not r2 and not rest2)
 r3, e3, _n, rest3 = al.apply_table({A2: ("Kyle", "x")}, {}, keys, prec, troutes)
 ok("apply_table: the lane routing to Kyle on a fallback row -> escalate", A2 in e3 and not r3 and not rest3)
-PMR = (None, aor.ESCALATE + "batch B-PMB is owned by CC-PM, not a building session")
+# The escalation route, built by the real function from an injected non-session owner (KD-115 moved CC-PM into SESSIONS).
+PMR = aor._batch_route("B-KY", "Kyle", "register/plan:B-KY")
+ok("escalation route: built from an injected non-session owner", PMR[0] is None and aor.is_escalation(PMR))
 for lane_owner in ("CC-A", "CC-INFRA", "Kyle"):
     r5, e5, _n, rest5 = al.apply_table({A1: (lane_owner, "x")}, {}, keys, prec, {A1: PMR})
-    ok("apply_table BLOCKER-1: an escalation route escalates whatever the lane chose (%s)" % lane_owner,
-       A1 in e5 and not r5 and not rest5 and "CC-PM" in e5[A1] and "Langston decides" in e5[A1])
+    ok("apply_table: an escalation route escalates whatever the lane chose (%s)" % lane_owner,
+       A1 in e5 and not r5 and not rest5 and "B-KY" in e5[A1] and "Langston decides" in e5[A1])
 r6, e6, _n, rest6 = al.apply_table({A1: ("CC-A", "x"), A2: ("CC-C", "y")}, {}, keys, prec, {A1: PMR, A2: troutes[A2]})
-ok("apply_table BLOCKER-1: every alert still lands exactly once beside an escalation",
+ok("apply_table: every alert still lands exactly once beside an escalation",
    sorted(list(r6) + list(e6) + list(rest6)) == sorted([A1, A2]) and A1 in e6)
-ok("table line BLOCKER-1: an escalation route says ESCALATE, never an owner",
-   "ESCALATE" in al.owner_table_line(PMR) and "CC-PM" in al.owner_table_line(PMR))
+ok("table line: an escalation route says ESCALATE, never an owner",
+   "ESCALATE" in al.owner_table_line(PMR) and "B-KY" in al.owner_table_line(PMR))
+r7, e7, _n, rest7 = al.apply_table({A1: ("CC-PM", "x")}, {}, keys, prec, {A1: ("CC-PM", "register/plan:B-PMB")})
+ok("apply_table KD-115: a CC-PM table route with the lane agreeing -> routed to CC-PM",
+   r7.get(A1, ("",))[0] == "CC-PM" and not e7 and not rest7)
+r8, e8, _n, rest8 = al.apply_table({A1: ("CC-A", "x")}, {}, keys, prec, {A1: ("CC-PM", "register/plan:B-PMB")})
+ok("apply_table KD-115: the CC-PM table owner wins over the lane's CC-A", r8.get(A1, ("",))[0] == "CC-PM" and not e8)
+ra, ea, pa = al.read_answer('[[ALERT id=%s owner=CC-PM action="x"]]' % A1, [A1])
+ok("read_answer KD-115: a lane marker naming CC-PM is a valid owner, not an unknown one",
+   ra.get(A1, ("",))[0] == "CC-PM" and A1 not in ea and not pa)
 r4, e4, _n, _r = al.apply_table({A1: ("CC-B", "x")}, {"zz": "already"}, keys, prec, troutes)
 ok("apply_table: an escalation from read_answer is kept", e4.get("zz") == "already")
 
@@ -406,17 +423,22 @@ run([{"channel_id": 100, "message_id": 5009, "author_id": 1, "author_name": "d",
 ok("bridge: an alert with no id is escalated without reading the mirror's verdict",
    ESC == [(5009, "the alert lane could not read an alert id in it")] and INVOKES == [])
 
-# Step-4 BLOCKER-1 through the shipping entry point: a live row keyed to a CC-PM register batch is escalated.
+# KD-115 through the shipping entry point (reverses the Step-4 BLOCKER-1 case that stood here): a live row keyed to a
+# CC-PM register batch is ROUTED to CC-PM, and the table owner wins over the lane's CC-A. The escalation branch cannot be
+# reached through the files any more (no parser yields an owner outside SESSIONS); it is driven at the unit level above
+# with an injected owner (KYBO, PMR).
 C1 = "%08x-0000-4000-8000-%012x" % (19, 19)
 LIVE[C1] = {"id": C1, "metadata": {"dedupe_key": "gov-staleopen:B-PMB"}, "title": "Stale open"}
 PREC.clear()
 ANSWER["v"] = '[[ALERT id=%s owner=CC-A action="look"]]' % C1
 run([task(19, C1, "Stale open")], FILES)
-ok("bridge BLOCKER-1: a CC-PM register batch is ESCALATED to Langston, not routed",
-   [m for m, _r in ESC] == [5019] and "CC-PM" in ESC[0][1])
-ok("bridge BLOCKER-1: no routing marker for it is published", not any(("id=%s owner=" % C1) in p for p in POSTS))
-ok("bridge BLOCKER-1: the lane prompt told Langston it is an escalation",
-   len(INVOKES) == 1 and "OWNER TABLE: ESCALATE" in INVOKES[0])
+ok("bridge KD-115: a CC-PM register batch is routed, not escalated", ESC == [])
+ok("bridge KD-115: the published marker names CC-PM (the table owner wins over the lane's CC-A)",
+   any(("id=%s owner=CC-PM" % C1) in p for p in POSTS) and not any(("id=%s owner=CC-A" % C1) in p for p in POSTS))
+ok("bridge KD-115: the lane prompt did not call it an escalation",
+   len(INVOKES) == 1 and "OWNER TABLE: ESCALATE" not in INVOKES[0])
+ok("bridge KD-115: the published CC-PM marker survives the precedent rule",
+   bal.effective_owner([(TS(19), "CC-PM")])[2])
 
 # ---- 4. the REAL pin and read against a real bare repo (C-1, C-2, C-3, C-5) ----------------------------------------
 import subprocess  # noqa: E402

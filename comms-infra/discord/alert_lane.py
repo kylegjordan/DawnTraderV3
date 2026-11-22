@@ -24,7 +24,7 @@ LANE_MODEL = "claude-sonnet-5-5"            # cheaper than Langston's; confirmed
 LANE_TIMEOUT_S = 600
 BATCH_SETTLE_S = 20                         # after the first alert, wait this long for the rest of a burst
 BATCH_MAX = 15                              # alerts per invocation
-OWNERS = ("CC-A", "CC-B", "CC-C", "CC-INFRA", "Kyle")
+OWNERS = ("CC-A", "CC-B", "CC-C", "CC-INFRA", "CC-PM", "Kyle")  # CC-PM: KD-115, 2026-11-22
 # B-TOKEN-ECONOMY amendment 1, P6 (pre-audit row P6): the crew's owner table, the open-batch register and the active
 # plan are read by the BRIDGE from the Helsinki repo mirror at the review branch (never from a laptop copy, never from
 # the lane), once per batch. A failed or unparseable read escalates the whole batch (R2-4) - never the fallback owner.
@@ -431,7 +431,7 @@ def apply_table(routed, escalate, keys, prec, troutes):
       - Langston's clean precedent names a DIFFERENT session -> escalate (the table or his ruling is stale - he decides);
       - an interleave in his precedent -> the table owner SETTLES it (R2-6);
       - otherwise -> the table owner, whatever the lane chose (a different lane choice is noted, never silent).
-    An escalation rule (rules 8/9 found an owner outside the building sessions) -> escalate, whatever the lane chose.
+    An escalation rule (rules 8/9 found an owner outside alert_owner_route.SESSIONS) -> escalate, whatever the lane chose.
     The fallback rule (nothing matched):
       - a Langston precedent exists -> `rest`, so `apply_precedent` rules exactly as before;
       - none -> the table's fallback owner (R2-5: the post states it was the fallback)."""

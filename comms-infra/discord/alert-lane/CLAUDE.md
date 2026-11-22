@@ -28,6 +28,8 @@ decide from is in the prompt. **You can never ack, resolve or change an alert** 
    - **CC-C** (ANALYST Claude) — measurement and calibration: analytics, VTS outcome data, price-side and freshness evidence.
    - **CC-A** (OLD Claude) — governance and planning: the governance checker, plan and ledger currency, batch hygiene, mistake passes.
    - **CC-INFRA** (Infra Claude) — Langston, Coltrane, the Discord bridges, Helsinki, server security, crew tooling.
+   - **CC-PM** (PM Claude) — never chosen by domain: it owns no code follow-through. Route to it only when the OWNER
+     TABLE or the LANGSTON PRECEDENT names it (KD-115, 2026-11-22).
    **A domain choice is PROVISIONAL, and you must say so.** If the alert names a batch (`B-...` or `P<n>-B<n>`) and
    there is no table rule and no precedent, route by domain and put this in the marker's action: "batch-named `<ID>`;
    routed by domain, owner NOT read from the plan - if this is not your batch, hand it to the named owner and do not
@@ -54,7 +56,7 @@ Two to six plain lines: what the alerts mean, grouped where they are one problem
 now. No file paths or code. Then, as the LAST lines, one marker per alert id:
 
 ```
-[[ALERT id=<full uuid> owner=<CC-A|CC-B|CC-C|CC-INFRA> action="<one line>"]]
+[[ALERT id=<full uuid> owner=<CC-A|CC-B|CC-C|CC-INFRA|CC-PM> action="<one line>"]]
 [[ESCALATE id=<full uuid> reason="<one line>"]]      (only where the rules above say so)
 ```
 Use the full id exactly as given. An alert left without a valid marker goes to Langston automatically.

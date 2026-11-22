@@ -21,12 +21,14 @@ Rule order (`_about.order` in the table, approved at Step 4 C-4):
   9. a register or plan batch named anywhere in the title
  10. nothing matched -> the table's fallback (CC-INFRA)
 Rules 8 and 9 return (None, 'escalate:...') when the register or plan owner is not one of SESSIONS.
+SESSIONS is the ONE trusted owner set: the five sessions, PM Claude included since KD-115 (Kyle via PM Claude,
+2026-11-22), which reverses the Step-4 BLOCKER-1 fence of 2026-11-20.
 """
 import collections
 import json
 import re
 
-SESSIONS = ('CC-A', 'CC-B', 'CC-C', 'CC-INFRA')
+SESSIONS = ('CC-A', 'CC-B', 'CC-C', 'CC-INFRA', 'CC-PM')
 SECT = {'batch': 'batches', 'prefix': 'prefixes', 'title': 'titles'}
 
 # --- the open-batch register: batch -> owner, from the session section the row sits in -----------------------
@@ -101,10 +103,10 @@ def batch_owners(register, plan_owner):
 
 
 # --- the family a row belongs to --------------------------------------------------------------------------------
-OWNER_TITLE = re.compile(r'^(CC-(?:A|B|C|INFRA)|OLD Claude|NEW Claude|ANALYST Claude|Infra Claude)\s*[:—-]')
-OWNER_SUFFIX = re.compile(r'\bowner (CC-(?:A|B|C|INFRA)|Infra)\b')
+OWNER_TITLE = re.compile(r'^(CC-(?:A|B|C|INFRA|PM)|OLD Claude|NEW Claude|ANALYST Claude|Infra Claude|PM Claude)\s*[:—-]')
+OWNER_SUFFIX = re.compile(r'\bowner (CC-(?:A|B|C|INFRA|PM)|Infra)\b')
 DISPLAY = {'OLD Claude': 'CC-A', 'NEW Claude': 'CC-B', 'ANALYST Claude': 'CC-C', 'Infra Claude': 'CC-INFRA',
-           'Infra': 'CC-INFRA'}
+           'Infra': 'CC-INFRA', 'PM Claude': 'CC-PM'}
 BATCH_TITLE = re.compile(r'^(B-[A-Z0-9-]+)[: ]')
 BATCH_KEY = ('deploy-window-stale:', 'deploy-in-window:')
 BATCH_ANY = re.compile(r'\b(B-[A-Z0-9][A-Z0-9-]*[A-Z0-9])\b')
@@ -157,13 +159,16 @@ ESCALATE = 'escalate:'
 
 
 def _batch_route(batch, owner, rule):
-    """Rules 8 and 9 read an owner out of the register or the plan, which can name an owner the alert lane must
-    never route to - PM Claude's register section maps to CC-PM (Step-4 BLOCKER-1, Langston 2026-11-20). Such an
-    owner is an ESCALATION to Langston: (None, 'escalate:<why>'). Never the fallback (that would be a guess) and
-    never the owner verbatim (an alert routed to a non-building session is cleared without waking anyone)."""
+    """Rules 8 and 9 read an owner out of the register or the plan. An owner outside SESSIONS is an ESCALATION to
+    Langston: (None, 'escalate:<why>'). Never the fallback (that would be a guess) and never the owner verbatim (an
+    alert routed to an owner no wake filter records is cleared without waking anyone).
+    KD-115 (2026-11-22) put CC-PM into SESSIONS, reversing the Step-4 BLOCKER-1 fence (Langston 2026-11-20) that
+    escalated PM Claude's register rows. Today's parsers (SECTION, _OWNER_FULL) name only the five sessions, so this
+    branch is the fail-closed guard for the day a parser learns a name before SESSIONS does; the tests drive it with
+    an injected owner, not a parsed one."""
     if owner in SESSIONS:
         return (owner, rule)
-    return (None, ESCALATE + 'batch %s is owned by %s, not a building session' % (batch, owner))
+    return (None, ESCALATE + 'batch %s is owned by %s, not a session the lane routes to' % (batch, owner))
 
 
 def is_escalation(route):
@@ -173,7 +178,7 @@ def is_escalation(route):
 
 def load_table(text):
     """The parsed table. RAISES ValueError on anything a router could not trust: unparseable JSON, a missing
-    section, zero rows, an owner outside the four building sessions, or a fallback outside them."""
+    section, zero rows, an owner outside SESSIONS, or a fallback outside them."""
     if not (text or '').strip():
         raise ValueError('the owner table is empty')
     table = json.loads(text)
@@ -186,12 +191,12 @@ def load_table(text):
             raise ValueError('the owner table has no %s section' % s)
         for name, row in sec.items():
             if not isinstance(row, dict) or row.get('owner') not in SESSIONS:
-                raise ValueError('owner table row %s:%s has no building-session owner' % (s, name))
+                raise ValueError('owner table row %s:%s has no owner in SESSIONS' % (s, name))
             n += 1
     if not n:
         raise ValueError('the owner table has zero rows')
     if table.get('fallback') not in SESSIONS:
-        raise ValueError('the owner table fallback is not a building session')
+        raise ValueError('the owner table fallback is not in SESSIONS')
     return table
 
 
