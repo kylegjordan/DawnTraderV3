@@ -279,10 +279,22 @@ describe('the run — arm (a), degeneracy and arm (b) against the real loader ga
     expect(lastRow()).toMatchObject({ outcome: 'refused', refusalReason: 'degenerate', confirmable: false,
       computedCount: 227, countBefore: 469 });
     const msgs = warn.mock.calls.map(c => String(c[0]));
-    // The floor figure is the plausibility floor ceil(running / 2), fenced explicitly (Langston Gate A, #10 residual).
-    expect(Math.ceil(469 / 2)).toBe(235);
     expect(msgs.some(m => m.includes('computed 227 symbols against 469 running (floor 235); refusing as degenerate'))).toBe(true);
     expect(msgs.some(m => m.includes('[perpfeed]'))).toBe(false); // C2
+  });
+
+  // The floor is pinned from BOTH sides at 235 (Langston Gate A, #10 residual): 234 is degenerate and 235 is not, so a
+  // loosened floor fails the first and a tightened one fails the second, and the printed "floor 235" cannot drift.
+  it('#10: the plausibility floor is exactly 235 against 469 — 234 is degenerate, 235 is not', async () => {
+    h.universe = universeOf(range(0, 234));
+    const warn = vi.spyOn(console, 'warn');
+    const below = await run();
+    expect([below.outcome, below.refusalReason]).toEqual(['refused', 'degenerate']);
+    expect(warn.mock.calls.map(c => String(c[0])).some(m => m.includes('computed 234 symbols against 469 running (floor 235)'))).toBe(true);
+    h.universe = universeOf(range(0, 235));
+    const at = await run();
+    expect(at.refusalReason).not.toBe('degenerate');
+    expect([at.outcome, at.refusalReason]).toEqual(['refused', 'drop_share']);
   });
 
   it('a degenerate row is never a baseline: the next run judges arm (b) as if no episode had a baseline', async () => {
@@ -374,13 +386,22 @@ describe('the rung alerts — real alert store', () => {
     expect(open.map(a => [a.dedupe_key, a.severity]).sort()).toEqual([
       [`${RUNG_PREFIX}1`, 'info'], [`${RUNG_PREFIX}2`, 'warning'], [`${RUNG_PREFIX}3`, 'critical'],
     ]);
-    const rung3Body = open.find(a => a.dedupe_key === `${RUNG_PREFIX}3`)!.body;
+    const rung3 = open.find(a => a.dedupe_key === `${RUNG_PREFIX}3`)!;
+    const rung3Body = rung3.body;
     expect(rung3Body).toMatch(/NO operator path/);
     expect(lastRow().consecutiveRefusals).toBe(4);
     // The open rung-3 row was minted at refusal 3 and is now four refusals old: its body must carry no count or age
     // purporting to be current (Langston Gate A FINDING-1).
     expect(rung3Body).not.toMatch(/consecutive runs without a clean apply:? \d|h before this run|h ago/i);
     expect(rung3Body).toMatch(/LATEST row of crypto_universe_refresh_runs/);
+    // The title is the widest-reach surface (the resurface path replays it to Kyle) and freezes the same way.
+    expect(rung3.title).not.toMatch(/\d+ run\(s\)/);
+    expect(rung3.title).toMatch(/3 or more consecutive runs without a clean apply/);
+    // The frozen metadata never borrows the live column names the body advertises.
+    const md = (typeof rung3.metadata === 'string' ? JSON.parse(rung3.metadata) : rung3.metadata) as Record<string, unknown>;
+    expect(md).not.toHaveProperty('consecutive_refusals');
+    expect(md).not.toHaveProperty('running_set_age_hours');
+    expect(md.consecutive_refusals_at_mint).toBe(3);
 
     h.universe = universeOf(range(0, 469));                        // nothing to change → noop
     const r = await run();

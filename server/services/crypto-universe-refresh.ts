@@ -332,15 +332,20 @@ export async function runCryptoUniverseRefresh(
       triggers_at: new Date(),
       category: 'health_check',
       severity: rung.severity,
-      title: `Crypto universe refresh: ${outcome === 'refused' ? `refused (${refusalReason})` : 'bounded confirmed step'}, ` +
-        `${consecutiveRefusals} run(s) without a clean apply`,
+      // The rung-3 row stays open across later refusals and addAlert's dedupe branch never rewrites it, so its title
+      // carries no count: the live figure is on the latest run row (Langston Gate A FINDING-1, title leg).
+      title: rung.level === 3
+        ? 'Crypto universe refresh: 3 or more consecutive runs without a clean apply (live count on the latest run row)'
+        : `Crypto universe refresh: ${outcome === 'refused' ? `refused (${refusalReason})` : 'bounded confirmed step'}, ` +
+          `${consecutiveRefusals} run(s) without a clean apply`,
       body: rungBody({ level: rung.level, consecutive: consecutiveRefusals, ageHours: runningSetAgeHours, outcome,
         refusalReason, occurrenceId, runId }),
       dedupe_key: rung.key,
       metadata: {
         batch: 'B-UNIVERSE-REFRESH-ACTS', ledger: '#1018', run_id: runId, occurrence_id: occurrenceId,
-        outcome, refusal_reason: refusalReason, consecutive_refusals: consecutiveRefusals,
-        running_set_age_hours: runningSetAgeHours, count_before: countBefore, count_after: countAfter,
+        // Frozen with the row: named _at_mint so they are never read as the live columns the body points at.
+        outcome, refusal_reason: refusalReason, consecutive_refusals_at_mint: consecutiveRefusals,
+        running_set_age_hours_at_mint: runningSetAgeHours, count_before: countBefore, count_after: countAfter,
       },
     });
   } else {
