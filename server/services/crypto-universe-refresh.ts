@@ -159,10 +159,16 @@ export function rungBody(args: {
   const what = args.outcome === 'applied_confirmed'
     ? 'applied a BOUNDED, confirmed step (part of a large drop the gate held back), so the universe is still converging'
     : `REFUSED to change the universe (reason: ${args.refusalReason})`;
+  // A body is written ONCE: addAlert returns an open same-key row unchanged (system-alerts.ts, the dedupe branch),
+  // so rung 3 stays open across every later refusal. Rungs 1 and 2 are mint-time records and say so; rung 3 carries
+  // NO figure at all and points at the table for the live count (pre-audit, the rung-3 body rule — Langston Gate A).
+  const figures = args.level === 3
+    ? 'This alert is not updated after it is raised: the LIVE count of runs without a clean apply and the age of the recorder\'s subscribed set are consecutive_refusals and running_set_age_hours on the LATEST row of crypto_universe_refresh_runs.'
+    : `As of run ${args.runId}: consecutive runs without a clean apply ${args.consecutive}; the recorder's subscribed set was last confirmed current ${args.ageHours.toFixed(1)} h before this run.`;
   const lines = [
     `The daily crypto spot universe refresh ${what}.`,
-    `Consecutive runs without a clean apply: ${args.consecutive}. The recorder's subscribed set was last confirmed current ${args.ageHours.toFixed(1)} h ago.`,
-    `Occurrence ${args.occurrenceId}; run row ${args.runId} in crypto_universe_refresh_runs.`,
+    figures,
+    `Raised by occurrence ${args.occurrenceId}; run row ${args.runId} in crypto_universe_refresh_runs.`,
     'This alert resolves itself on the next applied or noop run. RESOLVE it, never ack it.',
   ];
   if (args.level === 3) {
@@ -204,9 +210,6 @@ export async function runCryptoUniverseRefresh(
   const maxDropShare = await requiredNumber(MAX_DROP_SHARE_KEY);
   const confirmMaxDiffShare = await requiredNumber(CONFIRM_MAX_DIFF_SHARE_KEY);
 
-  const running = archiver.getCryptoRecorderRunningSymbols();
-  const countBefore = running.length;
-
   // 1. Load.
   const { loadCryptoSpotUniverse, isUniverseFetchComplete, assertClassifiedPlausible } =
     await import('./passive-archive/universe-loader.js');
@@ -228,6 +231,13 @@ export async function runCryptoUniverseRefresh(
   const processStartMs = Date.now() - process.uptime() * 1000;
   const cleanMs = lastClean?.finishedAt ? new Date(lastClean.finishedAt).getTime() : Number.NEGATIVE_INFINITY;
   const runningSetAgeHours = (Date.now() - Math.max(cleanMs, processStartMs)) / 3_600_000;
+
+  // The running set is read AFTER the multi-batch fetch and the row reads, not before them: the recorder can remove
+  // symbols outside a refresh (a rejected or timed-out add is withdrawn), so a snapshot taken before those awaits
+  // could diff against a set that no longer exists (Langston Gate A carry 1). The pins read is the only await left
+  // between this read and decideRefresh.
+  const running = archiver.getCryptoRecorderRunningSymbols();
+  const countBefore = running.length;
 
   let outcome: RefreshOutcome;
   let refusalReason: RefusalReason | null = null;

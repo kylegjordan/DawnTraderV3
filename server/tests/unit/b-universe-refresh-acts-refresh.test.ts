@@ -225,6 +225,13 @@ describe('the pure gate', () => {
     expect(rungBody({ ...base, level: 3 })).toMatch(/NO operator path/);
     expect(rungBody({ ...base, level: 2 })).not.toMatch(/NO operator path/);
     expect(rungBody({ ...base, level: 1 })).toMatch(/RESOLVE it, never ack it/);
+    // Rungs 1-2 are mint-time records and are labelled as such; rung 3 stays open across later refusals
+    // (addAlert returns an open same-key row unchanged), so it carries no figure and points at the table.
+    expect(rungBody({ ...base, level: 1 })).toMatch(/As of run r: consecutive runs without a clean apply 3;/);
+    expect(rungBody({ ...base, level: 2 })).toMatch(/50\.0 h before this run/);
+    const r3 = rungBody({ ...base, level: 3 });
+    expect(r3).not.toMatch(/\b3\b|50\.0|h ago|As of run/);
+    expect(r3).toMatch(/consecutive_refusals and running_set_age_hours on the LATEST row of crypto_universe_refresh_runs/);
   });
 });
 
@@ -272,6 +279,8 @@ describe('the run — arm (a), degeneracy and arm (b) against the real loader ga
     expect(lastRow()).toMatchObject({ outcome: 'refused', refusalReason: 'degenerate', confirmable: false,
       computedCount: 227, countBefore: 469 });
     const msgs = warn.mock.calls.map(c => String(c[0]));
+    // The floor figure is the plausibility floor ceil(running / 2), fenced explicitly (Langston Gate A, #10 residual).
+    expect(Math.ceil(469 / 2)).toBe(235);
     expect(msgs.some(m => m.includes('computed 227 symbols against 469 running (floor 235); refusing as degenerate'))).toBe(true);
     expect(msgs.some(m => m.includes('[perpfeed]'))).toBe(false); // C2
   });
@@ -365,8 +374,13 @@ describe('the rung alerts — real alert store', () => {
     expect(open.map(a => [a.dedupe_key, a.severity]).sort()).toEqual([
       [`${RUNG_PREFIX}1`, 'info'], [`${RUNG_PREFIX}2`, 'warning'], [`${RUNG_PREFIX}3`, 'critical'],
     ]);
-    expect(open.find(a => a.dedupe_key === `${RUNG_PREFIX}3`)!.body).toMatch(/NO operator path/);
+    const rung3Body = open.find(a => a.dedupe_key === `${RUNG_PREFIX}3`)!.body;
+    expect(rung3Body).toMatch(/NO operator path/);
     expect(lastRow().consecutiveRefusals).toBe(4);
+    // The open rung-3 row was minted at refusal 3 and is now four refusals old: its body must carry no count or age
+    // purporting to be current (Langston Gate A FINDING-1).
+    expect(rung3Body).not.toMatch(/consecutive runs without a clean apply:? \d|h before this run|h ago/i);
+    expect(rung3Body).toMatch(/LATEST row of crypto_universe_refresh_runs/);
 
     h.universe = universeOf(range(0, 469));                        // nothing to change → noop
     const r = await run();
