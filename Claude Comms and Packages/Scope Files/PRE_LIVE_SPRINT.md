@@ -168,6 +168,8 @@ The sprint order is `1-system-manual/SPRINT_TO_LIVE_PLAN.md` §4, and the observ
 - #1086 (—) — B-GUARDRAIL-POLICY-ORPHAN: a dead block-code list and an orphan import (CC-C) — no live path reaches it (W41 homing 2026-10-06)
 
 - B-AI-CHAT-REMOVAL (CC-C) — Kyle 2026-09-30: the AI chat is dead code, remove it with finality. Its ACTION path (intent executor + the seven `/intent/*` routes + the approval components) goes NOW in `B-SIZING-DEC-RESTORE` 2e because it touches paper trading; THIS entry is the rest — conversation, saved chats, chat logs/costs routes, and the unmounted assistant/panel/container/sidebar/insights components (`ai-opportunities-tab` is mounted and stays). 0 calls in ~11 days of access logs. Pull forward if Kyle wants it before live.
+- #1264 (CC-B) — remove the daily AI brief code, switched off in B-AI-BRIEF-OFF (Kyle 2026-11-22, KD-111; rule 18 placed deletion)
+- #1263 residue (CC-C) — the leftover database enum values no code uses (8 old strategy names, passive/learning, tuning pending, 8 walter types, 3 untraced types): record as historical or rebuild the types (Kyle 2026-11-22, KD-110)
 - #422 (CC-B) — `/api/active-engine/diagnostics/scan-24h` has no client consumer; the reachability census rules on it (added 2026-09-30, W40 census)
 
 - #1042 (CC-B) — `calibration_ledger.decision_grade` is a flag no code reads and no screen shows; it read true on wrong xStock fee rates (added 2026-09-29)
