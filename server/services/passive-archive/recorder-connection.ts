@@ -143,6 +143,27 @@ export interface RecorderConnectionOptions {
   isEnabled: () => boolean;
   /** Expected subscribe replies per open (0 ⇒ the subscribe-reply check is off for this protocol). */
   expectedSubscribeReplies: () => number;
+  /**
+   * B-UNIVERSE-REFRESH-ACTS P4 (#1018): the outcome of one symbol of an incremental add (`sendAdd`). `confirmed` =
+   * every channel acknowledged it; `rejected` = any channel refused it; `unconfirmed` = no complete answer within
+   * `recorder_subscribe_reply_timeout_ms`. The OWNER withdraws a rejected/unconfirmed symbol from its own state — the
+   * connection never reconnects over an add (pre-audit §2.4). Absent ⇒ the protocol makes no incremental adds.
+   */
+  onAddResult?: (symbol: string, outcome: AddOutcome, nowMs: number) => void;
+}
+
+export type AddOutcome = 'confirmed' | 'rejected' | 'unconfirmed';
+
+/** One symbol of an incremental add still awaiting its answer. */
+interface PendingAdd {
+  reqId: number;
+  /** When its subscribe frames last went out (0 = not sent yet — the socket was not OPEN; the next open replays it). */
+  sentAtMs: number;
+  /** Channels that must each acknowledge it. */
+  channels: number;
+  ok: number;
+  /** True once the open-time subscribe re-sent it — its replies then also count toward that open's tally. */
+  viaOpen: boolean;
 }
 
 interface AlertDeps {
@@ -192,6 +213,16 @@ export class RecorderConnection {
   subscribeOk = 0;
   readonly subscribeRejected: string[] = [];
   private subscribeTimer: NodeJS.Timeout | null = null;
+  /** B-UNIVERSE-REFRESH-ACTS P4: incremental adds awaiting their answer, by symbol. Survives a reopen (the open
+   *  replays every subscription, and the replayed replies are routed back here by symbol). */
+  readonly pendingAdds = new Map<string, PendingAdd>();
+  /** Replies to the open-time subscribe that answered a PENDING add (counted toward the open-time tally, not lost). */
+  private openRepliesRoutedToAdds = 0;
+  private nextReqId = 1;
+  private addTimer: NodeJS.Timeout | null = null;
+  /** Unsubscribe replies — their own counters, never mixed into the subscribe tally (pre-audit §2.4). */
+  unsubscribeOk = 0;
+  readonly unsubscribeRejected: string[] = [];
   private configMissingWarned = false;
   /** Whether this process has looked for an already-open silent row to adopt (once, at the first tick). */
   private adoptChecked = false;
@@ -205,6 +236,7 @@ export class RecorderConnection {
     if (!this.opts.isEnabled()) return;
     this.clearReconnectTimer();
     this.clearSubscribeTimer();
+    this.clearAddTimer();
     if (this.ws) { detachAndTerminate(this.ws); this.ws = null; }
     const ws = new WebSocket(this.opts.url, { handshakeTimeout: RECORDER_HANDSHAKE_TIMEOUT_MS });
     this.ws = ws;
@@ -217,9 +249,13 @@ export class RecorderConnection {
       this.bytesSinceOpen = 0;
       this.subscribeOk = 0;
       this.subscribeRejected.length = 0;
+      this.openRepliesRoutedToAdds = 0;
       console.log(`[B74][${this.opts.label}] connected (attempt ${this.backoff.attempts() + 1})`);
       this.opts.onOpen(ws);
+      // A pending add is in the owner's symbol list, so the open just re-sent it: restart its tally and its clock.
+      for (const p of this.pendingAdds.values()) { p.ok = 0; p.sentAtMs = now; p.viaOpen = true; }
       this.armSubscribeTimer(ws);
+      this.armAddTimer();
     });
     ws.on('message', (raw) => {
       if (this.ws !== ws) return;
@@ -261,6 +297,104 @@ export class RecorderConnection {
     else this.subscribeRejected.push('?');
   }
 
+  /**
+   * B-UNIVERSE-REFRESH-ACTS P4: route one subscribe reply. A reply carrying a `req_id` answers an incremental add
+   * (the open-time subscribe sends none), and is never counted in the open-time tally. A reply with no `req_id` for a
+   * symbol that is a pending add answers that add — the reopen replay, or a venue that does not echo `req_id` (P12
+   * checks which). Anything else is an open-time reply, unchanged.
+   */
+  noteSubscribeAck(reqId: number | null, success: boolean, symbol: string | null, nowMs: number): void {
+    const pending = symbol ? this.pendingAdds.get(symbol) : undefined;
+    if (reqId !== null) {
+      if (!symbol || !pending || pending.reqId !== reqId) {
+        console.warn(`[B74][${this.opts.label}][ADD] reply for req_id=${reqId} symbol=${symbol ?? '?'} matches no pending add — ignored`);
+        return;
+      }
+    } else if (!pending) {
+      this.noteSubscribeReply(success, symbol);
+      return;
+    } else if (pending.viaOpen) {
+      this.openRepliesRoutedToAdds++;
+    }
+    if (!success) { this.finishAdd(symbol!, 'rejected', nowMs); return; }
+    pending.ok++;
+    if (pending.ok >= pending.channels) this.finishAdd(symbol!, 'confirmed', nowMs);
+  }
+
+  /** Record one unsubscribe reply — its own counters (pre-audit §2.4). */
+  noteUnsubscribeReply(success: boolean, symbol: string | null): void {
+    if (success) this.unsubscribeOk++;
+    else this.unsubscribeRejected.push(symbol ?? '?');
+  }
+
+  /**
+   * B-UNIVERSE-REFRESH-ACTS P4: subscribe `symbols` on the CURRENT socket as one tracked add, never a reconnect. The
+   * owner must already have put the symbols into its own list (state first, then send — pre-audit §2.4), so if the
+   * socket is not OPEN the send is skipped and the next open replays them; they stay pending either way. `frames`
+   * builds the subscribe frames for this request id; `channels` is how many acknowledgements each symbol needs.
+   */
+  sendAdd(symbols: string[], frames: (reqId: number) => object[], channels: number, nowMs: number): { reqId: number; sent: boolean } {
+    const reqId = this.nextReqId++;
+    const ws = this.ws;
+    const sent = !!ws && ws.readyState === WebSocket.OPEN;
+    for (const s of symbols) this.pendingAdds.set(s, { reqId, sentAtMs: sent ? nowMs : 0, channels, ok: 0, viaOpen: false });
+    if (sent) {
+      for (const f of frames(reqId)) ws!.send(JSON.stringify(f));
+      this.armAddTimer();
+    }
+    console.log(`[B74][${this.opts.label}][ADD] req_id=${reqId} ${symbols.length} symbol(s) ${sent ? 'sent' : 'queued for the next open (socket not open)'}`);
+    return { reqId, sent };
+  }
+
+  /**
+   * B-UNIVERSE-REFRESH-ACTS P4: unsubscribe `symbols` on the current socket. The owner removes them from its own list
+   * first, so a reopen does not bring them back; if the socket is not OPEN there is nothing to unsubscribe from. Any
+   * still-pending add for them is withdrawn without an outcome (the owner is dropping them).
+   */
+  sendUnsubscribe(symbols: string[], frames: (reqId: number) => object[]): { reqId: number; sent: boolean } {
+    const reqId = this.nextReqId++;
+    for (const s of symbols) this.pendingAdds.delete(s);
+    const ws = this.ws;
+    const sent = !!ws && ws.readyState === WebSocket.OPEN;
+    if (sent) for (const f of frames(reqId)) ws!.send(JSON.stringify(f));
+    console.log(`[B74][${this.opts.label}][DROP] req_id=${reqId} ${symbols.length} symbol(s) ${sent ? 'unsubscribed' : 'removed (socket not open)'}`);
+    return { reqId, sent };
+  }
+
+  private finishAdd(symbol: string, outcome: AddOutcome, nowMs: number): void {
+    if (!this.pendingAdds.delete(symbol)) return;
+    if (outcome !== 'confirmed') console.warn(`[B74][${this.opts.label}][ADD] ${symbol} ${outcome} — withdrawn by the owner, no reconnect`);
+    try { this.opts.onAddResult?.(symbol, outcome, nowMs); } catch (err) {
+      console.error(`[B74][${this.opts.label}][ADD] onAddResult threw for ${symbol}:`, err);
+    }
+    if (this.pendingAdds.size === 0) this.clearAddTimer();
+  }
+
+  /** One timer for every SENT pending add, set to the earliest deadline; on firing, overdue adds are `unconfirmed`. */
+  private armAddTimer(): void {
+    this.clearAddTimer();
+    let earliest = Infinity;
+    for (const p of this.pendingAdds.values()) if (p.sentAtMs > 0 && p.sentAtMs < earliest) earliest = p.sentAtMs;
+    if (earliest === Infinity) return;
+    const cfg = this.resolveConfig();
+    if (!cfg) return; // config-missing is already paged; the adds stay pending, never guessed at
+    const ws = this.ws;
+    const delay = Math.max(0, earliest + cfg.subscribeReplyTimeoutMs - Date.now());
+    this.addTimer = setTimeout(() => {
+      this.addTimer = null;
+      if (this.ws !== ws) return; // a reopen re-armed it
+      const now = Date.now();
+      for (const [s, p] of [...this.pendingAdds]) {
+        if (p.sentAtMs > 0 && now - p.sentAtMs >= cfg.subscribeReplyTimeoutMs) this.finishAdd(s, 'unconfirmed', now);
+      }
+      if (this.pendingAdds.size > 0) this.armAddTimer();
+    }, delay);
+  }
+
+  private clearAddTimer(): void {
+    if (this.addTimer) { clearTimeout(this.addTimer); this.addTimer = null; }
+  }
+
   /** At most ONE pending reconnect. */
   scheduleReconnect(): void {
     if (!this.opts.isEnabled()) return;
@@ -289,6 +423,7 @@ export class RecorderConnection {
       `last_kinds=${this.recentKinds.join(',') || 'none'} subscribe_ok=${this.subscribeOk} subscribe_rejected=${this.subscribeRejected.length}`,
     );
     this.clearSubscribeTimer();
+    this.clearAddTimer(); // re-armed on the next open, which replays the pending adds
     detachAndTerminate(ws);
     this.ws = null;
     this.liveSinceMs = 0;
@@ -411,7 +546,7 @@ export class RecorderConnection {
     this.subscribeTimer = setTimeout(() => {
       this.subscribeTimer = null;
       if (this.ws !== ws) return;
-      const got = this.subscribeOk + this.subscribeRejected.length;
+      const got = this.subscribeOk + this.subscribeRejected.length + this.openRepliesRoutedToAdds;
       if (this.subscribeRejected.length > 0) {
         console.warn(`[B74][${this.opts.label}][SUBSCRIBE] ${this.subscribeRejected.length} rejected: ${this.subscribeRejected.slice(0, 20).join(',')}${this.subscribeRejected.length > 20 ? ',…' : ''}`);
       }
@@ -497,9 +632,32 @@ export class RecorderConnection {
   stop(): void {
     this.clearReconnectTimer();
     this.clearSubscribeTimer();
+    this.clearAddTimer();
+    this.pendingAdds.clear();
     detachAndTerminate(this.ws);
     this.ws = null;
     _registry.delete(this);
+  }
+
+  /**
+   * B-UNIVERSE-REFRESH-ACTS P3/§2.9: retire this connection for good (its shard emptied). Its silent-connection key is
+   * never reused (shard ids are monotonic), so an open page on it would have no clearer once the connection is gone —
+   * resolve it FIRST, with the caller's evidence, then stop. Resolving an absent key is a no-op. A failed resolve is
+   * logged loudly and the connection still stops: keeping a dead shard's socket alive to retry would grade a
+   * connection that no longer owns any symbol. Returns whether the resolve succeeded.
+   */
+  async stopAndResolve(evidence: string): Promise<boolean> {
+    let ok = true;
+    try {
+      const deps = await _alertDeps();
+      await deps.resolveByKey(this.dedupeKey(), RECORDER_WATCHDOG_ACTOR, evidence, 'engine');
+      this.alertRaised = false;
+    } catch (err) {
+      ok = false;
+      console.error(`[B74][${this.opts.label}][WATCH] failed to resolve ${this.dedupeKey()} before retiring the connection — resolve it by hand:`, err);
+    }
+    this.stop();
+    return ok;
   }
 }
 

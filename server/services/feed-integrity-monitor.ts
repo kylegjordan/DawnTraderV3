@@ -131,7 +131,18 @@ export interface RecorderLivenessReading {
   notGradedReason: string | null;
   windowMs: number | null;
   floor: number | null;
-  shards: { shardId: number; liveShare: number; symbolCount: number; grade: FeedAliveGrade }[];
+  /** Per connection. `graded=false` with reason 'grace' = more newly-added symbols still inside their grace than gradable
+   *  ones (B-UNIVERSE-REFRESH-ACTS §2.3); such a shard is never critical that tick. `liveShare` is over the GRADABLE symbols
+   *  only and `symbolCount` counts them; `gracedCount` is the excluded remainder. */
+  shards: {
+    shardId: number;
+    liveShare: number;
+    symbolCount: number;
+    gracedCount: number;
+    graded: boolean;
+    notGradedReason: 'grace' | null;
+    grade: FeedAliveGrade;
+  }[];
   /** The fold input. ⚠️ On a NOT-GRADED reading this is `'healthy'` as a FOLD-NEUTRAL SENTINEL (it must not move the
    *  overall status), NOT a verdict — read `graded` first; the issues list prints NOT GRADED (Langston Step-4 item 3, #546). */
   grade: FeedAliveGrade;
@@ -383,6 +394,12 @@ class FeedIntegrityMonitorService {
    * against the floor. ONE window (`feed_health.recorder_live_window_ms`) for both the share and the warmth gate (C2), so the
    * reading is blind for the first window after every process start — reported as NOT GRADED ('warming'), never as healthy.
    * Measured basis (pre-audit A5): 2 h share healthy 0.80-0.99 (Sunday 0.785+), half-dead ≤ 0.44; floor 0.60.
+   *
+   * B-UNIVERSE-REFRESH-ACTS (#1018, pre-audit §2.3): a symbol the daily universe refresh ADDED to a running connection is out
+   * of that connection's denominator until its first ticker update or one window after Kraken confirmed it — whichever first
+   * (the recorder decides per symbol: `gradable`). A connection whose graced symbols OUTNUMBER its gradable ones is not graded
+   * that tick (n = 0 included): too few settled symbols to say anything, and never a critical. No new constant — the grace
+   * is the same window.
    */
   private computeRecorderLiveness(now: number): RecorderLivenessReading {
     const ids = getCryptoRecorderShardIds();
@@ -397,11 +414,17 @@ class FeedIntegrityMonitorService {
     if (!isCryptoRecorderWarm(now, windowMs)) return { ...base, graded: false, notGradedReason: 'warming', grade: 'healthy' };
     let grade: FeedAliveGrade = 'healthy';
     for (const id of ids) {
-      const items = getCryptoRecorderSymbolAges(now, id);
-      const liveShare = proportionFresh(items, windowMs);
+      const items = getCryptoRecorderSymbolAges(now, id, windowMs);
+      const gradable = items.filter((i) => i.gradable);
+      const gracedCount = items.length - gradable.length;
+      const liveShare = proportionFresh(gradable, windowMs);
+      if (gradable.length === 0 || gracedCount > gradable.length) {
+        base.shards.push({ shardId: id, liveShare, symbolCount: gradable.length, gracedCount, graded: false, notGradedReason: 'grace', grade: 'healthy' });
+        continue;
+      }
       const g: FeedAliveGrade = liveShare < floor ? 'critical' : 'healthy';
       if (g === 'critical') grade = 'critical';
-      base.shards.push({ shardId: id, liveShare, symbolCount: items.length, grade: g });
+      base.shards.push({ shardId: id, liveShare, symbolCount: gradable.length, gracedCount, graded: true, notGradedReason: null, grade: g });
     }
     return { ...base, graded: true, notGradedReason: null, grade };
   }
@@ -570,6 +593,10 @@ class FeedIntegrityMonitorService {
       issues.push(`Info: crypto recorder live share NOT GRADED (${rec.notGradedReason})`);
     }
     for (const sh of rec?.graded ? rec.shards : []) {
+      if (!sh.graded) {
+        issues.push(`Info: crypto recorder shard${sh.shardId} NOT GRADED (grace: ${sh.gracedCount} newly added vs ${sh.symbolCount} gradable)`);
+        continue;
+      }
       if (sh.grade === 'healthy') continue;
       issues.push(`Critical: crypto recorder shard${sh.shardId} live share ${(sh.liveShare * 100).toFixed(1)}% of ${sh.symbolCount} symbols (floor ${((rec!.floor ?? 0) * 100).toFixed(0)}%)`);
     }

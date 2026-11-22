@@ -1,23 +1,30 @@
 /**
  * ═════════════════════════════════════════════════════════════════════════════
- * B74 — Crypto Spot Archiver (with hash-mod sharding)
+ * B74 — Crypto Spot Archiver (sharded, membership changed in-app)
  * ═════════════════════════════════════════════════════════════════════════════
  *
  * Persistent WebSocket connections to wss://ws.kraken.com/v2 for the dynamic
- * crypto universe. Hash-mod sharding when the universe exceeds the per-
- * connection limit (b74_crypto_ws_shard_size = 300, per Langston Q3).
+ * crypto universe, split into shards of at most `passive_archive.b74_crypto_ws_shard_size`
+ * symbols (module_constants, read with no fallback — B-UNIVERSE-REFRESH-ACTS §2.10).
  *
  * Universe selection:
- *   - Loaded from universe-loader.loadCryptoSpotUniverse() at startup
- *   - Refreshed daily via cron (server/scripts/b74-refresh-universe.ts)
- *   - Filter: USD/USDT/USDC quotes with ≥ $10k 24h volume
+ *   - Boot: universe-loader.loadCryptoSpotUniverse() (ungated; floor
+ *     `passive_archive.b74_crypto_min_volume_24h_usd`, DB-only).
+ *   - Daily: the in-app crypto universe refresh (B-UNIVERSE-REFRESH-ACTS, #1018)
+ *     computes the add/drop sets behind its gate and calls
+ *     `applyCryptoUniverseChange` — the only way membership changes after boot.
  *
  * Sharding:
- *   - hash(symbol) % shardCount → which connection owns each symbol
- *   - All connections in same Node process; no IPC overhead
- *   - Shard count = ceil(universe.length / 300)
+ *   - Boot places symbols by hash(symbol) % shardCount, shardCount = ceil(n / shard size).
+ *   - After boot a symbol NEVER moves (pre-audit §2.4): an add goes to the least-full
+ *     shard under the shard size, a new shard opens only when every shard is full, and
+ *     a shard emptied by drops is resolved-then-stopped (§2.9). Shard ids are monotonic
+ *     within a process and never reused.
+ *   - Membership changes go out as incremental subscribe / unsubscribe frames with
+ *     their own req_id — never a reconnect (the reconnect is the watchdog's alarm).
  *
- * Reference: BATCH_74_SCOPE.md v1.1 + Langston cc-inbox #867 + #869.
+ * Reference: BATCH_74_SCOPE.md v1.1 + Langston cc-inbox #867 + #869;
+ * B_UNIVERSE_REFRESH_ACTS_PRE_AUDIT.md §2.3-§2.10.
  *
  * B-CRYPTO-FEED-WATCHDOG (#1232, row 33a): each shard's socket is now a
  * `RecorderConnection` (recorder-connection.ts) — one socket and one reconnect
@@ -35,12 +42,23 @@ import { bufferOhlcBar } from './ohlc-batch-writer.js';
 import { bufferTickerSnap } from './ticker-batch-writer.js';
 import { validateOhlcFrame } from './ohlc-frame-validator.js';
 import { noteOhlcFrameAccepted, noteOhlcFrameRejected } from './ohlc-frame-skip-tracker.js';
-import { RecorderConnection, startRecorderWatch, type RecorderConnectionLiveness } from './recorder-connection.js';
+import {
+  RecorderConnection, startRecorderWatch, type AddOutcome, type RecorderConnectionLiveness,
+} from './recorder-connection.js';
 
 const WS_URL = 'wss://ws.kraken.com/v2';
 // B69: unchanged value (crypto_spot was already correct), renamed var for consistency
 const ASSET_CLASS = 'crypto_spot' as const;
-const SHARD_SIZE = 300;
+
+/** §2.10: the per-connection symbol cap. DB-governed, no fallback — an absent row throws (the bootstrap logs it and the
+ *  archiver does not start; the refresh records the throw). */
+async function readShardSize(): Promise<number> {
+  const { prefetchModule, getCachedNumberRequired, GLOBAL_KEY } = await import('../module-constants-service.js');
+  await prefetchModule('passive_archive');
+  const n = getCachedNumberRequired('passive_archive', 'b74_crypto_ws_shard_size', GLOBAL_KEY);
+  if (!Number.isInteger(n) || n < 1) throw new Error(`passive_archive.b74_crypto_ws_shard_size must be a positive integer, got ${n}`);
+  return n;
+}
 
 export interface Shard {
   id: number;
@@ -67,13 +85,25 @@ const state = {
   shards: [] as Shard[],
 };
 
-/** B-CRYPTO-FEED-WATCHDOG (C1/P6): the subscribed universe, symbol → shard id. Static per process (loaded once at start). */
+/** B-CRYPTO-FEED-WATCHDOG (C1/P6): the subscribed universe, symbol → shard id. Set at boot, then changed ONLY by
+ *  `applyCryptoUniverseChange` and by an add that fails confirmation (B-UNIVERSE-REFRESH-ACTS). */
 const symbolShard = new Map<string, number>();
 /** Receipt time of the last ticker UPDATE per symbol. A `snapshot` (sent on every subscribe) is the venue replaying the
- *  current state, however old, and does not count as the symbol ticking (the xStock recorder's B-VENUE-QUIET-ALERTING r4 lesson). */
+ *  current state, however old, and does not count as the symbol ticking (the xStock recorder's B-VENUE-QUIET-ALERTING r4 lesson).
+ *  Pruned with the symbol (§2.5) and written only for a symbol still in `symbolShard`, so a re-added symbol never carries a stale age. */
 const lastTickerUpdateAt = new Map<string, number>();
 /** When THIS process received its first ticker update — the warmth clock (C2: warm once a full live-share window has passed). */
 let firstTickerUpdateAtMs: number | null = null;
+/** B-UNIVERSE-REFRESH-ACTS §2.3 (J5): the grace clock for symbols added AFTER boot. Absent = a boot symbol (graded as
+ *  before). `null` = added to an existing shard and its subscribe not yet confirmed — not gradable until its first update.
+ *  A number = confirmed (or placed on a new shard) at that time — gradable at its first update or one window later. */
+const subscribedAtMs = new Map<string, number | null>();
+/** §2.9: shard ids are monotonic within a process and never reused, so a stopped shard's silent-alert key can never
+ *  dedupe-suppress a later shard's genuine page. */
+let nextShardId = 0;
+/** §2.4: adds that failed confirmation since the refresh last collected them — written by `onAddResult`, read and
+ *  cleared by the refresh into its run record (`rejected_adds` / `unconfirmed_adds`). */
+const addFailures = { rejected: [] as string[], unconfirmed: [] as string[] };
 
 export function getCryptoSpotStats(nowMs: number = Date.now()): {
   /** SOCKET state: every shard's readyState is OPEN. Not a liveness signal — `connections` carries that, beside it. */
@@ -113,17 +143,29 @@ export function getCryptoSpotStats(nowMs: number = Date.now()): {
 
 /** B-CRYPTO-FEED-WATCHDOG (C1/P6): every subscribed symbol of one shard (or all shards) with its age since its last
  *  ticker UPDATE — `null` for a symbol that has not updated in this process. The list IS the universe, so a dark shard
- *  shows as many nulls/old ages, never as a shorter list. Read-only. */
-export function getCryptoRecorderSymbolAges(nowMs: number, shardId?: number): { symbol: string; ageMs: number | null }[] {
-  const out: { symbol: string; ageMs: number | null }[] = [];
+ *  shows as many nulls/old ages, never as a shorter list. Read-only.
+ *  B-UNIVERSE-REFRESH-ACTS §2.3: `gradable` is false for a symbol still inside its add grace — added after boot and
+ *  neither updated yet nor one `windowMs` past its confirmation (an unconfirmed add is never gradable). Boot symbols are
+ *  always gradable. The caller decides what to do with the graced ones; the list still carries them. */
+export function getCryptoRecorderSymbolAges(
+  nowMs: number, shardId?: number, windowMs?: number,
+): { symbol: string; ageMs: number | null; gradable: boolean }[] {
+  const out: { symbol: string; ageMs: number | null; gradable: boolean }[] = [];
   for (const sh of state.shards) {
     if (shardId !== undefined && sh.id !== shardId) continue;
     for (const symbol of sh.symbols) {
       const at = lastTickerUpdateAt.get(symbol);
-      out.push({ symbol, ageMs: at === undefined ? null : Math.max(0, nowMs - at) });
+      out.push({ symbol, ageMs: at === undefined ? null : Math.max(0, nowMs - at), gradable: isGradable(symbol, at, nowMs, windowMs) });
     }
   }
   return out;
+}
+
+function isGradable(symbol: string, lastUpdateAt: number | undefined, nowMs: number, windowMs?: number): boolean {
+  if (!subscribedAtMs.has(symbol)) return true; // a boot symbol
+  if (lastUpdateAt !== undefined) return true;  // it has ticked since it was added
+  const t = subscribedAtMs.get(symbol);
+  return typeof t === 'number' && windowMs !== undefined && nowMs - t >= windowMs;
 }
 
 /** The shard ids, for per-connection grading. */
@@ -259,9 +301,17 @@ function handleMessage(shard: Shard, raw: WebSocket.RawData): { data: boolean; k
     return { data: false, kind: 'unparsable' };
   }
   if (msg.method === 'subscribe') {
-    // Wire capture 2026-11-04: one reply per symbol per channel; success:false carries `error` and `symbol`.
-    shard.conn?.noteSubscribeReply(msg.success === true, typeof msg.symbol === 'string' ? msg.symbol : null);
+    // Wire capture 2026-11-04: one reply per symbol per channel; success:false carries `error` and a top-level `symbol`,
+    // success:true carries it at `result.symbol`. A `req_id` is echoed when one was sent (an incremental add, P4).
+    shard.conn?.noteSubscribeAck(
+      typeof msg.req_id === 'number' ? msg.req_id : null, msg.success === true, replySymbol(msg), now,
+    );
     return { data: false, kind: msg.success === true ? 'subscribe_ok' : 'subscribe_rejected' };
+  }
+  if (msg.method === 'unsubscribe') {
+    // §2.4: unsubscribe replies get their own branch and counters — never the subscribe tally.
+    shard.conn?.noteUnsubscribeReply(msg.success === true, replySymbol(msg));
+    return { data: false, kind: msg.success === true ? 'unsubscribe_ok' : 'unsubscribe_rejected' };
   }
   if (msg.channel === 'ohlc' && Array.isArray(msg.data)) {
     for (const bar of msg.data) {
@@ -277,7 +327,9 @@ function handleMessage(shard: Shard, raw: WebSocket.RawData): { data: boolean; k
     for (const snap of msg.data) {
       parseTickerSnap(snap);
       shard.cumulativeTickerSnaps++;
-      if (isUpdate && typeof snap?.symbol === 'string') {
+      // §2.5: only a symbol still in the universe gets an age — a frame in flight for a just-dropped symbol must not
+      // leave a stale entry for it to carry if it is re-added later.
+      if (isUpdate && typeof snap?.symbol === 'string' && symbolShard.has(snap.symbol)) {
         lastTickerUpdateAt.set(snap.symbol, now);
         if (firstTickerUpdateAtMs === null) firstTickerUpdateAtMs = now;
       }
@@ -285,6 +337,49 @@ function handleMessage(shard: Shard, raw: WebSocket.RawData): { data: boolean; k
     return { data: msg.data.length > 0, kind: `ticker/${msg.type ?? '?'}` };
   }
   return { data: false, kind: typeof msg.channel === 'string' ? msg.channel : 'other' };
+}
+
+function replySymbol(msg: any): string | null {
+  if (typeof msg?.symbol === 'string') return msg.symbol;
+  if (typeof msg?.result?.symbol === 'string') return msg.result.symbol;
+  return null;
+}
+
+const subscribeFrames = (syms: string[]) => (reqId: number): object[] => [
+  { method: 'subscribe', params: { channel: 'ohlc', symbol: syms, interval: 1 }, req_id: reqId },
+  { method: 'subscribe', params: { channel: 'ticker', symbol: syms }, req_id: reqId },
+];
+const unsubscribeFrames = (syms: string[]) => (reqId: number): object[] => [
+  { method: 'unsubscribe', params: { channel: 'ohlc', symbol: syms, interval: 1 }, req_id: reqId },
+  { method: 'unsubscribe', params: { channel: 'ticker', symbol: syms }, req_id: reqId },
+];
+
+/** Remove a symbol from every piece of per-symbol state (§2.4 withdrawal, §2.5 pruning). Not the socket. */
+function forgetSymbol(shard: Shard, symbol: string): void {
+  const i = shard.symbols.indexOf(symbol);
+  if (i >= 0) shard.symbols.splice(i, 1);
+  symbolShard.delete(symbol);
+  lastTickerUpdateAt.delete(symbol);
+  subscribedAtMs.delete(symbol);
+}
+
+/** §2.4: an incremental add's answer. Confirmed starts its grace clock; rejected or unconfirmed withdraws it (state
+ *  first, then a best-effort unsubscribe in case one channel did take it) and records it for the refresh's run row. */
+function onShardAddResult(shard: Shard, symbol: string, outcome: AddOutcome, nowMs: number): void {
+  if (symbolShard.get(symbol) !== shard.id) return; // dropped meanwhile
+  if (outcome === 'confirmed') { subscribedAtMs.set(symbol, nowMs); return; }
+  forgetSymbol(shard, symbol);
+  (outcome === 'rejected' ? addFailures.rejected : addFailures.unconfirmed).push(symbol);
+  console.warn(`[B74][crypto-spot][shard${shard.id}] add ${outcome}: ${symbol} withdrawn from the universe`);
+  if (shard.symbols.length === 0) {
+    // §2.9 applies to a shard emptied by withdrawal exactly as to one emptied by a drop.
+    const conn = shard.conn;
+    shard.conn = null;
+    state.shards = state.shards.filter(s => s !== shard);
+    void conn?.stopAndResolve(`shard emptied by withdrawn add of ${symbol}`);
+    return;
+  }
+  shard.conn?.sendUnsubscribe([symbol], unsubscribeFrames([symbol]));
 }
 
 function subscribe(shard: Shard, ws: WebSocket): void {
@@ -312,7 +407,28 @@ function makeShardConnection(shard: Shard): RecorderConnection {
     isEnabled: () => state.enabled,
     // Two channels, one reply per symbol each (wire capture 2026-11-04).
     expectedSubscribeReplies: () => shard.symbols.length * 2,
+    onAddResult: (symbol, outcome, nowMs) => onShardAddResult(shard, symbol, outcome, nowMs),
   });
+}
+
+function newShard(symbols: string[]): Shard {
+  return {
+    id: nextShardId++,
+    conn: null,
+    symbols,
+    lastMsgAt: 0,
+    rowsPersistedLastMinute: 0,
+    cumulativeOhlcRows: 0,
+    cumulativeTickerSnaps: 0,
+    ohlcFramesSkipped: 0,
+  };
+}
+
+/** Open a shard's connection and register its symbols. */
+function launchShard(s: Shard): void {
+  for (const sym of s.symbols) symbolShard.set(sym, s.id);
+  s.conn = makeShardConnection(s);
+  s.conn.connect();
 }
 
 // Health log every 60s across all shards
@@ -339,43 +455,118 @@ export async function startCryptoSpotArchiver(): Promise<void> {
     return;
   }
 
-  const shardCount = Math.max(1, Math.ceil(result.symbols.length / SHARD_SIZE));
+  const shardSize = await readShardSize();
+  const shardCount = Math.max(1, Math.ceil(result.symbols.length / shardSize));
   const buckets = assignToShard(result.symbols, shardCount);
 
   state.enabled = true;
-  state.shards = buckets.map((symbols, id) => ({
-    id,
-    conn: null,
-    symbols,
-    lastMsgAt: 0,
-    rowsPersistedLastMinute: 0,
-    cumulativeOhlcRows: 0,
-    cumulativeTickerSnaps: 0,
-    ohlcFramesSkipped: 0,
-  }));
   symbolShard.clear();
-  for (const sh of state.shards) for (const sym of sh.symbols) symbolShard.set(sym, sh.id);
+  subscribedAtMs.clear();
+  state.shards = buckets.map(symbols => newShard(symbols));
 
   console.log(
     `[B74][crypto-spot] starting ${state.shards.length} shard(s) ` +
-    `(${result.symbols.length} symbols total, shard_size_target=${SHARD_SIZE})`
+    `(${result.symbols.length} symbols total, shard_size_target=${shardSize})`
   );
 
-  for (const s of state.shards) {
-    s.conn = makeShardConnection(s);
-    s.conn.connect();
-  }
+  for (const s of state.shards) launchShard(s);
   startRecorderWatch();
 }
 
-export function stopCryptoSpotArchiver(): void {
-  state.enabled = false;
-  for (const shard of state.shards) {
-    shard.conn?.stop();
-    shard.conn = null;
+export interface CryptoUniverseChangeResult {
+  added: string[];
+  dropped: string[];
+  shardsOpened: number[];
+  shardsStopped: number[];
+}
+
+/**
+ * B-UNIVERSE-REFRESH-ACTS (J7, pre-audit §2.4-§2.10) — apply one refresh's decided change to the running recorder.
+ * Order: drops first (state, then unsubscribe; an emptied shard is resolved-then-stopped and removed), then adds
+ * (least-full shard with room, as an incremental subscribe with a req_id; a new shard only when every shard is full).
+ * Nothing already placed moves. Starts the recorder if it is not running. An add's confirmation arrives later, through
+ * `onShardAddResult`; a rejected or unconfirmed add is withdrawn there and surfaces via `takeCryptoAddFailures`.
+ */
+export async function applyCryptoUniverseChange(
+  { add, drop, occurrenceId }: { add: string[]; drop: string[]; occurrenceId: string },
+): Promise<CryptoUniverseChangeResult> {
+  const out: CryptoUniverseChangeResult = { added: [], dropped: [], shardsOpened: [], shardsStopped: [] };
+  const now = Date.now();
+
+  // ── drops ──
+  const dropsByShard = new Map<number, string[]>();
+  for (const sym of drop) {
+    const id = symbolShard.get(sym);
+    if (id === undefined) continue;
+    const list = dropsByShard.get(id) ?? [];
+    list.push(sym);
+    dropsByShard.set(id, list);
   }
-  state.shards = [];
-  symbolShard.clear();
+  for (const [id, syms] of dropsByShard) {
+    const shard = state.shards.find(s => s.id === id);
+    if (!shard) continue;
+    for (const sym of syms) forgetSymbol(shard, sym);
+    out.dropped.push(...syms);
+    if (shard.symbols.length === 0) {
+      // §2.9: an emptied shard's own alerts are resolved before its socket closes, so nothing is left firing for it.
+      await shard.conn?.stopAndResolve(`shard emptied by crypto universe refresh, occurrence ${occurrenceId}`);
+      shard.conn = null;
+      state.shards = state.shards.filter(s => s !== shard);
+      out.shardsStopped.push(id);
+    } else {
+      shard.conn?.sendUnsubscribe(syms, unsubscribeFrames(syms));
+    }
+  }
+
+  // ── adds ──
+  const fresh = [...new Set(add)].filter(sym => !symbolShard.has(sym));
+  if (fresh.length === 0) return out;
+  const shardSize = await readShardSize();
+  const addsByShard = new Map<number, string[]>();
+  const overflow: string[] = [];
+  for (const sym of fresh) {
+    let target: Shard | undefined;
+    for (const s of state.shards) {
+      if (s.symbols.length >= shardSize) continue;
+      if (!target || s.symbols.length < target.symbols.length) target = s;
+    }
+    if (!target) { overflow.push(sym); continue; }
+    target.symbols.push(sym);
+    symbolShard.set(sym, target.id);
+    subscribedAtMs.set(sym, null); // graced until its add is confirmed
+    const list = addsByShard.get(target.id) ?? [];
+    list.push(sym);
+    addsByShard.set(target.id, list);
+  }
+  for (const [id, syms] of addsByShard) {
+    const shard = state.shards.find(s => s.id === id)!;
+    shard.conn?.sendAdd(syms, subscribeFrames(syms), 2, now);
+    out.added.push(...syms);
+  }
+  // Every shard full (or none running): open new shards. Their symbols subscribe on open, like boot symbols, but
+  // start their grace clock now — a silent new shard is graded after one window, never forgiven indefinitely.
+  for (let i = 0; i < overflow.length; i += shardSize) {
+    const s = newShard(overflow.slice(i, i + shardSize));
+    for (const sym of s.symbols) subscribedAtMs.set(sym, now);
+    state.shards.push(s);
+    launchShard(s);
+    out.shardsOpened.push(s.id);
+    out.added.push(...s.symbols);
+  }
+  if (overflow.length > 0) {
+    state.enabled = true;
+    startRecorderWatch();
+  }
+  return out;
+}
+
+/** The adds withdrawn since the last call (rejected by the venue, or never confirmed) — read and cleared by the
+ *  refresh, which records them on its run row (§2.4). */
+export function takeCryptoAddFailures(): { rejected: string[]; unconfirmed: string[] } {
+  const copy = { rejected: [...addFailures.rejected], unconfirmed: [...addFailures.unconfirmed] };
+  addFailures.rejected.length = 0;
+  addFailures.unconfirmed.length = 0;
+  return copy;
 }
 
 // B-OHLC-FRAME-GUARD P8 (test-only): drive real frames through `handleMessage` against a detached shard,
@@ -394,6 +585,7 @@ export function _installShardsForTests(shards: Shard[]): void {
   state.shards = shards;
   symbolShard.clear();
   for (const sh of shards) for (const sym of sh.symbols) symbolShard.set(sym, sh.id);
+  nextShardId = shards.length === 0 ? 0 : Math.max(...shards.map(s => s.id)) + 1;
 }
 /** Test-only: clear the per-symbol update clock and the warmth clock. */
 export function _resetCryptoRecorderClockForTests(): void {
@@ -401,4 +593,8 @@ export function _resetCryptoRecorderClockForTests(): void {
   firstTickerUpdateAtMs = null;
   state.shards = [];
   symbolShard.clear();
+  subscribedAtMs.clear();
+  nextShardId = 0;
+  addFailures.rejected.length = 0;
+  addFailures.unconfirmed.length = 0;
 }
