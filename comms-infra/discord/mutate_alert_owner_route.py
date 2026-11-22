@@ -12,6 +12,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 SUITE = os.path.join(HERE, "alert_owner_route_test.py")
 AOR, LANE, BRIDGE = "alert_owner_route.py", "alert_lane.py", "discord-langston-bridge.py"
+WAKE = os.path.join("..", "laptop", "cc-wake-filter.py")  # RIDER-1: the suite reads it at this relative path
 
 # name -> [(file, anchor, replacement), ...]
 MUTATIONS = {
@@ -66,6 +67,14 @@ MUTATIONS = {
     "KD-115: PM Claude not an owner opener": [(AOR, "ANALYST Claude|Infra Claude|PM Claude)", "ANALYST Claude|Infra Claude)")],
     "KD-115: PM Claude display name unmapped": [(AOR, "'Infra': 'CC-INFRA', 'PM Claude': 'CC-PM'}", "'Infra': 'CC-INFRA'}")],
     "KD-115: owner CC-PM suffix not read": [(AOR, "INFRA|PM)|Infra)", "INFRA)|Infra)")],
+    # --- KD-115 RIDER-1 (Langston): a name a parser maps outside SESSIONS must fail the suite ---
+    "R1: suffix regex gains a non-session name": [(AOR, "INFRA|PM)|Infra)", "INFRA|PM)|Infra|PMX)")],
+    "R1: title regex gains a non-session name": [(AOR, "ANALYST Claude|Infra Claude|PM Claude)", "ANALYST Claude|Infra Claude|PM Claude|QA Claude)")],
+    "R1: owner-cell regex gains a non-session name": [(AOR, "CC-PM|Infra Claude|PM Claude)'", "CC-PM|CC-QA|Infra Claude|PM Claude)'")],
+    "R1: _OWNER_NAME maps outside SESSIONS": [(AOR, "_OWNER_NAME = {'Infra Claude': 'CC-INFRA', 'PM Claude': 'CC-PM'}", "_OWNER_NAME = {'Infra Claude': 'CC-INFRA', 'PM Claude': 'CC-QA'}")],
+    "R1: DISPLAY maps outside SESSIONS": [(AOR, "'Infra': 'CC-INFRA', 'PM Claude': 'CC-PM'}", "'Infra': 'CC-INFRA', 'PM Claude': 'CC-PM', 'QA': 'CC-QA'}")],
+    "R1: SECTION maps outside SESSIONS": [(AOR, "SECTION = {'OLD Claude': 'CC-A'", "SECTION = {'OLD Claude': 'CC-QA'")],
+    "R1: wake filter ALERT_OWNERS drops CC-PM": [(WAKE, 'ALERT_OWNERS = ("CC-A", "CC-B", "CC-C", "CC-INFRA", "CC-PM", "Kyle", "Langston")', 'ALERT_OWNERS = ("CC-A", "CC-B", "CC-C", "CC-INFRA", "Kyle", "Langston")')],
     "is_escalation always False": [(AOR, "    return bool(route) and str(route[1]).startswith(ESCALATE)\n", "    return False\n")],
     "apply_table: an escalation route not escalated": [(LANE, "        if aor.is_escalation(tr):", "        if False:")],
     "mirror age limit back to 15 h": [(LANE, "OWNER_MIRROR_MAX_AGE_S = 1800", "OWNER_MIRROR_MAX_AGE_S = 54000")],

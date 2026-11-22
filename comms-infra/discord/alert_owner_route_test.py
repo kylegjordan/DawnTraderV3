@@ -554,5 +554,79 @@ finally:
         else:
             os.environ[k] = v
 
+# ---- KD-115 RIDER-1 (Langston, 2026-11-22): every name a parser can map lands in SESSIONS ----------------------------
+# BLOCKER-1's cause was skew: SECTION and _OWNER_FULL carried PM Claude from 11-04 while SESSIONS did not, for 18 days.
+# Rule 1 (family -> 'owner') returns its name with NO SESSIONS check, so this is where the next skew would land.
+# The regexes are EXPANDED (every string group 1 can capture), not sampled, so a name added only to a regex is caught.
+try:
+    import re._parser as _sp  # Python 3.11+
+except ImportError:  # pragma: no cover
+    import sre_parse as _sp  # noqa: F401
+
+
+def _expand(items):
+    outs = [""]
+    for op, av in items:
+        name = str(op)
+        if name == "LITERAL":
+            outs = [o + chr(av) for o in outs]
+        elif name == "BRANCH":
+            alts = [s for br in av[1] for s in _expand(br)]
+            outs = [o + a for o in outs for a in alts]
+        elif name == "SUBPATTERN":
+            outs = [o + a for o in outs for a in _expand(av[-1])]
+        elif name == "IN" and all(str(iop) == "LITERAL" for iop, _ in av):  # the parser folds A|B|C into a set
+            outs = [o + chr(c) for o in outs for _, c in av]
+        else:
+            raise ValueError("unexpandable opcode in an owner group: " + name)
+    return outs
+
+
+def _group1(rx):
+    def walk(items):
+        for op, av in items:
+            if str(op) == "SUBPATTERN" and av[0] == 1:
+                return _expand(av[-1])
+            if str(op) == "SUBPATTERN":
+                r = walk(av[-1])
+                if r is not None:
+                    return r
+        return None
+    got = walk(_sp.parse(rx.pattern))
+    if got is None:
+        raise ValueError("no group 1 in " + rx.pattern)
+    return got
+
+
+S = set(aor.SESSIONS)
+ok("R1: SECTION maps only into SESSIONS, and covers every session", set(aor.SECTION.values()) == S)
+ok("R1: _OWNER_NAME maps only into SESSIONS", set(aor._OWNER_NAME.values()) <= S)
+ok("R1: DISPLAY maps only into SESSIONS", set(aor.DISPLAY.values()) <= S)
+full = _group1(aor._OWNER_FULL)
+ok("R1: _OWNER_FULL expands to a real list (positive control)", len(full) >= len(S))
+ok("R1: every _OWNER_FULL name maps into SESSIONS via _owner_cell",
+   all(aor._owner_cell(n) in S for n in full))
+title = _group1(aor.OWNER_TITLE)
+ok("R1: OWNER_TITLE expands to a real list (positive control)", len(title) >= len(S))
+t_got = [aor.family(None, None, n + ": x", (), ()) for n in title]
+ok("R1: every OWNER_TITLE name lands as a SESSIONS owner", all(f[0] == "owner" and f[1] in S for f in t_got))
+ok("R1: OWNER_TITLE reaches every session", {f[1] for f in t_got} == S)
+suffix = _group1(aor.OWNER_SUFFIX)
+ok("R1: OWNER_SUFFIX expands to a real list (positive control)", len(suffix) >= len(S))
+s_got = [aor.family(None, None, "x owner " + n, (), ()) for n in suffix]
+ok("R1: every OWNER_SUFFIX name lands as a SESSIONS owner", all(f[0] == "owner" and f[1] in S for f in s_got))
+ok("R1: the lane's OWNERS are SESSIONS plus Kyle, exactly", set(al.OWNERS) == S | {"Kyle"})
+import ast  # noqa: E402
+WAKE = os.path.join(HERE, "..", "laptop", "cc-wake-filter.py")
+wake_owners = None
+if os.path.exists(WAKE):
+    for node in ast.parse(open(WAKE, encoding="utf-8").read()).body:
+        if isinstance(node, ast.Assign) and any(getattr(t, "id", None) == "ALERT_OWNERS" for t in node.targets):
+            wake_owners = ast.literal_eval(node.value)
+ok("R1: the wake filter's ALERT_OWNERS is readable at ../laptop (a missing file FAILS, never skips)",
+   wake_owners is not None)
+ok("R1: the wake filter's ALERT_OWNERS are SESSIONS plus Kyle and Langston, exactly",
+   wake_owners is not None and set(wake_owners) == S | {"Kyle", "Langston"})
+
 print("alert_owner_route_test: %d passed, %d failed" % (P, F))
 sys.exit(1 if F else 0)

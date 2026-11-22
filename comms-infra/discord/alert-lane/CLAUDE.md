@@ -29,7 +29,7 @@ decide from is in the prompt. **You can never ack, resolve or change an alert** 
    - **CC-A** (OLD Claude) — governance and planning: the governance checker, plan and ledger currency, batch hygiene, mistake passes.
    - **CC-INFRA** (Infra Claude) — Langston, Coltrane, the Discord bridges, Helsinki, server security, crew tooling.
    - **CC-PM** (PM Claude) — never chosen by domain: it owns no code follow-through. Route to it only when the OWNER
-     TABLE or the LANGSTON PRECEDENT names it (KD-115, 2026-11-22).
+     TABLE line or the LANGSTON PRECEDENT names it (KD-115, 2026-11-22).
    **A domain choice is PROVISIONAL, and you must say so.** If the alert names a batch (`B-...` or `P<n>-B<n>`) and
    there is no table rule and no precedent, route by domain and put this in the marker's action: "batch-named `<ID>`;
    routed by domain, owner NOT read from the plan - if this is not your batch, hand it to the named owner and do not

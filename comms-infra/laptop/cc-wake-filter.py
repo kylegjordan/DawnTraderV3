@@ -189,8 +189,10 @@ OTHERS_RE = re.compile(
 # "Langston" added 2026-09-30 (his ruling, B-TOKEN-BURN-CUT amendment 1): he is already a canonical ACTOR (ALERT_ACTORS),
 # and routing a row he holds to Kyle would fake a Kyle obligation. Mirrors ALERT_HANDLING_PROTOCOL.md; the emitter prompt
 # in discord-langston-bridge.py is #1035 (Infra Claude).
-# "CC-PM" added 2026-11-22 (KD-115, Kyle via PM Claude): an alert Langston routes to PM Claude now wakes PM Claude and is
-# recorded as its own, where before it was suppressed for everyone. Mirrors alert_lane.OWNERS.
+# "CC-PM" added 2026-11-22 (KD-115, Kyle via PM Claude): a marker naming CC-PM is now RECORDED as PM Claude's
+# (OWNER_CANON / record_owners) instead of rejected, and suppresses the other sessions on the broadcast path. It does NOT
+# wake PM Claude - since #995 the marker is a suppressor only; the wake comes from the lead name (OPEN_RE).
+# Mirrors alert_lane.OWNERS.
 ALERT_OWNERS = ("CC-A", "CC-B", "CC-C", "CC-INFRA", "CC-PM", "Kyle", "Langston")
 ALERT_OWNER_RE = re.compile(
     r"\[\[ALERT\b[^\]]*\bowner=(" + "|".join(re.escape(o) for o in ALERT_OWNERS) + r")\b", re.I)
