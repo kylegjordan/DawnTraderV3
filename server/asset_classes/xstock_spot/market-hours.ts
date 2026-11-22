@@ -190,6 +190,16 @@ const PAUSE_1615: readonly [number, number] = [974, 995];
 const PAUSE_2015: readonly [number, number] = [1214, 1235];
 const PAUSE_SUN_REOPEN: readonly [number, number] = [1200, 1235];
 
+/**
+ * B-XSTOCK-BAR-AVAILABILITY Step 9 R2' — THE MINUTE THE SUNDAY REOPEN GOES LIVE, in ET minutes since midnight (20:15).
+ * The weekly reopen re-sends the whole universe at 20:00 and 20:13 and is live at 20:15 (the `sun_reopen` measurement
+ * above, 4 of 4 Sundays). The bar-availability gate opens a Sunday session HERE, not at 20:00, because a session that
+ * starts at 20:00 fails its own head test by construction: the first bar arrives ~15 minutes in (measured 2026-10-18 to
+ * 11-15, every Sunday session; pre-audit "Step 9 R2'"). Mon-Thu sessions keep 20:00, where heads measured 0-5 s.
+ * ⛔ POLICY, NOT A KNOB: same standing as the pause edges above — moves only by a reviewed commit.
+ */
+export const XSTOCK_SUNDAY_REOPEN_LIVE_MIN_ET = 20 * 60 + 15;
+
 export function isXstockVenueTransitionPause(now: Date = new Date()): { paused: boolean; window: XstockPauseWindow | null } {
   if (isInXstockWeekendClose(now)) return { paused: false, window: null };
   const { weekday, hour, minute } = getETParts(now);

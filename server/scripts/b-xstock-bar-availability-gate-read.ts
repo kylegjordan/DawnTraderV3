@@ -29,6 +29,7 @@
  *    inputs only when every leg returned.
  */
 import type pg from 'pg';
+import { XSTOCK_SUNDAY_REOPEN_LIVE_MIN_ET } from '../asset_classes/xstock_spot/market-hours.js';
 
 export const GATE_READ_BUDGET = {
   /** The whole run, measured from the reader's start (Langston C6-3: <= 20 min). */
@@ -559,7 +560,12 @@ export function reconstructDistinctCounts(population: PopulationRead, identity: 
 
 // ── The venue-session leg ──────────────────────────────────────────────────────────────────────
 
-/** Session bounds (20:00 ET to 20:00 ET, Sunday through Thursday starts) fully inside [$1,$2). */
+/**
+ * Session bounds fully inside [$1,$2): Sunday through Thursday starts, ending 20:00 ET the next day. Mon-Thu sessions
+ * start 20:00 ET; a SUNDAY session starts at the reopen's live minute, $3 = ET minutes since midnight
+ * (`XSTOCK_SUNDAY_REOPEN_LIVE_MIN_ET`, 20:15) — Step 9 R2': the venue is not live at 20:00 on Sunday, so a 20:00 start
+ * fails the head test by ~15 minutes on every Sunday session regardless of capture.
+ */
 export const SESSION_BOUNDS_SQL = `WITH et_days AS (
      SELECT d::date AS et_date
      FROM generate_series(
@@ -569,7 +575,9 @@ export const SESSION_BOUNDS_SQL = `WITH et_days AS (
      ) AS g(d)
    ), bounds AS (
      SELECT et_date,
-            (et_date + time '20:00') AT TIME ZONE 'America/New_York' AS session_start,
+            (et_date + CASE WHEN extract(isodow FROM et_date) = 7
+                            THEN make_interval(mins => $3::int)
+                            ELSE interval '20 hours' END) AT TIME ZONE 'America/New_York' AS session_start,
             (et_date + 1 + time '20:00') AT TIME ZONE 'America/New_York' AS session_end
      FROM et_days
      WHERE extract(isodow FROM et_date) IN (7,1,2,3,4)
@@ -625,7 +633,7 @@ export async function readSessionsChunked(
   outOfBoundIds: string[],
 ): Promise<SessionRow[]> {
   const bounds = (await budgetedQuery(client, budget, GATE_READ_BUDGET.otherCapMs, 'session bounds',
-    SESSION_BOUNDS_SQL, [windowStart, observedAt])).rows as Array<Record<string, unknown>>;
+    SESSION_BOUNDS_SQL, [windowStart, observedAt, XSTOCK_SUNDAY_REOPEN_LIVE_MIN_ET])).rows as Array<Record<string, unknown>>;
   const rows: SessionRow[] = [];
   for (const bound of bounds) {
     const start = new Date(bound.session_start as string | Date);

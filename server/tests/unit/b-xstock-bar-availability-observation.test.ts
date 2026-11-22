@@ -279,16 +279,21 @@ describe('B-XSTOCK-BAR-AVAILABILITY observation gate', () => {
 
     const constant = /const EXPECTED_GRADED_WINDOW_START = '([^']+)';/.exec(gate)?.[1];
     const row = /SET value = to_jsonb\('([^']+)'::text\)/.exec(r2prime)?.[1];
-    expect(constant).toBe('2026-11-30T00:00:00.000Z');
-    expect(row).toBe('2026-11-30T00:00:00Z');
+    expect(constant).toBe('2026-11-30T01:00:00.000Z');
+    expect(row).toBe('2026-11-30T01:00:00Z');
     // The gate compares new Date(row).toISOString() against the literal (capacity-gate.ts, gradedWindowStartMatches):
     // the literal must be the canonical form of the row, or the gate can never pass.
     expect(new Date(row as string).toISOString()).toBe(constant);
-    // Langston r6 ruling: a midnight start on a Monday.
+    // Step-4 send-back: Monday 01:00Z = Sunday 20:00 ET, the venue's week open (r6 asked for a Monday start).
     expect(new Date(constant as string).getUTCDay()).toBe(1);
-    expect(new Date(constant as string).getUTCHours()).toBe(0);
+    expect(new Date(constant as string).getUTCHours()).toBe(1);
+    // ...so the R7 runner's first due fire (00:15Z daily, final gate = start + 9 d 10 min) is a day later than a
+    // midnight start's, and the 12-07 session (ends 2026-12-09T01:00Z) is inside the read: seven sessions, not six.
+    const finalGate = new Date(constant as string).getTime() + 9 * 86_400_000 + 10 * 60_000;
+    expect(new Date(finalGate).toISOString()).toBe('2026-12-09T01:10:00.000Z');
     // C-1's third place: the documented --window-start usage line moves with the row and the literal.
-    expect(gate).toMatch(/--window-start 2026-11-30T00:00:00Z --graded-ref/);
+    expect(gate).toMatch(/--window-start 2026-11-30T01:00:00Z --graded-ref/);
+    expect(gate).not.toContain('--window-start 2026-11-30T00:00:00Z');
     expect(gate).not.toContain('--window-start 2026-11-09');
     expect(gate).not.toContain('--window-start 2026-10-16');
     expect(r2prime).toContain("constant_name = 'graded_window_start'");

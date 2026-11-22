@@ -149,7 +149,10 @@ const ORACLE_SESSIONS_SQL = `WITH graded_events AS MATERIALIZED (
          ) AS g(d)
        ), bounds AS (
          SELECT et_date,
-                (et_date + time '20:00') AT TIME ZONE 'America/New_York' AS session_start,
+                -- Step 9 R2': a Sunday session opens at the reopen's live minute, 20:15 ET (stated
+                -- independently here, as a literal, so the oracle does not reuse the production constant).
+                (et_date + CASE WHEN extract(isodow FROM et_date) = 7 THEN time '20:15' ELSE time '20:00' END)
+                  AT TIME ZONE 'America/New_York' AS session_start,
                 (et_date + 1 + time '20:00') AT TIME ZONE 'America/New_York' AS session_end
          FROM et_days
          WHERE extract(isodow FROM et_date) IN (7,1,2,3,4)
@@ -280,6 +283,21 @@ describe(TAG, () => {
       expect(r.sessions[i].symbols).toBe(Number(o.symbols));
       expect(r.sessions[i].max_event_gap_seconds).toBe(o.max_event_gap_seconds === null ? null : Number(o.max_event_gap_seconds));
     });
+  });
+
+  it('a Sunday session opens at 20:15 ET (the reopen goes live then); a Monday session at 20:00 ET (Step 9 R2 prime)', async (ctx) => {
+    if (!dbReachable || !isTestDb) ctx.skip();
+    const r = await readBoth();
+    const et = (iso: string) => {
+      const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/New_York', weekday: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+      }).formatToParts(new Date(iso));
+      const get = (t: string) => parts.find((p) => p.type === t)?.value;
+      return `${get('weekday')} ${get('hour')}:${get('minute')}`;
+    };
+    // The window is Monday 00:00Z to Wednesday 06:00Z: exactly the Sunday and Monday sessions fit, in EST or EDT.
+    expect(r.sessions.map((s) => et(s.session_start))).toEqual(['Sun 20:15', 'Mon 20:00']);
+    expect(r.sessions.map((s) => et(s.session_end))).toEqual(['Mon 20:00', 'Tue 20:00']);
   });
 
   it('an id linked by TWO completions fails identity in both reads (IDENTITY_LINK_SQL; production has none, Langston 11-20)', async (ctx) => {

@@ -21,9 +21,13 @@
  *
  * Cost of the cap, recorded for the batch: ~0.7 GiB hot per held day (741,040,128 B measured for 11-09),
  * and at the cap the gate's two whole-table legs read ~1.43x the rows: ~665 s, 55% of its budget.
- * What the cap buys: with `revisionHotRetentionDays` 8 against a 9-day window, a partition becomes
- * age-eligible the night the window's runner first falls due, so a cap of 3 covers three runner-failure
- * nights before the oldest in-window day is released (Langston Step-4 ruling 3).
+ * What the cap buys: with `revisionHotRetentionDays` 8 against a 9-day window, a window starting at 00:00Z
+ * has its first partition become age-eligible the night its runner first falls due, so a cap of 3 covers
+ * three runner-failure nights before the oldest in-window day is released (Langston Step-4 ruling 3).
+ * A start later in the UTC day falls due one night LATER than its first partition becomes eligible: the
+ * R2' window (2026-11-30T01:00Z, Sunday 20:00 ET) holds the 11-30 partition for one night in normal
+ * operation (an expected `…-sweep-hold` warning, cleared at the next sweep) and its cap covers two
+ * runner-failure nights, not three — pre-registered in the R2' pre-audit section.
  *
  * Alert edges (every key this rule raises has a named clearing edge):
  *   - `…-sweep-hold:<start>` (warning): resolved on a night that holds nothing — a verdict exists, or no
