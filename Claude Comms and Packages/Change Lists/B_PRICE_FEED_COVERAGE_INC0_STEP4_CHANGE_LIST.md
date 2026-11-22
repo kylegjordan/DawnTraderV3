@@ -262,7 +262,7 @@ Owner: **NEW Claude**, right after whichever deploy carries `3f06dd940`. Instrum
 
 **Ruling (A).** Langston re-derived r17 item 3 (28/27, 68/62, 54/51, 17/16, 1/1; 168 member-rows, 157 cycles, 166 promoted) with a sharper instrument: per `shadow_trade_id`, 165 of 166 appear in exactly one snapshot, one in three (59.9 s). Same-object positive control: crypto in the same band and window dwells up to 300 cycles / 8,940 s, so the single-cycle xStock result is the pool, not the instrument. A second pool read at 02:47:56Z also held no xStock row. `dt-deploy` runs fetch → reset → build → migrate before `pm2 restart` (`:342/:352/:363`), so a row once seen cannot be restarted into: the carrier is **unsteerable**, not merely unlikely. The chain is re-confirmed at `f56c1f38e` and the deployed `84eeb168e`: engine `:626` (depth gate), `:2478` (exit); `judgeDispatchTick` has one production site (`active-dispatch.ts:216`) and the engine never imports it, which discharges r11 item 4's "promotion re-enters the judge" branch.
 
-**The evidence set (A) records — not "the unit fence only":** the unit fence + M2/M4/M5 mutation proofs; **the production seam executed ≥15 times on its pass-through arm** (the retained post-deploy stderr 11-12 → 11-16 holds 31 `DEPTH_GATE_BLOCK` rows, 24 `xstock_spot` — `stale_book` 15 / `hollow_book` 5 / `venue_transition_pause` 4 — and `cold_tick` 0; the 15 `stale_book` refusals sit downstream of `:626` and read the `ageMs` it sets); and **the observed-latch primitive production-proved 15× at the sibling dispatch site, 14 of them at this morning's reopen** (CPB/USD `ageMs=50532075`, LMND, MSCI, 01:07–01:08Z — the guard refusing 14-hour replayed books). **UNPROVED, stated:** the three `cold_tick` arms and the age-raise branch. (Langston's own hypothesis that multi-minute `stale_book` ages were the age-raise landing is refuted against `xstock_spot_ticker_snap`, 7 of 7 — not evidence, do not re-run.)
+**The evidence set (A) records — not "the unit fence only":** the unit fence + M2/M4/M5 mutation proofs; **the production seam executed ≥15 times on its pass-through arm** (the retained stderr, **content 11-11 → 11-15, post-deploy segment from 11:01:14Z** — relabelled at Step 10, r24 correction 2 / r25; counts unchanged — holds 31 `DEPTH_GATE_BLOCK` rows, 24 `xstock_spot` — `stale_book` 15 / `hollow_book` 5 / `venue_transition_pause` 4 — and `cold_tick` 0; the 15 `stale_book` refusals sit downstream of `:626` and read the `ageMs` it sets); and **the observed-latch primitive production-proved 15× at the sibling dispatch site, 14 of them at this morning's reopen** (CPB/USD `ageMs=50532075`, LMND, MSCI, 01:07–01:08Z — the guard refusing 14-hour replayed books). **UNPROVED, stated:** the three `cold_tick` arms and the age-raise branch. (Langston's own hypothesis that multi-minute `stale_book` ages were the age-raise landing is refuted against `xstock_spot_ticker_snap`, 7 of 7 — not evidence, do not re-run.)
 
 **(B) refused; (C) named and refused on cost.** (C) — a watcher firing a bare `pm2 restart` on the first queued paper xStock row — would work, but bypasses the KD-56 register (it is `dt-deploy`'s gate), voids four other owners' open windows, resets the denominator mid-window and mints a restart with no deploy record. **The close says "we declined to pay for it", never "it cannot be done" (#453).** If Kyle wants the arm proved before live mode, (C) is the route and the call is his.
 
@@ -368,7 +368,7 @@ group by 1 order by 1;
 - **Reading, unchanged from r18:** `max(row, tick)` can only raise an age, so a lower post median is population, not loosening. The post sessions range 3,957-6,078 ms against the one registered pre session's 6,029; nothing here is read as a definition change.
 
 ### The r18 evidence set, re-read for the close (same instrument, more days)
-Retained stderr is now gzip-rotated; read with `zcat` per file. **The file named `error__D` holds the content of day D−1.** Post-deploy content 11-11 → 11-21:
+Retained stderr is now gzip-rotated; read with `zcat` per file. **The file named `error__D` holds the content of day D−1.** Post-deploy content 11-11 → 11-20 (relabelled at Step 10, r24 correction 2):
 | file | `cold_tick` | xStock `DEPTH_GATE_BLOCK` (control) | `DISPATCH_REFUSE` by arm |
 |---|---|---|---|
 | error__11-12 | 0 | 15 | cold 1 · stale 22 |
@@ -387,3 +387,61 @@ Retained stderr is now gzip-rotated; read with `zcat` per file. **The file named
 
 ### Owed at Step 10, not here
 Relabel the r18 stderr window "content 11-11 → 11-16, post-deploy segment from 11:01:14Z" (your note); counts unchanged.
+
+## r24 — Step 8 PROCEED (Langston, Discord 1574021946004475926, 2026-11-22) and the correction he required
+
+**Verdict:** PROCEED. C-1, C-2 and C-3 each re-derived independently by Langston (C-1 from objects that outlive the pair: uptime delta 20,703.7 s equals the wall delta, and the staging reflog shows no HEAD movement 11-20 07:58:51Z → 21:40:30Z; C-2 five rows, a complete set; C-3 re-run 11:14Z, identical; `applyXstockEntryTickAge` present at all 24 deployed shas). Board `Review` = Approved.
+
+### Correction 1 — the r23 headline population (required before Step 10 lands)
+PREVIOUSLY STATED (r23): 156 xStock `DEPTH_GATE_BLOCK` rows "downstream of `:626`". NOW: **≥59 downstream** — `stale_book` 45 (these read the age the seam set) + `hollow_book` 14. The other **97 are `venue_transition_pause`, which returns at engine ~:606-611, ABOVE the seam** (`:626` at `c21c1502a`), so they never reach it: non-exercise, per r12 item 2. REASON: r23 counted every reason as downstream without reading the order of the gate.
+- **Re-derived on staging 2026-11-22, by reason, same files and same instrument as r23:** xStock `hollow_book` 14 · `stale_book` 45 · `venue_transition_pause` 97 (sum 156, matching r23's total). **Control, same files:** crypto `no_book` 2 · `stale_book` 18 · `thin_book` 3 — the per-reason split reads both classes, so the instrument is not blind to a reason.
+- **Gate order, read at `c21c1502a`:** `isXstockVenueTransitionPause` → `venue_transition_pause` (~:606-611) · `getDepthSnapshot` (:613) · depth verdict · **the seam (:626)** · `assessWarmth` → `stale_book` (:630) · `hollow_book` later (~:700).
+- **Reading, unchanged:** the pass-through arm executed ≥59 times, 45 of them reading the `ageMs` the seam set. **`cold_tick` is still 0. The three `cold_tick` arms and the age-raise branch stay UNPROVED (r18 (A)).**
+
+### Correction 2 — two labels
+- PREVIOUSLY STATED (r23): "post-deploy content 11-11 → 11-21". NOW: **content 11-11 → 11-20** (the last file read, `error__11-21`, holds 11-20). REASON: the file-holds-D−1 rule was stated in r23 and not applied to its own heading.
+- PREVIOUSLY STATED (r23 "Owed at Step 10"): relabel r18 to "content 11-11 → 11-16". NOW: **"content 11-11 → 11-15, post-deploy segment from 11:01:14Z"**. REASON: same off-by-one; r18's last file holds 11-15.
+
+### Dispositions (Langston)
+1. The 59/45 decomposition and both labels → fold into Step 10's relabel (this entry carries them; Step 10 writes them where the r18 window is cited).
+2. `GOVERNANCE_EXCEPTIONS` B-PRICE-FEED-COVERAGE row, item (1), still names the 11-13 session → fold into Step 10; the row stays `open` until the parent batch closes.
+3. **Age-raise rider:** the 45 `stale_book` rows whose snapshot row age is under 15 s ride increment 1's successor read with the first natural `cold_tick`.
+
+- **Next:** Step 10 of 11 (increment 0's governance). Increment 0 has no separate completion report; the parent batch stays open.
+
+## r25 — Step 10 (increment 0's governance), 2026-11-22 (CC-B)
+
+**Done in this commit:** r18's stderr window relabelled in place to "content 11-11 → 11-15, post-deploy segment from 11:01:14Z" and r23's heading to "content 11-11 → 11-20" (r24 correction 2); counts unchanged. The r24 59/45/14/97 decomposition is carried into the catalog, phase history, fix registry and the `#1222` annotation; `GOVERNANCE_EXCEPTIONS` item (1) is struck as discharged and the row's deploy cell now names both increment 0 deploys (it named only the instrument deploy). Increment 0 has no separate completion report; the parent batch stays open.
+
+`CHANGE-CLASS: architecture`
+
+| tier | document | verdict | one line |
+|---|---|---|---|
+| T1 | `BATCH_CATALOG.md` | ✅ | B-PRICE-FEED-COVERAGE entry: why, what increment 0 built, verified, not discharged |
+| T1 | `PHASE_HISTORY.md` | ✅ | plain-language increment 0 entry; parent open |
+| T1 | `PHASE_19_PLAN.md` | N/A | no row there (sprint plan owns it) |
+| T1 | `SPRINT_TO_LIVE_PLAN.md` CC-B list row 3 | ✅ | status → increment 0 Step 10; parent Step 2 → 3 |
+| T1 | shared `MEMORY.md` | N/A | no consensus truth changed |
+| T1 | `MEMORY_CC_B.md` + mirror | ✅ | position block |
+| T1 | the batch `SCOPE` | N/A | r10 stands; no scope change at increment 0's close |
+| T1 | the batch `PRE_AUDIT` | N/A | Part 0 r2 stands; parent pre-audit still at Step 2 |
+| T1 | `COMPLETION_REPORT` | N/A | increment 0 has none by design; written at the parent close |
+| T1 | session task lists — CC_B ✅ / CC_A, CC_C, CC_INFRA N/A | ✅ mine / N/A ×3 | CC-B PFC row → increment 0 Step 10; the other three not mine |
+| T1 | Langston's `MEMORY.md` | ✅ | via `langston-memory-write`, net-zero |
+| T2 | `SYSTEM_MANUAL.md` | ✅ | xStock entry age = older of book row and live tick; dispatch gate arms; two-sided by design |
+| T2 | `SYSTEM_IMPACT_MAP.md` | ✅ | dispatch and depth-gate rows; equities tick store has FIVE readers, not two (stale line corrected) |
+| T2 | `RUNNING_ISSUES.md` | ✅ | `#1222` increment 0 annotation; stays OPEN |
+| T2 | `CHANGES_AND_FIXES.md` | ✅ | FIX-2026-11-22-B |
+| T2 | `GOVERNANCE_EXCEPTIONS.md` | ✅ | B-PRICE-FEED-COVERAGE row: item (1) discharged, both deploys named; stays open |
+| T2 | `POST_AUDIT_ROADMAP.md` | N/A | no roadmap item changed |
+| T2 | `ADJUSTMENT_FRAMEWORK.md` | N/A | no tunable changed (`active_fill_max_age_ms` read, not reseeded) |
+| T2 | `AUTHORITY_BASELINE.md` | N/A | no constitutional change |
+| T2 | `STORAGE_POLICY.md` | N/A | no retention change |
+| T2 | `MULTI_ASSET_VTS_EXPANSION_PLAN.md` | N/A | no VTS change; xStock working list reviewed, nothing owed |
+| T2 | `ASSET_CLASS_ONBOARDING_WORKFLOW.md` | N/A | no onboarding learning |
+| T2 | `BUILD_METHOD_PLAYBOOK.md` | N/A | method unchanged |
+| T2 | `LANGSTON_ARCHITECTURE.md` | N/A | reviewer build unchanged |
+| T2 | `CLAUDE.md` / `CONDUCT.md` | N/A | no rule changed |
+| T2 | `DELETED_COMPONENTS_LOG.md` | N/A | `getLatestTickAgeMs` removal already logged at Step 3 |
+
+- **Next:** the parent batch's Step 2 → 3 (Coltrane's fresh read owed). The age-raise rider and the `cold_tick` successor ride increment 1.
