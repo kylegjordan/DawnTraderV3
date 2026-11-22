@@ -680,7 +680,6 @@ app.use((req, res, next) => {
       // Import and register all scheduler tasks
       const { screenerRecalibrationTask } = await import('./services/screener-recalibration-task');
       const { marketScanTask } = await import('./services/market-scan-task');
-      const { aiSummaryTask } = await import('./services/ai-summary-task');
       const { cleTask } = await import('./services/cle-task');
       const { cwaTask } = await import('./services/cwa-task');
       const { cachePurgeTask } = await import('./services/cache-purge-task');
@@ -720,16 +719,9 @@ app.use((req, res, next) => {
         status: 'idle'
       });
       
-      schedulerRegistry.registerTask({
-        name: aiSummaryTask.name,
-        description: aiSummaryTask.description,
-        frequency: aiSummaryTask.frequency,
-        intervalMs: aiSummaryTask.intervalMs,
-        run: aiSummaryTask.run.bind(aiSummaryTask),
-        lastRun: null,
-        nextRun: null,
-        status: 'idle'
-      });
+      // B-AI-BRIEF-OFF (#1264, KD-111): the AI Summary task is switched off — not registered with
+      // the scheduler. services/ai-summary-task.ts is left in place until the after-live cleanup
+      // line in Claude Comms and Packages/Scope Files/PRE_LIVE_SPRINT.md:171 removes it.
       
       schedulerRegistry.registerTask({
         name: cleTask.name,

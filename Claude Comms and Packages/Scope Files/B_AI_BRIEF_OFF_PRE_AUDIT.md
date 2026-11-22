@@ -23,7 +23,7 @@ The audit comes first (A-sections); every plan item (P-sections) names the findi
 ### A1. Source 1, the code at the ref — what runs it, and the only two entry points
 - `server/index.ts:683` imports `aiSummaryTask`; `:723-732` registers it; `:835` `schedulerRegistry.startAllTasks()` starts every registered task.
 - `server/services/ai-summary-task.ts:7-11`: `name = 'AI Summary'`, `intervalMs = 24 * 60 * 60 * 1000`, **no `getInitialDelay`** (0 occurrences in the file).
-- `server/services/scheduler-registry.ts:26-49` `startTask`: first run by `setTimeout` at `getInitialDelay?.() ?? intervalMs`, then a `setInterval` at `intervalMs`. So this task first runs 24 h after start-up, twice (`#1039`, Infra Claude, already homed).
+- `server/services/scheduler-registry.ts:26-52` `startTask`: first run by `setTimeout` at `getInitialDelay?.() ?? intervalMs`, then a `setInterval` at `intervalMs`. So this task first runs 24 h after start-up, twice (`#1039`, Infra Claude, already homed).
 - **Repo-wide reference census at the ref, code paths only** (`git grep "AI Summary|aiSummaryTask|ai-summary-task|AISummary"` over `server client shared scripts tests` and the two baseline files, the task's own file excluded) — **every hit:**
 
 | hit | what it is | this batch |
@@ -56,7 +56,7 @@ The client readers, enumerated in full at the ref (`git grep "daily-brief|daily_
 | `client/src/pages/briefings.tsx:316`, `:318` | `/api/daily-briefs` with or without a date range |
 | `client/src/pages/daily-brief.tsx:53-54` | `/api/daily-briefs/:date` or `/today` |
 
-Server side unchanged from the scope: the three `GET` routes at `routes.ts:4949-4990`, and the separate manual writer `daily-brief.ts:120` behind `POST /api/daily-briefs/update` (`routes.ts:4998`), which this batch does not touch.
+Server side unchanged from the scope: the three `GET` routes at `routes.ts:4949-4990`, and the separate manual writer `daily-brief.ts:120` behind `POST /api/daily-briefs/update` (`routes.ts:4994`), which this batch does not touch.
 
 ### A4. Source 3, the System Impact Map (§9.8 Scheduler Registry, `:976-982`)
 - The registry's consumers, the `#1039` defect line and the task counts (`:981-982`) are the only places it names this task's population. **Content update owed at Step 10** under §17 (a runtime component removed), even at `non_architecture` — Langston's Step-1 note: index.ts 12 → 11, registered 38 → 37, "35 of the 38" → "34 of the 37".
@@ -78,7 +78,7 @@ Server side unchanged from the scope: the three `GET` routes at `routes.ts:4949-
 Read and quoted in the scope at Step 1 (introduced `1590221f7a37c0e735b41c07cf93bc265595d326`, broken `5d785f2647d27fdf309ec338a71d61279870f089`; spec `attached_assets/Pasted-Step-4-Autonomous-Schedulers-AI-Transparency-Panel-Milestone-11-...txt:55`). Langston confirmed both at the ref. `bridge/canonical/` was not re-read for this step: the task post-dates the pre-governance corpus (introduced 2025-10-09) and nothing about its behaviour is disputed.
 
 ### A9. The deploy windows the restart touches (Langston F-6)
-`1-system-manual/DEPLOY_WINDOWS.jsonl` at the ref, 42 lines, replayed (open / close / amend): **seven windows open.** This batch deploys **not before 2026-11-23 21:00Z** and never between 02:00 and 02:30Z.
+`1-system-manual/DEPLOY_WINDOWS.jsonl` at the ref, 42 lines, replayed (open / close / amend): **seven windows open.** This batch deploys **not before 2026-11-23 21:00Z**. *(r2: the "never 02:00-02:30Z" fence is dropped — Langston asked for its citation and none exists in the governance corpus; it is a carried habit from sibling pre-audits with no recorded reason.)*
 
 | window (owner) | open until | effect of this batch's restart | `--in-window` |
 |---|---|---|---|
@@ -112,7 +112,7 @@ Recorded in the Step-4 change list so the after-read has a baseline taken by the
 - `GET /api/schedulers/status` lists `AI Summary` and `Market Scan` (A2).
 
 ### P4. Deploy *(from A9)*
-Own deploy, `dt-deploy <full-40-sha> --by cc-b`, after 2026-11-23 21:00Z, outside 02:00-02:30Z, before row 9j's deploy or riding it. Re-run the A9 replay first and name every open window. Staging is behind the review branch (alert `d92423ce`); this deploy carries the branch head and that alert is resolved on its read-back.
+Own deploy, `dt-deploy <full-40-sha> --by cc-b`, strictly after the `B-ENTRY-GATE` increment-C read is TAKEN (not merely after 2026-11-23 21:00Z — C-2), before row 9j's deploy or riding it. Re-run the A9 replay first and name every open window. Staging is behind the review branch (alert `d92423ce`); this deploy carries the branch head. `d92423ce` is CC-A's and is **not hand-resolved**: it clears itself on the first drift run after the deploy, and Step 7 confirms that it did.
 
 ### P5. Verification and how the batch closes *(from A1, A2, Langston F-7)*
 - **The discriminating reads, which close the objective:** 1(a) the grep at the ref (P2); 1(b) `GET /api/schedulers/status` on the new process lists no `AI Summary` and does list `Market Scan`; 3(a) the code census (scope 3(a), re-run at the deployed ref).
@@ -125,10 +125,18 @@ Own deploy, `dt-deploy <full-40-sha> --by cc-b`, after 2026-11-23 21:00Z, outsid
 - **System Manual** §12: the table row marked switched off; a dated line on the "POST-AUDIT INVESTIGATION REQUIRED" note.
 - `RUNNING_ISSUES` `#1264`: annotated with the deploy sha and the read.
 - `Claude Comms and Packages/Scope Files/PRE_LIVE_SPRINT.md:171`: the line gains the two task-name lists (`routes.ts:15758`, `storage.ts:2176`) and the cross-check route's `user_id` 500, as the scope said it would.
+- **System Manual** §12 header count 12 → 11 (`SYSTEM_MANUAL.md:7737`) (C-5).
 - The rest of the Tier-1 ledger as the class matrix sets it for `non_architecture`.
 
 ### P7. The deploy-window row *(from A9, Langston F-6, KD-56; my R-3 forward rule)*
 Filed in this commit as an `open` row in `1-system-manual/DEPLOY_WINDOWS.jsonl`. Its `until_event` is the batch's longest leg — the end of the 25 h confirmatory read — not the first read-back.
+
+### P8. Langston Step-2 conditions, folded in at Step 3 (r2, Discord `1574059372915593276`)
+- **C-1 — enumerate the deploy delta.** Staging runs `c21c1502a`; the branch head between it and this batch carries other sessions' work (CC-C's R2' migration and capacity-gate script, CC-INFRA's token-watch route and page). At deploy time: list every commit in `<deployed sha>..<deploy sha>`, run the A9 effect column on that delta, and get CC-C's and CC-INFRA's go-ahead for their commits — or deploy a sha that excludes them.
+- **C-2 — P4 runs only after the increment-C read is taken** (the EntryWindow tally is in-process; a restart before the read destroys it).
+- **C-3 — if row 9j ships alone first,** this batch waits for the end of 9j's read rather than splitting it.
+- **C-4 — `GOVERNANCE_EXCEPTIONS.md` `open` row** filed in the same commit as P1; flipped to `open-retired` at close before its nag is hand-resolved.
+- **C-5 — the System Manual §12 header count** (P6).
 
 ## Reader record
 No fresh reader was spawned for this step. Load-bearing claims and their standing: the unreachable-write mechanism (A3) is cited to `ai-summary-task.ts:47`/`:69`/`:89` and `storage.ts:315` and was re-derived by Langston at Step 1; the reference census (A1) is a complete `git grep` result printed in full; the window replay (A9) is a script over every line of the register. **NOT RE-READ by a second reader: A9's per-window effect column.**
