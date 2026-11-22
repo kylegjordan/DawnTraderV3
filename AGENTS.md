@@ -23,9 +23,15 @@
 3. Read **`.claude/memory/MEMORY.md`** and **your own** file: `MEMORY_CC_A.md` (OLD) · `MEMORY_CC_B.md` (NEW) · `MEMORY_CC_C.md` (ANALYST) · `MEMORY_CC_INFRA.md` (INFRA) · `MEMORY_PM.md` (PM) in `.claude/memory/`. Its **POSITION** block says which batch and which step you are on. **Resume from there.**
 4. Before working any step of the 11-step workflow, read that step's file: `.claude/skills/workflow-NN-*/SKILL.md` (the table is at the top of `CLAUDE.md`).
 5. When a step skill names **`1-system-manual/WORKFLOW_SHARED_CONTRACT.md`** (the rules all step skills share), read the § it names there. The **audit aids** are plain Node scripts in `scripts/crew-tooling/` (`code-refs.mjs`, `census.mjs`, `history.mjs`; `closeout.mjs` at Step 10), run from Git Bash at the repo root; their standing and limits are in `workflow-02-audit-and-plan`, "THE AUDIT AIDS". They are leads, never verdicts.
-⚠️ `CLAUDE.md` is large; read its size with `node scripts/crew-tooling/claude-md-cap.mjs --report`, never from a figure written here. After a compaction, re-read `CONDUCT.md` and your memory file in full, and only the `CLAUDE.md` sections you need.
+⚠️ `CLAUDE.md` is large; read its size with `node scripts/crew-tooling/claude-md-cap.mjs --report`, never from a figure written here. After a compaction, re-read `CONDUCT.md` and your memory file in full (PM Codex: and `PM_CLAUDE_RULES.md`), and only the `CLAUDE.md` sections you need.
+⛔ **A pause is not a stop (Kyle, KD-75/KD-113, `CLAUDE.md` §0.a):** while your batch waits on an observation window, xStock trading, the reviewer or a timed read, arm what the wait needs, move to your next agreed batch that does not depend on it, then come back and close the first. Scoped work is finished, never dropped.
 
 ### 2a. PM Codex read order and limits
+★ **WHY THIS BLOCK EXISTS (KD-112, measured 2026-11-22):** Codex re-loads THIS file after every compaction, but `PM_CLAUDE_RULES.md` only when you read it. In PM Codex's 2026-11-09 session the rules were re-read in 49 of 57 context segments (none in the last four) and `pm-status-report` in 10 of 57. PM Claude has them injected; you must read them. So, for PM Codex, every time:
+- **At the start of every conversation AND after every compaction, before replying to anything:** read `1-system-manual/PM_CLAUDE_RULES.md` and `.claude/memory/MEMORY_PM.md` in full.
+- **Before every status report:** open `.claude/skills/pm-status-report/SKILL.md` and use its shape: per owner, the current batch, its purpose and how it fits the road to live; the step and what is happening in it; the next batches in order, each with what it is for; the wait or risk; the source. End with `Kyle needed` or `No Kyle action now`.
+- **A crew check, nudge or slotting:** open its `pm-*` skill under `.claude/skills/` first. Codex does not auto-discover these skills; the path is the only trigger.
+
 PM Codex reads these after the startup checks above, in order:
 1. `1-system-manual/PM_CLAUDE_RULES.md` — the PM role. Read "PM Claude" as PM Codex while on duty.
 2. `.claude/memory/MEMORY_PM.md` — **CURRENT POSITION first**, including the stop record, pending Kyle decisions and active plan.
