@@ -40,6 +40,10 @@ const CLONE_TO_SESSION = {
   // out of G:\My Drive and loading none of this. Additive and keyed on clone basename, so
   // it cannot affect the other three sessions' lookups.
   'DawnTraderV3-infra':   { name: 'Infra Claude (CC-INFRA)', file: 'MEMORY_CC_INFRA.md' },
+  // Added 2026-11-22 at Kyle's direction (KD-112): PM Claude's rules file said "always loaded"
+  // from 2026-11-04 but no loader carried it, and its memory was never mapped either, so every
+  // compaction dropped both. `rules` is read from the clone and injected AHEAD of the memory.
+  'DawnTraderV3-pm':      { name: 'PM Claude (CC-PM)', file: 'MEMORY_PM.md', rules: '1-system-manual/PM_CLAUDE_RULES.md' },
 };
 
 function readStdin() {
@@ -61,7 +65,12 @@ try {
     const input = JSON.parse(readStdin() || '{}');
     if (input && typeof input.transcript_path === 'string' && input.transcript_path) {
       const truthPath = join(dirname(input.transcript_path), 'memory', session.file);
-      memText = readFileSync(truthPath, 'utf8');
+      try { memText = readFileSync(truthPath, 'utf8'); }
+      catch {
+        // KD-112: PM's project folder keeps its own memory dir (not junctioned), so its live file is
+        // read from the one shared store directly rather than falling to the git mirror.
+        memText = readFileSync(join(dirname(dirname(input.transcript_path)), 'DT-SHARED-MEMORY', session.file), 'utf8');
+      }
     }
   } catch { /* fall through to mirror */ }
   if (!memText) {
@@ -82,6 +91,21 @@ try {
       );
       process.exit(0);
     }
+  }
+
+  // KD-112: a session with a `rules` file gets it prepended, so the slices carry rules then memory.
+  // An unreadable rules file is said LOUDLY in the text, never silently skipped (#546/#568).
+  if (session.rules) {
+    let rulesText = '';
+    try { rulesText = readFileSync(join(projectDir, session.rules), 'utf8'); } catch { /* flagged below */ }
+    memText = (rulesText
+      ? `[AUTO-LOADED — your own RULES: ${session.rules}]
+` + rulesText
+      : `[⚠️ YOUR OWN RULES ${session.rules} COULD NOT BE LOADED — read it manually now.]
+`)
+      + `
+[AUTO-LOADED — your own working memory: ${session.file}]
+` + memText;
   }
 
   // Q2 (Langston): when the mirror fallback fired, the state may be one commit behind the live file
