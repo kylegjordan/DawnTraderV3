@@ -96,13 +96,7 @@ vi.mock('../../services/passive-archive/crypto-universe-pins.js', () => ({
 }));
 
 vi.mock('../../services/module-constants-service.js', () => ({
-  prefetchModule: async () => {},
-  getCachedNumberRequired: (_m: string, name: string) => {
-    const v = h.CFG[name];
-    if (v === undefined) throw new Error(`required constant missing: ${name}`);
-    return v;
-  },
-  getCachedConstant: () => undefined,
+  getConstant: async (_m: string, name: string) => h.CFG[name],
   GLOBAL_KEY: { exchange: '*', assetClass: '*', strategy: '*', regime: '*' },
 }));
 
@@ -312,7 +306,14 @@ describe('the run — arm (a), degeneracy and arm (b) against the real loader ga
   it('a missing knob throws before anything is read or written', async () => {
     delete h.CFG.universe_refresh_confirm_max_diff_share;
     h.universe = universeOf(range(0, 359));
-    await expect(run()).rejects.toThrow(/required constant missing/);
+    await expect(run()).rejects.toThrow(/required number missing for crypto_spot\.universe_refresh_confirm_max_diff_share \(got no row\)/);
+    expect(h.rows).toHaveLength(0);
+  });
+
+  it('a knob stored as a non-number throws too — no coercion', async () => {
+    (h.CFG as Record<string, unknown>).universe_refresh_max_drop_share = '0.30';
+    h.universe = universeOf(range(0, 359));
+    await expect(run()).rejects.toThrow(/required number missing for crypto_spot\.universe_refresh_max_drop_share \(got string\)/);
     expect(h.rows).toHaveLength(0);
   });
 });

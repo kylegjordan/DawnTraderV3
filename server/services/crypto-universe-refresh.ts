@@ -190,11 +190,19 @@ export async function runCryptoUniverseRefresh(
     console.warn(`${LOG} previous adds: rejected=${JSON.stringify(addFailures.rejected)} unconfirmed=${JSON.stringify(addFailures.unconfirmed)}`);
   }
 
-  // Knobs — required, no fallback (a missing row throws).
-  const { prefetchModule, getCachedNumberRequired, GLOBAL_KEY } = await import('./module-constants-service.js');
-  await prefetchModule(MODULE);
-  const maxDropShare = getCachedNumberRequired(MODULE, MAX_DROP_SHARE_KEY, GLOBAL_KEY);
-  const confirmMaxDiffShare = getCachedNumberRequired(MODULE, CONFIRM_MAX_DIFF_SHARE_KEY, GLOBAL_KEY);
+  // Knobs — required, no fallback (a missing or non-number row throws). Read ASYNC, through the service's own
+  // TTL-cached loader: a once-a-day job has no reason to depend on the boot-warmed sync cache, and the sync readers
+  // are reserved for modules the warmup prefetches (the 8a-P4c inc 3 sweep guards exactly that class).
+  const { getConstant, GLOBAL_KEY } = await import('./module-constants-service.js');
+  const requiredNumber = async (name: string): Promise<number> => {
+    const v = await getConstant<unknown>(MODULE, name, GLOBAL_KEY);
+    if (typeof v !== 'number') {
+      throw new Error(`module_constants: required number missing for ${MODULE}.${name} (got ${v === undefined ? 'no row' : typeof v}). Seed via Drizzle migration.`);
+    }
+    return v;
+  };
+  const maxDropShare = await requiredNumber(MAX_DROP_SHARE_KEY);
+  const confirmMaxDiffShare = await requiredNumber(CONFIRM_MAX_DIFF_SHARE_KEY);
 
   const running = archiver.getCryptoRecorderRunningSymbols();
   const countBefore = running.length;
