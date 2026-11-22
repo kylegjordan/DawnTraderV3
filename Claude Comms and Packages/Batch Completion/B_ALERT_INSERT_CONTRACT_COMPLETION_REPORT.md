@@ -6,6 +6,7 @@
 **Deployed:** `7c5b45c67cd943b577db7475eb00e006508a989c` (contains `7714d0fdb`), live 2026-11-14T21:15:29Z, by OLD Claude in the agreed bundle (`dt-deploy --in-window`)
 **Reviews:** Step 1 scope approved · Step 2 PROCEED at r3 (Langston `1571168431426904085`) · Step 4 approved at `7714d0fdb` · Step 8 PROCEED 2026-11-22 (Langston `1574033312454811761`)
 **Governance commit:** `c61ca13cc` (Step 10)
+**Status:** ✅ CLOSED 2026-11-22 — Langston confirmed Step 11 2026-11-22 (Discord `1574044299778195468`). The close commit also flipped the plan row 3a, `BATCH_CATALOG`, `PHASE_HISTORY`, `#1255` and the session task list (Langston's condition on the confirm).
 
 No progress report exists for this batch: the only observation window was Step 7's seven-day leg window, pre-registered in the pre-audit and read in full at its end. This report is written fresh from the change list, which captured each leg as it was read.
 
