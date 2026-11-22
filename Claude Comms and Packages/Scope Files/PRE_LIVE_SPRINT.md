@@ -24,7 +24,7 @@
 
 The sprint order is `1-system-manual/SPRINT_TO_LIVE_PLAN.md` §4, and the observation windows are its §5. This file carried a second, generated copy of both until `B-PLAN-CURRENCY-CHECK` removed it on 2026-09-30, after reconciling it against the plan (the plan's value stood on every divergence: `Claude Comms and Packages/Scope Files/B_PLAN_CURRENCY_CHECK_PRE_AUDIT.md`, findings DL-A6 to DL-A9). The removed copy's Wave 0 GATE heading is not lost: its content lives on as the GATE sentence of the sprint plan's Wave 0 heading, `### Wave 0 — NOW — urgent, cheap, or already in flight`, in form (c) — no sha, no holder, no date — citing the current `deploy-hold` row(s) in `GOVERNANCE_EXCEPTIONS.md` by name, which carry the held commit, the window and its end (`1-system-manual/DELETED_COMPONENTS_LOG.md`, the `B-PLAN-CURRENCY-CHECK` entry).
 
-## After live — 230 after live (+6 moved to the sprint, +4 struck through, listed below)
+## After live — 231 after live (+6 moved to the sprint, +4 struck through, listed below)
 
 > Counting rule: every `- ` line under this heading, less the lines marked ➡️ MOVED to the sprint (6) and the struck-through lines that record a withdrawal, supersession or closure (4). Recounted 2026-10-08: 234 − 6 − 4 = 224 (the weekly census re-counts it since B-AFTERLIVE-TOTAL-RULE, #1180). The theme headings below use the same rule.
 
@@ -164,10 +164,11 @@ The sprint order is `1-system-manual/SPRINT_TO_LIVE_PLAN.md` §4, and the observ
 - row:1 (CC-A) — crew-process rule mechanisms (B-RULES-1e) — governance tooling, no effect on trading
 - B-INSTRUMENTS-OVER-RULES OBJ-3 (CC-A) — change WHAT LOADS, not what exists: path-scoped rule files so a session loads the repo-wide rules plus only its own area; measured before/after from `~/.claude/instructions-loaded.jsonl` with a paired negative control (a named binding rule must still load); folded with B-RULES-1e, same subject. Moved here at the batch's close (Langston-ruled shape, 2026-10-01); the rest of the batch closed
 
-### Legacy and dead-code cleanup (the reachability census may pull some forward) — 22
+### Legacy and dead-code cleanup (the reachability census may pull some forward) — 23
 - #1086 (—) — B-GUARDRAIL-POLICY-ORPHAN: a dead block-code list and an orphan import (CC-C) — no live path reaches it (W41 homing 2026-10-06)
 
 - B-AI-CHAT-REMOVAL (CC-C) — Kyle 2026-09-30: the AI chat is dead code, remove it with finality. Its ACTION path (intent executor + the seven `/intent/*` routes + the approval components) goes NOW in `B-SIZING-DEC-RESTORE` 2e because it touches paper trading; THIS entry is the rest — conversation, saved chats, chat logs/costs routes, and the unmounted assistant/panel/container/sidebar/insights components (`ai-opportunities-tab` is mounted and stays). 0 calls in ~11 days of access logs. Pull forward if Kyle wants it before live.
+- #1267 (CC-B) — user-link census: the code declares 44 links to the users table and the database enforces none; count orphans per table and which writers would throw on a missing user, THEN decide whether to enforce any link (that decision also after live); with the legacy user-ID cleanup (Kyle 2026-11-22, KD-117)
 - #1264 (CC-B) — remove the daily AI brief code, switched off in B-AI-BRIEF-OFF (Kyle 2026-11-22, KD-111; rule 18 placed deletion)
 - #1263 residue (CC-C) — the leftover database enum values no code uses (8 old strategy names, passive/learning, tuning pending, 8 walter types, 3 untraced types): record as historical or rebuild the types (Kyle 2026-11-22, KD-110)
 - #422 (CC-B) — `/api/active-engine/diagnostics/scan-24h` has no client consumer; the reachability census rules on it (added 2026-09-30, W40 census)
