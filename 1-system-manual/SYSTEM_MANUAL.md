@@ -7876,7 +7876,7 @@ Comprehensive engine-level health monitoring with 5-second heartbeat, auto-recov
 **File:** `server/services/feed-integrity-monitor.ts` + the pure aggregator `server/services/market-data/feed-health-aggregate.ts` (P19-B6.7).
 
 ### Purpose
-The SOLE operator `feed_health` alarm path (and feed-health grader). Boot-started (`feed-integrity-auto-check.ts`, cron `*/5`), it grades the live trading feed and raises `AlertsService.createAlert(feed_health)` on warning/critical (suppressed in dormant mode = active-trading OFF).
+The SOLE operator `feed_health` alarm path (and feed-health grader). Boot-started (`feed-integrity-auto-check.ts`, cron `*/5`), it grades the live trading feed and raises `AlertsService.createAlert(feed_health)` on warning/critical (suppressed in dormant mode = active-trading OFF). **Since B-ALERT-INSERT-CONTRACT (`#1255`, live 2026-11-14) a repeat alert refreshes the stored row (an upsert on `unique_global_alert`) instead of aborting the check, one alert is written per mode, and an acknowledged alert is raised again only after a healthy cycle has closed the episode.**
 
 ### P19-B6.7 (#301) — re-pointed onto the PRIMARY feed, per-class freshest-age alarm
 The monitor previously graded a **vestigial 2nd WebSocket** (`market-data-ws.ts`/`market-data-coordinator.ts`) that had delivered **0 ticks / 0 successful subscriptions since April** while a TCP connection stayed open — so every consumer mis-read it as "connected/healthy" and the alarm would have raised false CRITICALs the moment Phase-19 lifts dormant suppression. P19-B6.7 **deleted that subsystem (§15)** and re-pointed the alarm onto the PRIMARY `krakenWebSocketAdapter`'s real per-symbol tick-age (`getI8EWsHealth()`).

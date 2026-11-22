@@ -4489,3 +4489,11 @@ Deploys `b8ab812de` (chunk A) + `2c986c231` (chunk B); CI green; Step-8 CONFIRME
 **Fix:** dispatch judges the live tick (`judgeDispatchTick`) against `xstock_fill_safety` `active_fill_max_age_ms` and refuses absent / cold / stale / invalid, cold under its own alert key `xstock-cold-tick-fill-block`; the open depth gate (`applyXstockEntryTickAge`) refuses a missing, unobserved or invalid tick and otherwise judges the older of row and tick; `getLatestTickAgeMs` deleted. Deployed `72e7f35f6` 2026-11-11T11:01:14Z; instrument `e7ef8413e` 19:19:48Z.
 
 **Verified:** C-1 same-process pair PASSED 2026-11-20; Langston Step 8 PROCEED 2026-11-22 (Discord `1574021946004475926`); at least 59 downstream refusals (`stale_book` 45, `hollow_book` 14). **Not covered:** zero natural `cold_tick` refusals so far — the cold and unobserved arms are unproved live; the 45 `stale_book` rows with row age under 15 s ride increment 1's successor read.
+
+## FIX-2026-11-22-C — `B-ALERT-INSERT-CONTRACT` (`#1255`, CC-B): a repeat operator alert refreshes the stored row instead of crashing the save
+
+**Symptom:** the operator alert table's duplicate rule (`unique_global_alert`) threw on a repeat message and on the second admin's write in the per-admin loop; the feed-health check aborted mid-cycle 42 times on 6 of 14 days (Langston, 2026-11-13).
+
+**Fix:** `AlertsService.createAlert` is the single insert path and upserts on the rule (refresh, keep the id, re-open only after a healthy cycle stamps `episodeClosedAt`); one write per mode under the owner admin; the duplicate `storage.createSystemAlert` and the uncalled `cleanupOldAlerts` deleted. Deployed `7c5b45c67` 2026-11-14 (commit `7714d0fdb`).
+
+**Verified:** Step 7 legs 1-5 PASS over seven days (six alerting cycles complete, 0 crash lines, 1,996 occurrences succeeded, 14 conflict-branch writes); Langston Step 8 PROCEED 2026-11-22 (Discord `1574033312454811761`). **Not covered:** the second unique rule (`user_id, mode, timestamp`) is outside the conflict target — a same-transaction double write would still throw (no path does it); the deploy-window row under-covered 10 of 12 later deploys (forward rule recorded in the change list r3).

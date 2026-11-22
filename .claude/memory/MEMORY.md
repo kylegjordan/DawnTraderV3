@@ -56,6 +56,8 @@
 
 **★ CLAUDE.md size:** NO-TRIM (#339) holds; depth and evidence move to a named runbook behind a short pointer (#564, CLAUDE.md §4).
 
+**★ OPERATOR ALERTS ARE REPEAT-SAFE (`#1255`):** `createAlert` upserts on `unique_global_alert`; an acked row re-opens only after a healthy cycle. The app's table, not the staging queue.
+
 **★ TRADE RECORDS (B-CLOSE-WRITER-COSTS, closed 2026-11-14):** a close books against exactly ONE record (symbol + asset class + mode) or refuses and keeps the position (critical `close-record-unresolved-*`); the trade tables carry NO default on cost, class or mode — every writer states them.
 
 **★ ALERT IDENTITY IS CANONICAL SINCE 2026-09-02 (`#987`, CC-B, `fa563982c`):** `--by` on ack/resolve must be an exact canonical actor or it is REFUSED; the `cc-session-<date>` form is retired. ⛔ **Read the set from `ALERT_ACTORS` in `server/services/system-alerts.ts`, never from here.**
@@ -82,7 +84,7 @@
 
 **★ SYSTEM-ALERT HANDLING (B-ALERT-PROTOCOL #340):** `1-system-manual/ALERT_HANDLING_PROTOCOL.md` (ack=owned, resolve=fixed, no silent drop) + CLAUDE.md rule 26 and §10.5. Langston triages → `[[ALERT … owner=…]]` → the owner works it → `resolve --by`.
 
-**Settled Kyle decisions (authoritative homes in roadmap/RUNNING_ISSUES — not repeated here):** #94→25-7 · #226→20.3.1 · #5→leave · #80→Phase-25. New CLAUDE.md rules (surfaced-issue-scheduling §9.4, temp Phase-19-doc-upkeep §3 Tier-1, never-leave-legacy rule 18) live in CLAUDE.md — read there, not here.
+**Settled Kyle decisions (authoritative homes in roadmap/RUNNING_ISSUES — not repeated here):** #94→25-7 · #226→20.3.1 · #5→leave · #80→Phase-25.
 
 **★ PRICE SIDE — THE RULE IS CC-C + LANGSTON'S (Kyle delegated 2026-09-03, row `3n`) AND IS LIVE:** an estimate keeps the midpoint; a trigger, fill or booking takes the side a counterparty fills — **BUY on the ASK, SELL on the BID; a missing side ⇒ no decision.** Per-lane state: `SYSTEM_MANUAL` §18.0.1 — read it there, never from here. ★ **Kyle's test is fidelity to live trading, not better-looking results.**
 - [Say "the VTS", never "practice lane"](feedback_vts_name.md)
