@@ -1542,7 +1542,7 @@ The xStock feed's stall watchdog no longer false-fires at the Sunday reopen: on 
 
 Each Claude session now costs less per turn: a larger memory window that compacts later, cheaper helper agents, a rules file cut by about 37% with every moved passage proved present at its new home, and repeat warnings shown once. The shorter alert list runs in shadow until it has 50 checked samples. Crew rollout and the Codex trial wait for the crew to resume.
 
-### 2026-11-22 — B-WORKFLOW-IMPROVE (PM Claude, sprint stage 0 row 2; Kyle KD-103) — 🟦 STEPS 1-10 DONE, STEP 11 PENDING (Langston Step 8 PROCEED 2026-11-21)
+### 2026-11-22 — B-WORKFLOW-IMPROVE (PM Claude, sprint stage 0 row 2; Kyle KD-103) — 🟩 CLOSED 2026-11-22 (Langston Step 11 + na-skip CONFIRMED, Discord `1574057040039383166`)
 
 Sessions now have tools that answer "where is this used, how does the running app reach it, and what has happened to it before" in one command each, so an audit starts from a list instead of a guess, and the end-of-batch paperwork list is generated from the same tables the governance checker grades. The tools are aids, not gates: they say what they cannot see, and a session still reads the code and documents itself. The step skills lost about a fifth of their size by holding repeated text once. The search index over our documents is not built yet; it comes with the conversation index (row 5b).
 
