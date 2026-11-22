@@ -17,7 +17,7 @@ import {
   verifyTelemetryChecksum,
   shouldPersist,
   getTrueMode,
-  type MarketRegime,
+  type MarketRegimeDB,
   type TelemetryEntry
 } from '../../services/telemetry-repository.js';
 
@@ -180,7 +180,7 @@ describe('Directive 11.1A - Telemetry Persistence SQL', () => {
   });
 
   describe('Market Regime Types', () => {
-    const validRegimes: MarketRegime[] = [
+    const validRegimes: MarketRegimeDB[] = [
       'EXTREME_NOISE',
       'TREND_FRIENDLY_STABLE',
       'BULL_VOLATILE',

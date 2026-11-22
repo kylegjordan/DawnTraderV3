@@ -1010,6 +1010,9 @@ export const telemetryLineage = pgTable("telemetry_lineage", {
 }));
 
 // Directive 11.1A: Persistent Intelligence - SQL-based Telemetry History
+// market_regime = the six original labels (2026-04-22-initial-schema.sql) + the canonical five
+// (2026-11-22-b-db-regime-enum-align.sql, B-DB-REGIME-ENUM-ALIGN #1263). Must equal what the migrations create:
+// server/tests/unit/b-db-regime-enum-align.test.ts. HIGH_VOL_IMPULSE is a ghost label normalized at the writer.
 export const marketRegimeEnum = pgEnum("market_regime", [
   "EXTREME_NOISE",
   "BULL_STABLE",
@@ -1021,8 +1024,7 @@ export const marketRegimeEnum = pgEnum("market_regime", [
   "HIGH_VOLATILITY_UNSTABLE",
   "RANGE_BOUND_STABLE",
   "IMPULSE_EXPANSION",
-  "STRUCTURAL_TRANSITION",
-  "HIGH_VOL_IMPULSE"
+  "STRUCTURAL_TRANSITION"
 ]);
 
 export const telemetryHistory = pgTable("telemetry_history", {

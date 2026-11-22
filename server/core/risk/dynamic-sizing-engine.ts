@@ -46,12 +46,12 @@ async function getAdaptiveWeights(regime: string, strategyId: string): Promise<A
   const weights = await loadAdaptiveWeights(regime as any);
   return weights.get(strategyId);
 }
-import type { MarketRegime } from '../../services/telemetry-repository.js';
+import type { MarketRegimeDB } from '../../services/telemetry-repository.js';
 
 export interface DynamicSizeInput {
   strategyId: string;
   symbol: string;
-  regime: MarketRegime;
+  regime: MarketRegimeDB;
   pool: 'ideal' | 'rotational';
   volatility: number;
   cost: number;
@@ -74,7 +74,7 @@ export interface DynamicSizeResult {
 
 export interface DSETelemetry {
   symbol: string;
-  regime: MarketRegime;
+  regime: MarketRegimeDB;
   pool: 'ideal' | 'rotational';
   positionSize: number;
   sizeMultiplier: number;
@@ -313,7 +313,7 @@ export function getAverageSizeMultiplier(): number {
   return sum / sizeHistory.length;
 }
 
-export function getAverageSizeMultiplierByRegime(regime: MarketRegime): number {
+export function getAverageSizeMultiplierByRegime(regime: MarketRegimeDB): number {
   const regimeHistory = sizeHistory.filter(t => t.regime === regime);
   if (regimeHistory.length === 0) return 1.0;
   const sum = regimeHistory.reduce((acc, t) => acc + t.sizeMultiplier, 0);

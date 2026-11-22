@@ -4,8 +4,8 @@
   "frozen_at_commit": "d3e643032",
   "frozen_at_iso": "2026-09-02T08:15:35.574Z",
   "frozen_by_batch": "B-TSC-BASELINE-FIX (#579 — message-identity gate)",
-  "total_errors": 324,
-  "file_count": 43,
+  "total_errors": 314,
+  "file_count": 42,
   "files": [
     {
       "path": "client/src/components/alerts/alert-banner.tsx",
@@ -213,19 +213,6 @@
         },
         "TS2561": {
           "Object literal may only specify known properties, but 'reviewedAt' does not exist in type 'Partial<{ id: string; mode: \"live\" | \"paper\"; status: string | null; reason: string | null; userId: string; oldValue: string; appliedAt: Date | null; variableName: string; variableCategory: string; proposedVal": 2
-        }
-      }
-    },
-    {
-      "path": "server/services/adaptive-learning-repository.ts",
-      "phase_tag": "TBD (audit pending)",
-      "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
-      "errors": {
-        "TS2769": {
-          "No overload matches this call.": 4
-        },
-        "TS2322": {
-          "Type 'MarketRegime' is not assignable to type '\"EXTREME_NOISE\" | \"BULL_STABLE\" | \"BULL_VOLATILE\" | \"BEAR_STABLE\" | \"BEAR_VOLATILE\" | \"LOW_VOL_CHOP\" | \"TREND_FRIENDLY_STABLE\" | \"HIGH_VOLATILITY_UNSTABLE\" | \"RANGE_BOUND_STABLE\" | \"IMPULSE_EXPANSION\" | \"STRUCTURAL_TRANSITION\" | \"HIGH_VOL_IMPULSE\"'.": 1
         }
       }
     },
@@ -549,14 +536,7 @@
       "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
       "errors": {
         "TS2322": {
-          "Type 'string' is not assignable to type 'MarketRegime | undefined'.": 1,
           "Type '{ fx5Evaluated24h: number; fx5Passed24h: number; passRate24h: number; failedByCategory: Record<string, number>; version: string; pairCount: number; totalSamples: number; weights: { hybrid: 0.4; confidence: 0.3; regime: 0.2; decay: 0.1; }; timestamp: string; systemConfig: { metricEngineVersion:": 1
-        },
-        "TS2339": {
-          "Property 'TRANSITION' does not exist on type '{ readonly TREND_FRIENDLY_STABLE: \"TREND_FRIENDLY_STABLE\"; readonly HIGH_VOLATILITY_UNSTABLE: \"HIGH_VOLATILITY_UNSTABLE\"; readonly RANGE_BOUND_STABLE: \"RANGE_BOUND_STABLE\"; readonly IMPULSE_EXPANSION: \"IMPULSE_EXPANSION\"; readonly STRUCTURAL_TRANSITION: ": 1
-        },
-        "TS2345": {
-          "Argument of type 'string' is not assignable to parameter of type 'MarketRegime'.": 3
         }
       }
     },
@@ -661,6 +641,6 @@
       }
     }
   ],
-  "last_synced_at_iso": "2026-11-12T03:29:32.483Z",
-  "last_synced_by_batch": "B-CRON-MISSED-CATCHUP"
+  "last_synced_at_iso": "2026-11-22T15:32:51.000Z",
+  "last_synced_by_batch": "B-DB-REGIME-ENUM-ALIGN"
 }

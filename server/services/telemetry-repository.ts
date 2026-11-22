@@ -18,59 +18,36 @@
  * - FORCE_PERSIST enables writing, but never relabels data as 'live'
  * - Rehydration loads only true live-mode records
  *
- * Phase 14 (Batch 15): Updated regime types for direction-neutral canonical names.
- *   MarketRegimeDB expanded to include TREND_FRIENDLY_STABLE, HIGH_VOLATILITY_UNSTABLE,
- *   RANGE_BOUND_STABLE, IMPULSE_EXPANSION, STRUCTURAL_TRANSITION.
- *   toDBRegime() updated for direct pass-through (all names now in DB enum).
+ * B-DB-REGIME-ENUM-ALIGN (#1263): the Phase-14 note that stood here said the canonical five
+ *   were "now in DB enum" and that toDBRegime() was a safe pass-through. Neither was true: the
+ *   migrations created only the six original labels, so a canonical write would have been
+ *   refused. The labels are now added by 2026-11-22-b-db-regime-enum-align.sql; MarketRegimeDB
+ *   is DERIVED from the pgEnum (one source); the write path takes CanonicalRegimeType only, and
+ *   the writer (telemetry-aggregator) normalizes before it gets here. toDBRegime() and the
+ *   extended MarketRegime union are DELETED — DELETED_COMPONENTS_LOG.md, entry 2026-11-22.
  *
  * DO NOT MODIFY without architectural review.
  * ══════════════════════════════════════════════════════════════════════════════
  */
 
 import { db } from '../db.js';
-import { telemetryHistory, type InsertTelemetryHistory, type TelemetryHistory } from '../../shared/schema.js';
+import { telemetryHistory, marketRegimeEnum, type InsertTelemetryHistory, type TelemetryHistory } from '../../shared/schema.js';
+import type { CanonicalRegimeType } from '../config/canonical-regime-strategy-map.js';
 import { eq, desc, and, gte } from 'drizzle-orm';
 import crypto from 'crypto';
 import { SCHEMA_VERSION, SCHEMA_DIRECTIVE, METRIC_ENGINE_VERSION } from '../config/schema-version.js';
 
-// Database-compatible regime types (stored in PostgreSQL enum)
-// Phase 14: Expanded to include both old and new canonical names
-export type MarketRegimeDB =
-  | 'EXTREME_NOISE'
-  | 'BULL_STABLE'
-  | 'BULL_VOLATILE'
-  | 'BEAR_STABLE'
-  | 'BEAR_VOLATILE'
-  | 'LOW_VOL_CHOP'
-  | 'TREND_FRIENDLY_STABLE'
-  | 'HIGH_VOLATILITY_UNSTABLE'
-  | 'RANGE_BOUND_STABLE'
-  | 'IMPULSE_EXPANSION'
-  | 'STRUCTURAL_TRANSITION'
-  | 'HIGH_VOL_IMPULSE';
-
-// Extended regime types for in-memory use
-// Phase 14: TRANSITION mapped to STRUCTURAL_TRANSITION in DB
-export type MarketRegime = MarketRegimeDB
-  | 'TRANSITION';
-
-/**
- * Map extended regime types to database-compatible types.
- * Phase 14: New canonical names pass through directly.
- * Old canonical names also pass through (still in DB enum for backward compat).
- * Only 'TRANSITION' (never in DB enum) needs mapping.
- */
-export function toDBRegime(regime: MarketRegime): MarketRegimeDB {
-  if (regime === 'TRANSITION') return 'STRUCTURAL_TRANSITION';
-  return regime as MarketRegimeDB;
-}
+// Every label the PostgreSQL market_regime enum can hold — DERIVED from the pgEnum, never
+// hand-listed (the hand list that stood here carried a label the database could not store).
+// READ type: rows written before #1263 can carry the six original labels.
+export type MarketRegimeDB = (typeof marketRegimeEnum.enumValues)[number];
 
 export type PoolType = 'ideal' | 'rotational';
 
 export interface TelemetryEntry {
   symbol: string;
   mode: 'live' | 'paper';
-  regime: MarketRegime;
+  regime: MarketRegimeDB;
   pool?: PoolType; // Directive 11.2 R1: Source pool for segmented performance tracking
   finalScore: number;
   hybridScore?: number;
@@ -89,6 +66,10 @@ export interface TelemetryEntry {
   globalDirectionalBias?: string;
   decayPenalty?: number;
 }
+
+// WRITE type (#1263): a new record carries a canonical regime only. The writer normalizes
+// ghost labels before calling; the type makes a non-canonical write a compile error.
+export type TelemetryWriteEntry = Omit<TelemetryEntry, 'regime'> & { regime: CanonicalRegimeType };
 
 /**
  * Compute SHA-256 checksum for telemetry entry integrity
@@ -114,7 +95,7 @@ export function verifyTelemetryChecksum(record: TelemetryHistory): boolean {
   const expectedChecksum = computeTelemetryChecksum({
     symbol: record.symbol,
     mode: record.mode as 'live' | 'paper',
-    regime: record.regime as MarketRegime,
+    regime: record.regime,
     finalScore: parseFloat(record.finalScore),
   });
 
@@ -149,18 +130,17 @@ export function getTrueMode(): 'live' | 'paper' {
  * Used for contextual rehydration after restart
  */
 export async function loadRecentTelemetry(
-  regime: MarketRegime,
+  regime: MarketRegimeDB,
   mode: 'live' | 'paper' = 'live',
   limit: number = 100
 ): Promise<TelemetryHistory[]> {
   try {
-    const dbRegime = toDBRegime(regime); // Map extended regime to DB-compatible
     const records = await db
       .select()
       .from(telemetryHistory)
       .where(
         and(
-          eq(telemetryHistory.regime, dbRegime),
+          eq(telemetryHistory.regime, regime),
           eq(telemetryHistory.mode, mode)
         )
       )
@@ -212,7 +192,7 @@ export async function loadTelemetryBySymbol(
  * Phase 14: Includes 6 context dimensions and source tag
  * Note: DECIMAL columns in PostgreSQL accept string representation
  */
-export async function saveTelemetryRecord(entry: TelemetryEntry): Promise<boolean> {
+export async function saveTelemetryRecord(entry: TelemetryWriteEntry): Promise<boolean> {
   if (!shouldPersist()) {
     console.log(`[11.1A][TelemetryRepo] Persistence disabled (mode=${getTrueMode()})`);
     return false;
@@ -227,7 +207,7 @@ export async function saveTelemetryRecord(entry: TelemetryEntry): Promise<boolea
     const record: InsertTelemetryHistory = {
       mode: trueMode,
       symbol: entry.symbol,
-      regime: toDBRegime(entry.regime), // Map extended regime types to DB-compatible
+      regime: entry.regime,
       pool,
       finalScore: entry.finalScore.toFixed(4),
       hybridScore: entry.hybridScore?.toFixed(4),
@@ -266,7 +246,7 @@ export async function saveTelemetryRecord(entry: TelemetryEntry): Promise<boolea
  * Directive 11.2 R1: Includes pool tracking for segmented performance
  * Note: DECIMAL columns in PostgreSQL accept string representation
  */
-export async function saveTelemetryBatch(entries: TelemetryEntry[]): Promise<number> {
+export async function saveTelemetryBatch(entries: TelemetryWriteEntry[]): Promise<number> {
   if (!shouldPersist() || entries.length === 0) {
     return 0;
   }
@@ -279,7 +259,7 @@ export async function saveTelemetryBatch(entries: TelemetryEntry[]): Promise<num
       return {
         mode: trueMode,
         symbol: entry.symbol,
-        regime: toDBRegime(entry.regime), // Map extended regime types to DB-compatible
+        regime: entry.regime,
         pool: entry.pool ?? 'ideal',
         finalScore: entry.finalScore.toFixed(4),
         hybridScore: entry.hybridScore?.toFixed(4),
@@ -319,9 +299,9 @@ export async function saveTelemetryBatch(entries: TelemetryEntry[]): Promise<num
 export async function getTelemetryStatsByRegime(
   mode: 'live' | 'paper' = 'live',
   hoursBack: number = 24
-): Promise<Map<MarketRegime, { count: number; avgScore: number }>> {
+): Promise<Map<MarketRegimeDB, { count: number; avgScore: number }>> {
   const cutoff = new Date(Date.now() - hoursBack * 60 * 60 * 1000);
-  const stats = new Map<MarketRegime, { count: number; avgScore: number }>();
+  const stats = new Map<MarketRegimeDB, { count: number; avgScore: number }>();
 
   try {
     const records = await db
@@ -334,10 +314,10 @@ export async function getTelemetryStatsByRegime(
         )
       );
 
-    const grouped = new Map<string, { sum: number; count: number }>();
+    const grouped = new Map<MarketRegimeDB, { sum: number; count: number }>();
 
     for (const record of records) {
-      const regime = record.regime as MarketRegime;
+      const regime = record.regime;
       const current = grouped.get(regime) || { sum: 0, count: 0 };
       current.sum += parseFloat(record.finalScore);
       current.count++;
@@ -345,7 +325,7 @@ export async function getTelemetryStatsByRegime(
     }
 
     for (const [regime, data] of grouped.entries()) {
-      stats.set(regime as MarketRegime, {
+      stats.set(regime, {
         count: data.count,
         avgScore: data.sum / data.count,
       });

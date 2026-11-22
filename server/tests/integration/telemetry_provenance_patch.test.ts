@@ -20,7 +20,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { 
   shouldPersist,
   getTrueMode,
-  type MarketRegime,
+  type MarketRegimeDB,
   type TelemetryEntry
 } from '../../services/telemetry-repository.js';
 
@@ -152,7 +152,7 @@ describe('Directive 11.1A1 - Telemetry Provenance Patch', () => {
   });
 
   describe('Market Regime Types', () => {
-    const validRegimes: MarketRegime[] = [
+    const validRegimes: MarketRegimeDB[] = [
       'EXTREME_NOISE',
       'TREND_FRIENDLY_STABLE',
       'BULL_VOLATILE',

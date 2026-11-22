@@ -35,8 +35,7 @@ import {
   loadRecentTelemetry, 
   saveTelemetryRecord, 
   shouldPersist,
-  type MarketRegime,
-  type TelemetryEntry 
+  type TelemetryWriteEntry
 } from './telemetry-repository.js';
 import { 
   loadAdaptiveWeightsWithTimestamps,
@@ -84,7 +83,7 @@ export interface PairTelemetry {
   successRate: number;
   avgDecayedStrength: number;
   timeframe?: '1h' | '15m' | '5m';
-  pairRegime?: MarketRegime; // Directive 11.4C-R2: Per-pair regime at scan time
+  pairRegime?: CanonicalRegimeType; // Directive 11.4C-R2: Per-pair regime at scan time (#1263: canonical only)
   pattern?: string; // Directive 11.4C.3: Pattern name for HYBRID/PATTERN signals (empty for QUANT)
   pool?: PoolType; // Directive 11.2 R1: Source pool for segmented tracking
   source?: TelemetrySource; // Directive 11.0E.2: simulation vs live segregation
@@ -131,7 +130,7 @@ export class TelemetryAggregatorService {
   private readonly historyWindowMs = SCANNER_PARAMS.TELEMETRY.HISTORY_WINDOW_MS;
   private readonly minSamples = SCANNER_PARAMS.TELEMETRY.MIN_SAMPLES;
   // HF9: DSS instance removed — DSS deleted
-  private currentRegime: string = REGIMES.RANGE_BOUND_STABLE;  // HF9: Fixed stale LOW_VOL_CHOP → canonical name
+  private currentRegime: CanonicalRegimeType = REGIMES.RANGE_BOUND_STABLE;  // HF9: Fixed stale LOW_VOL_CHOP → canonical name
   private rehydrated = false;
   
   // Memory audit: Z-score histories stored per-symbol (not per-entry). Saves ~40MB.
@@ -193,7 +192,7 @@ export class TelemetryAggregatorService {
       timeframe?: '1h' | '15m' | '5m';
       pool?: PoolType; // Directive 11.2 R1: ideal or rotational
       source?: TelemetrySource; // Directive 11.0E.2: simulation or live
-      pairRegime?: MarketRegime; // Directive 11.4C-R2: Per-pair regime
+      pairRegime?: CanonicalRegimeType; // Directive 11.4C-R2: Per-pair regime (#1263: canonical only)
       pattern?: string; // Directive 11.4C.3: Pattern name for HYBRID/PATTERN signals (empty for QUANT)
       signalType?: string; // Directive 11.4C.3: Signal type from VTS (HYBRID/QUANT/PATTERN)
       strategy?: string; // Directive 11.4C-R2: Strategy name from VTS
@@ -278,10 +277,18 @@ export class TelemetryAggregatorService {
     // Directive 11.4C-R2: Use per-pair regime (not global) for database persistence
     if (shouldPersist()) {
       const mode = (process.env.MODE as 'live' | 'paper') || 'paper';
+      // #1263 B-DB-REGIME-ENUM-ALIGN P3: telemetry_history.regime takes the canonical five only.
+      // The input is typed canonical; anything else arriving at runtime is normalized and warned,
+      // never refused and never written raw (a raw ghost label is what failed every insert before).
+      const rawRegime: string = entry.pairRegime ?? this.currentRegime;
+      const persistedRegime = normalizeRegime(rawRegime);
+      if (persistedRegime !== rawRegime) {
+        console.warn(`[B-DB-REGIME-ENUM-ALIGN][Telemetry] non-canonical regime normalized before persist: symbol=${symbol} raw=${rawRegime} persisted=${persistedRegime}`);
+      }
       this.persistTelemetryAsync({
         symbol,
         mode,
-        regime: entry.pairRegime ?? REGIMES.TRANSITION, // Use per-pair regime from VTS with fallback
+        regime: persistedRegime,
         pool: data.pool ?? 'ideal', // Directive 11.2 R1
         finalScore: data.finalScore,
         hybridScore: data.hybridScore,
@@ -297,7 +304,7 @@ export class TelemetryAggregatorService {
   /**
    * Directive 11.1A: Persist telemetry asynchronously
    */
-  private async persistTelemetryAsync(entry: TelemetryEntry): Promise<void> {
+  private async persistTelemetryAsync(entry: TelemetryWriteEntry): Promise<void> {
     try {
       await saveTelemetryRecord(entry);
     } catch (error) {
@@ -758,8 +765,9 @@ export class TelemetryAggregatorService {
    * HF9: Update current market regime (DSS removed — accepts canonical regime string directly)
    * Note: This method was never called at runtime. Kept for interface compatibility.
    */
-  updateMarketRegime(regime: string): string {
-    this.currentRegime = regime;
+  updateMarketRegime(regime: string): CanonicalRegimeType {
+    // #1263: type-fix in place only (no caller; delete-vs-reconnect is a decision item for Kyle's list).
+    this.currentRegime = normalizeRegime(regime);
     console.log(`[11.1A][Telemetry] Market regime updated: ${this.currentRegime}`);
     return this.currentRegime;
   }
@@ -767,7 +775,7 @@ export class TelemetryAggregatorService {
   /**
    * Directive 11.1A: Get current market regime
    */
-  getCurrentMarketRegime(): string {
+  getCurrentMarketRegime(): CanonicalRegimeType {
     return this.currentRegime;
   }
 
@@ -1222,7 +1230,7 @@ export class TelemetryAggregatorService {
    * (pre-B-4.7 disk rehydrates) are excluded and age out naturally.
    * Returns null below MIN_CLASS_VOTE_PAIRS — CLASS_IDLE semantics.
    */
-  getDominantRegimeForClass(assetClass: AssetClass): { regime: MarketRegime; avgRegimeScore: number; pairCount: number; percentage: number } | null {
+  getDominantRegimeForClass(assetClass: AssetClass): { regime: CanonicalRegimeType; avgRegimeScore: number; pairCount: number; percentage: number } | null {
     const MIN_CLASS_VOTE_PAIRS = 5;
     const now = Date.now();
     const regimeCounts: Record<string, { count: number; totalScore: number }> = {};
@@ -1257,7 +1265,7 @@ export class TelemetryAggregatorService {
     const percentage = Math.round((stats.count / totalPairs) * 100);
     
     return {
-      regime: regime as MarketRegime,
+      regime: regime as CanonicalRegimeType, // READ cast: keys come from canonical-typed pairRegime
       avgRegimeScore,
       pairCount: totalPairs,
       percentage

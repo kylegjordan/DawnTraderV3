@@ -21,7 +21,7 @@ import { db } from '../db.js';
 import { adaptiveLearning, type InsertAdaptiveLearning, type AdaptiveLearning } from '../../shared/schema.js';
 import { eq, and, desc } from 'drizzle-orm';
 import { SCHEMA_VERSION, SCHEMA_DIRECTIVE } from '../config/schema-version.js';
-import { getTrueMode, shouldPersist, type MarketRegime } from './telemetry-repository.js';
+import { getTrueMode, shouldPersist, type MarketRegimeDB } from './telemetry-repository.js';
 
 export interface AdaptiveWeights {
   [key: string]: number;
@@ -43,7 +43,7 @@ export interface TimestampedWeights {
  * Required for time-based decay on rehydration
  */
 export async function loadAdaptiveWeightsWithTimestamps(
-  regime: MarketRegime
+  regime: MarketRegimeDB
 ): Promise<AdaptiveWeightResult[]> {
   try {
     const records = await db
@@ -78,7 +78,7 @@ export async function loadAdaptiveWeightsWithTimestamps(
  * Load all adaptive weights for a regime (simple map without timestamps)
  */
 export async function loadAdaptiveWeights(
-  regime: MarketRegime
+  regime: MarketRegimeDB
 ): Promise<Map<string, AdaptiveWeights>> {
   try {
     const records = await db
@@ -110,7 +110,7 @@ export async function loadAdaptiveWeights(
  */
 export async function saveAdaptiveWeights(
   strategyId: string,
-  regime: MarketRegime,
+  regime: MarketRegimeDB,
   weights: AdaptiveWeights,
   metadata?: Record<string, any>,
   originalTimestamp?: Date
@@ -175,7 +175,7 @@ export async function saveAdaptiveWeights(
 export async function saveAdaptiveWeightsBatch(
   entries: Array<{
     strategyId: string;
-    regime: MarketRegime;
+    regime: MarketRegimeDB;
     weights: AdaptiveWeights;
     metadata?: Record<string, any>;
   }>
@@ -203,7 +203,7 @@ export async function saveAdaptiveWeightsBatch(
  * Get adaptive learning statistics by regime
  */
 export async function getAdaptiveLearningStats(
-  regime?: MarketRegime
+  regime?: MarketRegimeDB
 ): Promise<{ total: number; byStrategy: Map<string, number> }> {
   try {
     const query = regime

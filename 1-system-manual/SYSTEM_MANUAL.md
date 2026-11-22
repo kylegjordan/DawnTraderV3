@@ -377,11 +377,13 @@ Where:
 
 | Regime | Min ROI | Rationale |
 |--------|---------|-----------|
-| BULL_STABLE | 1.25% | Low risk = lower return bar |
-| LOW_VOL_CHOP | 1.75% | Moderate |
-| TRANSITION | 2.00% | Uncertain |
-| BEAR_VOLATILE | 2.50% | Higher risk |
-| HIGH_VOL_IMPULSE | 3.00% | Highest risk = highest bar |
+| TREND_FRIENDLY_STABLE | 1.25% | Low risk = lower return bar |
+| RANGE_BOUND_STABLE | 1.75% | Moderate |
+| STRUCTURAL_TRANSITION | 2.00% | Uncertain |
+| HIGH_VOLATILITY_UNSTABLE | 2.50% | Higher risk |
+| IMPULSE_EXPANSION | 3.00% | Highest risk = highest bar |
+
+> **Source and names (B-DB-REGIME-ENUM-ALIGN, #1263, 2026-11-22):** the values come from `module_constants` (`roi_gating` / `min_roi`), held per asset class (B72 / reorg-B2); read 2026-11-22 they are identical for `crypto_spot` and `xstock_spot` and equal this table. `getMinROIForRegime` (`expectancy.ts`) reads them; a regime with no row falls through to the STRUCTURAL_TRANSITION value. The database rows already carry the canonical names (`updated_by` reorg-b2); it was this TABLE that showed the pre-v2.0.0 names (BULL_STABLE, LOW_VOL_CHOP, TRANSITION, BEAR_VOLATILE, HIGH_VOL_IMPULSE) until this batch. No value changed.
 
 ### Dynamic ROI Scaling
 
@@ -1737,7 +1739,7 @@ DawnTrader contains **four** independent regime classification systems operating
 #### Engine 2: calculatePairRegime (VTS / Pair-Level) — CANONICAL CANDIDATE
 - **File**: `server/core/metrics/market-regime.ts`
 - **Input**: OHLC data → volatility (stddev returns), momentum (14-period % change), ADX (14-period)
-- **Output**: 5 canonical regimes (BULL_STABLE, BEAR_VOLATILE, LOW_VOL_CHOP, HIGH_VOL_IMPULSE, TRANSITION)
+- **Output**: 5 canonical regimes (TREND_FRIENDLY_STABLE, HIGH_VOLATILITY_UNSTABLE, RANGE_BOUND_STABLE, IMPULSE_EXPANSION, STRUCTURAL_TRANSITION — the v2.0.0 names; pre-rename BULL_STABLE, BEAR_VOLATILE, LOW_VOL_CHOP, HIGH_VOL_IMPULSE, TRANSITION)
 - **Consumers**: VTS Runner (heavy use), Diagnostic 11.4G
 - **Thresholds**: Static, closely aligned with canonical map thresholds
 - **Status**: ACTIVE — recommended as sole pair-level regime authority
@@ -1779,7 +1781,7 @@ Market Context Engine (MCE) computes DBS first, then calls `calculatePairRegime(
 
 **B62 classifier redesign (Design B — DBS-integrated gates).** The `calculatePairRegime()` function now accepts a `dbsScore` parameter (default 0) and uses DBS to gate regime assignments:
 - **RANGE_BOUND_STABLE** requires `|DBS| < 0.10` in addition to the existing volatility < 0.012 and ADX < 45 checks. This eliminates drift-contaminated false ranges — Phase 0 replay measured **RBS drift contamination 70.2% → 0.0%** under Design B.
-- **TREND_FOLLOWING_STRONG** admits pairs with `|DBS| >= 0.30` even without traditional momentum/ADX signals. This unblocks trend strategies that were previously locked out by RBS misclassification.
+- **TREND_FRIENDLY_STABLE** admits pairs with `|DBS| >= 0.30` even without traditional momentum/ADX signals. This unblocks trend strategies that were previously locked out by RBS misclassification.
 - **IMPULSE_EXPANSION** admits pairs with `|DBS| >= 0.50 && vol > 0.015` (less restrictive than the old vol > 0.020 && ADX > 55 gate), expanding IE from vestigial ~1% to a viable regime.
 - **MCE execution order changed:** DBS is now computed BEFORE regime classification (was regime-first). This is required because the classifier consumes `dbsScore` as an input.
 - **Code freeze on `market-regime.ts` LIFTED as of B62 Phase 1.**
@@ -1871,21 +1873,23 @@ Market Data → Regime Classifier (Canonical 5-Regime Model)
 **Schema Version**: regime-mapping/v1.4c (2026-01-23)
 **Status**: DEFINED but NOT wired to DSS runtime
 
-### 5 Canonical Regimes
+> **⚠️ THIS SECTION IS THE v1.4c RECORD — read the regime NAMES through the v2.0.0 rename (B-DB-REGIME-ENUM-ALIGN, #1263, 2026-11-22).** Phase 14 Batch 15 (schema v2.0.0) renamed the five canonical regimes: BULL_STABLE → **TREND_FRIENDLY_STABLE**, BEAR_VOLATILE → **HIGH_VOLATILITY_UNSTABLE**, LOW_VOL_CHOP → **RANGE_BOUND_STABLE**, HIGH_VOL_IMPULSE → **IMPULSE_EXPANSION**, TRANSITION → **STRUCTURAL_TRANSITION**. The old five names are now ghost labels, normalized by `GHOST_REGIME_NORMALIZATION` (table below, corrected to the current code). **HIGH_VOL_IMPULSE in particular is no longer a regime anywhere: it is a ghost normalized to IMPULSE_EXPANSION, and since #1263 it is not a value of the stored `market_regime` enum either.** The current map is `CANONICAL_REGIME_STRATEGY_MAP_BASE` plus per-asset-class overrides (`regime-mapping/v3.0.0`, byAssetClass); since v1.4c the base membership gained `strong_bull_trend` (TREND_FRIENDLY_STABLE and IMPULSE_EXPANSION) and `orb` (IMPULSE_EXPANSION and STRUCTURAL_TRANSITION). The thresholds below are v1.4c's; the live classifier is the B62 DBS-gated `calculatePairRegime` (Engine 2 above). The headings below carry the current name with the v1.4c name beside it.
+
+### 5 Canonical Regimes (v1.4c thresholds)
 
 | Regime | Momentum | ADX | Volatility | Description |
 |--------|----------|-----|------------|-------------|
-| **BULL_STABLE** | > 0.005 | > 25 | < 0.025 | Sustained uptrend, confirmed directional trend, stable volatility |
-| **BEAR_VOLATILE** | < -0.005 | > 25 | > 0.03 | Downward impulse, strong bearish trend, high turbulence |
-| **LOW_VOL_CHOP** | abs < 0.002 | < 20 | < 0.015 | Flat market, no directionality, narrow range |
-| **HIGH_VOL_IMPULSE** | > 0.010 | > 30 | > 0.03 | Strong breakout, trend acceleration, violent expansion |
-| **TRANSITION** | ±0.004 | 20-25 | 0.015-0.03 | Reversal zone, weakening trend, volatility uplift |
+| **TREND_FRIENDLY_STABLE** (v1.4c: BULL_STABLE) | > 0.005 | > 25 | < 0.025 | Sustained uptrend, confirmed directional trend, stable volatility |
+| **HIGH_VOLATILITY_UNSTABLE** (v1.4c: BEAR_VOLATILE) | < -0.005 | > 25 | > 0.03 | Downward impulse, strong bearish trend, high turbulence |
+| **RANGE_BOUND_STABLE** (v1.4c: LOW_VOL_CHOP) | abs < 0.002 | < 20 | < 0.015 | Flat market, no directionality, narrow range |
+| **IMPULSE_EXPANSION** (v1.4c: HIGH_VOL_IMPULSE) | > 0.010 | > 30 | > 0.03 | Strong breakout, trend acceleration, violent expansion |
+| **STRUCTURAL_TRANSITION** (v1.4c: TRANSITION) | ±0.004 | 20-25 | 0.015-0.03 | Reversal zone, weakening trend, volatility uplift |
 
 ### Full Canonical Strategy Map (19 Strategies)
 
 > **★ Count correction (P19-B6.5c, 2026-06-17):** the canonical strategy count is **19**, not 17. The authoritative basis is the literal key count of `STRATEGY_DISPLAY_NAMES` in `server/config/canonical-regime-strategy-map.ts`: `sma_trend_ride, vwap_pullback, morning_star, pivot_shift, mean_reversion, reverse_impulse, defensive_hedge, inside_bar_reversal, range_trade, support_bounce, abcd_long, adaptive_flow, breakout, vwap_bounce, volatility_edge, dhma, liquidity_trap, strong_bull_trend, orb` = 19. The "17" figure predated `strong_bull_trend` (added B63) and `orb` (added B79.0d); both are now first-class canonical strategies. The per-regime tables immediately below predate those two additions and have not been re-tabulated, but the canonical count is 19.
 
-#### BULL_STABLE (3 strategies, riskMultiplier: 1.2, minConfidence: 0.65)
+#### TREND_FRIENDLY_STABLE — v1.4c: BULL_STABLE (3 strategies in v1.4c, riskMultiplier: 1.2, minConfidence: 0.65)
 
 | Strategy | Key | Signal Type | Pattern | Secondary Metrics |
 |----------|-----|-------------|---------|-------------------|
@@ -1893,7 +1897,7 @@ Market Data → Regime Classifier (Canonical 5-Regime Model)
 | Morning Star / Evening Star | morning_star | PATTERN | MORNING_STAR | 3-bar sequence, momentum flip > 0.3% |
 | Pivot Shift | pivot_shift | HYBRID | MORNING_STAR | RSI 45–55, ADX slope > 0.5 |
 
-#### BEAR_VOLATILE (4 strategies, riskMultiplier: 0.7, minConfidence: 0.75)
+#### HIGH_VOLATILITY_UNSTABLE — v1.4c: BEAR_VOLATILE (4 strategies, riskMultiplier: 0.7, minConfidence: 0.75)
 
 | Strategy | Key | Signal Type | Pattern | Secondary Metrics |
 |----------|-----|-------------|---------|-------------------|
@@ -1902,7 +1906,7 @@ Market Data → Regime Classifier (Canonical 5-Regime Model)
 | Defensive Hedge | defensive_hedge | HYBRID | ENGULFING | BTC Corr < 0.3, Vol Offset > 1σ |
 | Inside Bar Reversal | inside_bar_reversal | PATTERN | ENGULFING | Parent > Child × 1.3, Breakout Volume > 1.5× avg |
 
-#### LOW_VOL_CHOP (4 strategies, riskMultiplier: 0.9, minConfidence: 0.60)
+#### RANGE_BOUND_STABLE — v1.4c: LOW_VOL_CHOP (4 strategies, riskMultiplier: 0.9, minConfidence: 0.60)
 
 | Strategy | Key | Signal Type | Pattern | Secondary Metrics |
 |----------|-----|-------------|---------|-------------------|
@@ -1911,7 +1915,7 @@ Market Data → Regime Classifier (Canonical 5-Regime Model)
 | ABCD Long | abcd_long | QUANT | — | AB:CD ≈ 1.0, Volume > 1.2× avg |
 | Adaptive Flow | adaptive_flow | HYBRID | TRI_STAR | Momentum inversion ≥ 3, Volatility percentile > 70% |
 
-#### HIGH_VOL_IMPULSE (5 strategies, riskMultiplier: 0.8, minConfidence: 0.70)
+#### IMPULSE_EXPANSION — v1.4c: HIGH_VOL_IMPULSE (5 strategies in v1.4c, riskMultiplier: 0.8, minConfidence: 0.70)
 
 | Strategy | Key | Signal Type | Pattern | Secondary Metrics |
 |----------|-----|-------------|---------|-------------------|
@@ -1921,7 +1925,7 @@ Market Data → Regime Classifier (Canonical 5-Regime Model)
 | Volatility Edge | volatility_edge | HYBRID | ABCD | Volatility Percentile > 80, Regime mismatch = True |
 | DHMA | dhma | QUANT | — | HMA(9) cross HMA(21), ADX flat |
 
-#### TRANSITION (3 strategies, riskMultiplier: 0.85, minConfidence: 0.55)
+#### STRUCTURAL_TRANSITION — v1.4c: TRANSITION (3 strategies in v1.4c, riskMultiplier: 0.85, minConfidence: 0.55)
 
 | Strategy | Key | Signal Type | Pattern | Secondary Metrics |
 |----------|-----|-------------|---------|-------------------|
@@ -1929,19 +1933,24 @@ Market Data → Regime Classifier (Canonical 5-Regime Model)
 | Pivot Shift | pivot_shift | HYBRID | MORNING_STAR | RSI 45–55, ADX slope > 0.5 |
 | Morning Star / Evening Star | morning_star | PATTERN | MORNING_STAR | 3-bar sequence, momentum flip > 0.3% |
 
-**Note**: Pivot Shift and Morning Star appear in both BULL_STABLE and TRANSITION — they are cross-regime strategies.
+**Note**: Pivot Shift and Morning Star appear in both TREND_FRIENDLY_STABLE and STRUCTURAL_TRANSITION — they are cross-regime strategies.
 
 ### Ghost Regime Normalization (Legacy Bridge)
 
-The canonical map includes a normalization layer for legacy regime names:
+The canonical map includes a normalization layer for legacy regime names. Corrected to the current code (`GHOST_REGIME_NORMALIZATION`, #1263, 2026-11-22) — the table previously showed the v1.4c targets, which are themselves ghosts now; `normalizeRegime` returns STRUCTURAL_TRANSITION for any unrecognised label:
 
 | Legacy Regime | Canonical Equivalent |
 |---------------|---------------------|
-| BULL_VOLATILE | HIGH_VOL_IMPULSE |
-| BEAR_STABLE | BEAR_VOLATILE |
-| EXTREME_NOISE | LOW_VOL_CHOP |
-| HIGH_VOL_CHOP | HIGH_VOL_IMPULSE |
-| MIXED_TRANSITION | TRANSITION |
+| BULL_VOLATILE | IMPULSE_EXPANSION |
+| BEAR_STABLE | HIGH_VOLATILITY_UNSTABLE |
+| EXTREME_NOISE | RANGE_BOUND_STABLE |
+| HIGH_VOL_CHOP | IMPULSE_EXPANSION |
+| MIXED_TRANSITION | STRUCTURAL_TRANSITION |
+| BULL_STABLE (pre-v2.0.0 canonical) | TREND_FRIENDLY_STABLE |
+| BEAR_VOLATILE (pre-v2.0.0 canonical) | HIGH_VOLATILITY_UNSTABLE |
+| LOW_VOL_CHOP (pre-v2.0.0 canonical) | RANGE_BOUND_STABLE |
+| HIGH_VOL_IMPULSE (pre-v2.0.0 canonical) | IMPULSE_EXPANSION |
+| TRANSITION (pre-v2.0.0 canonical) | STRUCTURAL_TRANSITION |
 
 ### Context-Aware Strategy Selection (Directive 11.4G)
 
@@ -2056,7 +2065,7 @@ DSS must be rewired to:
 2. Import from `canonical-regime-strategy-map.ts` instead of `SYSTEM_GUARDS.STRATEGY_MAP`
 3. Use `selectContextAwareStrategy()` for pattern-aware routing
 4. Apply per-regime `riskMultiplier` and `minConfidence` from canonical map
-5. Remove EXTREME_NOISE as a regime — the canonical model handles high volatility via HIGH_VOL_IMPULSE (not as an auto-veto)
+5. Remove EXTREME_NOISE as a regime — the canonical model handles high volatility via IMPULSE_EXPANSION (HIGH_VOL_IMPULSE before the v2.0.0 rename), not as an auto-veto
 
 **Note**: This is a short-term fix achievable pre-MCE. The Signal Orchestrator can call `calculatePairRegime()` directly for regime classification, then look up strategies via the canonical map. MCE will eventually centralize this, but the fix doesn't need to wait.
 
@@ -2065,6 +2074,8 @@ DSS must be rewired to:
 ---
 
 ## 3. QUANT Strategies (9)
+
+> **Regime names (#1263, 2026-11-22):** the "Canonical Regime" lines in §3-§5 use the v2.0.0 names; they read BULL_STABLE / BEAR_VOLATILE / LOW_VOL_CHOP / HIGH_VOL_IMPULSE / TRANSITION before this batch (the Chapter 2 §1 banner gives the mapping). They record each strategy's home regime from the v1.4c map; the current membership is the code's.
 
 **File**: `server/services/strategy-engine.ts` (999 lines)
 **Directive**: 8.8.3-B
@@ -2077,7 +2088,7 @@ The 9 quant strategy implementations exist and are functional. Their detection l
 All strategy parameters (pullback thresholds, volume multipliers, etc.) are backend-configured. No UI exposure for user editing was found in the client code. If any route previously exposed parameter editing, it has been removed or is inactive.
 
 ### 3.1 VWAP Pullback
-**Canonical Regime**: BULL_STABLE
+**Canonical Regime**: TREND_FRIENDLY_STABLE
 **Method**: `detectVWAPPullback(indicators, settings, priceHistory)`
 
 Entry: Price above VWAP, within pullback threshold (2%), bullish reversal detected, volume ≥ 1.5× average.
@@ -2086,7 +2097,7 @@ Confidence: 0.7–0.9 (variable based on reversal confirmation).
 Strategy-Specific Exit: Price closes below current VWAP.
 
 ### 3.2 ABCD Long
-**Canonical Regime**: LOW_VOL_CHOP
+**Canonical Regime**: RANGE_BOUND_STABLE
 **Method**: `detectABCDLong(priceHistory, settings)`
 
 Entry: 4-point pattern (Spike → Pullback → Higher Low → Breakout). Requires volume confirmation ≥ 1.5× spike volume.
@@ -2095,7 +2106,7 @@ Confidence: 0.75 (static).
 Strategy-Specific Exit: Price drops 0.5% below entry.
 
 ### 3.3 SMA Trend Ride
-**Canonical Regime**: HIGH_VOL_IMPULSE
+**Canonical Regime**: IMPULSE_EXPANSION
 **Method**: `detectSMATrendRide(indicators, priceHistory, settings)`
 
 Entry: Price above SMA + near SMA + bounce pattern + uptrend confirmed (above mode), or price crosses above SMA + uptrend (crossover mode).
@@ -2104,7 +2115,7 @@ Confidence: 0.65 (static).
 Strategy-Specific Exit: Price closes below current SMA.
 
 ### 3.4 Breakout
-**Canonical Regime**: HIGH_VOL_IMPULSE
+**Canonical Regime**: IMPULSE_EXPANSION
 **Method**: `detectBreakout(priceHistory, params)`
 
 Entry: Price breaks above consolidated range high × (1 + buffer, 1%), volume ≥ 2× average.
@@ -2113,7 +2124,7 @@ Confidence: 0.75 (static).
 Strategy-Specific Exit: Price closes below breakout level × 0.995.
 
 ### 3.5 Mean Reversion
-**Canonical Regime**: BEAR_VOLATILE
+**Canonical Regime**: HIGH_VOLATILITY_UNSTABLE
 **Method**: `detectMeanReversion(indicators, priceHistory, params)`
 
 Entry: Price below mean (VWAP/SMA/range midpoint) by deviation threshold (2.5%), bullish reversal detected.
@@ -2122,7 +2133,7 @@ Confidence: 0.70 (static).
 Strategy-Specific Exit: None (stop/target only).
 
 ### 3.6 Range Trading
-**Canonical Regime**: LOW_VOL_CHOP
+**Canonical Regime**: RANGE_BOUND_STABLE
 **Key**: `range_trade` (note: canonical map uses `range_trade`, strategy engine uses `range_trading`)
 **Method**: `detectRangeTrading(priceHistory, params)`
 
@@ -2132,7 +2143,7 @@ Confidence: 0.72 (static).
 Strategy-Specific Exit: Price breaks above resistance × 1.002.
 
 ### 3.7 VWAP Bounce
-**Canonical Regime**: HIGH_VOL_IMPULSE
+**Canonical Regime**: IMPULSE_EXPANSION
 **Method**: `detectVWAPBounce(indicators, priceHistory, params)`
 
 Entry: VWAP trending up (slope ≥ 0.3%), price near VWAP (within 0.5%), recently touched/went below, now above, volume ≥ 1.3× average.
@@ -2141,7 +2152,7 @@ Confidence: 0.73 (static).
 Strategy-Specific Exit: Price closes below current VWAP.
 
 ### 3.8 Liquidity Trap
-**Canonical Regime**: TRANSITION
+**Canonical Regime**: STRUCTURAL_TRANSITION
 **Method**: `detectLiquidityTrap(priceHistory, params)`
 
 Entry: False breakout above range detected (broke above, returned), trap extension ≤ 1.2%, volume reversal ≥ 1.5× breakout volume.
@@ -2150,7 +2161,7 @@ Confidence: 0.68 (static).
 Strategy-Specific Exit: Price goes above trap level × 1.002.
 
 ### 3.9 DHMA (Dual-Horizon Microstructure Alpha)
-**Canonical Regime**: HIGH_VOL_IMPULSE
+**Canonical Regime**: IMPULSE_EXPANSION
 **File**: ~~`server/strategies/dhma.ts`~~ **DELETED** (Directive 12.2.1, Batch 8). Standalone DHMA module was orphaned — never instantiated by strategy-engine. Active DHMA detection runs inline via `server/strategies/strategy-engine.ts:detectDHMA()`.
 
 The most sophisticated strategy — uses Level-2 order book data, not OHLCV candles.
@@ -2213,7 +2224,7 @@ Timeframe weighting: 1h = 1.0, 15m = 0.8, 5m = 0.6.
 xstock pattern_max_position_pct is elevated to 0.50 (vs crypto 0.15) per B79.0m.b2 design — pattern-pool relaxations on xstock are by intentional design, not configuration drift.
 
 ### 4.1 Morning Star / Evening Star
-**Canonical Regime**: BULL_STABLE, TRANSITION
+**Canonical Regime**: TREND_FRIENDLY_STABLE, STRUCTURAL_TRANSITION
 **Key**: `morning_star`
 **Signal Type**: PATTERN
 **Pattern**: MORNING_STAR
@@ -2222,7 +2233,7 @@ xstock pattern_max_position_pct is elevated to 0.50 (vs crypto 0.15) per B79.0m.
 Uses the Morning Star detection from pattern-recognizer.ts. Entry on completion of the 3-bar reversal sequence. Stop/target calculated from ATR (1.5× ATR stop, 2.5× ATR target).
 
 ### 4.2 Support Bounce
-**Canonical Regime**: LOW_VOL_CHOP
+**Canonical Regime**: RANGE_BOUND_STABLE
 **Key**: `support_bounce`
 **Signal Type**: PATTERN
 **Pattern**: PINBAR
@@ -2231,7 +2242,7 @@ Uses the Morning Star detection from pattern-recognizer.ts. Entry on completion 
 Uses Pinbar detection near identified support levels. Requires price to be at or near a local minimum with volume confirmation.
 
 ### 4.3 Inside Bar Reversal
-**Canonical Regime**: BEAR_VOLATILE
+**Canonical Regime**: HIGH_VOLATILITY_UNSTABLE
 **Key**: `inside_bar_reversal`
 **Signal Type**: PATTERN
 **Pattern**: ENGULFING (canonical mapping)
@@ -2256,7 +2267,7 @@ HybridScore = quantConf × 0.4 + patternStrength × 0.4 + mlConf × 0.2
 Minimum score: 0.65. Pattern decay: `effectiveStrength = strength × e^(-0.15 × Δt_candles)` with floor at 30%.
 
 ### 5.1 Pivot Shift
-**Canonical Regime**: BULL_STABLE, TRANSITION
+**Canonical Regime**: TREND_FRIENDLY_STABLE, STRUCTURAL_TRANSITION
 **Key**: `pivot_shift`
 **Pattern**: MORNING_STAR
 **Secondary Metrics**: RSI 45–55, ADX slope > 0.5
@@ -2264,7 +2275,7 @@ Minimum score: 0.65. Pattern decay: `effectiveStrength = strength × e^(-0.15 ×
 Quant confluence + Morning Star pattern at regime pivot points. Cross-regime strategy.
 
 ### 5.2 Reverse Impulse
-**Canonical Regime**: BEAR_VOLATILE
+**Canonical Regime**: HIGH_VOLATILITY_UNSTABLE
 **Key**: `reverse_impulse`
 **Pattern**: PINBAR
 **Secondary Metrics**: Volume > 1.5× avg, Momentum spike < −0.5%
@@ -2272,7 +2283,7 @@ Quant confluence + Morning Star pattern at regime pivot points. Cross-regime str
 Quant momentum reversal + Pinbar formation in bearish conditions.
 
 ### 5.3 Defensive Hedge
-**Canonical Regime**: BEAR_VOLATILE
+**Canonical Regime**: HIGH_VOLATILITY_UNSTABLE
 **Key**: `defensive_hedge`
 **Pattern**: ENGULFING
 **Secondary Metrics**: BTC Corr < 0.3, Vol Offset > 1σ
@@ -2280,7 +2291,7 @@ Quant momentum reversal + Pinbar formation in bearish conditions.
 Quant decorrelation signal + Engulfing pattern. Defensive positioning when asset is decoupled from BTC.
 
 ### 5.4 Adaptive Flow
-**Canonical Regime**: LOW_VOL_CHOP
+**Canonical Regime**: RANGE_BOUND_STABLE
 **Key**: `adaptive_flow`
 **Pattern**: TRI_STAR
 **Secondary Metrics**: Momentum inversion ≥ 3, Volatility percentile > 70%
@@ -2288,7 +2299,7 @@ Quant decorrelation signal + Engulfing pattern. Defensive positioning when asset
 Quant flow analysis + Tri-Star/Doji pattern in sideways markets.
 
 ### 5.5 Volatility Edge
-**Canonical Regime**: HIGH_VOL_IMPULSE
+**Canonical Regime**: IMPULSE_EXPANSION
 **Key**: `volatility_edge`
 **Pattern**: ABCD
 **Secondary Metrics**: Volatility Percentile > 80, Regime mismatch = True
@@ -2420,7 +2431,7 @@ VTS warm-up preloader — ensures pattern detection is initialized with ≥2000 
 2. Update regime classification to use canonical thresholds (momentum + ADX + volatility)
 3. Use `selectContextAwareStrategy()` for pattern-aware routing
 4. Apply canonical `riskMultiplier` and `minConfidence` per regime
-5. Remove EXTREME_NOISE as a regime — canonical model uses HIGH_VOL_IMPULSE for high volatility
+5. Remove EXTREME_NOISE as a regime — canonical model uses IMPULSE_EXPANSION (HIGH_VOL_IMPULSE before the v2.0.0 rename) for high volatility
 
 **Timing**: Pre-MCE — this is a foundational routing fix, not dependent on MCE.
 
@@ -3836,6 +3847,8 @@ Every validation result is logged via `provenanceLogger.logLineage()` with full 
 **File**: `server/core/risk/dynamic-sizing-engine.ts` (Directive 11.3)
 **Export**: `computeDynamicSize(input)`, plus diagnostics getters
 
+> **Status (B-DB-REGIME-ENUM-ALIGN, #1263, read 2026-11-22):** `computeDynamicSize` has **zero production callers** — `routes/dse.ts` imports only the diagnostics getters, and `core/risk/index.ts` re-exports into a barrel nothing imports. The formula below describes code that does not size any trade today. It is also the only route to `loadAdaptiveWeights` (§11 Adaptive Learning Repository). #1263 changed it for types only; whether to delete or reconnect it is a proposal on Kyle's list, not decided here.
+
 ### Core Formula
 
 ```
@@ -4539,7 +4552,7 @@ The L-Series autonomy cluster (MCP, ARE, GASP, MOF, MACO, ECS, DCE, etc.) was di
 | `server/services/active-portfolio-manager.ts` | ~725 | ACTIVE | Paper trading lifecycle management |
 | `server/services/portfolio-aggregator.ts` | ~243 | ACTIVE | Portfolio-level metrics aggregation |
 | `server/services/kraken.ts` | ~750+ | ACTIVE (LOCKED) | Kraken REST API client |
-| `server/core/risk/dynamic-sizing-engine.ts` | ~314 | ACTIVE | Predictive position sizing |
+| `server/core/risk/dynamic-sizing-engine.ts` | ~314 | PARTIAL | Diagnostics getters live (via `routes/dse.ts`); `computeDynamicSize` has zero callers (§8 status note, #1263) |
 | `server/core/risk/index.ts` | ~8 | ACTIVE | Risk module re-export |
 | `server/utils/covariance-engine.ts` | ~371 | ACTIVE | Rolling covariance/correlation matrices |
 | `server/config/execution-config.ts` | ~23 | ACTIVE | TEC configuration constants |
@@ -6825,7 +6838,7 @@ Backs the 48h verify-gate alert `1f34cf84-a37c-425c-a1c4-54924b053061` (triggers
 
 **File**: `server/services/adaptive-learning-repository.ts` (~170+ lines)
 **Directive**: 11.1B
-**Status**: Active
+**Status**: Active as code; **no production caller writes or reads it** (B-DB-REGIME-ENUM-ALIGN, #1263, read 2026-11-22). `persistAdaptiveLearning`, `saveAdaptiveWeightsBatch` and `getAdaptiveLearningStats` have no callers; `loadAdaptiveWeights` is reached only through `computeDynamicSize`, which has none (§8 DSE). The `adaptive_learning` table therefore receives no rows. #1263 changed its regime type only; delete-or-reconnect is a proposal on Kyle's list.
 
 ### Purpose
 
@@ -10695,7 +10708,7 @@ Runtime middleware that validates every trade against canonical rules before exe
 
 | Violation Level | Trigger | Trade Outcome |
 |----------------|---------|---------------|
-| **WARN** | Ghost regime normalized (e.g., BULL_VOLATILE → HIGH_VOL_IMPULSE) | Trade proceeds with normalized values |
+| **WARN** | Ghost regime normalized (e.g., BULL_VOLATILE → IMPULSE_EXPANSION) | Trade proceeds with normalized values |
 | **WARN** | Legacy strategy normalized (e.g., TrendFlow → sma_trend_ride) | Trade proceeds with normalized values |
 | **ERROR** | SignalType mismatch for strategy | **Trade rejected** |
 | **CRITICAL** | Non-canonical regime/strategy/signalType combination | **Trade rejected** |
@@ -11146,8 +11159,8 @@ These tables serve the canonical paper/live trading flow:
 | `rtb_signals` | Ready-to-Buy signal queue | 33 columns, 7 indexes (staging, measured 2026-10-17 after `B-RTB-QUEUED-STATUS-SWEEP` dropped three; it read "Ready-to-Brief … ~25 columns, 5 indexes") | Y |
 | `execution_attempt_audit` | Execution decision log | 14 columns, 5 indexes, executionDecision/blockReason enums | Y |
 | `system_context` | Engine state / LATTI | ~25 columns, 3 indexes, extensive defaults | Y |
-| `telemetry_history` | Signal telemetry persistence | 14 columns, 4 indexes, marketRegime enum | Y |
-| `adaptive_learning` | Adaptive weight persistence | weights/metadata (jsonb), marketRegime enum | Y |
+| `telemetry_history` | Signal telemetry persistence | 14 columns, 4 indexes, marketRegime enum. Written only when `shouldPersist()` holds (live mode, or `FORCE_PERSIST`), so empty in paper mode — read 2026-11-22: empty on staging | Y |
+| `adaptive_learning` | Adaptive weight persistence | weights/metadata (jsonb), marketRegime enum. No production writer or reader (the 11.1A path is dead — §11 Adaptive Learning Repository) | Y |
 | `daily_performance_summary` | Performance tracking | 3 indexes | Y |
 | `screener_results` | Screener output | uniqueIndex(mode, scannedAt) | Y |
 | `system_settings` | Key-value system config | PK = varchar(key), FK to users | N |
@@ -11295,8 +11308,8 @@ Tuning, actuation, strategy drive, learning, behavioral, oversight, audit, exper
 | `patternTypeEnum` | PINBAR, ENGULFING, INSIDE_BAR, MORNING_STAR, THREE_SOLDIERS, ABCD (declared in code since B79.0n; storable in the database only from deploy B, migration `2026-10-02-b-pattern-enum-drift-abcd.sql`, `#1063`) | trades, closed_trades, active_open_positions (corrected 2026-10-02: `rtb_signals` has no such column; the sinks write the RAW detector label) |
 | `rtbSignalStatusEnum` | queued, promoted, expired, rejected, reconfirmed, active — **written: `active` (admission) and `reconfirmed` (refresh) only; the other four are labels nothing writes, kept because Postgres cannot drop an enum value on a live table** (`B-RTB-QUEUED-STATUS-SWEEP`, 2026-10-17; `status` has no default since then) | rtb_signals |
 | `executionDecisionEnum` | OPENED, BLOCKED | execution_attempt_audit |
-| `executionBlockReasonEnum` | KILL_SWITCH, NO_STOP_LOSS, ... (13 values) | execution_attempt_audit |
-| `marketRegimeEnum` | EXTREME_NOISE, BULL_STABLE, BULL_VOLATILE, BEAR_STABLE, BEAR_VOLATILE, LOW_VOL_CHOP | telemetry_history |
+| `executionBlockReasonEnum` | KILL_SWITCH, NO_STOP_LOSS, INVALID_STOP_LOSS, POSITION_LIMIT, COOLDOWN, MAX_POSITION, LPCP_LOW_PRICE, LPCP_MIN_NOTIONAL, FX_CONVERSION_FAILED, PORTFOLIO_RISK, INSUFFICIENT_BALANCE, MAX_EXPOSURE, MAX_TRADES, MAX_TOTAL_EXPOSURE, ENGINE_STOPPING, CORRELATION_EXPOSURE, GUARDRAIL_READ_FAIL, MONEY_HELD_UNAVAILABLE (18 values; this row read 13 until #1263 re-read `shared/schema.ts` 2026-11-22) | execution_attempt_audit |
+| `marketRegimeEnum` | EXTREME_NOISE, BULL_STABLE, BULL_VOLATILE, BEAR_STABLE, BEAR_VOLATILE, LOW_VOL_CHOP, TREND_FRIENDLY_STABLE, HIGH_VOLATILITY_UNSTABLE, RANGE_BOUND_STABLE, IMPULSE_EXPANSION, STRUCTURAL_TRANSITION (11 values). The last five — the canonical regimes — were added by migration `2026-11-22-b-db-regime-enum-align.sql` (#1263); before it the code declared them (and HIGH_VOL_IMPULSE) while the database could store only the first six, so the telemetry writer's canonical labels (and its `TRANSITION` fallback) were not storable and a live-mode insert would have been refused. HIGH_VOL_IMPULSE was removed from the declaration (never storable, no producer). The first six are left intentionally (stored history; `DELETED_COMPONENTS_LOG.md`, entry 2026-11-22). A test asserts the declaration EQUALS the set the registered migrations can store. | telemetry_history, adaptive_learning |
 | `userRoleEnum` | owner, editor, admin, trader, viewer | users |
 | `goalsPresetNameEnum` | conservative, baseline, optimistic, maximum, custom | goals_presets |
 
