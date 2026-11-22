@@ -108,5 +108,9 @@ changed by someone else, it touches nothing, raises a page and exits 4. Steps an
 `tests/dt_api_tests.py` · `tests/dt_api_mutations.py` · `tests/setter_tests.py` ·
 `tests/setter_mutations.py` · `tests/drift_tests.py` · `tests/alert_tests.py` · `tests/staging_session_tests.py` · `tests/drift_mutations.py` · `tests/dt_sql_tests.py` · `tests/dt_sql_mutations.py` (B-DB-READ-TOOL; these two also run in CI, and the one-attempt check against `tests/fakepg_server.py` runs wherever `psql` and `openssl` exist). Each runs a copy of the committed file that
 differs ONLY in its CONSTANTS block (asserted). The mutation runners refuse to report unless the
-unmutated suite passes, and count a crash as a problem, never as a kill.
+unmutated suite passes, and count a crash as a problem, never as a kill. `dt_sql_mutations.py` and
+the repo-root `token-watch/tests/mutate_birthcap.py` run their mutants CONCURRENTLY, each in its own scratch copy
+(`MUTANT_WORKERS` sets the pool, default the CPU count; `1` = serial). The one resource the copies
+share is `dt_sql_tests.py` section 9's TCP port (picked free, then bound a process later) — see the
+comment in `dt_sql_mutations.py`.
 `tests/c10_express_variants.js` runs on staging (as deploy) against the installed Express.

@@ -74,8 +74,12 @@ def run_suite(root):
     return p.returncode, [l.strip() for l in p.stdout.splitlines() if l.strip().startswith("FAIL")]
 
 
-# Mutants run CONCURRENTLY, each in its OWN copy of comms-infra/staging (the suite makes its own state dir and binds
-# port 0, so copies share nothing). Run one at a time they took ~7 min of CI's 22-min Test Suite, which every push
+# Mutants run CONCURRENTLY, each in its OWN copy of comms-infra/staging. The suite makes its own state dir, so the
+# copies share files with nothing. ONE EXCEPTION, a shared resource: section 9's TCP port. dt_sql_tests.py binds port 0
+# only to DISCOVER a free port, CLOSES it, and fakepg_server.py binds that concrete port a process later — so two
+# copies can race for it (EADDRINUSE; the child's traceback goes to stderr, which run_suite does not collect).
+# Langston measured 0 collisions in 140 picks (B-DB-READONLY-ROLE carrier review). A second shared resource added
+# here needs the same check. Run one at a time the mutants took ~7 min of CI's 22-min Test Suite, which every push
 # landing inside it cancelled. MUTANT_WORKERS overrides the pool size (1 = the old serial behaviour).
 WORKERS = max(1, int(os.environ.get("MUTANT_WORKERS") or (os.cpu_count() or 2)))
 scratch = tempfile.mkdtemp(prefix="dt-sql-mut-")
