@@ -207,8 +207,12 @@ the CA 0644, `/etc/sudoers.d/dtsql` 0440, `/etc/dt-sql` 0750 `root:dtsql`, priva
 7. Install the new `dt-sql`; one live read showing `current_user = dt_reader`.
 8. Rename-file drill (move `reader.env` aside → dt-sql refuses before connecting, no lock) → restore.
 9. `--rotate` dry run → `--verify`.
-10. `dt-install-drift` clean.
+9a. **Install the new checker** `comms-infra/staging/dt-install-drift` → `/usr/local/sbin/dt-install-drift` 0700 root:root, and append `<deploy-sha> comms-infra/staging/dt-install-drift` to `/var/lib/dt-install-drift/installed.sha`. *(Langston Step-4 r2 amendment, msg `1574167979351085170`: r1 and r2 both change the checker, live is from `4456f515d`, so without this the three C4 rows are inert at Step 6.)*
+9b. **Install `comms-infra/staging/psql-wrapper`** → `/usr/local/bin/psql` 0755 root:root, and append `<deploy-sha> comms-infra/staging/psql-wrapper` (live is from `b9ad4f026`; r1 changed it comment-only, and the checker hashes bytes).
+   Every other file installed in items 3, 4 and 7 likewise gets its own `<deploy-sha> <repo path>` line.
+10. `dt-install-drift` run by hand — **expected: no PERM and no PENDING on the seven 5a1 paths** (`dt-sql`, `psql-wrapper`, `dt-sql-login`, `dt-sql-role-setup`, `supabase-ca.crt`, `sudoers-dtsql`, `dt-install-drift`), and the transient rows silent (no LOCKED/INTENT present).
 11. **One line naming the accounts newly bound through `psql-wrapper`** by the 0755 change (from `getent passwd` with a login shell, at install time).
+- **Record notes for Step 10/11 (Langston r2):** the login 88 / role_setup 87 counts are a ROOT run; a non-root run adds the unreadable-`reader.env` refusals (`dt_sql_login_tests.py:183`,`:188`; `dt_sql_role_setup_tests.py:343`) and gives 90 / 88 — name the caller. `drift_tests.py`/`drift_mutations.py` run in NO CI step (`grep -n drift .github/workflows/ci.yml` = 0), so the 4/4 does not cover the drift half; it stands on the Helsinki runs.
 - **Rollback:** reinstall the previous `dt-sql` blob (reads `.env` again) and its drift row; `DROP ROLE dt_reader` only on a Langston/Kyle ruling.
 - **Window:** not before the xStock increment-C window closes (Mon 11-23 21:00Z) unless coordinated — no app restart is involved, but the install touches the only hand-run DB read.
 
