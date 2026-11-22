@@ -1281,6 +1281,24 @@ Kill-switch is **DB-backed per-mode**: `isKillSwitchTripped(mode)` (`guardrail-p
 | **BIRTH CAP** *(B-TOKEN-WATCH-BIRTH-CAP, KD-90, 2026-11-16)* | `token-watch-birthcap.service` + `.timer` — a minute tick as `tokenwatch` (`birthcap.py --tick`); its pages are minted as root by `ExecStartPost=+ … --mint`; it acts only while `state/birthcap.enabled` exists. **WRITES OUTBOUND:** it flips the Helius birth webhook's `active` flag (100 credits a call, bounded by `birthcap_switch_ceiling`) and reads the vendor's project usage counter. **STORES:** `provenance/switches.jsonl` (every switch, requested and vendor-confirmed times — the on-time weight the study uses), `state/birthcap` (its state; `liveness` reads its `last_tick`), the per-day truncation record. **FAILS CLOSED TO THE FEED ON.** **ALERTS:** the `birthcap-*` family — critical (`plan-refused`, `record-unreadable`, `hard-ceiling-<day>`, `handshake`, `breaker-<day>`, `switch-failed-*`, `off-failed-*`, `disabled-*`, `cumulative-overbill-<day>`) and warning (`vendor-meter-frozen/backwards[-window]-*`, `rpc-overrun-*`, `divergence-*`); routing in `comms-infra/discord/alert_owner_table.json`. **BLAST RADIUS:** the study's birth denominator (a mis-switch loses births that cannot be re-derived) and the credit allowance; nothing in the trading app reads it. |
 | **BLAST RADIUS** | the disk it shares with the trading app. Growth ~96 MB/day (one measured window, 11-04/05: due 50, births 32, state 13); `births/` and `state/` have no prune path (`B-TOKEN-WATCH-FOLLOWUP-MEMORY` P15, decision `#1246`). |
 
+### 9.16 Crew audit tooling (laptop sessions and CI, NOT the app) — Added B-WORKFLOW-IMPROVE (2026-11-22)
+
+> **What it is:** command-line aids under `scripts/crew-tooling/` that a session runs while auditing, plus one advisory CI step. **Nothing here runs on staging or in the app.** They answer WHERE a thing is used or changed, never WHETHER a change is safe; each prints its own "cannot see" lines, and the Step-2 skill (`workflow-02-audit-and-plan`, "THE AUDIT AIDS") is the one home for how far to rely on them. No aid is a gate (Langston, Step-4 gate 1).
+>
+> | aid | what it does | reads | upstream it depends on |
+> |---|---|---|---|
+> | `code-refs.mjs` | type-aware references to a symbol | the repo's pinned TypeScript (5.6.3) over the tsconfig programs | `typescript` in `package.json`; raw SQL, string keys and shell scripts are not covered |
+> | `census.mjs` | every way into a symbol, file or table: uses, import reach from each start file (`server/index.ts` plus PM2/systemd entries), text hits | `code-refs.mjs`, the import graph, `git grep` | the PM2 and systemd entry list |
+> | `history.mjs` | per-component history: commits through renames, batch-id per subject, the batch documents, `RUNNING_ISSUES` / `DECISIONS` / `DELETED_COMPONENTS_LOG` entries citing it | `git log --follow`, the governance files | batch naming (§3.0) and the `BATCH_<n>` document names |
+> | `closeout.mjs` | the Step-10 close-out matrix for a batch | **imports** `scripts/governance-checker/config.mjs` (DOCS, CLASS_DOCSET, REQUIRED_IF, LEDGER_ROWS, PLAN_LINE), never copies it | the checker's tables: a change there changes the matrix with no edit here; its diff legs are the whole `--base..--head` range, not the batch's own commits |
+> | `ledger-validate.mjs` + `ledger-schema.json` | checks a batch traceability ledger (draft, not called as a gate) | the ledger JSON | the schema |
+> | `move-ledger-check.mjs` | proves each moved passage arrived unchanged, once, and left its source | a move ledger JSON | **blocking in CI** for both move ledgers (B-TOKEN-ECONOMY P5, B-WORKFLOW-IMPROVE Q10) |
+> | `skill-cites.mjs` | lists every pinned skill-line citation in the citing corpora and the cited text at a ref | the step skills and the corpora at a ref | the skill file names |
+> | CI step "Enum parity (advisory, not required)" | database enum declarations in the schema against `pg_enum` in the CI database, both directions | `vitest.enum-parity.config.ts` | the CI database migrations; `continue-on-error`, so it never decides the required result |
+> | `dt-typescript-lsp@skills-dir` plugin | the Claude Code code-navigation tool (`#1038`) | `typescript-language-server` | **kept as a convenience; `code-refs.mjs` is the recorded instrument** (scope :148): the plugin is per-laptop and has no ref |
+>
+> **Cross-cutting state:** none written; every aid is read-only and prints to stdout. **Blast radius of a change:** `closeout.mjs` follows the checker automatically; `skill-cites.mjs` and `move-ledger-check.mjs` are what prove a skill or rules-file move, so changing them changes what a move can claim. **Not yet delivered:** the governance-prose search index (OBJ-12) waits on sprint row 5b `B-CONVERSATION-INDEX` (`#1262`).
+
 ## Layer 10: Frontend & Communication
 
 ### 10.1 WebSocket Broadcast Layer

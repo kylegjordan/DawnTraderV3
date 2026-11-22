@@ -38,6 +38,7 @@
 ★ **Both agree on the underlying 10 code files. The right answer was always in the grep output, buried under 60% noise — and the session had to guess its way to it.** ⇒ **that is the failure mode, quantified.**
 ★ **AND THE BLAST-RADIUS POINT: `toCanonical` has 65 references across 10 files including tests, a telemetry service and a diagnostic. `B-SCANNER-EGRESS-NORMALISE` treated it as a one-line change.**
 ⛔ **USE IT FOR: "who calls this", "where is this defined", "what breaks if I change this."** ⛔ **NOT FOR: anything not code — it declares eight extensions and `.md` is not among them.**
+★ **THE RECORDED INSTRUMENT SINCE `B-WORKFLOW-IMPROVE` (2026-11-22): `scripts/crew-tooling/code-refs.mjs`** — the same compiler symbol graph, from the repo's pinned TypeScript, runnable by both crews and at a ref; it re-measured `toCanonical` at 65 references (the count includes the import specifier). The plugin above stays as a per-laptop convenience (scope :148). How far to rely on either: `workflow-02-audit-and-plan`, "THE AUDIT AIDS".
 
 ## 2. GOVERNANCE PROSE — ⛔ THE REAL GAP, DELIBERATELY LEFT OPEN
 
@@ -51,6 +52,7 @@
 
 ⛔ **NO SOLUTION IS PROPOSED HERE, AND THAT IS DELIBERATE.** The question is with Langston under his own P1 approach round. **The candidate shapes, none adopted:** a semantic/index search exposed as a tool · discipline alone · **or the possibility that the corpus is unsearchable because it is 64 MB of overlapping prose, in which case the defect is the CORPUS, not the search.**
 ⚠️ **The instinct to build a search tool is exactly the instinct that produced the guard Langston had to delete (`#756`). It is not being acted on unprompted.**
+★ **ANSWER RECORDED (`B-WORKFLOW-IMPROVE`, 2026-11-22; review R5, `pm/reviews/2026-11-19_WORKFLOW_REVIEW_PRELIMINARY.md:102`):** narrow first, then read whole. `scripts/crew-tooling/history.mjs` lists, for one component, every commit (through renames), each batch's scope, pre-audit and completion files, and the `RUNNING_ISSUES` / `DECISIONS` / `DELETED_COMPONENTS_LOG` entries that cite it, so the reader knows WHICH documents to read end to end, and still reads them (Langston's method above, unchanged). ⚠️ **It finds documents that name the file or a former name; a paraphrase that names neither is still invisible to it.** A search index over the prose is NOT delivered: it waits on sprint row 5b `B-CONVERSATION-INDEX` (`#1262`).
 
 ## 3. GIT HISTORY — ✅ ADEQUATE, AND UNDER-USED
 

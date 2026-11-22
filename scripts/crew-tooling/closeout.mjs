@@ -221,7 +221,7 @@ function verdict(key, c) {
 const matrix = ROWS.map(([key, label]) => { const c = cell(cls, key, batchId); return { key, label, ...c, verdict: verdict(key, c) }; });
 const missing = matrix.filter((m) => m.verdict?.state === 'MISSING').length;
 const out = { tool: 'closeout.mjs', tool_version: '1.1', class: cls, class_source: classSource, batch: batchId || null, base: base || null, head, base_sha: baseSha, head_sha: headSha, fetched: false, source: 'scripts/governance-checker/config.mjs (imported) + OVERLAY', rows: matrix, missing,
-  not_covered: ['whether an UPDATED entry says the right thing (content, not presence)', 'local-state rows (memory, task lists) - the author attests', 'a judged row the diff gives no hint for'] };
+  not_covered: ['whether an UPDATED entry says the right thing (content, not presence)', 'local-state rows (memory, task lists) - the author attests', 'a judged row the diff gives no hint for', 'which batch made a change - the diff legs are the whole --base..--head range, not the batch commits, so another batch touching a document in the range reads UPDATED and its deletions feed the deleted-log hint'] };
 if (args.includes('--json')) { console.log(JSON.stringify(out, null, 2)); process.exit(missing ? 1 : 0); }
 console.log(`CHANGE-CLASS: ${cls} (${classSource})${batchId ? `   batch ${batchId}, ${base} (${baseSha.slice(0, 12)})..${head} (${headSha.slice(0, 12)}); no fetch performed, refs as this clone last fetched them` : ''}`);
 console.log('| document | requirement · checker | verdict | evidence |');
