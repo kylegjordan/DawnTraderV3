@@ -1,9 +1,70 @@
-# B-PRICE-FEED-COVERAGE (#1222) — OBJ-5 (reconnect keeps the subscription intent) — STEP 4 CHANGE LIST (for Langston)
+# B-PRICE-FEED-COVERAGE (#1222) — OBJ-5 (reconnect keeps the subscription intent) — STEP 4 CHANGE LIST (for Langston) — r2
 
 **Change-class:** `architecture` (scope `Scope Files/B_PRICE_FEED_COVERAGE_SCOPE.md` line 3, unchanged).
 **Step-2 plan it implements:** `Scope Files/B_PRICE_FEED_COVERAGE_PRE_AUDIT.md` PART 1, OBJ-5 P5-1..P5-4 (your acceptance 2026-11-13 19:51Z, `0b62a3720`).
 **Graded ref:** `b9205dcbb74859fbe1c872de0729f354d4e1c31f` on **`migration/aws-supabase`** (one commit on `19cbbb7ab`; 5 files, +443 / −13 — `git diff --stat 19cbbb7ab b9205dcbb`). **NOT deployed.** ⚠️ Unlike inc 0 this landed on the migration head, not a review branch — see decision 9: it must not ride any deploy until your PROCEED.
 **Doc set for the class (row by row):** SCOPE ✅ present · PRE_AUDIT ✅ present (PART 1) · COMPLETION_REPORT, BATCH_CATALOG (`:1743` row exists for the parent), PHASE_HISTORY (`:1576`), SYSTEM_MANUAL, SYSTEM_IMPACT_MAP — owed at Step 10/11. SIM `:335` currently reads *"the reconnect re-subscribes open positions only — `#1222`"*; that known-gap line is rewritten at Step 10.
+
+
+## r2 — Step-4 AMEND (your verdict on `b9205dcbb`, Discord `1574086571139793078`)
+**Graded ref for r2:** the commit that carries this r2 (parent `45a3710e5`), on `migration/aws-supabase`. 3 runtime/test files + this list + `RUNNING_ISSUES` + `DEPLOY_WINDOWS`. **Still NOT deployed; the crew fence (no deploy at or after `b9205dcbb`) stands until your PROCEED.**
+
+### Your rulings, recorded
+Decisions 1, 2, 6, 7, 8 — good as taken. Decision 9 — no revert; the fence held. Decision 10 — no seam tests needed once items 3 and 4 land (both landed, below).
+
+### The six items and how each landed
+| # | your item | landed |
+|---|---|---|
+| 1 | a green Test Suite on a sha that holds the change | CI on the r2 commit — run id + per-job result go in the dispatch post (this file is inside that commit, so it cannot carry its own run) |
+| 2 | ONE line per restore run | `restoreIntent` (`kraken-websocket-adapter.ts:3543-3595`) counts `sent` through the loop and writes exactly one line after it: `[OBJ-5][RESUB] sent=<n> candidates=<n> reasons=<prefixes> trigger=<t>`, or `[OBJ-5][RESUB_ABORTED] reason=socket_changed sent=<n> candidates=<n> reasons=<prefixes> trigger=<t>` when the socket changed mid-run. No line inside the loop any more. A non-audit run with nothing to send still writes `sent=0 candidates=0` (`:3562`), so a healthy reconnect is visible; a non-audit run that finds a restore already in progress writes `sent=0 candidates=<n> … skipped=restore_in_progress` (`:3547`). The 5 s audit stays silent on zero and on in-progress (`quietWhenIdle`, `:3544`). `candidates` is the count at run start. |
+| 3 | release `open` on the stop-flow orphan delete | `active-engine-service.ts:1193`: `releaseIntentReason(orphan.symbol, 'open')` right after `deleteActiveOpenPosition('paper', orphan.id)` (`:1189`). No unsubscribe added (the stop flow never unsubscribed). Harmless for an xStock symbol (no intent is ever held for one). |
+| 4 | the audit declares intent | `i8cRunOpenPositionAudit` (`:3431`): every position the provider names gets `addIntentReason(…, 'open')`, healthy or not, before the health check. So after `clearAllSubscriptions()` empties the intent, the next tick puts `open` back on every still-open position. Additive, not `replaceIntentReasonSet('open', …)` — a replace would strip `open` from a symbol whose position the OTHER engine holds (the provider slot is last-writer-wins, decision 5). |
+| 5 | remove the pending exclusion | `restoreCandidates` (`:3526`) no longer skips `pendingSubscriptions`. A pending symbol counts as in flight only through its request stamp (same socket, under 10 s). Consequence: a symbol Kraken refused after the open flush (pending forever, stamp aged out) is retried on the ~10-15 s cadence of decision 4; a pending symbol inside its grace is not doubled. |
+| 6 | a `DEPLOY_WINDOWS` open row | `1-system-manual/DEPLOY_WINDOWS.jsonl` — `open` row for this window (until your PROCEED), in this commit. |
+
+### Decisions changed or narrowed by the amend
+- **Decision 3 — the benign callers named:** `triggerCorrectiveAction` (`:3069`) and the book-channel swap (`:3136`) re-subscribe symbols that already hold intent or are open positions; neither needs to declare.
+- **Decision 4 — narrowed:** the refused-ticker retry now also covers a refused PENDING symbol (item 5); before r2 a pending refusal was never retried.
+- **Decision 5 — the close-entry-point census, now run (`git grep` at HEAD `45a3710e5`, tests excluded):**
+  - single deletes — `active-engine-service.ts:1189` (stop-flow orphan, **releases since r2**), `active-execution-engine.ts:2289` (never_filled, releases `:2291`), `:5329` (close, releases `:5337`): **all three release.**
+  - bulk deletes — `routes.ts:11384` (reset soft-cleanup), `:11432`, `:11697`, `c14-validation-service.ts:163`: **none releases.** Only the engine reset (`active-execution-engine.ts:1738`) and the session reset (`active-session-reset.ts:221`, which also runs the `storage.ts:4694` bulk delete) are followed by `clearAllSubscriptions()`.
+  - **audit/close race:** an audit that read the provider before a close can re-add `open` after the close released it.
+  - **Residual, stated:** after a bulk delete or that race, `open` outlives the position until `stop()` / `clearAllSubscriptions()`. Cost: one kept subscription per such symbol (and a close-path `WS_UNSUB_KEPT` naming `open`). It is never a lost subscription. **Proposed class fix filed on `#1222`** (each engine replaces its OWN `open:<mode>` set from its own provider read), as a proposal for Kyle's list, not a slot.
+- **New, named — the RTB-refresh first-call race:** on the FIRST `syncRtbSubscriptionIntent` call only, an `rtb:<mode>` reason added at queue time between `getQueuedSignals`, the `await import(...)` and `replaceIntentReasonSet` can be stripped by the replace. Later calls are not exposed (the module import is cached, so the replace follows the read with no await between). The next refresh restores it from the queue. Cost: one symbol possibly unrestored on a reconnect inside that one window. `NOT RE-READ` by a second reader.
+
+### Verification at the r2 ref (CC-B, local)
+- `node scripts/check-tsc-baseline.mjs`: 324 / 324, no regression.
+- vitest: `b-price-feed-coverage-obj5-reconnect` **21/21** (14 → 21: item 2 ×3, item 5 ×2, item 4 ×2). Every unit suite that imports the adapter or `active-engine-service` (`git grep` at HEAD; one integration suite needing a database excluded): **31 files / 440 tests pass.**
+- **Mutations — RUN against the adapter, each restored after, all exit=1 (script output, not predicted):**
+
+| # | mutation | killed by |
+|---|---|---|
+| M1 | reconnect branch: no restore | T1 |
+| M2 | `softResubscribeAll`: no restore | T2 |
+| M3 | restore behind the provider early return | T3 |
+| M4 | in-flight ignores which socket | replaced-socket |
+| M5 | no in-flight grace | 7 failed (pacing, grace, item-2 in-progress, item-5 retry, …) |
+| M6 | paced restore does not abort | abort |
+| M7 | no chunking | 3 failed (pacing, abort, item-2 in-progress) |
+| M8 | replace keeps stale members | T4, T4b |
+| M9 | `stop()` keeps the intent | stop |
+| M10 | release always reports empty | T4b |
+| **M11** | **pending excluded again (pre-r2)** | item-5 refused-pending retry |
+| **M12** | **non-audit zero line dropped** | item-2 zero line |
+| **M13** | **audit loud on zero** | item-2 audit-silent, item-2 in-progress |
+| **M14** | **in-progress skip line dropped** | item-2 in-progress |
+| **M15** | **abort also writes the finished line** | abort (one line per run) |
+| **M16** | **audit declares no `open`** | item-4 |
+| **M17** | **audit declares `open` only for symbols it re-subscribes** | item-4 (healthy position) |
+
+- The item-3 engine line has no unit test (your decision-10 ruling).
+
+### Step 7 — (a) reworded for the new line; (b)-(d) unchanged
+(a) **Every reconnect after the deploy writes exactly one `[OBJ-5][RESUB] … trigger=reconnect` (or `RESUB_ABORTED … trigger=reconnect`) line — including `sent=0 candidates=0` when nothing was lost** — with `sent` > 0 whenever an RTB-queued crypto symbol was ACKed before it. A reconnect with no line is a failure.
+
+---
+
+# r1 (graded at `b9205dcbb`, kept as written)
 
 ## The defect (F-3, pre-audit PART 1)
 The crypto adapter's reconnect branch re-subscribed open positions only, so a symbol the RTB had queued and Kraken had ACKed was dropped on every reconnect; `softResubscribeAll` snapshotted the ACKed set only and cleared `pendingSubscriptions`, so a symbol still awaiting its ACK was dropped there. Nothing retried it until the symbol happened to be re-requested. Measured drop rate in the pre-audit: ~11/day.

@@ -7,7 +7,9 @@
  * either until the symbol happened to be re-requested.
  *
  * THE FIX, as tested here: one intent per symbol holding named reasons ('open', 'rtb:<mode>'); every restore sends
- * intent − acked − pending − in-flight, computed at send time, in paced chunks; the 5 s audit is the retry.
+ * intent − acked − in-flight-on-this-socket, computed at send time, in paced chunks; the 5 s audit is the retry.
+ * Step-4 amend (Langston): one log line per non-audit restore run (zero included), the audit declares 'open' for every
+ * position it names, and a pending symbol counts as in flight only through its request stamp.
  * Every negative ships with its twin (the old behaviour, shown to lose the symbol, so the positive discriminates).
  */
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
@@ -72,7 +74,7 @@ describe('#1222 OBJ-5 T1 — a reconnect restores the ACKed RTB symbol AND the o
     expect(subs.filter((s) => s === X)).toHaveLength(1);
     expect(subs.filter((s) => s === Y)).toHaveLength(1); // the open-position helper sent it; the restore did not re-send
     expect(adapter.getIntentReasons(Y)).toEqual(['open']);
-    expect(logs).toContain('[OBJ-5][RESUB] restored=1 reasons=rtb trigger=reconnect');
+    expect(logs).toContain('[OBJ-5][RESUB] sent=1 candidates=1 reasons=rtb trigger=reconnect');
   });
 
   it('T1-twin. the same reconnect with X ACKed but NOT in the intent loses X — the pre-fix behaviour', async () => {
@@ -111,7 +113,7 @@ describe('#1222 OBJ-5 T2 — the safe resubscribe restores a symbol that was sti
     const subs = tickerSubs(sent);
     expect(subs).toContain(Z); // the ACKed snapshot
     expect(subs.filter((s) => s === X)).toHaveLength(1); // restored from the intent
-    expect(logs).toContain('[OBJ-5][RESUB] restored=1 reasons=rtb trigger=soft_resubscribe');
+    expect(logs).toContain('[OBJ-5][RESUB] sent=1 candidates=1 reasons=rtb trigger=soft_resubscribe');
   });
 
   it('T2-twin. the same resubscribe with X pending but NOT in the intent loses X — the pre-fix behaviour', async () => {
@@ -145,7 +147,7 @@ describe('#1222 OBJ-5 T3 — not connected: one deferred line, then the audit re
     await adapter.i8cRunSubscriptionAudit(); // no open-position provider: the restore must still run
 
     expect(tickerSubs(sent)).toEqual([X]);
-    expect(logs).toContain('[OBJ-5][RESUB] restored=1 reasons=rtb trigger=audit');
+    expect(logs).toContain('[OBJ-5][RESUB] sent=1 candidates=1 reasons=rtb trigger=audit');
   });
 
   it('T3-twin. an empty intent writes no deferred line at all', async () => {
@@ -242,7 +244,8 @@ describe('#1222 OBJ-5 P5-4 — pacing and the in-flight grace', () => {
     await vi.advanceTimersByTimeAsync(1_000);
     expect(await p).toBe(25);
     expect(tickerSubs(sent)).toHaveLength(25);
-    expect(logs).toContain('[OBJ-5][RESUB_ABORTED] reason=socket_changed restored=25 trigger=audit');
+    const runLines = logs.filter((l) => l.startsWith('[OBJ-5][RESUB'));
+    expect(runLines).toEqual(['[OBJ-5][RESUB_ABORTED] reason=socket_changed sent=25 candidates=30 reasons=rtb trigger=audit']);
   });
 
   it('stop() clears the intent; a reconnect never does', () => {
@@ -250,5 +253,90 @@ describe('#1222 OBJ-5 P5-4 — pacing and the in-flight grace', () => {
     adapter.addIntentReason(X, 'open');
     adapter.stop();
     expect(adapter.getSubscriptionIntent()).toEqual({});
+  });
+});
+
+describe('#1222 OBJ-5 Step-4 amend item 2 — one line per restore run', () => {
+  const runLines = () => logs.filter((l) => l.startsWith('[OBJ-5][RESUB'));
+
+  it('a non-audit restore with nothing to send still writes its line, so a healthy reconnect is visible', async () => {
+    const { adapter } = makeAdapter();
+    expect(await adapter.restoreIntent('reconnect')).toBe(0);
+    expect(runLines()).toEqual(['[OBJ-5][RESUB] sent=0 candidates=0 reasons= trigger=reconnect']);
+  });
+
+  it('the 5 s audit stays silent when it has nothing to send', async () => {
+    const { adapter } = makeAdapter();
+    expect(await adapter.restoreIntent('audit')).toBe(0);
+    expect(runLines()).toEqual([]);
+  });
+
+  it('a non-audit restore that finds one already running writes a skipped line; an audit that finds one stays silent', async () => {
+    vi.useFakeTimers();
+    const { adapter } = makeAdapter();
+    adapter.replaceIntentReasonSet('rtb:paper', Array.from({ length: 30 }, (_, i) => `S${i}/USD`));
+
+    const p = adapter.restoreIntent('audit');
+    await flush();
+    expect(await adapter.restoreIntent('reconnect')).toBe(0);
+    expect(await adapter.restoreIntent('audit')).toBe(0);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(await p).toBe(30);
+    expect(runLines()).toEqual([
+      '[OBJ-5][RESUB] sent=0 candidates=5 reasons= trigger=reconnect skipped=restore_in_progress',
+      '[OBJ-5][RESUB] sent=30 candidates=30 reasons=rtb trigger=audit',
+    ]);
+  });
+});
+
+describe('#1222 OBJ-5 Step-4 amend item 5 — a pending symbol is in flight only through its request stamp', () => {
+  it('a symbol Kraken refused after the open flush (still pending, stamp aged out) is retried', async () => {
+    vi.useFakeTimers();
+    const { adapter, sent } = makeAdapter();
+    adapter.addIntentReason(X, 'rtb:paper');
+    adapter.subscribeToSymbols([X]); // stamped + sent on this socket
+    adapter.pendingSubscriptions.add(X); // the v2 rejection branch clears neither the pending entry nor the stamp
+    expect(tickerSubs(sent)).toEqual([X]);
+
+    await adapter.restoreIntent('audit');
+    expect(tickerSubs(sent)).toEqual([X]); // inside the grace: in flight, not doubled
+
+    vi.advanceTimersByTime(10_001);
+    await adapter.restoreIntent('audit');
+    expect(tickerSubs(sent)).toEqual([X, X]); // retried like any other refused symbol
+  });
+
+  it('twin: a pending symbol inside its grace on this socket is NOT re-sent', async () => {
+    const { adapter, sent } = makeAdapter();
+    adapter.addIntentReason(X, 'rtb:paper');
+    adapter.subscribeToSymbols([X]);
+    adapter.pendingSubscriptions.add(X);
+    await adapter.restoreIntent('audit');
+    expect(tickerSubs(sent)).toEqual([X]);
+  });
+});
+
+describe('#1222 OBJ-5 Step-4 amend item 4 — the audit declares open for every position it names', () => {
+  it('after clearAllSubscriptions empties the intent, the next audit puts open back on a still-open position, healthy or not', async () => {
+    const { adapter } = makeAdapter();
+    adapter.addIntentReason(X, 'open');
+    adapter.addIntentReason(Y, 'open');
+    adapter.clearAllSubscriptions();
+    expect(adapter.getSubscriptionIntent()).toEqual({});
+
+    adapter.subscribedSymbols.add(Y); // Y healthy (subscribed, fresh tick), X missing
+    adapter.symbolStats.set(Y, { lastUpdate: Date.now() });
+    adapter.setI8COpenPositionsProvider(async () => [X, Y]);
+    await adapter.i8cRunSubscriptionAudit();
+
+    expect(adapter.getIntentReasons(X)).toEqual(['open']);
+    expect(adapter.getIntentReasons(Y)).toEqual(['open']);
+  });
+
+  it('twin: a symbol the provider no longer names gets no open from the audit', async () => {
+    const { adapter } = makeAdapter();
+    adapter.setI8COpenPositionsProvider(async () => [Y]);
+    await adapter.i8cRunSubscriptionAudit();
+    expect(adapter.getIntentReasons(X)).toEqual([]);
   });
 });

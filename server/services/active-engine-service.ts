@@ -1187,6 +1187,10 @@ export async function stopActiveEngine(
                   console.log(`[8.8.3-I2][STOP_FLOW][CLEANUP] Force-removing orphan position: ${orphan.symbol} (${orphan.id})`);
                   try {
                     await storage.deleteActiveOpenPosition('paper', orphan.id);
+                    // #1222 OBJ-5 (Langston Step-4 item 3): the position is gone, so it no longer wants its feed. Release only —
+                    // no unsubscribe here (as before; the stop flow does not touch subscriptions). Harmless for an xStock symbol,
+                    // which never holds a Kraken intent.
+                    krakenWebSocketAdapter.releaseIntentReason(orphan.symbol, 'open');
                     flattenReport.orphansDeleted.push(orphan.symbol);
                     console.log(`[8.8.3-I2][STOP_FLOW][CLEANUP_SUCCESS] Removed orphan: ${orphan.id}`);
                   } catch (cleanupErr) {

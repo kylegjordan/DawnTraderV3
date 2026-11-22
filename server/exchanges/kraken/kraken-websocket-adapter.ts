@@ -3424,6 +3424,11 @@ export class KrakenWebSocketAdapter extends EventEmitter {
       let lowVolumeCount = 0;
       for (const symbol of openPositions) {
         const normalizedSymbol = normalizeToInternalSymbol(symbol);
+        // #1222 OBJ-5 (Langston Step-4 item 4): every position the provider names declares 'open', healthy or not. The
+        // provider is the authority on what is open (crypto_spot only, #559), so this heals the reason wherever it was lost:
+        // clearAllSubscriptions empties the intent on a session reset, and a close in one mode releases 'open' for a symbol
+        // the other mode may still hold. Without it the next reconnect would restore nothing for such a position.
+        this.addIntentReason(normalizedSymbol, 'open');
         const isSubscribed = this.subscribedSymbols.has(normalizedSymbol);
         const stats = this.symbolStats.get(normalizedSymbol);
         const lastTickAgeMs = stats ? now - stats.lastUpdate : null;
@@ -3512,14 +3517,17 @@ export class KrakenWebSocketAdapter extends EventEmitter {
     return out;
   }
 
-  /** intent − acked − pending − in-flight-on-this-socket, computed now. Pending holds raw caller input, so it is compared
-   *  normalized; a request stamped before this socket opened went out on a dead socket and does not count as in flight. */
+  /** intent − acked − in-flight-on-this-socket, computed now. "In flight" is one rule for every unACKed symbol, pending or
+   *  not: a request stamped on THIS socket under the grace. A pending entry is not excluded for being pending — every pending
+   *  entry carries a request stamp (subscribeToSymbols stamps before it queues, and the open flush re-stamps), so the stamp
+   *  bounds it; a symbol Kraken refused after the open flush is retried like any other refused symbol, not held out for the
+   *  life of the socket (Langston Step-4 item 5 — the v2 rejection branch clears neither the pending entry nor the stamp).
+   *  A request stamped before this socket opened went out on a dead socket and does not count as in flight. */
   private restoreCandidates(now: number = Date.now()): string[] {
-    const pending = new Set(Array.from(this.pendingSubscriptions).map(s => normalizeToInternalSymbol(s)));
     const out: string[] = [];
     for (const [key, reasons] of Array.from(this.subscriptionIntent.entries())) {
       if (reasons.size === 0) continue;
-      if (this.subscribedSymbols.has(key) || pending.has(key)) continue;
+      if (this.subscribedSymbols.has(key)) continue;
       const req = this.subscriptionRequests.get(key);
       if (req && req.timestamp >= this.socketOpenedAt && now - req.timestamp < this.RESTORE_INFLIGHT_GRACE_MS) continue;
       out.push(key);
@@ -3528,9 +3536,18 @@ export class KrakenWebSocketAdapter extends EventEmitter {
   }
 
   /** Send what the intent holds and the socket lacks, in paced chunks (P5-2, P5-4). Returns the number of symbols sent.
-   *  One restore at a time; a chunk is re-computed when it is sent, and the run stops if the socket it began on is gone. */
+   *  One restore at a time; a chunk is re-computed when it is sent, and the run stops if the socket it began on is gone.
+   *  LOGGING (Langston Step-4 item 2): every run that is not the 5 s audit writes exactly ONE line — `[OBJ-5][RESUB]` when it
+   *  finished, `[OBJ-5][RESUB_ABORTED]` when the socket changed under it — including `sent=0 candidates=0`, so a healthy
+   *  reconnect is visible. The audit writes a line only when it sends something (it runs every 5 s). */
   async restoreIntent(trigger: string): Promise<number> {
-    if (this.restoreInProgress) return 0;
+    const quietWhenIdle = trigger === 'audit';
+    if (this.restoreInProgress) {
+      if (!quietWhenIdle) {
+        console.log(`[OBJ-5][RESUB] sent=0 candidates=${this.restoreCandidates().length} reasons= trigger=${trigger} skipped=restore_in_progress`);
+      }
+      return 0;
+    }
     if (!this.isConnected) {
       const wanted = this.subscriptionIntent.size;
       if (wanted > 0 && (trigger !== 'audit' || this.restoreDeferredLoggedGeneration !== this.socketGeneration)) {
@@ -3539,24 +3556,29 @@ export class KrakenWebSocketAdapter extends EventEmitter {
       }
       return 0;
     }
-    let chunk = this.restoreCandidates().slice(0, this.RESTORE_CHUNK_SIZE);
-    if (chunk.length === 0) return 0;
+    const candidates = this.restoreCandidates();
+    let chunk = candidates.slice(0, this.RESTORE_CHUNK_SIZE);
+    if (chunk.length === 0) {
+      if (!quietWhenIdle) console.log(`[OBJ-5][RESUB] sent=0 candidates=0 reasons= trigger=${trigger}`);
+      return 0;
+    }
 
     this.restoreInProgress = true;
     const generation = this.socketGeneration;
     const reasonsSeen = new Set<string>();
-    let restored = 0;
+    let sent = 0;
+    let aborted = false;
     try {
       while (chunk.length > 0) {
         for (const key of chunk) {
           for (const r of Array.from(this.subscriptionIntent.get(key) ?? [])) reasonsSeen.add(r.split(':')[0]);
         }
         this.subscribeToSymbols(chunk);
-        restored += chunk.length;
+        sent += chunk.length;
         if (chunk.length < this.RESTORE_CHUNK_SIZE) break;
         await new Promise(resolve => setTimeout(resolve, this.RESTORE_CHUNK_GAP_MS));
         if (!this.isConnected || this.socketGeneration !== generation) {
-          console.log(`[OBJ-5][RESUB_ABORTED] reason=socket_changed restored=${restored} trigger=${trigger}`);
+          aborted = true;
           break;
         }
         chunk = this.restoreCandidates().slice(0, this.RESTORE_CHUNK_SIZE);
@@ -3564,8 +3586,13 @@ export class KrakenWebSocketAdapter extends EventEmitter {
     } finally {
       this.restoreInProgress = false;
     }
-    console.log(`[OBJ-5][RESUB] restored=${restored} reasons=${Array.from(reasonsSeen).sort().join(',')} trigger=${trigger}`);
-    return restored;
+    const reasons = Array.from(reasonsSeen).sort().join(',');
+    if (aborted) {
+      console.log(`[OBJ-5][RESUB_ABORTED] reason=socket_changed sent=${sent} candidates=${candidates.length} reasons=${reasons} trigger=${trigger}`);
+    } else {
+      console.log(`[OBJ-5][RESUB] sent=${sent} candidates=${candidates.length} reasons=${reasons} trigger=${trigger}`);
+    }
+    return sent;
   }
 
   /**
