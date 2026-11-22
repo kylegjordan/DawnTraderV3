@@ -600,7 +600,7 @@ Exactly these three read the start; none caches it across restarts. A fourth rea
 2. DEPLOY_WINDOWS `open` row in this commit (r6), `until_event` = the R2' verdict written by the 12-09 00:15Z fire and read back.
 3. GOVERNANCE_EXCEPTIONS amendment row recording R2' registration (r6: amend the GE row).
 4. At deploy: read the governed row back through `dt-sql`; then **resolve `3306c5c3` as superseded** (never ack; C6 ruling "Alerts"), and only after that create the new event-wait alert on dedupe key `xstock-bar-availability-capacity-gate` (a non-resolved row would dedup it), category `soak_verification`, triggers at 2026-12-09T00:45Z, metadata `supersedes 3306c5c3`.
-5. `ba8b42e2` stays active, resolved on the graded read; `8bd256bc` clears only at batch close.
+5. `ba8b42e2` stays active and is hand-resolved with evidence at the graded read (no code path reaches its key; corrected per Langston `1574079693408305166`); `8bd256bc` clears only at batch close.
 
 ### Step 9 R2' round 2 - after Langston's Step-4 send-back (CC-C, 2026-11-22)
 **The send-back, verbatim:** *"the session-boundary disposition against `market-hours.ts`'s `sun_reopen` (fix the Sunday start, or exempt the documented pause from the head test — your design call, not mine), a stated disposition on the 20 % weekday gap rate, and only then a start date."* Taken in that order.
@@ -633,4 +633,4 @@ Exactly these three read the start; none caches it across restarts. A fourth rea
 3. R7b hold comment states the one-night hold and the 2-night margin (point 3, costs).
 4. DEPLOY_WINDOWS: an amend row (append-only) moving `until_event` to the 12-10 00:15Z fire, `expected_by` about 12-10 00:45Z, and naming the expected 12-09 sweep-hold warning in `disturbs` (point 3).
 5. GOVERNANCE_EXCEPTIONS row for this batch corrected to 01:00Z / 7 sessions / gate 12-09 01:10Z (point 3).
-6. At deploy, unchanged order: read the governed row back; resolve `3306c5c3` as superseded; then create the new event-wait alert on `xstock-bar-availability-capacity-gate`, triggering about **12-10 00:45Z**, metadata `supersedes 3306c5c3`. `ba8b42e2` resolves only on the graded read.
+6. At deploy, unchanged order: read the governed row back; resolve `3306c5c3` as superseded; then create the new event-wait alert on `xstock-bar-availability-capacity-gate`, triggering about **12-10 00:45Z**, metadata `supersedes 3306c5c3`, its body naming a hand resolve with evidence as its own clearing edge (no code resolves this key; largely redundant with `…verdict-runner-failed:<start>`, which the runner clears). `ba8b42e2` is hand-resolved with evidence at the graded read: the runner resolves only `RUNNER_FAILURE_KEY_PREFIX` keys (`verdict-runner.ts:598`, `:499`). *(Corrected per Langston's PROCEED, `1574079693408305166`.)*
