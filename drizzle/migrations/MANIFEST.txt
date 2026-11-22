@@ -261,3 +261,4 @@
 2026-11-20-b-entry-gate-inc-c.sql
 2026-11-22-b-xstock-bar-availability-window-r2prime.sql
 2026-11-22-b-db-regime-enum-align.sql
+2026-11-22-b-alert-orphan-rows.sql

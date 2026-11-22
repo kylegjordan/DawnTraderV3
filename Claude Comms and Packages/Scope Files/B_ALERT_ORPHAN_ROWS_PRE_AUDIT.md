@@ -37,11 +37,14 @@ The upsert's `DO UPDATE` sets `acknowledged = false` when `metadata.episodeClose
 ## PART 2 — PLAN
 | # | item | from |
 |---|---|---|
-| P1 | `drizzle/migrations/2026-11-22-b-alert-orphan-rows.sql`: `DELETE FROM system_alerts a WHERE NOT EXISTS (SELECT 1 FROM users u WHERE u.id = a.user_id);` — a predicate, not 12 hardcoded ids, so it is exact on staging and a no-op on an empty database. | A1, A5 |
-| P2 | `…-rollback.sql`: the 12 rows re-inserted verbatim (all 11 columns, original ids), `ON CONFLICT DO NOTHING`. Residual: a row whose `(mode, alert_type, message)` was re-used after deploy would be skipped — acceptable, the live row is the newer truth. | A1, A3 |
+| P1 | `drizzle/migrations/2026-11-22-b-alert-orphan-rows.sql`: `DELETE FROM system_alerts a WHERE NOT EXISTS (SELECT 1 FROM users u WHERE u.id = a.user_id);` — a predicate, not 12 hardcoded ids, so it is exact on staging and a no-op on an empty database. **Fenced (C-1):** a gate refuses when `users` is empty while `system_alerts` holds rows (the predicate would then match every alert); after the delete it asserts 0 orphans remain and `RAISE NOTICE`s the count; gate and delete in one `BEGIN/COMMIT` (precedent `2026-05-26-b79-0n-tec-wildcard-retire.sql`). | A1, A5 |
+| P2 | `…-rollback.sql`: the 12 rows re-inserted verbatim (all 11 columns, original ids), `ON CONFLICT DO NOTHING`. Residual: a row whose `(mode, alert_type, message)` was re-used after deploy would be skipped — acceptable, the live row is the newer truth. **C-2:** the rollback header carries its own generator; immediately before deploy it is re-run (`dt-sql --csv -f`, first column) and must match the file line-for-line, else regenerate and re-commit. Dry run 2026-11-22: 12 of 12, identical (control: a malformed run of the same compare returned DIFFER). The episode-close sweep is not user-filtered (A3), so the rows' `metadata` can change — that is why the check is at deploy, not now. | A1, A3 |
 | P3 | `MANIFEST.txt`: one line, appended last. | A5 |
 | P4 | No code change, no test file (no code path changes; CI's empty-database apply exercises the migration). | A2 |
 | P5 | Deploy: separate from the shared one-sha deploy after 11-23 21:00Z unless OLD Claude agrees to fold it (KD-116). Step 7: orphan count 0, total = pre-deploy − 12. | scope O1 |
+
+### Langston Step-1/2 ruling (2026-11-22, Discord `1574139970585886853`)
+PROCEED with C-1 (fence, P1), C-2 (pre-deploy exactness, P2), C-3 (a running-plan row in the Step-2/3 commit: `SPRINT_TO_LIVE_PLAN.md` CC-B row 3c, and row 3a's "R-1 with PM for Kyle" cell corrected). O3 agreed: no foreign key; the class-wide drift goes to `RUNNING_ISSUES` as a proposal for Kyle. Step 10: `SPRINT_TO_LIVE_PLAN` required, `PHASE_19_PLAN` N/A, `PHASE_HISTORY` required.
 
 ### UNAUDITED
 None.
