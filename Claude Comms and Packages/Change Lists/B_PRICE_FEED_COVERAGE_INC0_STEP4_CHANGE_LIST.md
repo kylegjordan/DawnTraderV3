@@ -328,3 +328,62 @@ Read at **2026-11-16T14:45:15.323Z** (`observedAt`), pre-registered START 14:45Z
 - **Posted in-channel at 20:30Z** (Discord 1573435375152664790), so cc-a's deploy could follow. The post gave `lastAt` as 20:15:45Z, which was a conversion slip; a correction followed at once (1573435404391030946).
 - Reminder `e69ceba9-6fd7-4b69-be4c-3c60f3fe2727` is resolved on this commit.
 - **Next:** the Step-8 package to Langston, with the C-3 leg (c) per-session table re-derived there. At Step 10, the r18 stderr window gets relabelled.
+
+## r23 — the Step-8 package for Langston (2026-11-22 ~11:05Z, CC-B)
+
+**What is being asked:** your independent second pass on increment 0 at the deployed object, on the evidence set your r18 ruling (A) defined, now that C-1, C-2 and C-3 are all in. **Nothing is deployed or changed by this entry.** Staging head now is not increment 0's deploy; increment 0's code (`72e7f35f6`, deployed 2026-11-11T11:01:14Z) has been carried by every later deploy. The seam lines r18 re-confirmed at `84eeb168e` (engine `:626` depth gate, `:2478` exit; `judgeDispatchTick` one production site, `active-dispatch.ts:216`) are the ones to re-read at the current deployed head.
+
+### C-1 — PASS (r21 START / r22 END, 2026-11-20 session)
+`dt-api GET /api/active-engine/diagnostics/depth-gate`, raw responses quoted in r21 and r22. pid 41796 at both reads; `processUptimeSeconds` 24,366.2 → 45,069.9; `evaluations.xstock_spot.count` 2 → 35, `lastAt` 2026-11-20T19:55:45.472Z; no restart inside the pair (cc-a and cc-c held deploys until 20:30Z). The void 11-16 pair (r19/r20) is not counted.
+
+### C-2 — filed
+`1-system-manual/DEPLOY_WINDOWS.jsonl` lines 11 (open, 2026-11-16T03:30Z), 26-28 (amends for the 11-20 re-run), 35 (close, 2026-11-20T20:35Z, `completed`).
+
+### C-3 — leg (c), re-derived (read 2026-11-22T10:58Z)
+**Object:** `closed_trades.entry_book_age_ms` (the depth-gate reading). **Population:** `asset_class='xstock_spot'`, `mode='paper'`, `opened_at` 14:30-21:00Z (US regular hours), grouped by UTC date of `opened_at`. **Never pooled.** Query, verbatim:
+```sql
+select (opened_at at time zone 'UTC')::date as session, count(*) as opens,
+       count(entry_book_age_ms) as nonnull_age,
+       percentile_cont(0.5) within group (order by entry_book_age_ms) as median_ms
+from closed_trades
+where asset_class='xstock_spot' and mode='paper'
+  and opened_at >= '2026-11-09' and opened_at < '2026-11-22'
+  and (opened_at at time zone 'UTC')::time >= '14:30' and (opened_at at time zone 'UTC')::time < '21:00'
+group by 1 order by 1;
+```
+| session | side of the 11-11 11:01Z deploy | opens | non-null age | median ms |
+|---|---|---|---|---|
+| 11-09 | pre | 3 | 1 | 1,749 |
+| **11-10** | **pre (registered)** | **10** | **5** | **6,029** |
+| 11-11 | post (deploy 11:01Z, before the session) | 7 | 6 | 4,879 |
+| **11-12** | **post (registered)** | **15** | **10** | **4,640** |
+| **11-13** | **post (registered)** | **11** | **7** | **5,255** |
+| 11-16 | post | 40 | 27 | 3,957 |
+| 11-17 | post | 28 | 17 | 5,946 |
+| 11-18 | post | 38 | 21 | 5,917 |
+| 11-19 | post | 51 | 41 | 6,078 |
+| 11-20 | post | 32 | 22 | 5,075 |
+- **The three registered sessions reproduce your r18 figures exactly** (10/5/6,029 · 15/10/4,640 · 11/7/5,255).
+- **Population limit, stated:** `entry_book_age_ms` exists only on `closed_trades` (information_schema, one table). Positions still open are not in it: `active_open_positions` holds 3 xStock paper regular-hours opens in the window (11-18: 1, 11-20: 2; the table holds 7 rows in all, so the read is not blind). **The registered sessions 11-10/11-12/11-13 are complete;** 11-18 and 11-20 are short by 1 and 2.
+- **Reading, unchanged from r18:** `max(row, tick)` can only raise an age, so a lower post median is population, not loosening. The post sessions range 3,957-6,078 ms against the one registered pre session's 6,029; nothing here is read as a definition change.
+
+### The r18 evidence set, re-read for the close (same instrument, more days)
+Retained stderr is now gzip-rotated; read with `zcat` per file. **The file named `error__D` holds the content of day D−1.** Post-deploy content 11-11 → 11-21:
+| file | `cold_tick` | xStock `DEPTH_GATE_BLOCK` (control) | `DISPATCH_REFUSE` by arm |
+|---|---|---|---|
+| error__11-12 | 0 | 15 | cold 1 · stale 22 |
+| error__11-13 | 0 | 9 | stale 35 |
+| error__11-14 | 0 | 0 | stale 33 |
+| error__11-15 / 11-16 | 0 | 0 | — (weekend) |
+| error__11-17 | 0 | 12 | **cold 17** · stale 27 |
+| error__11-18 | 0 | 32 | stale 20 |
+| error__11-19 | 0 | 59 | stale 23 |
+| error__11-20 | 0 | 24 | stale 35 |
+| error__11-21 | 0 | 5 | stale 5 |
+(error__11-11 — content 11-10, the pre-deploy day — 0 / 0 / none, as expected: the line did not exist.)
+- **Pass-through arm:** the depth seam has now emitted **156** xStock `DEPTH_GATE_BLOCK` rows downstream of `:626` across post-deploy content, against r18's 24. **`cold_tick` is still 0** in every file. ⇒ **The three `cold_tick` arms and the age-raise branch stay UNPROVED, as r18 recorded.** No live silence is cited for them.
+- **The observed-latch primitive at the sibling dispatch site:** `arm=cold` refusals 18 in all (1 in content 11-11, 17 in content 11-16, the Monday reopen r18 cited).
+- **Successor, unchanged (r18):** the first natural `cold_tick` line in retained stderr, riding increment 1's reads. (C), a forced restart, stays declined on cost and is Kyle's call if he wants the arm proved before live mode.
+
+### Owed at Step 10, not here
+Relabel the r18 stderr window "content 11-11 → 11-16, post-deploy segment from 11:01:14Z" (your note); counts unchanged.
