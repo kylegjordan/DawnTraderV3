@@ -4,7 +4,7 @@
 - **CHANGE-CLASS: architecture** (scope header r7)
 - **Record:** `Scope Files/B_DISK_FILE_TIERING_SCOPE.md` r7 · `Scope Files/B_DISK_FILE_TIERING_PRE_AUDIT.md` · `Change Lists/B_DISK_FILE_TIERING_CHANGE_LIST.md`
 - **Live:** deployed `4456f515d07a1e7b1310a767bd7e1d645f565411` 2026-11-21 (rollback `85e7ce638`); Step 4 PROCEED at `b08323b86`; Step 9 rotation proofs at `d24bc86f8`; Step 10 governance `f0c3083d5` + `f02439ae3` (Langston confirmed, Discord `1574017339178094613`).
-- **Status at writing (2026-11-22):** Step 11 — awaiting Langston's confirm.
+- **Status: CLOSED 2026-11-22** — Langston confirmed Step 11 (Discord `1574023561394266153`). Carried: the wide Backblaze key's deletion (§0 item 1, plan row 5a).
 
 > **No scaffolding.** Every objective marked YES is live on staging and ran there. OBJ-2 and OBJ-3 are marked PARTIAL because the case they guard has not yet occurred on staging, not because a later batch must switch them on.
 
@@ -38,7 +38,7 @@
 | **OBJ-7** one command brings any moved file back, verified; consumers named | **YES** | `b75-rehydrate.ts`: the 2026-11-05 restore proof; its `--out` guard exercised on all four arms (:56 area); `b75-cold-proof.ts`, `b75-cold-audit.ts` |
 | **OBJ-8** the carrier: page + archival-health record | **YES** | O5 PASS (a `lock_held` run minted `afd2ab68`); cold-upload-failure row and the deferred report paged via archival-health; archival-health `all_ok=true checks=8`. Cold audit first run 2026-11-15 read back 4/4; latest audit DONE `versions=132`, 8,154,668,948 B, `missing=0`, `failed=0`; lifecycle proof both arms PASS 2026-11-19 (:658). Disk watchdog force-tested (O3, `9c9061de`) |
 | **OBJ-9** governance, class `architecture` | **YES** | Step 10 `f0c3083d5` + `f02439ae3`; §3 below |
-| **OBJ-10** per-tick price-feed debug lines removed (`#1240`) | **YES** | on a whole rotated file: all six tag pairs at 0 with the control tags nonzero; 8.03 h per 1 GB file against 2.90 h before and about 7.7 h predicted (:113). **NOT RE-READ** |
+| **OBJ-10** per-tick price-feed debug lines removed (`#1240`) | **YES** | Langston re-derived it on a whole rotated file at Step 11 (`out__2026-11-22_11-00-26.log`): all six tags 0, the two control tags 561,261 and 773,489; 10.99 h per 1.14 GB file against 2.90 h per 1 GB before and about 7.7 h predicted (:113) |
 
 ---
 
@@ -49,7 +49,10 @@
 - **Step-10 sha `f02439ae3`:** run `45015731219` **cancelled** by a later push — a cancelled job is not green. The final governance sha's per-job result is recorded in §2a.
 
 ### 2a. Final sha
-*(added after the close push)*
+
+- **Close sha `3d402195d`:** run `45016704111` **cancelled** at 11:18:59Z by the next push; the next five runs (`45016855440`, `45017422185`, `45018946240`, `45019499956`, `45020412408`) were each **cancelled** in the Test Suite by the push after them (Build, TypeScript Check and Docker Build success in each). A cancelled job is not green.
+- **The green that covers this tree is run `45024617078` on `260ff62b3`:** Build, Test Suite, TypeScript Check (baseline gate) and Docker Build all success (4/4), Test Suite completed 13:02:05Z. `260ff62b3` descends from `3d402195d`; the delta is other sessions' commits and touches none of this batch's files except other sessions' rows of the active plan. The Test Suite there grades the amendment-1 fence as CC-C's `e276b3eeb` left it (in both trees).
+- archival-health's `checks=8` (OBJ-8) is the deployed reading; it will move when `e276b3eeb` deploys.
 
 ---
 
@@ -77,7 +80,7 @@
 | shared `MEMORY.md` | N/A | no consensus truth changed |
 | `MEMORY_CC_A.md` + mirror | ✅ | position block |
 | Langston's `MEMORY.md` | ✅ | via `langston-memory-write` |
-| session task list(s) — CC_A_SESSION_TASK_LIST ✅ | ✅ | row 2; the other three N/A, not mine |
+| T1 · session task list(s) — CC_A_SESSION_TASK_LIST | ✅ | row 2 set to CLOSED at Step 11; the other three N/A, not mine |
 | `workflow-07-verify-cc` skill | ✅ | log-retention facts updated for the new rotation |
 | `GOVERNANCE_EXCEPTIONS.md` | ✅ | row 48 retired to `open-retired` (Step 11) |
 | `CONDUCT.md` | N/A | no behavioural rule changed |
