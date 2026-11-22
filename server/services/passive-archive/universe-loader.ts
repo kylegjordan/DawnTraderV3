@@ -93,23 +93,19 @@ export const loadEquityPerpUniverse = loadXstockPerpUniverse;
 // ───────────────────────────────────────────────────────────────────────────
 //
 // Selects from Kraken AssetPairs by:
-//   - Quote currency in `allowedQuotes` set (default: USD/USDT/USDC)
-//   - 24h notional volume ≥ floor (default: $10k USD-equivalent;
-//     tunable via module_constants.passive_archive.b74_crypto_min_volume_24h_usd)
+//   - Quote currency in ADMITTED_QUOTES (`shared/admitted-quotes.ts`)
+//   - 24h notional volume ≥ floor — module_constants
+//     `passive_archive.b74_crypto_min_volume_24h_usd`, read with NO fallback (absent ⇒ throw).
 //
 // Returns canonical BASE/QUOTE symbol strings that the Kraken WS v2 protocol
 // accepts directly.
-
-interface CryptoFilterConfig {
-  filter: {
-    // B-PRICE-SIDE-BY-JOB OBJ-8 row 8f (2026-09-12): `allowedQuotes` was REMOVED from this
-    // interface AND from the JSON in the same commit. It now lives at
-    // `shared/admitted-quotes.ts` as ADMITTED_QUOTES, shared with the mirror-balance and the
-    // 8f admission gate. Leaving the key here would have left an editable config field nobody
-    // reads, which reads as tunable and is the same defect inverted (Langston condition (c)).
-    minVolume24hUsd: number;
-  };
-}
+//
+// B-UNIVERSE-REFRESH-ACTS P1/P2 (#1018): the floor is DB-governed only. The JSON file
+// `server/config/crypto-universe-filter.json` carried a `minVolume24hUsd: 10000` that this
+// loader read while the DB row of the same name was read by nothing — the comment called the
+// file "the documented default" and the DB "the override", and the code did the opposite.
+// The key, and then the whole file (no reader remained), were removed; record in
+// DELETED_COMPONENTS_LOG.md.
 
 interface KrakenAssetPair {
   altname: string;
@@ -175,26 +171,117 @@ function computeNotionalUsd(ticker: KrakenTickerResp): number {
   return price * volume;
 }
 
-interface CryptoUniverseResult {
+/**
+ * B-UNIVERSE-REFRESH-ACTS P1 (#1018, gate arm (a)): ONE record per Kraken REST fetch the
+ * loader made — the AssetPairs fetch first, then each Ticker batch, in call order.
+ *
+ * `ok` is true ONLY when the HTTP status was 2xx AND Kraken's `error` array was empty AND the
+ * `result` held at least one row. ⛔ A fetch that THREW is caught into a not-OK record and never
+ * propagated: the refresh job must be able to SEE the failure, not lose it to a `console.warn`.
+ *
+ * ★ Why every fetch, not "did it throw": the 2026-10-30 run (b74-refresh.log run 182) got an
+ * HTTP-200 Kraken error envelope on every Ticker batch — no throw anywhere — and came back with
+ * zero pairs. And one silently-empty batch out of ~8 removes ~59 of ~469 symbols (drop share
+ * ≈ 0.126), indistinguishable from a median day by the drop-share arm. Only a per-fetch record
+ * can tell a partial outage from a real universe change.
+ */
+export interface UniverseFetchRecord {
+  kind: 'asset_pairs' | 'ticker';
+  ok: boolean;
+  /** HTTP status, or null when the fetch threw before a response existed. */
+  httpStatus: number | null;
+  /** Kraken's `error` array joined, the thrown message, or null when clean. */
+  krakenError: string | null;
+  /** Pairs asked for — the batch size for a Ticker fetch; null for AssetPairs (asks for all). */
+  rowsRequested: number | null;
+  /** Rows in Kraken's `result`; 0 when the fetch threw or returned no result. */
+  rowsReturned: number;
+}
+
+export interface CryptoUniverseResult {
   symbols: string[];
   totalCandidates: number;
   filterReasons: { dead: number; wrongQuote: number; offline: number; noTicker: number };
+  /** P1: every fetch the loader made, AssetPairs first. Read with `isUniverseFetchComplete`. */
+  batches: UniverseFetchRecord[];
+  /**
+   * P1: 24 h notional USD volume for every candidate pair that HAD a ticker (admitted or below
+   * the floor), keyed by canonical symbol. The bounded apply drops lowest-volume first and
+   * treats a symbol ABSENT from this map (no ticker) as lowest of all.
+   */
+  volumeUsdBySymbol: Record<string, number>;
+  /** P1: the floor actually applied, for the run record. */
+  floorUsd: number;
+}
+
+/**
+ * Gate arm (a), ONE home: every fetch OK, an AssetPairs record present, AND at least one Ticker
+ * batch. ★ Zero Ticker batches is INCOMPLETE — an AssetPairs answer that leaves no candidates
+ * must not pass vacuously (Langston Step-2 A1).
+ */
+export function isUniverseFetchComplete(batches: readonly UniverseFetchRecord[]): boolean {
+  if (!batches.some(b => b.kind === 'asset_pairs')) return false;
+  if (!batches.some(b => b.kind === 'ticker')) return false;
+  return batches.every(b => b.ok);
+}
+
+async function fetchKrakenPublic<T>(
+  fetchImpl: typeof fetch,
+  url: string,
+  kind: UniverseFetchRecord['kind'],
+  rowsRequested: number | null,
+): Promise<{ result: Record<string, T>; record: UniverseFetchRecord }> {
+  try {
+    const resp = await fetchImpl(url);
+    const httpStatus = typeof resp.status === 'number' ? resp.status : null;
+    const body = (await resp.json()) as { error?: unknown; result?: Record<string, T> };
+    const errs = Array.isArray(body?.error) ? body.error.map(String).filter(s => s.length > 0) : [];
+    const result = body?.result && typeof body.result === 'object' ? body.result : {};
+    const rowsReturned = Object.keys(result).length;
+    const ok = resp.ok === true && errs.length === 0 && rowsReturned > 0;
+    return {
+      result,
+      record: { kind, ok, httpStatus, krakenError: errs.length > 0 ? errs.join('; ') : null, rowsRequested, rowsReturned },
+    };
+  } catch (err) {
+    return {
+      result: {},
+      record: {
+        kind, ok: false, httpStatus: null,
+        krakenError: `threw: ${err instanceof Error ? err.message : String(err)}`,
+        rowsRequested, rowsReturned: 0,
+      },
+    };
+  }
+}
+
+/**
+ * The floor, DB-governed with NO fallback (CLAUDE.md §11, rule 15). Warms the module first so
+ * the sync required-read works from every caller — the boot archiver, the daily refresh, the
+ * perp recompute script — none of which can be assumed to have warmed `passive_archive`.
+ */
+async function resolveCryptoVolumeFloorUsd(): Promise<number> {
+  const { prefetchModule, getCachedNumberRequired, GLOBAL_KEY } = await import('../module-constants-service.js');
+  await prefetchModule('passive_archive');
+  return getCachedNumberRequired('passive_archive', 'b74_crypto_min_volume_24h_usd', GLOBAL_KEY);
 }
 
 export async function loadCryptoSpotUniverse(opts?: {
+  /** Tests only: supplies the floor so no database is touched. Production passes nothing. */
   minVolumeFloorUsd?: number;
   fetchImpl?: typeof fetch;
 }): Promise<CryptoUniverseResult> {
   const fetchImpl = opts?.fetchImpl ?? fetch;
-  const cfgPath = path.join(CONFIG_DIR, 'crypto-universe-filter.json');
-  const cfg = JSON.parse(await fs.readFile(cfgPath, 'utf-8')) as CryptoFilterConfig;
   const allowedQuotes = new Set(ADMITTED_QUOTES);
-  const floorUsd = opts?.minVolumeFloorUsd ?? cfg.filter.minVolume24hUsd;
+  const floorUsd = opts?.minVolumeFloorUsd ?? (await resolveCryptoVolumeFloorUsd());
+  const batches: UniverseFetchRecord[] = [];
 
   // Fetch full pair list
-  const pairsResp = await fetchImpl('https://api.kraken.com/0/public/AssetPairs');
-  const pairsJson = (await pairsResp.json()) as { result?: Record<string, KrakenAssetPair> };
-  const allPairs = pairsJson.result ?? {};
+  const pairs = await fetchKrakenPublic<KrakenAssetPair>(
+    fetchImpl, 'https://api.kraken.com/0/public/AssetPairs', 'asset_pairs', null,
+  );
+  batches.push(pairs.record);
+  const allPairs = pairs.result;
 
   // First pass: filter by quote + status only (pre-volume)
   const preVolumeCandidates: Array<{ krakenId: string; canonical: string }> = [];
@@ -227,19 +314,24 @@ export async function loadCryptoSpotUniverse(opts?: {
   for (let i = 0; i < preVolumeCandidates.length; i += BATCH) {
     const batch = preVolumeCandidates.slice(i, i + BATCH);
     const pairList = batch.map(c => c.krakenId).join(',');
-    try {
-      const resp = await fetchImpl(`https://api.kraken.com/0/public/Ticker?pair=${pairList}`);
-      const tickerJson = (await resp.json()) as { result?: Record<string, KrakenTickerResp> };
-      for (const [k, v] of Object.entries(tickerJson.result ?? {})) {
-        tickerMap.set(k, v);
-      }
-    } catch (err) {
-      console.warn(`[B74][universe] crypto ticker batch ${i}-${i + batch.length} failed:`, err);
+    const tick = await fetchKrakenPublic<KrakenTickerResp>(
+      fetchImpl, `https://api.kraken.com/0/public/Ticker?pair=${pairList}`, 'ticker', batch.length,
+    );
+    batches.push(tick.record);
+    if (!tick.record.ok) {
+      console.warn(
+        `[B74][universe] crypto ticker batch ${i}-${i + batch.length} not OK: ` +
+        `http=${tick.record.httpStatus} error=${tick.record.krakenError ?? 'none'} rows=${tick.record.rowsReturned}`,
+      );
+    }
+    for (const [k, v] of Object.entries(tick.result)) {
+      tickerMap.set(k, v);
     }
   }
 
   // Final filter: notional volume above floor
   const symbols: string[] = [];
+  const volumeUsdBySymbol: Record<string, number> = {};
   for (const cand of preVolumeCandidates) {
     const ticker = tickerMap.get(cand.krakenId);
     if (!ticker) {
@@ -247,6 +339,7 @@ export async function loadCryptoSpotUniverse(opts?: {
       continue;
     }
     const notional = computeNotionalUsd(ticker);
+    volumeUsdBySymbol[cand.canonical] = Math.max(volumeUsdBySymbol[cand.canonical] ?? 0, notional);
     if (notional < floorUsd) {
       reasons.dead++;
       continue;
@@ -268,6 +361,9 @@ export async function loadCryptoSpotUniverse(opts?: {
     symbols,
     totalCandidates: Object.keys(allPairs).length,
     filterReasons: reasons,
+    batches,
+    volumeUsdBySymbol,
+    floorUsd,
   };
 }
 

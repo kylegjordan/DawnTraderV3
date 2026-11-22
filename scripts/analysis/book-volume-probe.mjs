@@ -56,7 +56,7 @@ const SECONDS     = Number(process.argv[2] ?? 600);
 const PER_STRATUM = Number(process.argv[3] ?? 8);
 const STRATA      = 3;
 const DEPTH       = 10;
-const FLOOR_USD   = 10000;                             // crypto-universe-filter.json filter.minVolume24hUsd
+const FLOOR_USD   = 10000;                             // mirrors module_constants passive_archive.b74_crypto_min_volume_24h_usd (read the live value there)
 const QUOTES      = new Set(['USD', 'USDT', 'USDC']);  // shared/admitted-quotes.ts ADMITTED_QUOTES
 
 const wsPath = process.env.WS_MODULE ?? 'ws';

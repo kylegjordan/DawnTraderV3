@@ -81,6 +81,7 @@ describe('B74 — universe loader: dynamic crypto universe', () => {
       XXBTZUSD: { c: ['33800.00', '0.001'], v: ['1000', '50000'] },
     };
     const result = await loadCryptoSpotUniverse({
+      minVolumeFloorUsd: 10000, // B-UNIVERSE-REFRESH-ACTS P1: tests supply the floor; no DB
       fetchImpl: buildMockFetch(pairs, tickers) as any,
     });
     expect(result.symbols).toEqual(['BTC/USD']);
@@ -113,6 +114,7 @@ describe('B74 — universe loader: dynamic crypto universe', () => {
       LIVEUSD: { c: ['100', '0'], v: ['0', '50000'] },
     };
     const result = await loadCryptoSpotUniverse({
+      minVolumeFloorUsd: 10000, // B-UNIVERSE-REFRESH-ACTS P1: tests supply the floor; no DB
       fetchImpl: buildMockFetch(pairs, tickers) as any,
     });
     expect(result.symbols).toEqual(['LIVE/USD']);
@@ -129,6 +131,7 @@ describe('B74 — universe loader: dynamic crypto universe', () => {
       XXDGZUSD: { c: ['0.10', '0'], v: ['0', '10000000'] },
     };
     const result = await loadCryptoSpotUniverse({
+      minVolumeFloorUsd: 10000, // B-UNIVERSE-REFRESH-ACTS P1: tests supply the floor; no DB
       fetchImpl: buildMockFetch(pairs, tickers) as any,
     });
     expect(result.symbols).toContain('BTC/USD');
@@ -140,6 +143,7 @@ describe('B74 — universe loader: dynamic crypto universe', () => {
       DEADEUR: { altname: 'DEADEUR', base: 'DEAD', quote: 'ZEUR', status: 'online' }, // wrong quote
     };
     const result = await loadCryptoSpotUniverse({
+      minVolumeFloorUsd: 10000, // B-UNIVERSE-REFRESH-ACTS P1: tests supply the floor; no DB
       fetchImpl: buildMockFetch(pairs, {}) as any,
     });
     expect(result.symbols).toEqual([]);
