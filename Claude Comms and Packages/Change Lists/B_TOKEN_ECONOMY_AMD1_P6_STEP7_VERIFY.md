@@ -185,3 +185,37 @@ mid-uuid (five zero-padded, one transposed). They are well-formed, so they parse
 
 **Next:** the daily reads, day 1 at ~2026-11-22 00:13Z through day 7 at 2026-11-28 00:13Z, each appended here with the
 Timezone line, then Step 10.
+
+## Daily read — day 1 (Infra Claude, run 2026-11-22T10:08:05Z, ~10h after its 00:13Z slot)
+
+**Box:** Helsinki, `Time zone: Etc/UTC (UTC, +0000)` (`timedatectl`) — UTC, so the F-3 and pin legs stand.
+**Inputs:** tool + lane + route + table from the Helsinki mirror at `refs/heads/migration/aws-supabase` = `acc954ba8`
+(table blob `a9f00990f721`); journal `--since 2026-11-21 00:13:33`; alerts = a WHOLE copy of staging's
+`system-alerts.jsonl`, 3,558 lines on both sides of the copy. Self-test 27 checks, 0 failures, exit 0; read exit 0.
+**Window:** [2026-11-21T00:13:33, 2026-11-22T10:08:05).
+
+| UTC day | lane markers | agree | OWNER DIFFERS | rule not stated | fallback-to-precedent | unjoined | no rule text |
+|---|---|---|---|---|---|---|---|
+| 2026-11-21 | 25 | 24 | 0 | 0 | 1 | 0 | 1 |
+| 2026-11-22 (to 10:08Z) | 9 | 9 | 0 | 0 | 0 | 0 | 0 |
+
+- **C-2 largest group:** 11-21 `'VTS trade closed with NO price — <SYM>'` → CC-C, 2 distinct ids (18 groups); 11-22 a
+  1-id group, tied with 7 more (8 groups).
+- **F-3, every note listed:** one, on 11-21. `LANE CHOSE 2026-11-21T05:10:14 a3b1bc1e-dd42-429a-b5ea-6cd53896fd2d lane
+  CC-B table CC-INFRA by 'fallback'`. The alert is the critical `ohlc-writer-shed-crypto_perp` (no owner-table rule).
+  The lane escalated it to Langston the same second ("no owner-table rule and no Langston precedent, so the
+  domain-based owner is provisional"). He triaged at 05:14Z, moved it to CC-A (the one churn below), and it was resolved
+  07:19:04Z. 11-22: 0 notes.
+- **F-4 pins:** every marker recomputed at its batch's pinned commit; all nine pins carry the same table blob
+  `a9f00990f721`.
+- **(iii) fallback:** 11-21 no-precedent 2 + to-precedent 1, journal 3; 11-22 0.
+- **(iv) escalations:** lane posts 0 both days; journal 11-21 7 (1 table-rule) over 19 batches, 11-22 0 over 7.
+- **(iv) churn:** 1 — `a3b1bc1e` CC-INFRA → CC-A (the F-3 item above).
+- **(v):** due now 19; installed `discord-langston-bridge.py`, `alert_lane.py`, `alert_owner_route.py` all equal to
+  the ref. Last staging deploy `c21c1502a` 2026-11-21T05:08:44Z (claimed `cc-c`), an app deploy that does not touch
+  the Helsinki lane.
+
+**Reading:** 33 of 34 markers agree with the table, 0 OWNER DIFFERS. The one difference is a critical alert with no
+table rule, which the lane escalated as built. **Whether a critical no-rule alert should carry the table's fallback
+owner or a provisional domain owner is a question for Step 10, not a defect found here. NOT RE-READ:** I have not
+traced which lane branch picked CC-B.
