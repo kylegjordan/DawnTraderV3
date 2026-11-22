@@ -474,6 +474,7 @@ describe('B-CRON-MISSED-CATCHUP occurrence runner', () => {
     ['awareness_reflection_cron', 60 * 60_000, 'too_old'],
     ['xstock_qd_probe_cron', 30_000, 'historical_inputs_unreconstructable'],
     ['xstock_universe_discovery_cron', 4 * 60 * 60_000, 'too_old'],
+    ['crypto_universe_refresh_cron', 4 * 60 * 60_000, 'too_old'],
   ] as const)('fails closed beyond the %s lag policy', async (policyKey, maxLag, reason) => {
     const boundary = new Date('2026-11-12T00:00:00.000Z');
     const f = fixture({
@@ -1349,7 +1350,8 @@ describe('B-CRON-MISSED-CATCHUP source and registration fences', () => {
     expect(source).not.toMatch(/runQdProbeOnce\(context\.scheduledFor, config\)/);
   });
 
-  it('finds exactly six dormant production schedules, each reconciled before start', () => {
+  // B-UNIVERSE-REFRESH-ACTS (#1018) adds the seventh: crypto_universe_refresh_cron, in its own module.
+  it('finds exactly seven dormant production schedules, each reconciled before start', () => {
     const productionTypescript = (dir: string): string[] => readdirSync(dir, { withFileTypes: true })
       .flatMap((entry) => {
         const path = resolve(dir, entry.name);
@@ -1429,12 +1431,14 @@ describe('B-CRON-MISSED-CATCHUP source and registration fences', () => {
       }
     }
     expect({ scheduleCalls, dormantTaskCalls, recoveryProperties, missedListeners, preparationCalls, startCalls }).toEqual({
-      scheduleCalls: 6,
-      dormantTaskCalls: 6,
-      recoveryProperties: 6,
-      missedListeners: 6,
-      preparationCalls: 6,
-      startCalls: 6,
+      scheduleCalls: 7,
+      dormantTaskCalls: 7,
+      recoveryProperties: 7,
+      missedListeners: 7,
+      preparationCalls: 7,
+      startCalls: 7,
     });
-  });
+    // A whole-tree TypeScript parse, so its cost grows with the source tree rather than with any wait;
+    // measured 10.5 s on the CC-A laptop against vitest's 5 s default (B-UNIVERSE-REFRESH-ACTS Step 3).
+  }, 30_000);
 });

@@ -110,8 +110,8 @@ describe('cron-run jobs load the app .env themselves', () => {
   const readsDb = (s: string) =>
     /process\.env(\.DATABASE_URL|\[k\])|SUPABASE_SERVICE_ROLE_KEY/.test(s) || /^import [^;]*from '\.\.\/db(\.js)?';/m.test(s);
 
-  // The DB-using jobs in staging's root crontab, read 2026-11-04 (b74-refresh-universe is also scheduled,
-  // but reads only Kraken's public API and needs no settings). replay-ablation runs through `npm run
+  // The DB-using jobs in staging's root crontab, read 2026-11-04 (b74-refresh-universe was also scheduled then;
+  // it was retired by B-UNIVERSE-REFRESH-ACTS, #1018, and the refresh now runs in-app). replay-ablation runs through `npm run
   // b67:replay-ablation` (package.json), which a search for `tsx server/scripts/` misses (Langston CHANGE 2).
   const SCHEDULED = [
     'b-disk-file-tiering.ts', 'b-storage-archival-health.ts', 'b75-retention-sweep.ts', 'b75-cold-rotator.ts',

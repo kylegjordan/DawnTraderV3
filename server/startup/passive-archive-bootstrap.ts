@@ -29,6 +29,7 @@ import { startTickerWriter, setTickerThrottle, setTickerThrottleForClass } from 
 import { startEquitySpotArchiver } from '../services/passive-archive/equity-spot-archiver.js';
 import { startEquityPerpArchiver } from '../services/passive-archive/equity-perp-archiver.js';
 import { startCryptoSpotArchiver } from '../services/passive-archive/crypto-spot-archiver.js';
+import { registerCryptoUniverseRefreshCron } from '../services/crypto-universe-refresh-cron.js';
 import { startCryptoPerpArchiver } from '../services/passive-archive/crypto-perp-archiver.js';
 import { getConstant, prefetchModule } from '../services/module-constants-service.js';
 import { cutoverForTable } from '../services/data-archive/daily-partition-cutover.js';
@@ -280,9 +281,18 @@ export async function passiveArchiveBootstrap(): Promise<void> {
 
   if (cryptoEnabled) {
     tasks.push(
-      startCryptoSpotArchiver().catch(err => {
-        console.error('[B74][bootstrap] crypto-spot archiver failed to start:', err instanceof Error ? err.message : err);
-      })
+      startCryptoSpotArchiver()
+        .catch(err => {
+          console.error('[B74][bootstrap] crypto-spot archiver failed to start:', err instanceof Error ? err.message : err);
+        })
+        // B-UNIVERSE-REFRESH-ACTS (#1018): the daily refresh acts on the running recorder, so it is armed only
+        // where crypto capture is enabled, and only AFTER the archiver's start has settled. Armed earlier, a boot
+        // catch-up could apply a change to shards that startCryptoSpotArchiver then clears; armed with capture
+        // off, an apply would start the recorder against the operator's setting.
+        .then(() => registerCryptoUniverseRefreshCron())
+        .catch(err => {
+          console.error('[B-UNIVERSE-REFRESH-ACTS][bootstrap] crypto universe refresh cron failed to register:', err instanceof Error ? err.message : err);
+        })
     );
   } else {
     console.log('[B74][bootstrap] crypto-spot capture DISABLED via module_constants');

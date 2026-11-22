@@ -440,6 +440,19 @@
    "inferred": true,
    "flag": true
   },
+  "crypto-universe-refresh-rung-": {
+   "owner": "CC-A",
+   "votes": {},
+   "n": 0,
+   "rows": 0,
+   "latest": null,
+   "agree": null,
+   "batch": "B-UNIVERSE-REFRESH-ACTS",
+   "ledger": "#1018",
+   "ruling": "B-UNIVERSE-REFRESH-ACTS pre-audit P7: the refresh owner; minted by crypto-universe-refresh.ts",
+   "inferred": true,
+   "flag": true
+  },
   "db-pool-acquire-timeout": {
    "owner": "CC-A",
    "votes": {

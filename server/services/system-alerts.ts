@@ -255,6 +255,7 @@ export const ALERT_ACTORS = [
   { value: 'db-pool-monitor',              tag: 'machine', why: 'server/db-pool-alerts.ts (in the app, B-DB-POOL-GUARD OBJ-5): mints and resolves its own db-pool-* and app-unplanned-restart:* rows' },
   { value: 'cron-recovery',                tag: 'machine', why: 'server/services/cron-occurrence-runner.ts — resolves only the exact cron_stale occurrence after its durable scheduled occurrence succeeds; transport `engine` (B-CRON-MISSED-CATCHUP #691)' },
   { value: 'langston-privacy-check',       tag: 'machine', why: 'comms-infra/langston-memory/bin/langston-privacy-check (daily 06:00Z timer on Helsinki, root): arms and resolves its own exposure alerts - a machine, so it never claims a session name (B-LANGSTON-CONTEXT)' },
+  { value: 'crypto-universe-refresh',      tag: 'machine', why: 'server/services/crypto-universe-refresh.ts: resolves its own crypto-universe-refresh-rung-* rows on an applied or noop run, transport engine - a machine, so it never claims a session name (B-UNIVERSE-REFRESH-ACTS #1018, Langston Step-2 C3)' },
   // human
   { value: 'kyle',     tag: 'human', why: 'the decider; the alerts-page default' },
   { value: 'langston', tag: 'human', why: 'the reviewer, acting through the CLI over SSH from Helsinki' },

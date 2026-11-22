@@ -1744,3 +1744,27 @@ Archive: git history is authoritative (this is a field-retirement within live fi
 **LEFT INTENTIONALLY:** `server/config/equity-perp-universe.json` and `loadStaticUniverse` (the perp universe still reads its JSON; not this batch's subject). The historical comments named above.
 **ARCHIVE:** `1-system-manual/_archive/deleted-code/crypto-universe-filter.20261122-B-UNIVERSE-REFRESH-ACTS.json.removed`.
 **COMMIT:** the B-UNIVERSE-REFRESH-ACTS Step-3 P1 commit that adds this entry (sha in `BATCH_CATALOG.md` at close).
+
+## 2026-11-22 — `server/scripts/b74-refresh-universe.ts` + its crontab line + `/tmp/b74-crypto-universe-cache.json` — B-UNIVERSE-REFRESH-ACTS (#1018) Step 3 P10 (rule 18; the batch's own subject), CC-A
+| removed | where (pre-removal) | what it was |
+|---|---|---|
+| `server/scripts/b74-refresh-universe.ts` | the whole file | B74's daily crypto universe refresh: a separate OS process that recomputed the list, diffed it against a `/tmp` cache and logged the churn. Its own docstring: *"Does NOT modify the running archiver subscriptions"* — it reached nothing in the app. |
+| the staging root crontab line `0 3 * * * su - deploy -c "cd /home/deploy/dawntrader && /usr/bin/npx tsx server/scripts/b74-refresh-universe.ts" >> /var/log/dawntrader/b74-refresh.log 2>&1` | staging host, root crontab (pre-audit A.9) | removed AT DEPLOY (Step 6), after the in-app refresh's first run is confirmed; the file deletion alone would leave the line failing nightly |
+| `/tmp/b74-crypto-universe-cache.json` | staging host | the script's own diff baseline; deleted at deploy with the crontab line |
+
+**WHY:** the batch replaces it. The in-app crypto universe refresh (`server/services/crypto-universe-refresh.ts`, scheduled through the shared cron lane as `crypto-universe-refresh`) computes the same list and APPLIES it to the running recorder behind its gate, recording every run in `crypto_universe_refresh_runs`. Leaving the script would keep a second, inert computation of the same list writing a second log that reads as the refresh (rule 18: a dead path that looks live).
+**BLAST RADIUS (§9.5(a-ii)):** `census --symbol loadCryptoSpotUniverse` (pre-audit §2.1): the script is a caller that no entry point reaches; it is not in `package.json`. `git grep b74-refresh-universe` outside the governance corpus: the file itself, the comment at `b-disk-file-tiering.test.ts:113` (updated in this commit), and frozen Codex Audit artifacts (`CITATION_CHECK.json:441/461`, `FINAL_PROVENANCE.json:79`), left as records. **State written:** the `/tmp` cache (read only by the script — one non-md mention tree-wide) and `/var/log/dawntrader/b74-refresh.log` via the crontab redirect (no code reader; humans and the pre-audit's 206-run analysis). The log is LEFT on the host as the historical record.
+**LEFT INTENTIONALLY:** `/var/log/dawntrader/b74-refresh.log` (history, no writer after the crontab line goes); the frozen Codex Audit citations.
+**ARCHIVE:** `1-system-manual/_archive/deleted-code/b74-refresh-universe.20261122-B-UNIVERSE-REFRESH-ACTS.ts.removed`.
+**COMMIT:** the B-UNIVERSE-REFRESH-ACTS Step-3 P7-P10 commit that adds this entry (sha in `BATCH_CATALOG.md` at close). Host removals: recorded in the Step-6 deploy record.
+
+## 2026-11-22 — `stopCryptoSpotArchiver` — B-UNIVERSE-REFRESH-ACTS (#1018) Step 3 P3 (rule 18; pre-audit J8, carried by Langston's Step-2 PROCEED on r3 with no objection to it), CC-A
+| removed | where (pre-removal, at `a232b7132^`) | what it was |
+|---|---|---|
+| `export function stopCryptoSpotArchiver(): void` | `server/services/passive-archive/crypto-spot-archiver.ts:371-379` | stopped every shard's connection, emptied `state.shards` and cleared `symbolShard`; it left `lastTickerUpdateAt` and `firstTickerUpdateAtMs` behind (pre-audit §2.7) |
+
+**WHY:** zero callers. The refresh's drop path needs to stop ONE emptied connection and resolve its watchdog row, which is `stopAndResolve` on that connection; a whole-recorder stop with a half-cleared state is a dead path that would mislead the next reader into using it.
+**BLAST RADIUS (§9.5(a-ii)):** `git grep stopCryptoSpotArchiver` before the deletion returned only the definition; the importer list of the archiver (pre-audit A.3) is complete and none imports it, and there is no namespace import. tsc stayed at baseline. **State written:** `state.enabled`, `state.shards`, `symbolShard` — all still written by their live writers (boot, `applyCryptoUniverseChange`).
+**LEFT INTENTIONALLY:** nothing.
+**ARCHIVE:** `1-system-manual/_archive/deleted-code/stopCryptoSpotArchiver.20261122-B-UNIVERSE-REFRESH-ACTS.ts.removed`.
+**COMMIT:** deleted in `a232b7132` (Step 3 P3+P4+P5); this entry rides the P7-P10 commit, as that commit's message said it would.

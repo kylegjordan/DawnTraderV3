@@ -106,6 +106,44 @@ export const scheduledJobOccurrences = pgTable("scheduled_job_occurrences", {
     .on(table.status, table.claimedAt)
     .where(sql`${table.status} IN ('claimed', 'running')`),
 }));
+
+// B-UNIVERSE-REFRESH-ACTS (#1018, KD-26): one row per daily crypto spot universe refresh run — the whole record of what
+// the refresh computed, what it applied to the running recorder, and why it refused. No operator path writes here; the
+// refresh (server/services/crypto-universe-refresh.ts) is the only writer. Outcomes: noop | applied | applied_confirmed |
+// refused; refusal_reason: incomplete_fetch | degenerate | drop_share. `confirmable` marks a row whose computed list may
+// serve as the next run's confirming baseline (a complete, non-degenerate computation).
+export const cryptoUniverseRefreshRuns = pgTable("crypto_universe_refresh_runs", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  occurrenceId: uuid("occurrence_id").notNull(),
+  triggerSource: text("trigger_source").notNull(),
+  startedAt: timestamp("started_at", { withTimezone: true, precision: 6 }).notNull(),
+  finishedAt: timestamp("finished_at", { withTimezone: true, precision: 6 }).notNull(),
+  outcome: text("outcome").notNull(),
+  refusalReason: text("refusal_reason"),
+  confirmable: boolean("confirmable").notNull(),
+  confirmDiffShare: doublePrecision("confirm_diff_share"),
+  confirmMaxDiffShare: doublePrecision("confirm_max_diff_share").notNull(),
+  boundedStep: doublePrecision("bounded_step"),
+  countBefore: integer("count_before").notNull(),
+  countAfter: integer("count_after").notNull(),
+  computedCount: integer("computed_count").notNull(),
+  computedSymbols: jsonb("computed_symbols").notNull(),
+  added: jsonb("added").notNull(),
+  dropped: jsonb("dropped").notNull(),
+  pinned: jsonb("pinned").notNull(),
+  rejectedAdds: jsonb("rejected_adds").notNull(),
+  unconfirmedAdds: jsonb("unconfirmed_adds").notNull(),
+  batches: jsonb("batches").notNull(),
+  volumes: jsonb("volumes").notNull(),
+  floorUsd: doublePrecision("floor_usd"),
+  dropShare: doublePrecision("drop_share"),
+  maxDropShare: doublePrecision("max_drop_share").notNull(),
+  runningSetAgeHours: doublePrecision("running_set_age_hours").notNull(),
+  consecutiveRefusals: integer("consecutive_refusals").notNull(),
+}, (table) => ({
+  startedAtIdx: index("crypto_universe_refresh_runs_started_at_idx").on(table.startedAt.desc()),
+  occurrenceIdx: index("crypto_universe_refresh_runs_occurrence_idx").on(table.occurrenceId),
+}));
 export const planStatusEnum = pgEnum("plan_status", ["draft", "active", "paused", "completed"]);
 export const learningPhaseEnum = pgEnum("learning_phase", ["observation", "adjustment", "evaluation"]);
 

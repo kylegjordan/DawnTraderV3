@@ -1,0 +1,10 @@
+// ARCHIVED from server/services/passive-archive/crypto-spot-archiver.ts:371-379 at a232b7132^ (B-UNIVERSE-REFRESH-ACTS #1018, deleted in a232b7132). Non-compilable by suffix; git history is authoritative.
+export function stopCryptoSpotArchiver(): void {
+  state.enabled = false;
+  for (const shard of state.shards) {
+    shard.conn?.stop();
+    shard.conn = null;
+  }
+  state.shards = [];
+  symbolShard.clear();
+}

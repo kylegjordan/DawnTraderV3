@@ -183,6 +183,12 @@ export function isInCryptoRecorderUniverse(symbol: string): boolean {
   return symbolShard.has(symbol);
 }
 
+/** B-UNIVERSE-REFRESH-ACTS: the recorder's running universe — the set the refresh gate measures drops against. Empty
+ *  when the recorder is not running. Sorted, so a run row's lists are stable. */
+export function getCryptoRecorderRunningSymbols(): string[] {
+  return [...symbolShard.keys()].sort();
+}
+
 /** C3/P7: is DATA arriving on the connection that owns this symbol? `null` when the symbol is not in the universe or the
  *  connection's threshold cannot be read (the caller treats unknown as NOT vouched — never as live). Sync, in-memory. */
 export function isCryptoRecorderSymbolConnectionLive(symbol: string, nowMs: number): boolean | null {
@@ -450,14 +456,34 @@ setInterval(() => {
 
 export async function startCryptoSpotArchiver(): Promise<void> {
   const result = await loadCryptoSpotUniverse();
-  if (result.symbols.length === 0) {
-    console.warn('[B74][crypto-spot] universe is empty; archiver not started');
+  // §2.2 (boot stays ungated): log the per-fetch records so a boot that silently lost a batch is visible in the log.
+  // Stated residual: such a boot starts short; the first refresh adds the missing symbols back (adds are ungated).
+  const bad = result.batches.filter(b => !b.ok);
+  console.log(
+    `[B74][crypto-spot] boot universe fetch: ${result.batches.length} fetch(es), ${bad.length} not OK` +
+    (bad.length > 0 ? ` (${bad.map(b => `${b.kind}:${b.httpStatus ?? 'throw'}:${b.krakenError ?? ''}:${b.rowsReturned}/${b.rowsRequested}`).join(', ')})` : '') +
+    `; ${result.symbols.length} symbols above the floor`,
+  );
+  // §2.6 (J2): a held coin is always recorded. A failed pins read does not stop the boot — nothing is dropped at boot,
+  // so the only cost is a held coin unrecorded until the first refresh, which refuses on the same failure.
+  let pins: string[] = [];
+  try {
+    const { readCryptoUniversePins } = await import('./crypto-universe-pins.js');
+    pins = await readCryptoUniversePins();
+  } catch (err) {
+    console.error('[B74][crypto-spot] pins read failed at boot; starting without the held-position union:', err instanceof Error ? err.message : err);
+  }
+  const extra = pins.filter(p => !result.symbols.includes(p));
+  if (extra.length > 0) console.log(`[B74][crypto-spot] boot universe + ${extra.length} held symbol(s) below the floor: ${extra.join(', ')}`);
+  const symbols = [...result.symbols, ...extra];
+  if (symbols.length === 0) {
+    console.warn('[B74][crypto-spot] universe is empty; archiver not started (the first refresh starts it)');
     return;
   }
 
   const shardSize = await readShardSize();
-  const shardCount = Math.max(1, Math.ceil(result.symbols.length / shardSize));
-  const buckets = assignToShard(result.symbols, shardCount);
+  const shardCount = Math.max(1, Math.ceil(symbols.length / shardSize));
+  const buckets = assignToShard(symbols, shardCount);
 
   state.enabled = true;
   symbolShard.clear();
@@ -466,7 +492,7 @@ export async function startCryptoSpotArchiver(): Promise<void> {
 
   console.log(
     `[B74][crypto-spot] starting ${state.shards.length} shard(s) ` +
-    `(${result.symbols.length} symbols total, shard_size_target=${shardSize})`
+    `(${symbols.length} symbols total, shard_size_target=${shardSize})`
   );
 
   for (const s of state.shards) launchShard(s);

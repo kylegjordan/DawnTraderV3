@@ -300,8 +300,9 @@ export class RecorderConnection {
   /**
    * B-UNIVERSE-REFRESH-ACTS P4: route one subscribe reply. A reply carrying a `req_id` answers an incremental add
    * (the open-time subscribe sends none), and is never counted in the open-time tally. A reply with no `req_id` for a
-   * symbol that is a pending add answers that add — the reopen replay, or a venue that does not echo `req_id` (P12
-   * checks which). Anything else is an open-time reply, unchanged.
+   * symbol that is a pending add answers that add — the reopen replay. Wire-captured 2026-11-22 (P12, Kraken v2 ticker):
+   * subscribe AND unsubscribe replies echo `req_id`, one reply per symbol; a rejection carries `req_id`, `symbol` and
+   * `error`; a request sent without `req_id` gets replies without one. Anything else is an open-time reply, unchanged.
    */
   noteSubscribeAck(reqId: number | null, success: boolean, symbol: string | null, nowMs: number): void {
     const pending = symbol ? this.pendingAdds.get(symbol) : undefined;

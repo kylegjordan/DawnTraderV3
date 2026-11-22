@@ -469,6 +469,7 @@ const POLICY_MAX_LAG_MS: Readonly<Record<CronRecoveryPolicyKey, number>> = {
   awareness_reflection_cron: 60 * 60_000,
   xstock_qd_probe_cron: 30_000,
   xstock_universe_discovery_cron: 4 * 60 * 60_000,
+  crypto_universe_refresh_cron: 4 * 60 * 60_000,
 };
 
 export class CronOccurrenceRunner {

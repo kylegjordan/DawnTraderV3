@@ -38,7 +38,8 @@ export type CronRecoveryPolicyKey =
   | 'awareness_state_update_cron'
   | 'awareness_reflection_cron'
   | 'xstock_qd_probe_cron'
-  | 'xstock_universe_discovery_cron';
+  | 'xstock_universe_discovery_cron'
+  | 'crypto_universe_refresh_cron';
 
 export interface CronScheduledRunContext {
   scheduledFor: Date;
