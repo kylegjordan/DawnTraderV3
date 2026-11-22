@@ -179,7 +179,8 @@ OTHERS_RE = re.compile(
 # — it just was not the cause of what I attributed to it.
 # ★ CC-INFRA WAS included here for SUPPRESSION ONLY while his onboarding was deferred. ⛔ THAT
 # DEFERRAL ENDED 2026-08-26 (Kyle) — he now HAS an entry in NAMES above, so this tuple and that
-# registry agree and an alert owned by him both wakes him and stays out of the other three.
+# registry agree. (Corrected 2026-11-22: since #995 an alert owned by him is RECORDED as his and stays
+# out of the other sessions, but the marker never wakes him - the wake comes from the lead name, OPEN_RE.)
 # The pre-placement did its job: onboarding him required no change here at all.
 # ⛔ ONE LIST, BUILT ONCE. Langston, Step-4 2026-08-23: the first fix updated the regex and left
 # THREE other copies of the same enumeration drifting — the stale comment at the call site below,
