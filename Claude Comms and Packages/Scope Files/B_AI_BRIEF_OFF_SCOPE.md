@@ -1,0 +1,41 @@
+# B-AI-BRIEF-OFF — SCOPE (r1)
+
+change-class: non_architecture
+
+**Issue:** `#1264` · **Plan row:** CC-B list `3b` (`SPRINT_TO_LIVE_PLAN`, PM commits `849df8380` / `f0c3083d5`; ⚠️ `849df8380` is NOT on origin at `f7593fe4d` — r2 re-cites the row and the after-live cleanup placement at the ref before Step 2) · **Owner:** CC-B (NEW Claude) · **Decision:** `KD-111`.
+
+**Directed by Kyle, directly, on 2026-11-22** (relayed by PM Claude, `KD-111`): *"The daily AI brief is old legacy concepts and code that needs to be just turned off. If we can turn it off in a way that and make sure that it's not interfering with the current code, it's not causing alerts, then let's do that. And then we can gut it and just take it out later after we go live or in the batch where we're doing our major cleanup."*
+
+⛔ **THE AI-PAGES BOUNDARY — WHY THIS BATCH MAY TOUCH IT (Langston's condition, Discord 1574017595747598528).** Kyle's 2026-10-19 rule keeps the main Dashboard and the AI pages off-limits unless paper-mode trading or the VTS is broken. **This batch exists because Kyle ordered it himself on 2026-11-22; that direct order overrides his own 10-19 rule for this one change.** The prior disposal under the 10-19 rule — the 69 `[AISummary] … trading_mode` enum errors withdrawn to cleanup (`B_WORKFLOW_IMPROVE_CHANGE_LIST.md:181`) — is superseded by `KD-111` for the switch-off only. **Scope stays inside the order: switch it off, prove it is harmless to do so, nothing more.**
+
+## Objectives
+1. **Switch off the daily AI brief's scheduling** — remove its import (`server/index.ts:683`) and its registration (`server/index.ts:723-732`) from the scheduler start-up block, leaving one comment that names `#1264`, `KD-111` and the after-live cleanup row. *Verify:* (a) at the ref, `git grep aiSummaryTask -- server` returns only `server/services/ai-summary-task.ts` itself; (b) after deploy, `GET /api/schedulers/status` (read via `dt-api`) lists no `AI Summary` task — **positive control:** the same read lists `Market Scan` (today's pre-change read lists both, `AI Summary` with `lastRun 2026-11-22T05:08:41.627Z`, `nextRun 2026-11-23T05:08:41.817Z`); (c) across the first 25 h of process uptime after the restart, zero `[AISummary]` lines in `out.log` and zero new `ai_transparency_log` rows named `AI Summary` — **positive control:** `Market Scan` rows written after the same restart > 0. If a restart intervenes, (b) is re-read on the new process and (c) counts uptime, not wall-clock.
+2. **Prove nothing current reads what it writes.** *Verify:* the reader census below, repo-wide at the ref, tests excluded, every reader named with `path:line` and shown to see the same data before and after.
+3. **Prove no alert depends on it.** *Verify:* (a) the whole `system-alerts.jsonl` holds zero rows matching `aisummary | ai summary | daily brief | daily_brief` — **positive control:** the same read finds `B-ENTRY-GATE` (pre-change: 3,561 lines, 0 hits; control 25 hits; r2 re-runs at the ref date); (b) no alert producer in `server/` references the task, its name or the `daily_briefs` table (git grep at the ref); (c) after deploy the six daily `[AISummary] Error creating summary …` lines (3 users × error + stack, 2026-11-22 05:08:41Z) stop.
+4. **No fix, no deletion.** The broken call stays broken and the file stays. *Verify:* `git diff <base>..<ref> -- server/services/ai-summary-task.ts` is empty; `.tsc-baseline.json` is unchanged (its `ai-summary-task.ts` entry at `:243` stays, because `tsconfig.json:2` still compiles `server/**/*`); the deletion is placed on the after-live legacy cleanup list (rule 18 disposition (b)), cited at the ref.
+
+## Provenance (§2 1.b, TIER 1 — this batch removes behaviour)
+**Corpora searched:** `git log -S` (not path-limited), `BATCH_CATALOG.md`, `RUNNING_ISSUES.md`, the completion reports and change lists (`git grep` at `f7593fe4d`), `attached_assets/`.
+- **Introduced** `1590221f7` (2025-10-09, Replit): *"Add AI transparency panel and automated scheduler tasks ... Integrates four new autonomous scheduler tasks (Screener Recalibration, Market Scan, AI Summary, System Health Check) into the `SchedulerRegistry`."* Spec: `attached_assets/Pasted-Step-4-Autonomous-Schedulers-AI-Transparency-Panel-Milestone-11-...txt:55` (*"3. AI Summary Task"*). **Built to** compile a once-a-day overview of paper and live trades into a Daily Brief row per user, shown on the main Dashboard.
+- **Broken** `5d785f264` (2025-10-25): *"Remove user ID from service layer calls to use mode-based queries"* — it changed `storage.getTrades(userId, { limit: 1000 })` to `storage.getTrades({ limit: 1000 })` (`ai-summary-task.ts:47`) against `getTrades(mode, filters?)` (`server/storage.ts:315`), so Postgres refuses `trading_mode = '{"limit":1000}'` every run. The TS2345 was grandfathered (`.tsc-baseline.json:243`).
+- **Why the break is invisible:** `createSummaryForUser` catches and logs each user's error, so `run()` returns normally and the scheduler writes `success = true` every day — 178 `AI Summary` rows in `ai_transparency_log`, **all** `success = t`, latest 2026-11-22 05:08:42Z. The task status reads `idle`, not `error`.
+- **Disposition: (4) connected but should be REMOVED**, staged by Kyle's order: disconnected now (this batch), deleted in the after-live cleanup (rule 18 (b)). Precedent for the same registry: `B-HEALTH-CHECK-REMOVAL` (`#1147`, `3b4df5bf5`), which deleted the System Health Check task introduced by the same commit.
+
+## Entry-point census (§9.5(a-ii), repo-wide at the ref, tests excluded)
+**Exactly two ways the task runs:** (1) registration at `server/index.ts:723-732`, started by `schedulerRegistry.startAllTasks()` at `:835` — first run `intervalMs` (24 h) after start-up, no `getInitialDelay`, so it does not actually run at UTC midnight as its label says; (2) the manual `POST /api/schedulers/run` (`server/routes.ts:15522`), which calls `executeTask(taskName)`. `autonomy-scheduler.ts:1004-1069` starts only its own named tasks, none of them this one. **After the change, (2) answers `500 Task AI Summary not found in registry`** (`scheduler-registry.ts:66-69`) — no client code calls that route (`git grep "schedulers/run" -- client`: none).
+
+## Reader census (§9.5(a)/(a-ii))
+**State it writes, and every reader:**
+| state | writers | readers | effect of switching off |
+|---|---|---|---|
+| `daily_briefs` rows | `ai-summary-task.ts:69` (this task); `daily-brief.ts:120` via the manual `POST /api/daily-briefs/update` (`routes.ts:4998`) — **not scheduled by this task, unaffected** | `GET /daily-briefs/today`, `/daily-briefs`, `/daily-briefs/:date` (`routes.ts:4949-4990`); `portfolio-overview.tsx:70` (only outside paper mode); `DailyBriefCard` on `dashboard.tsx:113` | **none** — 73 rows, newest `date` 2025-10-24, newest `created_at` 2025-10-24 00:01:02Z: nothing has been written since the break, so every reader sees identical data before and after |
+| `ai_transparency_log` rows named `AI Summary` | `scheduler-registry.ts` `executeTask` (one row per run) | `storage.getSystemSchedulerLogs` (`storage.ts:2173-2183`) → the database cross-check route (`routes.ts:15724`, `:15757`, cadence list `:15758`); `GET /schedulers/transparency-logs` (`routes.ts:15546`) → `ai-transparency.tsx:41` (a display list) | the cadence check already marks it non-compliant (24 h > its 4 h target) and still does; the display list stops gaining a daily false "success" row |
+**None of these feeds trading, the SQE, the RTB pool, the VTS, sizing, or any alert.** `expert-insights-metrics.ts` reads only `Weekly Expert Insights Update` rows (`:145-179`), not this task's.
+**The name stays in the two task lists** (`routes.ts:15758`, `storage.ts:2176`) — they read history, and removing it is gutting work for the cleanup batch.
+
+## Deploy
+Its own deploy, no migration. **Placed after the B-ENTRY-GATE Step-7 window closes (2026-11-23 21:00Z)** so this batch adds no restart to that read.
+
+## Out of scope
+- Fixing the `getTrades` call, deleting `ai-summary-task.ts`, the `daily_briefs` table or its routes, the Daily Brief card, or the 178 history rows — all cleanup work, placed after live.
+- The manual `daily-brief.ts` service and its route — not scheduled, not broken by this batch.
