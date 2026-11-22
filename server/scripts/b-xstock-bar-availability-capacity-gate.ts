@@ -6,7 +6,7 @@
  * time budget (C6, `b-xstock-bar-availability-gate-read.ts`). Usage:
  *
  *   npx tsx server/scripts/b-xstock-bar-availability-capacity-gate.ts \
- *     --window-start 2026-11-09T00:05:00Z --graded-ref <deployed-sha> \
+ *     --window-start 2026-11-30T00:00:00Z --graded-ref <deployed-sha> \
  *     --reviewed-ref <every-contributing-deployed-sha>
  *
  * The command prints one JSON evidence object whose `verdict.state` is `pass`, `fail` or
@@ -44,10 +44,11 @@ const EIGHT_DAYS_MS = 8 * 86_400_000;
 const EXPECTED_PLAN_CAP_MB = 204_800;
 const EXPECTED_CRITICAL_THRESHOLD = 0.80;
 const EXPECTED_VENUE_SESSION_MAX_GAP_SECONDS = 60;
-// B-XSTOCK-BAR-AVAILABILITY R2 (2026-11-06): the re-run window. Moves TOGETHER with the governed row
-// `graded_window_start` (migration 2026-11-06-b-xstock-bar-availability-window-rerun.sql); the gate compares
-// this literal against the row's Date.toISOString(), so it must stay in canonical millisecond form.
-const EXPECTED_GRADED_WINDOW_START = '2026-11-09T00:05:00.000Z';
+// B-XSTOCK-BAR-AVAILABILITY R2' (2026-11-22): the second re-run window, Monday midnight (Langston r6 ruling,
+// 2026-11-20). Moves TOGETHER with the governed row `graded_window_start` (migration
+// 2026-11-22-b-xstock-bar-availability-window-r2prime.sql); the gate compares this literal against the row's
+// Date.toISOString(), so it must stay in canonical millisecond form.
+const EXPECTED_GRADED_WINDOW_START = '2026-11-30T00:00:00.000Z';
 const EXPECTED_AVAILABILITY_CONTRACT = 'xstock-bar-availability/v1';
 /** Exit codes: the verdict's three states, distinct from a fatal error (1). */
 export const GATE_EXIT = { pass: 0, fatal: 1, fail: 2, inconclusive: 3 } as const;

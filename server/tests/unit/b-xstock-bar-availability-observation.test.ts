@@ -265,30 +265,45 @@ describe('B-XSTOCK-BAR-AVAILABILITY observation gate', () => {
     expect(handoffAt).toBeGreaterThan(finalDrainAt);
   });
 
-  it('R2: the re-run window moves the governed row and the code constant together, in canonical form', () => {
+  it("R2': the second re-run window moves the governed row and the code constant together, in canonical form", () => {
     const root = process.cwd();
     const gate = fs.readFileSync(path.join(root, 'server/scripts/b-xstock-bar-availability-capacity-gate.ts'), 'utf8');
+    const r2prime = fs.readFileSync(path.join(
+      root, 'drizzle/migrations/2026-11-22-b-xstock-bar-availability-window-r2prime.sql'), 'utf8');
+    const r2primeRollback = fs.readFileSync(path.join(
+      root, 'drizzle/migrations/2026-11-22-b-xstock-bar-availability-window-r2prime-rollback.sql'), 'utf8');
     const rerun = fs.readFileSync(path.join(
       root, 'drizzle/migrations/2026-11-06-b-xstock-bar-availability-window-rerun.sql'), 'utf8');
-    const rerunRollback = fs.readFileSync(path.join(
-      root, 'drizzle/migrations/2026-11-06-b-xstock-bar-availability-window-rerun-rollback.sql'), 'utf8');
     const manifest = fs.readFileSync(path.join(root, 'drizzle/migrations/MANIFEST.txt'), 'utf8');
+    const manifestLines = manifest.split(/\r?\n/);
 
     const constant = /const EXPECTED_GRADED_WINDOW_START = '([^']+)';/.exec(gate)?.[1];
-    const row = /SET value = to_jsonb\('([^']+)'::text\)/.exec(rerun)?.[1];
-    expect(constant).toBe('2026-11-09T00:05:00.000Z');
-    expect(row).toBe('2026-11-09T00:05:00Z');
+    const row = /SET value = to_jsonb\('([^']+)'::text\)/.exec(r2prime)?.[1];
+    expect(constant).toBe('2026-11-30T00:00:00.000Z');
+    expect(row).toBe('2026-11-30T00:00:00Z');
     // The gate compares new Date(row).toISOString() against the literal (capacity-gate.ts, gradedWindowStartMatches):
     // the literal must be the canonical form of the row, or the gate can never pass.
     expect(new Date(row as string).toISOString()).toBe(constant);
+    // Langston r6 ruling: a midnight start on a Monday.
+    expect(new Date(constant as string).getUTCDay()).toBe(1);
+    expect(new Date(constant as string).getUTCHours()).toBe(0);
     // C-1's third place: the documented --window-start usage line moves with the row and the literal.
-    expect(gate).toMatch(/--window-start 2026-11-09T00:05:00Z --graded-ref/);
+    expect(gate).toMatch(/--window-start 2026-11-30T00:00:00Z --graded-ref/);
+    expect(gate).not.toContain('--window-start 2026-11-09');
     expect(gate).not.toContain('--window-start 2026-10-16');
-    expect(rerun).toContain("constant_name = 'graded_window_start'");
-    expect(rerun).toContain("RAISE EXCEPTION 'graded_window_start: expected exactly 1 row, updated %', n;");
-    expect(rerun).toContain("updated_by = 'b-xstock-bar-availability-r2-rerun'");
-    expect(rerunRollback).toContain("to_jsonb('2026-10-16T00:05:00Z'::text)");
-    expect(manifest.split(/\r?\n/)).toContain('2026-11-06-b-xstock-bar-availability-window-rerun.sql');
+    expect(r2prime).toContain("constant_name = 'graded_window_start'");
+    expect(r2prime).toContain("RAISE EXCEPTION 'graded_window_start: expected exactly 1 row, updated %', n;");
+    // A distinct updated_by per write (the storage coalesce trap): never reuse R2's value.
+    expect(r2prime).toContain("updated_by = 'b-xstock-bar-availability-r2prime'");
+    expect(r2primeRollback).toContain("to_jsonb('2026-11-09T00:05:00Z'::text)");
+    expect(r2primeRollback).toContain("updated_by = 'b-xstock-bar-availability-r2prime-rollback'");
+    // R2 stays in the forward chain; R2' runs after it, so the row ends at the R2' value.
+    expect(rerun).toContain("to_jsonb('2026-11-09T00:05:00Z'::text)");
+    const r2At = manifestLines.indexOf('2026-11-06-b-xstock-bar-availability-window-rerun.sql');
+    const r2primeAt = manifestLines.indexOf('2026-11-22-b-xstock-bar-availability-window-r2prime.sql');
+    expect(r2At).toBeGreaterThanOrEqual(0);
+    expect(r2primeAt).toBeGreaterThan(r2At);
     expect(manifest).not.toContain('window-rerun-rollback');
+    expect(manifest).not.toContain('window-r2prime-rollback');
   });
 });
