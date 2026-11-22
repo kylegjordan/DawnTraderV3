@@ -112,7 +112,7 @@ Plus: `pairRegime?: CanonicalRegimeType` at `:86` and `:195`; `currentRegime: Ca
 - **7** pgEnum at `schema.ts:1016-1028` (now `:1016-1027` after the HIGH_VOL_IMPULSE line).
 - "§15" in the pre-audit means the dated DELETED_COMPONENTS_LOG entry (2026-11-22).
 
-## 5. THE NINE DEAD ITEMS (no caller; NOT deleted here — a deletion proposal for Kyle's list)
+## 5. THE DEAD ITEMS — NINE, PLUS THREE REPOSITORY EXPORTS ADDED AT r2 (no caller; NOT deleted here — a deletion proposal for Kyle's list)
 
 1. `server/services/telemetry-aggregator.ts:768` `updateMarketRegime`
 2. `:788` method `rehydrateTelemetryState` (the module function `:1649`, called `:1673`, is LIVE — different symbol)
@@ -123,8 +123,20 @@ Plus: `pairRegime?: CanonicalRegimeType` at `:86` and `:195`; `currentRegime: Ca
 7. `server/core/risk/dynamic-sizing-engine.ts:198` `computeDynamicSize`
 8. `dynamic-sizing-engine.ts:42` `getAdaptiveWeights` + `adaptive-learning-repository.ts:80` `loadAdaptiveWeights`
 9. `server/core/telemetry/cost-telemetry.ts:223` `startCostTelemetryLoop` + `:75` `persistCostSnapshot` (inserter `:97`)
+10. `server/services/telemetry-repository.ts:249` `saveTelemetryBatch`
+11. `telemetry-repository.ts:299` `getTelemetryStatsByRegime`
+12. `telemetry-repository.ts:161` `loadTelemetryBySymbol`
+
+Items 10-12 added at Step 4 r2 (Langston F2): zero callers outside the defining file across `server client shared scripts`, tests included (`grep -rn`); control: the same grep finds callers of `loadRecentTelemetry`. From F3: `adaptive-learning-repository.ts` `saveAdaptiveWeights` keeps the wide `MarketRegimeDB` write type with no normalize; its only caller `persistAdaptiveLearning` (item 4) is dead, so it rides the same delete-or-reconnect proposal — and if that limb is ever reconnected, its type narrows to `CanonicalRegimeType` (Langston rider).
 
 F16 (cost telemetry): `startCostTelemetryLoop` and `startDriftMonitor` (`server/services/monitoring/cost-drift-monitor.ts:195`) have no callers, so `persistCostSnapshot` never runs; readers stay live (`getCostHistory` → `routes.ts:8695`; `getRecentAlerts` → `:8728/:8731`; `getRecentCostDrift` `:174` only by the dead DSE). Staging `telemetry_history` count = 0 (control query returned 1). **`NOT RE-READ`** — the no-callers absence claim feeds a Kyle proposal and changes nothing built in this batch.
+
+## 5b. STEP 4 r2 — RESPONSE TO LANGSTON'S CHANGES-NEEDED (round 1 at `329cd825b`)
+
+- **F1 (blocking) — fixed.** The P11 proof now passes `caller: 'vts'`; `recordPairTelemetry` returns at the M70 guard for any other caller, so the old value could never reach the writer. `caller` is not persisted; the `B1263-PROOF-*` symbols stay the discriminator, and the script's own service instance leaves the app's M70 counters untouched.
+- **F5 — fixed.** `n_tup_ins` is nullable in the proof; a missing `pg_stat_user_tables` row prints `unavailable`, never a false zero, and stays ungraded.
+- **F2 — fixed.** The deleted-components entry now names `getTelemetryStatsByRegime` (not `getRegimeStats`) and lists the three zero-caller repository exports under LEFT INTENTIONALLY; §5 above carries them as items 10-12.
+- **F3, F4 — carried** to Step 10 (governance) and the Kyle deletion proposal before Step 11, as ruled.
 
 ## 6. SYSTEM MANUAL — the ROI table correction
 
