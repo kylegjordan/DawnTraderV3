@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 STAGING = os.path.dirname(HERE)
@@ -73,31 +74,44 @@ def run_suite(root):
     return p.returncode, [l.strip() for l in p.stdout.splitlines() if l.strip().startswith("FAIL")]
 
 
+# Mutants run CONCURRENTLY, each in its OWN copy of comms-infra/staging (the suite makes its own state dir and binds
+# port 0, so copies share nothing). Run one at a time they took ~7 min of CI's 22-min Test Suite, which every push
+# landing inside it cancelled. MUTANT_WORKERS overrides the pool size (1 = the old serial behaviour).
+WORKERS = max(1, int(os.environ.get("MUTANT_WORKERS") or (os.cpu_count() or 2)))
 scratch = tempfile.mkdtemp(prefix="dt-sql-mut-")
-root = os.path.join(scratch, "staging")
-shutil.copytree(STAGING, root, ignore=shutil.ignore_patterns("__pycache__"))
+
+
+def run_mutant(idx):
+    """One mutant in its own scratch copy. Returns (line, bad)."""
+    name, fname, a, b = MUTANTS[idx]
+    orig = open(os.path.join(STAGING, fname), encoding="utf-8").read()
+    if orig.count(a) != 1:
+        return "NOT-APPLIED %s (anchor count %d)" % (name, orig.count(a)), True
+    root = os.path.join(scratch, "m%03d" % idx, "staging")
+    try:
+        shutil.copytree(STAGING, root, ignore=shutil.ignore_patterns("__pycache__"))
+        open(os.path.join(root, fname), "w", encoding="utf-8", newline="").write(orig.replace(a, b))
+        rc, fails = run_suite(root)
+    finally:
+        shutil.rmtree(os.path.dirname(root), ignore_errors=True)
+    killed = rc != 0 and bool(fails)
+    return ("KILLED  " if killed else ("CRASHED " if rc != 0 else "SURVIVED")) + " %-60s %s" % (name, fails[:1]), not killed
+
+
 bad = 0
 try:
-    rc, fails = run_suite(root)
+    base = os.path.join(scratch, "base", "staging")
+    shutil.copytree(STAGING, base, ignore=shutil.ignore_patterns("__pycache__"))
+    rc, fails = run_suite(base)
     if rc != 0:
         print("REFUSED: the unmutated suite does not pass (rc %d) %s" % (rc, fails[:2]))
         sys.exit(2)
-    for name, fname, a, b in MUTANTS:
-        path = os.path.join(root, fname)
-        orig = open(path, encoding="utf-8").read()
-        if orig.count(a) != 1:
-            print("NOT-APPLIED %s (anchor count %d)" % (name, orig.count(a)))
-            bad += 1
-            continue
-        open(path, "w", encoding="utf-8", newline="").write(orig.replace(a, b))
-        try:
-            rc, fails = run_suite(root)
-        finally:
-            open(path, "w", encoding="utf-8", newline="").write(orig)
-        killed = rc != 0 and bool(fails)
-        print(("KILLED  " if killed else ("CRASHED " if rc != 0 else "SURVIVED")) + " %-60s %s" % (name, fails[:1]))
-        bad += not killed
+    with ThreadPoolExecutor(max_workers=WORKERS) as pool:
+        results = list(pool.map(run_mutant, range(len(MUTANTS))))    # map keeps MUTANTS order in the report
+    for line, is_bad in results:
+        print(line)
+        bad += is_bad
 finally:
     shutil.rmtree(scratch, ignore_errors=True)
-print("%d of %d killed" % (len(MUTANTS) - bad, len(MUTANTS)))
+print("%d of %d killed (%d workers)" % (len(MUTANTS) - bad, len(MUTANTS), WORKERS))
 sys.exit(1 if bad else 0)

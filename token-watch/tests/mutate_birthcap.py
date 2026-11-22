@@ -4,12 +4,14 @@ Run from anywhere (CI runs it from the repo root):  python3 token-watch/tests/mu
 It mutates a SCRATCH COPY of token-watch/ under the home directory and removes it afterwards; never the checkout.
 exit 0 = every mutant killed (its test exits non-zero WITH a FAIL line). NOT-APPLIED counts as a failure."""
 import os, shutil, subprocess, sys, tempfile
+from concurrent.futures import ThreadPoolExecutor
 
 PKG = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCRATCH = tempfile.mkdtemp(prefix="tw-mut-birthcap-", dir=os.path.expanduser("~"))
-WORK = os.path.join(SCRATCH, "token-watch")
-shutil.copytree(PKG, WORK, ignore=shutil.ignore_patterns("__pycache__"))
-os.chdir(WORK)
+# Mutants run CONCURRENTLY, each in its OWN copy of token-watch/ (the suite makes its own store root, so copies share
+# nothing). Run one at a time the 89 mutants took ~10 min and CI's 22-min Test Suite was cancelled by every push that
+# landed inside it. MUTANT_WORKERS overrides the pool size (1 = the old serial behaviour).
+WORKERS = max(1, int(os.environ.get("MUTANT_WORKERS") or (os.cpu_count() or 2)))
 
 NL = chr(10)
 T = "tests/test_birthcap.py"
@@ -224,35 +226,40 @@ MUTANTS = [
      [("birthcap.py", ' "pending_replan": st.get("replan"),', '')]),
 ]
 files = sorted({f for _n, _t, edits in MUTANTS for f, _a, _b in edits})
-orig = {f: open(f, encoding="utf-8").read() for f in files}
-bad = 0
-try:
-    for name, test, edits in MUTANTS:
-        texts = dict(orig)
-        ok = True
-        for f, a, b in edits:
-            if texts[f].count(a) != 1:
-                print("NOT-APPLIED %s (anchor count %d in %s)" % (name, texts[f].count(a), f))
-                ok = False
-                break
-            texts[f] = texts[f].replace(a, b)
-        if not ok:
-            bad += 1
-            continue
+orig = {f: open(os.path.join(PKG, f), encoding="utf-8").read() for f in files}
+
+
+def run_mutant(idx):
+    """One mutant in its own scratch copy. Returns (line, bad). Never touches the checkout or another mutant's copy."""
+    name, test, edits = MUTANTS[idx]
+    texts = dict(orig)
+    for f, a, b in edits:
+        if texts[f].count(a) != 1:
+            return "NOT-APPLIED %s (anchor count %d in %s)" % (name, texts[f].count(a), f), True
+        texts[f] = texts[f].replace(a, b)
+    work = os.path.join(SCRATCH, "m%03d" % idx, "token-watch")
+    try:
+        shutil.copytree(PKG, work, ignore=shutil.ignore_patterns("__pycache__"))
         for f in files:
             if texts[f] != orig[f]:
-                open(f, "w", encoding="utf-8", newline="").write(texts[f])
-        p = subprocess.run([sys.executable, test], capture_output=True, env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"),
-                           text=True, timeout=900)
-        fails = [l.strip()[:110] for l in p.stdout.splitlines() if l.strip().startswith("FAIL")]
-        killed = p.returncode != 0 and bool(fails)
-        print(("KILLED  " if killed else "SURVIVED") + " %-70s rc=%d %s" % (name, p.returncode, fails[:1]))
-        bad += not killed
-        for f in files:
-            open(f, "w", encoding="utf-8", newline="").write(orig[f])
+                open(os.path.join(work, f), "w", encoding="utf-8", newline="").write(texts[f])
+        p = subprocess.run([sys.executable, test], cwd=work, capture_output=True,
+                           env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"), text=True, timeout=900)
+    finally:
+        shutil.rmtree(os.path.dirname(work), ignore_errors=True)
+    fails = [l.strip()[:110] for l in p.stdout.splitlines() if l.strip().startswith("FAIL")]
+    killed = p.returncode != 0 and bool(fails)
+    return ("KILLED  " if killed else "SURVIVED") + " %-70s rc=%d %s" % (name, p.returncode, fails[:1]), not killed
+
+
+bad = 0
+try:
+    with ThreadPoolExecutor(max_workers=WORKERS) as pool:
+        results = list(pool.map(run_mutant, range(len(MUTANTS))))    # map keeps MUTANTS order in the report
+    for line, is_bad in results:
+        print(line)
+        bad += is_bad
 finally:
-    for f, t in orig.items():
-        open(f, "w", encoding="utf-8", newline="").write(t)
-    os.chdir(os.path.expanduser("~"))
     shutil.rmtree(SCRATCH, ignore_errors=True)
+print("%d of %d killed (%d workers)" % (len(MUTANTS) - bad, len(MUTANTS), WORKERS))
 sys.exit(1 if bad else 0)
