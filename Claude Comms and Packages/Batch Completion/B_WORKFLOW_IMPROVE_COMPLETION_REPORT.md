@@ -33,13 +33,13 @@ Make the eleven-step workflow catch the escapes that reached staging (#903, #106
 | 12 search-index leg | CLOSED-UNPROVEN | none; row 5b not delivered | home in the LEFT OPEN table |
 
 ## Review trail
-- Step 4, five gates: gate 1 audit-aid text narrowed (`57a8bf75e`); gate 2 five conditions + fold-ins (`70a629f64`, re-check `07b7cd727`); gate 3 C-7, C-8, Q10 (a)-(e), Q7 row (`b3bde2575`), D-1/D-2 (`ef1d13abb`); gate 4 enum drift → Kyle, placed KD-110 (`0e417497d`); gate 5 PROCEED (`174f5bc33`).
+- Step 4, five gates: gate 1 audit-aid text narrowed (`57a8bf75e`); gate 2 five conditions + fold-ins (`70a629f64`, re-check `07b7cd727`); gate 3 C-7, C-8, Q10 (a)-(e), Q7 row (`b3bde2575`), D-1/D-2 (`ef1d13abb`); gate 4 enum drift → Kyle, placed KD-110 (`f4e8f6330`); gate 5 PROCEED (`174f5bc33`).
 - Step 5: CI 4/4 green at `29303adff`, run 44907099007 — TypeScript Check, Test Suite, Build, Docker Build all `success`.
 - Step 6: no deploy owed — nothing in the batch runs on staging (`7538c9244`).
-- Step 7: `53a56b3db`. Step 8: PROCEED, Langston `1573704029442412579` (`cdaf37ddc`). Step 9: nothing to iterate.
-- Step 10: `383ee9857`, `6ba2de7eb`; #1263 provenance read `ca7dc70e9`.
+- Step 7: `53a56b3db`. Step 8: PROCEED, Langston `1573704029442412579` (`48ce2f41e`). Step 9: nothing to iterate.
+- Step 10: `87ac165bf`, `6d01ad8b2`; #1263 provenance read `82f119e70`.
 
-## Governance files changed — transcribed from the Step 10 tier ledger (`383ee9857` message)
+## Governance files changed — transcribed from the Step 10 tier ledger (`87ac165bf` message)
 
 | # | document | WHEN IT APPLIES | verdict | ONE LINE |
 |---|---|---|---|---|
@@ -56,7 +56,7 @@ Make the eleven-step workflow catch the escapes that reached staging (#903, #106
 | T1 | Langston MEMORY | every batch | ✅ | 00-legacy.md line, sha 297c8457871e -> 17305d22ee50 |
 | T2 | SYSTEM_MANUAL | trading architecture or maths changed | N/A | crew tooling only; no trading behaviour |
 | T2 | SYSTEM_IMPACT_MAP | a component's links changed | ✅ | new 9.16 Crew audit tooling |
-| T2 | RUNNING_ISSUES | an issue opened, moved or closed | ✅ | #1038 note (recorded instrument); new #1262 (OBJ-12 home, row 5b); #1263 enum drift (`6ba2de7eb`) |
+| T2 | RUNNING_ISSUES | an issue opened, moved or closed | ✅ | #1038 note (recorded instrument); new #1262 (OBJ-12 home, row 5b); #1263 enum drift (`6d01ad8b2`) |
 | T2 | CHANGES_AND_FIXES | app code fixed | N/A | no app code |
 | T2 | POST_AUDIT_ROADMAP | roadmap-level change | N/A | none |
 | T2 | ADJUSTMENT_FRAMEWORK | a trading knob changed | N/A | none |
@@ -80,7 +80,7 @@ Ledger checker (draft line): not run — there is no batch ledger instance to ch
 
 ## New findings (each with its home)
 - **Enum drift between the code and the database (gate 4):** `#1263`, placed KD-110 (ANALYST, CC-C list 1, before live mode). The provenance read also found the daily AI brief failing every day since 2025-10-25: `#1264`, switched off under KD-111 (NEW, CC-B list 3b), removal on the after-live list.
-- **F-2 — the advisory enum step reports `success` even when it found drift** (run 44907099007), so drift, clean and database-unreachable look the same without opening the log. Disposition: recorded in `#1263` (the gate-4 record, `6ba2de7eb`) as a condition before the step can become a candidate to block; the step stays advisory, no new slot, no work now.
+- **F-2 — the advisory enum step reports `success` even when it found drift** (run 44907099007), so drift, clean and database-unreachable look the same without opening the log. Disposition: recorded in `#1263` (the gate-4 record, `6d01ad8b2`) as a condition before the step can become a candidate to block; the step stays advisory, no new slot, no work now.
 - **Skipped-the-gate tripwire hit (MISTAKE_PATTERNS #5):** a push loop checked CI was idle, not green (`70a629f64`). Per the tripwire, `#754`'s unbuilt checker legs return to priority, owner OLD Claude, and are reported to Kyle this week.
 - **Aids proposal P-1..P-4 (for Kyle's list, not slotted):** a value-set aid first (the only aid that could have caught #1063's shape mechanically); entry only after the first real blind-spot blocks are read; a pre-registered discriminating test on #1063; a lead, never a gate.
 
