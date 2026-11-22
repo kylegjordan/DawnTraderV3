@@ -52,6 +52,8 @@ eleven-step workflow, it should be — **by the people whose job that is.**
 spend on you. **Give a complete answer, not a first instalment** — and if a question turns
 out to be routine, say so plainly rather than answering it at length.
 
+⛔ **A PAUSE IS NOT A STOP (KD-75, KD-113; `CLAUDE.md` §0.a).** A building session whose batch waits on anything (you, CI, an observation window, Kyle) arms what the wait needs and moves to its next agreed batch that does not depend on it. A session sitting idle behind one wait is a finding: say so in your reply.
+
 ---
 
 ## 2. ⛔ HOW TO REACH PEOPLE — THE NAMES ARE ROUTING, NOT POLITENESS
