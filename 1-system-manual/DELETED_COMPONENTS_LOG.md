@@ -13,7 +13,7 @@
 **Blast radius:** the module's settings were read before removal (below). Its archives (`error__<date>.log`, `out__<date>.log`) keep their names: the new config's `dateformat __%Y-%m-%d_%H-%M-%S` + `extension .log` produces the same shape, so the readers that open them by name (`p4c-window-extract.py`, the `workflow-07-verify-cc` D+1 rule) are unchanged, and the old archives age out under the new counts. Verified after removal: `pm2 ls` lists no `pm2-logrotate` (count 0); the dry run (`logrotate -d`) considered all four stanzas and rotated nothing; a scratch replica forced three times kept exactly 2 archives, compressed one rotation late, and carried the job log's mtime back; `dt-install-drift` PASS with the five new files matching the deployed commit.
 **Restore path:** `su - deploy -c 'pm2 install pm2-logrotate'`, then the settings it ran with — `max_size 1G`, `retain 14`, `compress true`, `dateFormat YYYY-MM-DD_HH-mm-ss`, `workerInterval 30`, `rotateInterval 0 0 * * *`, `rotateModule true` (each as `pm2 set pm2-logrotate:<key> <value>`) — and `systemctl disable --now dawntrader-logrotate.timer` FIRST, so the two never run together.
 **Archive:** none — a runtime module, not repo code; the settings above are its whole configuration.
-**Left intentionally:** `/home/deploy/.pm2/pm2.log` (its reader `scripts/analysis/xs_frame_extract.sh` reads it as one file; a Step-10 review with that reader's owner decides it) and `/home/deploy/.pm2/logs/` (nothing writes there after the uninstall).
+**Left intentionally:** `/home/deploy/.pm2/pm2.log` (its reader `scripts/analysis/xs_frame_extract.sh` reads it as one file; **Step-10 review, 2026-11-22: kept unrotated** — 176,189,584 B since 2026-03-30, about 0.74 MB/day, and rotating it would cut that reader's reach; change list "Step 10") and `/home/deploy/.pm2/logs/` (nothing writes there after the uninstall).
 
 ## `server/scripts/b8-5-measurement-override.ts` and `b8-5-tune3-anchor.ts` — the two one-off paper re-anchor scripts — DELETED 2026-11-05 (B-BALANCE-SESSION-PAIRING, `#618` leg 1, CC-C; pre-audit P6, Langston Step-2: "delete, don't flat-check")
 
@@ -1662,7 +1662,7 @@ Archive: git history is authoritative (this is a field-retirement within live fi
 **LEFT INTENTIONALLY (until 3d's close):** `deleteColdVersion` and `b75-cold-bind.ts --delete-residue` — the residue deletion still needs them with the wide key, BEFORE step 4 and only on Kyle's yes. Both are removed at 3d's close and logged then, with the disaster-recovery procedure: Kyle mints a temporary delete-capable key → restore the archived code → run it → delete the temporary key.
 **RESTORE PATH:** the archived copy below, or git at `f187b1862`. A restored `deleteCold` cannot run once the wide key is deleted (3d step 5); it needs a delete-capable key Kyle mints.
 **ARCHIVE:** `1-system-manual/_archive/deleted-code/storage-client.deleteCold.20261114-B-DISK-FILE-TIERING.ts.removed`.
-**COMMIT:** the B-DISK-FILE-TIERING 3d step-1 Step-3 commit.
+**COMMIT:** `7e0716244` (B-DISK-FILE-TIERING 3d step 1, Step 3).
 
 ## 2026-11-15 — four stale token-watch backup files on staging — B-TOKEN-WATCH-FOLLOWUP-MEMORY P12 (pre-audit A10), Infra Claude
 

@@ -11866,13 +11866,22 @@ If any of these constants change, the aggregator's window filters must be re-val
 
 1. **No hardcoded regime strings in the aggregator.** All regime literals route through `CANONICAL_REGIMES` / `REGIMES.*`. Enforced by `regime_mapping_integrity.test.ts`. This was the last bug fixed in B64a HF (commit `cf7baef1`).
 2. **isStale is surfaced, not hidden.** If the global DBS snapshot's age exceeds the freshness window, `isStale: true` flows through to the UI and a badge is displayed. Do not silently replace a stale snapshot with a fabricated fresh one.
-3. **No writes from the dashboard code path.** The aggregator reads; the endpoint serves; the UI renders. No code in this chain mutates production state, triggers scans, or writes to disk.
+3. **No writes from the dashboard code path — with ONE stated exception (B-DISK-FILE-TIERING, 2026-11-22).** The aggregator reads; the endpoint serves; the UI renders. No code in this chain mutates production state, triggers scans, or writes to disk — **except that it may raise, and later resolve, the one moved-day alert in B64a.6.** That is a write to the alert queue only, fire-and-forget, throttled, and it never throws into the request.
 4. **Window filtering at aggregator boundary.** The store's ring buffer may hold up to 24h; consumers requesting `rolling_7d` get an empty history array (expected, not an error). Never extend the store's buffer to satisfy a longer window — instead add a secondary long-window persistence layer if that need arises.
 
 ## B64a.5 Known open items (pre-registered for follow-up)
 
 - **History persistence across restart** — ring buffer is in-memory only; PM2 restart wipes it. DB-backed persistence is a candidate follow-up if operational evidence demands cross-restart snapshot continuity (currently: not needed, daily telemetry archive is sufficient for historical analysis).
 - **UI polish** — B71 slot is repurposed for final Drift Dashboard polish based on observation-window feedback (deferred until after 2026-04-28 Item 13 decision gate). Local redesign already drafted (column-aligned unified table, dollar-value columns added) — queued for deploy after open book resolves.
+
+## B64a.6 Layer-1 telemetry is tiered, and the dashboard says when a day has moved (B-DISK-FILE-TIERING, 2026-11-22, `#1233`)
+
+- **The telemetry files the dashboard reads now leave the staging disk.** `logs/phase15b_dbs_telemetry` (and its `consumer_sites` subfolder) stay on disk for 35 days (`data_lifecycle.disk_file_hot_days`), then the daily disk-file job moves each day to WARM, and to COLD after 365 days. Storage detail: `STORAGE_POLICY.md` §4.
+- **Why the dashboard needed a change.** Its reader lists the folder and reads whatever is present; it never asks for a named day. So a moved day would simply be missing, and the numbers would be computed without it, with nothing on screen to say so.
+- **The moved-day check** (`server/services/data-archive/moved-day-check.ts`, called from the aggregator) works out which days the requested window should contain, subtracts the days on disk, and asks the archive manifest about the rest. A day that is expected, archived and not on disk raises one alert per window (dedupe key `disk-tiering-moved-day:phase15b_dbs_telemetry:<window>`, actor `drift-dashboard-moved-day`). A later check of the same window that finds nothing moved resolves it.
+- **When it can fire.** Every rolling window is far inside 35 days, so today only `cohort_latest` can reach a moved day (its start is the app's own start time), and only after about 34 days without a restart. Inside the hot window no query runs at all.
+- **What it does not do.** It does not fetch the moved day back. A view that needs older telemetry reads it from WARM through the rehydrator.
+- **One writer removed alongside it.** The `phase-41F-L` trace writer in `context-bridge.ts` was deleted (rule 18; `DELETED_COMPONENTS_LOG.md`, 2026-11-04 entry). It appended every `trade_*` and `health_engine` broadcast to one file that nothing read, which had reached 5.37 GB on staging.
 
 ---
 
@@ -12375,7 +12384,7 @@ The context lane's final delete fence uses one connected client and transaction.
 
 - **Trend Mining Engine** (Phase 17.6/18.5, post-launch) — B74 OHLC tables + manifest+warm rehydration for older periods.
 - **Future ML/analytics scheduler** — wraps `b75-rehydrate.ts`.
-- **B70 retention sweep** — UNCHANGED in B75 (purely additive). Future B75.x can migrate B70 knob into per-table `data_lifecycle.*` registry.
+- **B70 retention sweep** — *(corrected 2026-11-22, B-DISK-FILE-TIERING Step 10)* it no longer exists: B-STORAGE-HARDEN Wave C **deleted** `b70-retention-sweep.ts` on 2026-07-08, and its five tables now tier through the B75 sweep (`DELETED_COMPONENTS_LOG.md`, 2026-07-08 entry). The original line read "UNCHANGED in B75 (purely additive)", which was true at B75 and stale after Wave C.
 
 *End of Data Lifecycle Policy. Last updated 2026-05-06 with B75 close.*
 

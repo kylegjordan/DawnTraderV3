@@ -24,7 +24,7 @@ Data flows **one direction only: HOT → WARM → COLD.** At each boundary the o
 
 So a given day's data (for a 90-day-hot table) lives: ~90 days HOT → the following ~365 days WARM → COLD forever after (~15 months after creation it reaches cold). **Nothing is deleted at any hop.**
 
-**Rehydration:** any archived data is retrievable via `b75-rehydrate.ts` (warm = fast, cold = slightly slower). The manifest tells the rehydrator where each partition lives.
+**Rehydration:** any archived data is retrievable via `b75-rehydrate.ts` (warm = fast, cold = slightly slower). The manifest tells the rehydrator where each partition lives. ⛔ **Before a large COLD restore, read §4.6 first: the cold account has a daily download cap that a real restore exceeds, and hitting it looks exactly like broken backups.**
 
 ## 2.5 ★ THE 30-DAY DEFAULT RULE (Kyle directive 2026-08-17 — the standing retention policy)
 
@@ -59,8 +59,11 @@ Operationally: **30-day rolling hot is the DEFAULT for every table.** A hot wind
 ## 4. What preserves the data (the machinery)
 
 - **`b75-retention-sweep.ts`** (cron `15 2 * * *`): the single retention owner. The checked-in `b75-retention-run.sh` launcher and the TypeScript body share one kernel `flock`; direct unmarked invocation refuses, so cron and manual runs cannot overlap. Partitioned lanes export each eligible HOT partition → WARM and drop only after verification. The xStock snapshot lane freezes one complete day and ranked per-symbol population, uploads/downloads canonical full-row JSONL, proves counts + ordered-key digest + full-row digest + checksum, then deletes only those proven keys; a mismatch or lock timeout leaves the source intact.
-- **`b75-cold-rotator.ts`** (cron `0 3 1 * *`): table-agnostic WARM → COLD rotation at 365 d; stamps `verified_at` after a re-download checksum match.
-- **`b75-cold-liveness.ts`** (cron `0 4 * * 1`): weekly cold round-trip canary — a dead-key detector so the cold credentials can't silently rot between real rotations.
+- **`b75-cold-rotator.ts`** (cron `0 3 1 * *`): table-agnostic WARM → COLD rotation at 365 d. **Since B-DISK-FILE-TIERING (2026-11-22) it streams:** each object is downloaded to a private `0700` temp folder, uploaded with `uploadColdFile` (memory stays at a few chunks whatever the size), and the warm copy is deleted only after the upload is attested. It **refuses an object** unless the disk has twice the object's size plus `data_lifecycle.disk_file_free_floor_bytes` free (the same floor the tiering job uses, because it is the same disk). ⚠️ **`verified_at` means the B2 attestation time, not an end-to-end read-back:** the row records `b2-sha1-attested` (B2 re-read the SHA-1 and length it was sent). Our own read-back is the cold audit below, paged at 90 days.
+- **`b75-cold-liveness.ts`** (cron `0 4 * * 1`): weekly cold round-trip canary — a dead-key detector so the cold credentials can't silently rot between real rotations. The canary HIDES its object afterwards (the narrow key cannot delete); the bucket's lifecycle rules remove hidden versions under `_liveness/` and `_proof/` after one day, and a version-count ceiling (`cold_meter_liveness_max_versions`, 2) pages if they stop doing so.
+- **`b-disk-file-tiering.ts`** (cron `45 2 * * *`, log `/var/log/dawntrader/disk-file-tiering.log`): moves dated app files older than `disk_file_hot_days` (35) from the staging disk to WARM, and after 365 days on to COLD. Five folders: `logs/phase15b_dbs_telemetry` and its `consumer_sites` subfolder, `logs/vts_eval_history`, `logs/data_aggregates` (the `passive_*` files) and `logs/data_aggregates/hourly`, plus the dated `diagnostic-reports` traces. Each run moves at most `disk_file_run_cap_bytes` (2 GiB), lifts that cap while free space is under `disk_file_backlog_free_bytes` (15 GiB), and stops before free space would fall below `disk_file_free_floor_bytes` (5 GiB). A file is removed from the disk only after its warm copy is proven.
+- **`b75-cold-audit.ts`** (cron `10 4 * * *`, log `/var/log/dawntrader/b75-cold-audit.log`): OUR read-back of cold objects — a few per run (`cold_readback_max_objects_per_run` 10, `cold_readback_daily_bytes` 500 MB), each object re-read at most every `cold_readback_min_interval_days` (30); it pages when any cold object has gone unread for `cold_readback_max_age_days` (90) or the audit has stalled `cold_readback_stall_days` (3).
+- **`b75-cold-proof.ts`** (hand-run only): the end-to-end round trip of a test object through the cold store, used to prove a key or rule change. Writes under `_proof/`, which the lifecycle rules clear.
 - **`b-storage-archival-health.ts`** (cron `0 5 * * *`): watchdog that fires a §10.5 alert if any sweep goes stale or reports failures — and (Wave D) a daily-partition **forward-coverage check** that alerts if the furthest-provisioned daily partition is < 4 days ahead (or none exist at/after cutover). Runs in its own process so a dead daily creator can't vouch for itself.
 - **`b74-create-daily-partitions.ts`** (cron `0 1 * * *`, Wave D): pre-creates `xstock_spot_ticker_snap_YYYY_MM_DD` daily partitions for a 14-day forward window (self-heals the current day; skips pre-cutover days). The monthly creator (`b74-create-monthly-partitions.ts`) EXCLUDES the daily-partitioned table at/after the 2026-08-01 cutover so the two never overlap.
 - **`database-monitor.ts`** (in-app, 24h): fires a §10.5 alert when logical DB size crosses 65% (warning) / 80% (critical) of the 200 GB Supabase plan cap.
@@ -89,6 +92,15 @@ Operationally: **30-day rolling hot is the DEFAULT for every table.** A hot wind
 **What `source-count-matched` does NOT mean:** that the table held everything it should have. It proves the copy matches the table as it stood at export time.
 **The deletion rule:** nothing is dropped or deleted unless its copy is proven. A rehydrate prints each copy's basis and writes a `.completeness.json` beside it.
 
+## 4.6 ★ The cold store (B2) — keys, lifecycle rules, restoring (B-DISK-FILE-TIERING, 2026-11-22)
+
+- **One narrow key does the work.** The app uses key `…0003` (`dawntrader-app-cold-narrow`), which can only list, read and write in `dt-archive-cold` — it cannot delete. The older wide key `…0001` is retired to `/root/b2-wide-key.retired`; deleting it at Backblaze waits on Kyle's yes.
+- **Lifecycle rules (bucket revision 4)** delete hidden versions after one day under `_liveness/` and `_proof/` only. Nothing else in the bucket expires: COLD is still keep-forever.
+- **Leftover objects.** If a failed run ever leaves an object we decide to keep, its id goes in `data_lifecycle.cold_residue_kept_file_ids` (seeded `[]`), so the checks stop reporting it.
+- **Downloads cost money above 1 GB a day.** Steady state is about 0.62 GB a day of that free allowance (the cold audit plus the weekly canary). ⚠️ **Nothing measures the whole account's daily download, so this is a design figure, not a meter.** Storage is alerted (`cold_meter_warn_bytes`, 100 GB) but uncapped.
+- ⛔ **BEFORE A REAL RESTORE: Kyle raises the Backblaze daily download cap, and puts it back afterwards.** A real restore pulls far more than 1 GB, and hitting the cap fails mid-restore in a way that reads as "the backups are broken" when they are not.
+- **If we ever need the delete code back** (removed under rule 18 at `78d25acf1`): `git show 78d25acf1^:<path>` restores it, and it runs with the existing key. It was removed because nothing in normal flow may delete from cold.
+
 ## 5. Capacity + the disk ceiling
 
 - Supabase Pro disk **auto-expands** at ~90% usage (+50% per step) and **never shrinks**; the practical auto-expand ceiling is **200 GB** (`database_monitor.plan_cap_mb = 204800`). Logical data is measured against this cap; the tiering keeps hot data moving off so logical size stays well under it.
@@ -98,7 +110,12 @@ Operationally: **30-day rolling hot is the DEFAULT for every table.** A hot wind
 
 **The never-drop / move-not-delete directive governs BUSINESS DATA** (signals, provenance, trades, market-data tables) — the data whose future value we can't yet predict. It does **NOT** govern **operational process logs** (the app's pm2 stdout/stderr: `health_engine latency=1ms`, event-loop metrics, broadcast lines, debug traces). Those are operational noise, not analysable business data, and the correct universal policy for them is **rotate-and-discard**, not cold-archive — archiving gigabytes of `latency=1ms` lines to cold storage forever would spend the tiering machinery (and disk) on noise.
 
-- **Machinery (added B-OPS-PM2-LOG #499, 2026-07-13):** `pm2-logrotate` on the deploy-owned pm2 governs `/var/log/dawntrader/{out,error}.log` — **`max_size 1G` → rotate (lossless rename + reloadLogs), `retain 14`, `compress`, oldest discarded, 30s size-poll.** Bounded, self-managing; replaced an ungoverned 22.4 GB unrotated `out.log` (the exact "never trimmed / never archived" failure). This is a GOVERNED retention stream now, not an accumulator.
+- **Machinery (since B-DISK-FILE-TIERING, 2026-11-22; replaced `pm2-logrotate`, which was added by B-OPS-PM2-LOG #499 2026-07-13 and is now uninstalled):** a system `logrotate` run by the hourly `dawntrader-logrotate.timer`, config `/etc/dawntrader/logrotate-app.conf`, state `/var/lib/logrotate/dawntrader-app.status`.
+  - `error.log`: daily, or sooner at 2 GB; **30 kept**.
+  - `out.log`: daily, or sooner at 1 GB; **60 kept and none older than 7 days**.
+  - `disk-file-tiering.log` and `b75-retention.log`: monthly, 12 kept. `sqe_rejections.log`: at 10 MB, 5 kept.
+  - Archives are named `error__YYYY-MM-DD_HH-MM-SS.log` (the same form as before, so existing readers still work) and compressed one rotation late. ⚠️ **The name is the rotation time, so the daily `error__D` file holds day D-1.**
+  Bounded, self-managing; it replaced an ungoverned 22.4 GB unrotated `out.log` (the exact "never trimmed / never archived" failure). This is a GOVERNED retention stream, not an accumulator.
 - **The valuable signals INSIDE the log stream are NOT discarded** — they are EXTRACTED to a dedicated durable store that the rotator never reaps: the **switch-on behavioral evidence** (FINALSCORE_SHADOW verdicts, EV_REJECT rate, maker-pick-rate) lands in a dedicated evidence sink — the **`switch_on_shadow_evidence` table (B-EVIDENCE-SINK, 2026-07-14, §3)**, retained 90d-hot then tiered — which the rotator never reaps. Rotation discards the operational firehose; the extracted evidence persists. So "valuable → retained, noise → rotated" holds at the line level, not just the file level.
 - **Rule of thumb:** if it's a structured record you might re-analyse or calibrate from → a DB table under §3 (never-drop, tiered). If it's process/debug console output → rotate-and-discard here. When a log line turns out to be evidence, route it to a table/sink (never leave it only in the rotated firehose).
 
@@ -115,6 +132,7 @@ Operationally: **30-day rolling hot is the DEFAULT for every table.** A hot wind
 - WARM→COLD window: `data_lifecycle.default_warm_retention_days` (global today; **can be made per-table if we want a table to reach cold sooner** — e.g. sending a rarely-re-read table straight-ish to cold. Cost delta is pennies; the reason to keep a warm window is faster rehydrate for re-analysis/calibration).
 - Capture cadence (xStock/crypto ticker): `passive_archive.b74_ticker_snapshot_min_interval_ms`.
 - Disk alarm thresholds: `database_monitor.{plan_cap_mb, warning_threshold_pct, critical_threshold_pct}`.
+- App-file tiering and the cold store: `data_lifecycle.disk_file_*` (hot days, run cap, backlog line, free floor), `cold_readback_*` (the audit), `cold_meter_*` (the meters), `cold_rotator_*` and `cold_upload_setup_ms` / `cold_body_min_bytes_per_s` (run limits). Every one is required: a missing row stops the job rather than falling back to a default.
 
 ## 7.5 Crew-status snapshots (B-CREW-STATUS, 2026-08-07) — business data, NON-DB substrate
 
@@ -155,6 +173,7 @@ token-watch keeps files on the staging box, not database rows, so none of §3's 
 **Caps:** 8 GiB hard cap, 6 GiB warn line, checked daily (store-watch) and hourly (feed-watch). **Move, never drop:** nothing leaves the box until its off-box copy is verified. Details: `SYSTEM_IMPACT_MAP.md` Layer 9 "token-watch".
 
 ## 8. Change log (policy-level)
+- **2026-11-22 (B-DISK-FILE-TIERING):** five app-file folders and the diagnostic traces now tier disk → WARM at 35 days → COLD at 365 (§4); the cold rotator streams and refuses without free space; a daily cold read-back audit was added; the cold store moved to a narrow no-delete key with lifecycle rules (§4.6); `pm2-logrotate` was replaced by an hourly system `logrotate` with longer `error.log` retention (§5.5); F.1 and F.2 updated.
 - **2026-11-12 (B-XSTOCK-SNAPSHOT-RETENTION, `#1194`):** both xStock snapshot stores added to the policy at 30 complete UTC days plus 240/60 per-symbol floors; one kernel-locked B75 ranked-day lane now proves exact counts, ordered keys, full rows and checksum before proven-key delete. Initial exercise: 211 verified objects / 2,737,186 rows.
 - **2026-11-06 (B-TOKEN-WATCH-STORAGE, `#1132`):** §7.6 added — token-watch's own file store: hot / on-box cold / off-box cold to B2 `dt-archive-cold/token-watch/`, the 8 GiB cap and 6 GiB warn line.
 - **2026-11-05 (B-STATUS-BOARD OBJ-6):** §7.5 marked retired — the crew-status writer is deleted; its 18 MB of snapshots are kept as history and stop growing; `#670` becomes a one-time cold copy.
@@ -206,7 +225,7 @@ At the 2026-11-12 live read, `data_archive_manifest` held **6,300 objects across
 
 ⚠️ **FIRST, A DISTINCTION THAT MUST NOT BE BLURRED: these live on the STAGING BOX filesystem. They have NOTHING to do with the `Database disk CRITICAL: 81.4% of 200 GB plan cap` alert, which is the Supabase DB.** Two different disks, two different risks. **Measured staging disk: 75 G total, 33 G used — 45%, comfortable.**
 
-**F.1 — PROCESS LOGS: `/var/log/dawntrader` = 15 G, and it is BOUNDED.** `pm2-logrotate` is configured `max_size 1G` · `retain 14` · `compress true` · daily rotate ⇒ a ~14 G steady-state ceiling, which is exactly what is observed. **Not a growth risk.** ⚠️ **Operational consequence worth knowing: retention is ~14 rotations, and at current volume the LIVE `out.log` spans only ~45 MINUTES.** ⇒ **any log-based investigation of something more than a few hours old must use the rotated `out__*`/`error__*` files, not `out.log`** — a `grep` of the live file returning nothing is an artifact of the window, not evidence of absence.
+**F.1 — PROCESS LOGS: `/var/log/dawntrader`, BOUNDED.** *(Updated 2026-11-22, B-DISK-FILE-TIERING; the 2026-07-28 reading was `pm2-logrotate`, 15 G, 14 rotations.)* Rotation is now the system `logrotate` in §5.5. Expected steady state: `error.log` about 0.36 GB over 30 days, `out.log` about 1.6 GB over 7 days (both compressed). **Not a growth risk.** ⚠️ **The live `out.log` still spans only hours, so any investigation older than that must use the rotated `out__*` / `error__*` files** — a `grep` of the live file returning nothing is an artifact of the window, not evidence of absence. `error__*` now reaches back about 30 days, `out__*` about 7.
 
 **F.2 — APP-LOCAL FILE STORES: `/home/deploy/dawntrader/logs/*` ≈ 6 G, and these are NOT bounded by anything.** Daily files, retained from inception, **no pruning, no tier, and NOT covered by any section of this policy before today:**
 
@@ -219,6 +238,7 @@ At the 2026-11-12 live read, `data_archive_manifest` held **6,300 objects across
 | `predictive_adjustments` | 2.3 M | 120 | 2026-03-30 → |
 | `fx5_state` | 22 M | 1 | rolling `window_24h.json` (self-bounding) |
 
+★ **UPDATE 2026-11-22 (B-DISK-FILE-TIERING): three of these stores now tier** — `phase15b_dbs_telemetry`, `vts_eval_history` and `data_aggregates` move to WARM after 35 days and to COLD after 365 (§4). The table above is the 2026-07-28 reading. **`virtual_trades` and `predictive_adjustments` are deliberately NOT tiered**, for the load-bearing reason below (`#174`).
 ★ **NOT an emergency and explicitly not filed as a defect** — ~6 G on a disk at 45% with 40 G free buys a long runway. **It is a POLICY GAP: an entire class of store that grows monotonically and that this document did not previously acknowledge.** The honest disposition is that these need a retention decision *before* the runway matters, not after.
 ★★ **TWO OF THESE ARE LOAD-BEARING, so do NOT prune them casually:** `virtual_trades` is the population the settings-adjustment routine READS (last 30 files, HYBRID-filtered — see `RUNNING_ISSUES` #174), and `predictive_adjustments` is what it WRITES. **A naive "delete files older than N days" on `virtual_trades` silently changes what that routine computes on.** `phase15b_dbs_telemetry` is the 4.9 G outlier and the obvious first candidate — **Phase 15b is long past, so its consumer set should be established before it is trimmed, not assumed.**
 

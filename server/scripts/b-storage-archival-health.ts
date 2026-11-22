@@ -26,9 +26,10 @@
  * Disk-usage thresholds are NOT re-checked here — DatabaseMonitor owns that and
  * (as of B-STORAGE-HARDEN OBJ-5) wires warning/critical straight into §10.5.
  *
- * The B70 analytics sweep is intentionally SKIPPED while it is paused
- * (B-STORAGE-HARDEN Wave A). It is re-added to this watchdog when OBJ-2 re-enables
- * the B70 cron — do NOT remove that line silently.
+ * There is no B70 analytics sweep to check: B-STORAGE-HARDEN Wave C (OBJ-2,
+ * 2026-07-08) DELETED `b70-retention-sweep.ts` and routed its five tables through
+ * the B75 sweep checked below (DELETED_COMPONENTS_LOG, 2026-07-08 entry). Nothing
+ * is waiting to be re-added (corrected at B-DISK-FILE-TIERING Step 10).
  *
  * Cron line (root crontab on staging — daily 05:00 UTC, after the 02:xx sweeps):
  *   0 5 * * * su - deploy -c "cd /home/deploy/dawntrader && /usr/bin/npx tsx server/scripts/b-storage-archival-health.ts" >> /var/log/dawntrader/archival-health.log 2>&1
@@ -125,8 +126,8 @@ interface CheckSpec {
   onMissing: 'skip' | 'alert';
 }
 
-// NOTE: b70-retention.log is deliberately ABSENT while the B70 sweep is paused
-// (Wave A). Re-add it at OBJ-2 when the B70 cron is re-enabled.
+// NOTE: no b70-retention.log check: the B70 sweep was deleted 2026-07-08
+// (B-STORAGE-HARDEN Wave C); its tables are swept by b75-retention, checked here.
 const CHECKS: CheckSpec[] = [
   {
     name: 'b75-retention',
