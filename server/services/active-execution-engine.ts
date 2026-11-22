@@ -2287,6 +2287,8 @@ export class ActiveExecutionEngine {
       } as any);
     }
     await storage.deleteActiveOpenPosition(this.mode, position.id);
+    // #1222 OBJ-5: the position no longer wants the feed; release only — no unsubscribe here, as before this batch.
+    krakenWebSocketAdapter.releaseIntentReason(position.symbol, 'open');
     console.log(`[P19-B7.2c][MAKER_NEVER_FILLED:${this.mode}] ${position.symbol}: ${why} — dropped (slot freed, never-filled record ${tradeId})`);
   }
 
@@ -5331,9 +5333,14 @@ export class ActiveExecutionEngine {
       // Phase 8.8.3-B3.6: Unsubscribe from Kraken WebSocket after position close
       // Phase 8.8.3-I6-FIX: Enhanced diagnostic logging for unsubscription audit
       try {
-        krakenWebSocketAdapter.unsubscribeFromSymbols([position.symbol]);
-        console.log(`[8.8.3-I6-FIX][WS_UNSUB] closedSymbol=${position.symbol} | action=unsubscribe`);
-        console.log(`[KrakenWS] Unsubscribed from ${position.symbol} after position close`);
+        // #1222 OBJ-5: release this position's reason; unsubscribe only when nothing else (an RTB-queued row) wants it.
+        if (krakenWebSocketAdapter.releaseIntentReason(position.symbol, 'open')) {
+          krakenWebSocketAdapter.unsubscribeFromSymbols([position.symbol]);
+          console.log(`[8.8.3-I6-FIX][WS_UNSUB] closedSymbol=${position.symbol} | action=unsubscribe`);
+          console.log(`[KrakenWS] Unsubscribed from ${position.symbol} after position close`);
+        } else {
+          console.log(`[OBJ-5][WS_UNSUB_KEPT] closedSymbol=${position.symbol} | still_wanted_by=${krakenWebSocketAdapter.getIntentReasons(position.symbol).join(',')}`);
+        }
       } catch (wsUnsubError) {
         console.warn(`[8.8.3-I6-FIX][WS_UNSUB_FAILED] symbol=${position.symbol} error=${wsUnsubError}`);
         console.warn(`[KrakenWS] Failed to unsubscribe from ${position.symbol}:`, wsUnsubError);
@@ -7079,7 +7086,9 @@ export class ActiveExecutionEngine {
       // Phase 8.8.3-I8C: Subscribe each NEW trade immediately upon creation
       try {
         // I8C-ENGINE-SUBCALL: Subscribe to new trade with I8C logging
-        krakenWebSocketAdapter.i8cSubscribeNewTrade(signal.symbol, 'new_trade');
+        // #1222 OBJ-5: crypto only carries the 'open' intent — an xStock symbol has no Kraken feed, and an intent for it
+        // would be re-sent by every audit tick.
+        krakenWebSocketAdapter.i8cSubscribeNewTrade(signal.symbol, 'new_trade', _tradeClass === 'crypto_spot' ? 'open' : undefined);
         console.log(`[8.8.3-I6-FIX][WS_SUB_NEW] newSymbol=${signal.symbol} | action=subscribe`);
         console.log(`[KrakenWS] Subscribed to ${signal.symbol} for real-time price updates`);
       } catch (wsSubError) {

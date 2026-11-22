@@ -476,6 +476,24 @@ export class KrakenWebSocketAdapter extends EventEmitter {
   private readonly I8C_STALE_THRESHOLD_MS = 30000; // 30 seconds = truly stale (resubscribe)
   private readonly I8E_LOW_VOLUME_MIN_MS = 5000;  // 5-25s = normal low-volume behavior
   private readonly I8E_LOW_VOLUME_MAX_MS = 25000; // don't resubscribe in this window
+
+  // B-PRICE-FEED-COVERAGE (#1222) OBJ-5: ONE subscription intent per symbol, keyed by the internal symbol, holding the
+  // named reasons that want it ('open' = an open crypto position; 'rtb:<mode>' = a queued RTB row). Each owner REPLACES or
+  // releases only its own reason; the intent is the union. Only stop() and clearAllSubscriptions() clear it — a reconnect
+  // never does, which is the point: every restore sends intent − acked − pending, computed at send time (P5-1, P5-2).
+  private subscriptionIntent: Map<string, Set<string>> = new Map();
+  /** Incremented on every socket open; a restore paced across chunks aborts if the socket it started on is gone. */
+  private socketGeneration = 0;
+  /** When the current socket opened — a subscribe request stamped before it was sent on a dead socket. */
+  private socketOpenedAt = 0;
+  private restoreInProgress = false;
+  /** The generation the audit's "not connected" line was last written for — one line per outage, not one per 5 s tick. */
+  private restoreDeferredLoggedGeneration = -1;
+  private readonly RESTORE_CHUNK_SIZE = 25;
+  private readonly RESTORE_CHUNK_GAP_MS = 1000;
+  /** A request sent on THIS socket less than this long ago is still in flight — not re-sent (P5-4 pacing). A refused
+   *  ticker never clears its request stamp, so it ages past this and the audit retries it. */
+  private readonly RESTORE_INFLIGHT_GRACE_MS = 10_000;
   
   // Phase 8.8.3-I7-WS-G: Tick Frequency Stabilization
   private tickFrequencyData: Map<string, {
@@ -668,6 +686,7 @@ export class KrakenWebSocketAdapter extends EventEmitter {
     this.isConnecting = false;
     this.subscribedSymbols.clear();
     this.pendingSubscriptions.clear(); // Phase 8.8.3-B9.FIX-WS-START: Clear pending to avoid stale resubscriptions
+    this.subscriptionIntent.clear(); // #1222 OBJ-5: a stopped adapter wants nothing; the owners re-declare on start
     this.reconnectAttempts = 0;
     
     console.log('[DEBUG-B9][KrakenWS][STOP_COMPLETE]', {
@@ -743,6 +762,9 @@ export class KrakenWebSocketAdapter extends EventEmitter {
     
     this.isConnected = true;
     this.isConnecting = false;
+    // #1222 OBJ-5: a new socket — requests stamped before this moment went out on a socket that no longer exists.
+    this.socketGeneration++;
+    this.socketOpenedAt = Date.now();
     this.reconnectAttempts = 0;
     // #1220 record item (e): `reconnectWithBackoff`'s counter was never reset, so its delay sat at the cap for the life of
     // the process after the sixth episode ("attempt 2" on 2026-10-13 17:15:30 confirmed it).
@@ -779,13 +801,19 @@ export class KrakenWebSocketAdapter extends EventEmitter {
       console.log(`[I8C-WS-RECONNECT] reconnect_detected`);
       // Clear previous subscriptions - I8C helper will resubscribe all open positions
       this.subscribedSymbols.clear();
-      this.i8cResubscribeAllOpenPositions();
-    } else if (this.subscribedSymbols.size > 0) {
-      // Non-reconnect case: resubscribe to existing symbols
-      console.log(`[${this.MODULE_NAME}] Resubscribing to ${this.subscribedSymbols.size} symbols`);
-      const symbols = Array.from(this.subscribedSymbols);
-      this.subscribedSymbols.clear();
-      this.subscribeToSymbols(symbols);
+      // #1222 OBJ-5 (F-3): the provider covers open positions only, so an ACKed RTB-queued symbol was lost here. The
+      // restore runs after it either way — the helper resolves (never rejects) on no provider or no positions.
+      void this.i8cResubscribeAllOpenPositions().then(() => this.restoreIntent('reconnect'));
+    } else {
+      if (this.subscribedSymbols.size > 0) {
+        // Non-reconnect case: resubscribe to existing symbols
+        console.log(`[${this.MODULE_NAME}] Resubscribing to ${this.subscribedSymbols.size} symbols`);
+        const symbols = Array.from(this.subscribedSymbols);
+        this.subscribedSymbols.clear();
+        this.subscribeToSymbols(symbols);
+      }
+      // #1222 OBJ-5: whatever the intent holds that the sends above did not cover.
+      void this.restoreIntent('open');
     }
 
     if (!this.symbolKeyDisagreements) this.checkSymbolKeyAgreement();
@@ -2463,6 +2491,7 @@ export class KrakenWebSocketAdapter extends EventEmitter {
     
     this.subscribedSymbols.clear();
     this.pendingSubscriptions.clear();
+    this.subscriptionIntent.clear(); // #1222 OBJ-5: a full reset wants nothing restored
     this.symbolStats.clear();
     this.priceTickLogs = [];
     
@@ -3287,6 +3316,9 @@ export class KrakenWebSocketAdapter extends EventEmitter {
 
       const normalizedSymbols = symbols.map(s => normalizeToInternalSymbol(s));
       console.log(`[I8C-STARTUP][ENGINE_INIT_SUBSCRIBE] subscribing_to=[${normalizedSymbols.join(', ')}]`);
+      // #1222 OBJ-5: ADD, never replace — the provider slot is shared by the paper and live engines and the last to
+      // start wins, so a replace would strip the other engine's positions. The provider is crypto-filtered (#559).
+      for (const s of normalizedSymbols) this.addIntentReason(s, 'open');
       
       this.subscribeToSymbols(normalizedSymbols);
       
@@ -3300,9 +3332,10 @@ export class KrakenWebSocketAdapter extends EventEmitter {
   /**
    * Phase 8.8.3-I8C (2): Subscribe to a single new trade immediately upon creation
    */
-  i8cSubscribeNewTrade(symbol: string, reason: string = 'new_trade'): void {
+  i8cSubscribeNewTrade(symbol: string, reason: string = 'new_trade', intentReason?: string): void {
     const normalizedSymbol = normalizeToInternalSymbol(symbol);
     console.log(`[I8C-ENGINE-SUBCALL] symbol=${normalizedSymbol} reason=${reason}`);
+    if (intentReason) this.addIntentReason(normalizedSymbol, intentReason); // #1222 OBJ-5
     this.subscribeToSymbols([normalizedSymbol]);
   }
 
@@ -3325,6 +3358,7 @@ export class KrakenWebSocketAdapter extends EventEmitter {
 
       const normalizedSymbols = symbols.map(s => normalizeToInternalSymbol(s));
       console.log(`[I8C-WS-RESUBSCRIBE][RECONNECT] symbols=[${normalizedSymbols.join(', ')}]`);
+      for (const s of normalizedSymbols) this.addIntentReason(s, 'open'); // #1222 OBJ-5: add, never replace (shared slot)
       
       this.subscribeToSymbols(normalizedSymbols);
     } catch (error) {
@@ -3363,6 +3397,13 @@ export class KrakenWebSocketAdapter extends EventEmitter {
    * Phase 8.8.3-I8C (4): Run subscription health audit
    */
   private async i8cRunSubscriptionAudit(): Promise<void> {
+    await this.i8cRunOpenPositionAudit();
+    // #1222 OBJ-5 (P5-3): the audit IS the retry — a deferred or partly-refused restore is picked up on the next tick,
+    // whether or not any position is open (the early returns below used to end the tick before any RTB symbol was seen).
+    await this.restoreIntent('audit');
+  }
+
+  private async i8cRunOpenPositionAudit(): Promise<void> {
     if (!this.i8cOpenPositionsProvider) {
       return;
     }
@@ -3420,6 +3461,111 @@ export class KrakenWebSocketAdapter extends EventEmitter {
     } catch (error) {
       console.error('[I8C-AUDIT][ERROR] Failed to run audit:', error);
     }
+  }
+
+  // ===== B-PRICE-FEED-COVERAGE (#1222) OBJ-5: subscription intent =====
+
+  /** Declare that `reason` wants `symbol` subscribed. Idempotent. */
+  addIntentReason(symbol: string, reason: string): void {
+    const key = normalizeToInternalSymbol(symbol);
+    let reasons = this.subscriptionIntent.get(key);
+    if (!reasons) {
+      reasons = new Set();
+      this.subscriptionIntent.set(key, reasons);
+    }
+    reasons.add(reason);
+  }
+
+  /** Withdraw `reason` from `symbol`. Returns true when nothing wants the symbol any more (the caller may unsubscribe). */
+  releaseIntentReason(symbol: string, reason: string): boolean {
+    const key = normalizeToInternalSymbol(symbol);
+    const reasons = this.subscriptionIntent.get(key);
+    if (!reasons) return true;
+    reasons.delete(reason);
+    if (reasons.size === 0) {
+      this.subscriptionIntent.delete(key);
+      return true;
+    }
+    return false;
+  }
+
+  /** The owner of `reason` states its whole current set: symbols it no longer lists lose that reason, listed ones gain it.
+   *  No unsubscribe — a symbol nothing wants is simply not restored (T4). */
+  replaceIntentReasonSet(reason: string, symbols: string[]): void {
+    const wanted = new Set(symbols.map(s => normalizeToInternalSymbol(s)));
+    for (const [key, reasons] of Array.from(this.subscriptionIntent.entries())) {
+      if (reasons.has(reason) && !wanted.has(key)) {
+        reasons.delete(reason);
+        if (reasons.size === 0) this.subscriptionIntent.delete(key);
+      }
+    }
+    for (const key of Array.from(wanted)) this.addIntentReason(key, reason);
+  }
+
+  getIntentReasons(symbol: string): string[] {
+    return Array.from(this.subscriptionIntent.get(normalizeToInternalSymbol(symbol)) ?? []).sort();
+  }
+
+  getSubscriptionIntent(): Record<string, string[]> {
+    const out: Record<string, string[]> = {};
+    for (const [key, reasons] of Array.from(this.subscriptionIntent.entries())) out[key] = Array.from(reasons).sort();
+    return out;
+  }
+
+  /** intent − acked − pending − in-flight-on-this-socket, computed now. Pending holds raw caller input, so it is compared
+   *  normalized; a request stamped before this socket opened went out on a dead socket and does not count as in flight. */
+  private restoreCandidates(now: number = Date.now()): string[] {
+    const pending = new Set(Array.from(this.pendingSubscriptions).map(s => normalizeToInternalSymbol(s)));
+    const out: string[] = [];
+    for (const [key, reasons] of Array.from(this.subscriptionIntent.entries())) {
+      if (reasons.size === 0) continue;
+      if (this.subscribedSymbols.has(key) || pending.has(key)) continue;
+      const req = this.subscriptionRequests.get(key);
+      if (req && req.timestamp >= this.socketOpenedAt && now - req.timestamp < this.RESTORE_INFLIGHT_GRACE_MS) continue;
+      out.push(key);
+    }
+    return out;
+  }
+
+  /** Send what the intent holds and the socket lacks, in paced chunks (P5-2, P5-4). Returns the number of symbols sent.
+   *  One restore at a time; a chunk is re-computed when it is sent, and the run stops if the socket it began on is gone. */
+  async restoreIntent(trigger: string): Promise<number> {
+    if (this.restoreInProgress) return 0;
+    if (!this.isConnected) {
+      const wanted = this.subscriptionIntent.size;
+      if (wanted > 0 && (trigger !== 'audit' || this.restoreDeferredLoggedGeneration !== this.socketGeneration)) {
+        if (trigger === 'audit') this.restoreDeferredLoggedGeneration = this.socketGeneration;
+        console.log(`[OBJ-5][RESUB_DEFERRED] reason=not_connected intent=${wanted} trigger=${trigger}`);
+      }
+      return 0;
+    }
+    let chunk = this.restoreCandidates().slice(0, this.RESTORE_CHUNK_SIZE);
+    if (chunk.length === 0) return 0;
+
+    this.restoreInProgress = true;
+    const generation = this.socketGeneration;
+    const reasonsSeen = new Set<string>();
+    let restored = 0;
+    try {
+      while (chunk.length > 0) {
+        for (const key of chunk) {
+          for (const r of Array.from(this.subscriptionIntent.get(key) ?? [])) reasonsSeen.add(r.split(':')[0]);
+        }
+        this.subscribeToSymbols(chunk);
+        restored += chunk.length;
+        if (chunk.length < this.RESTORE_CHUNK_SIZE) break;
+        await new Promise(resolve => setTimeout(resolve, this.RESTORE_CHUNK_GAP_MS));
+        if (!this.isConnected || this.socketGeneration !== generation) {
+          console.log(`[OBJ-5][RESUB_ABORTED] reason=socket_changed restored=${restored} trigger=${trigger}`);
+          break;
+        }
+        chunk = this.restoreCandidates().slice(0, this.RESTORE_CHUNK_SIZE);
+      }
+    } finally {
+      this.restoreInProgress = false;
+    }
+    console.log(`[OBJ-5][RESUB] restored=${restored} reasons=${Array.from(reasonsSeen).sort().join(',')} trigger=${trigger}`);
+    return restored;
   }
 
   /**
@@ -4296,6 +4442,10 @@ export class KrakenWebSocketAdapter extends EventEmitter {
         this.subscribeToSymbols(symbolsToResubscribe);
         console.log(`[9.0][HEALTH] Resubscribed to ${symbolsToResubscribe.length} symbols`);
       }
+      // #1222 OBJ-5 (F-3): the snapshot above is ACKed symbols only — anything pending was cleared with it and lost.
+      // The intent restore sends what is wanted and still missing; not connected yet ⇒ one deferred line, and the
+      // audit restores on its next tick.
+      await this.restoreIntent('soft_resubscribe');
     }, 3000);
   }
 

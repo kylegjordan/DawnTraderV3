@@ -2532,6 +2532,8 @@ class ReadyToBuyService {
     if (resolvedAssetClass === 'crypto_spot') {
       try {
         const { krakenWebSocketAdapter } = await import('../../exchanges/kraken/kraken-websocket-adapter.js');
+        // #1222 OBJ-5: record the intent even when already subscribed, so a reconnect restores it (F-3).
+        krakenWebSocketAdapter.addIntentReason(normalizedSymbol, `rtb:${input.mode}`);
         if (!krakenWebSocketAdapter.getSubscribedSymbols().includes(normalizedSymbol)) {
           krakenWebSocketAdapter.i8cSubscribeNewTrade(normalizedSymbol, 'rtb_queued');
         }

@@ -48,7 +48,7 @@ import { computeExposureBias, getBiasSummaryForLog } from '../utils/strategyBias
 // threshold changes, ACT scaler logic rewrites.
 // Per Langston C-2: shared global ACT pool UNCHANGED — per-class isolation
 // comes from the bucket structure, not from splitting the ACT scaler.
-import { safeResolveAssetClass, type AssetClass } from '../../shared/asset-classes.js';
+import { asValidAssetClass, safeResolveAssetClass, type AssetClass } from '../../shared/asset-classes.js';
 
 // B79.0n.RTB: active asset classes that get their own bucket set. Reserved-
 // future classes (equity_spot/equity_futures/commodity_futures/fx_spot)
@@ -331,6 +331,7 @@ class RTBRefreshService {
     for (const mode of ['paper', 'live'] as TradingMode[]) {
       const signals = await readyToBuyService.getQueuedSignals(mode);
       if (!signals) continue;
+      await this.syncRtbSubscriptionIntent(mode, signals);
 
       for (const signal of signals) {
         const signalKey = `${mode}:${signal.symbol}:${signal.strategy}`;
@@ -373,6 +374,20 @@ class RTBRefreshService {
         this.signalBuckets.get(assignment.assetClass)?.get(assignment.bucketIndex)?.delete(signalKey);
         this.lastBucketAssignment.delete(signalKey);
       }
+    }
+  }
+
+  /** #1222 OBJ-5: the queue is the whole truth for the 'rtb:<mode>' intent — a row that left the queue stops being restored
+   *  on reconnect (no unsubscribe). Crypto only: an xStock has no Kraken feed. Never throws into the refresh. */
+  private async syncRtbSubscriptionIntent(mode: TradingMode, signals: Array<{ symbol: string; assetClass?: unknown }>): Promise<void> {
+    try {
+      const crypto = signals
+        .filter(s => (asValidAssetClass(s.assetClass) ?? safeResolveAssetClass(s.symbol, 'kraken')) === 'crypto_spot')
+        .map(s => s.symbol);
+      const { krakenWebSocketAdapter } = await import('../exchanges/kraken/kraken-websocket-adapter.js');
+      krakenWebSocketAdapter.replaceIntentReasonSet(`rtb:${mode}`, crypto);
+    } catch (err) {
+      console.warn(`[OBJ-5][RTB_INTENT_SYNC_FAILED] mode=${mode}:`, err instanceof Error ? err.message : err);
     }
   }
 
