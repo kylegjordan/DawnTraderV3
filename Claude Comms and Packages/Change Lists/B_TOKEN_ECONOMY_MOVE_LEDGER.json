@@ -465,6 +465,14 @@
    "sha256": "1e285206dfb40b4e19b6a0aa2e653392942a8dbf4afc1e8c8634fdf729186fbc",
    "bytes": 102,
    "pointer": " *(`P5-62`)*"
+  },
+  {
+   "id": "P5-63",
+   "origin_heading": "5. Critical Rules — THE EIGHT (read-first index)",
+   "destination": "1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md",
+   "sha256": "aadb7fca3f8eb5d57c36fd3a1d88b74e8188f013d8def51dc72ef952a42ad1a4",
+   "bytes": 119,
+   "pointer": " *(`P5-63`)*"
   }
  ],
  "citations": {

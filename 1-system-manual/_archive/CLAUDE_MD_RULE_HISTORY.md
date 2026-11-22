@@ -782,3 +782,9 @@ Role, communication style, the plain-language mandate, the two-paragraph default
 
 (added during B79.0n.CONFIDENCE-CHAIN 2026-05-25 when Memorial Day paused the live xstock signal flow)
 <!-- /P5-MOVED id=P5-62 -->
+
+<!-- P5-MOVED id=P5-63 -->
+### P5-63 — moved from CLAUDE.md, under "5. Critical Rules — THE EIGHT (read-first index)"
+
+(Relocated from the shared MEMORY.md 2026-07-25; the content was already here, so this is a pointer index, not a copy.)
+<!-- /P5-MOVED id=P5-63 -->
