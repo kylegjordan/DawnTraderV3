@@ -44,8 +44,10 @@ There is deliberately no second batch-local latch.
 
 1. **Producer census:** the only production caller of `runCryptoUniverseRefresh` is the recovery callback in `server/services/crypto-universe-refresh-cron.ts`; the other caller is its unit-test helper. The cron callback routes natural fires through `runNatural`; the missed-event listener routes catch-up through `dispatchMissed`.
 2. **One process:** `cron-occurrence-runner.ts` keeps one lane per job. `lane.draining` guards the drain and the loop awaits each scheduled item before shifting the next. Natural and missed occurrences for `crypto_universe_refresh_cron` therefore cannot overlap in one app process.
-3. **Across processes:** `PgOccurrenceStore.withJobLock` acquires a database advisory lock keyed by the job name and holds it until its callback returns. `executeScheduled` invokes the job's sole `recovery.run` inside that callback. A second app process receives `acquired:false`, waits, then re-enters the claim/duplicate decision; it does not run the refresh concurrently.
-4. **No bypass:** tree-wide production census finds exactly one `recovery.run(` call, the call inside that locked scheduled execution. Registration itself is idempotent through `_cronTask`.
+3. **Across app processes, while the lock session lives:** `PgOccurrenceStore.withJobLock` acquires a database advisory lock keyed by the job name and holds it until its callback returns. `executeScheduled` invokes the job's sole `recovery.run` inside that callback. A second app process receives `acquired:false`, waits, then re-enters the claim/duplicate decision.
+4. **No in-app acting bypass:** tree-wide production census finds exactly one `recovery.run(` call, the call inside that locked scheduled execution. Registration itself is idempotent through `_cronTask`. The staging root crontab's retired B74 script is still scheduled until Step 6 removes it; it computes and writes its inert cache but cannot call `runCryptoUniverseRefresh` or mutate the in-process recorder.
+
+**Fresh-reader limit:** a PostgreSQL advisory lock is owned by its database session. If that session dies while the Node process and the already-entered callback keep running, the database releases the lock and another process can acquire it; the shared runner has no fencing token that cancels the first callback. A second local latch would not close that cross-process state. Gate C names this residual for Coltrane rather than claiming a stronger guarantee than the shared mechanism provides.
 
 The existing occurrence-runner tests own that shared mechanism. Gate C adds no weaker source-text latch beside it.
 
@@ -56,6 +58,7 @@ File: `server/startup/passive-archive-bootstrap.ts`
 - Bootstrap reads `b74_crypto_capture_enabled` into `cryptoEnabled`.
 - Only the `if (cryptoEnabled)` arm calls `startCryptoSpotArchiver`; the same promise chain registers `registerCryptoUniverseRefreshCron` only after the start attempt settles.
 - The false arm calls neither function. The refresh therefore cannot start the recorder while the operator has crypto capture disabled.
+- This is a **boot switch**, not a live kill switch. A later database flip to false does not stop an already-running recorder or cron; a restart is the application point of the setting, matching the existing B74 capture-switch contract.
 - Deliberate recovery posture for review: when capture is enabled but the initial archiver start throws, its local catch logs the failure and the chain still registers the daily refresh. That later refresh may recover the recorder through OBJ-4. This is not a switch bypass because `cryptoEnabled` was true, but it is included here as the boundary Coltrane should attack.
 
 ## Gate C exact diff
@@ -75,12 +78,18 @@ Against the rebased Gate B content, Gate C changes only:
 - Focused total: 77/77 across the three files above.
 - TypeScript baseline: current 314 errors, baseline 314 errors; no regression.
 
+## Fresh-reader record
+
+`REVIEWER: claim-only · what other states are consistent with the production single-flight and capture-switch objects · HIT: the switch is boot-only; a swallowed startup failure still arms recovery; the inert root-crontab predecessor remains until Step 6; advisory-lock session loss is not fenced · re-derived y`
+
+All four are now stated above. The first two are deliberate existing contracts, the third cannot mutate the acting recorder and is removed at Step 6, and the fourth is the honest limit of the inherited shared occurrence runner for Coltrane to judge.
+
 ## Review ask
 
 At the exact pushed ref named in the Discord dispatch, rule on **Gate C only**:
 
 1. Does the persistent three-handoff page suppress one-off add failures without hiding a repeated symbol failure, and is its clear condition safe?
-2. Does the shared occurrence runner actually serialize every production path into this refresh, in-process and across processes, without a bypass?
-3. Does the capture switch prevent the daily refresh from starting or changing crypto capture while disabled, including bootstrap ordering?
+2. Is the shared occurrence runner the correct single-flight boundary for every **in-app acting** path, given the explicitly stated advisory-lock session-loss limit and the inert root-crontab predecessor that remains until Step 6?
+3. Does the boot-time capture switch prevent the daily refresh from starting or changing crypto capture when disabled at boot, and is the start-failure recovery ordering acceptable?
 
 PROCEED or SEND BACK with exact evidence.
