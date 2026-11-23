@@ -234,8 +234,8 @@ export async function runCryptoUniverseRefresh(
 
   // The running set is read AFTER the multi-batch fetch and the row reads, not before them: the recorder can remove
   // symbols outside a refresh (a rejected or timed-out add is withdrawn), so a snapshot taken before those awaits
-  // could diff against a set that no longer exists (Langston Gate A carry 1). The pins read is the only await left
-  // between this read and decideRefresh.
+  // could diff against a set that no longer exists (Langston Gate A carry 1). The pins module load and pins read are
+  // the two awaits left between this read and decideRefresh; neither changes recorder membership.
   const running = archiver.getCryptoRecorderRunningSymbols();
   const countBefore = running.length;
 
