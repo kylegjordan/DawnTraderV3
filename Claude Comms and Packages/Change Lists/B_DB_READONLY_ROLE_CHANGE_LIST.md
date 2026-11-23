@@ -203,8 +203,9 @@ the CA 0644, `/etc/sudoers.d/dtsql` 0440, `/etc/dt-sql` 0750 `root:dtsql`, priva
 3. Install helper, setup, CA, `/etc/dt-sql` 0750 `root:dtsql`, `/var/lib/dt-sql` 0755; `chmod 0640 log.jsonl`.
 4. `visudo -cf sudoers-dtsql` → install `/etc/sudoers.d/dtsql` 0440 → `sudo -l -U deploy` (**after**, quoted).
 5. openssl controls (verify-full against the CA copy succeeds; against a wrong CA fails).
+5a. **Install the exact reviewed `dt-sql` before setup**, prove its installed hash matches the reviewed blob, and repeat the no-login setup import with `locked_attempt=True`. *(Coltrane order correction, 2026-11-23T22:20:09Z: the setup calls the new dt-sql's `locked_attempt(..., redact=...)`; the previous live dt-sql has no such function, so the earlier create-before-install order could not execute.)*
 6. `dt-sql-role-setup --create` → `--verify` (exit 0).
-7. Install the new `dt-sql`; one live read showing `current_user = dt_reader`.
+7. With the new `dt-sql` already installed at 5a, one live read showing `current_user = dt_reader`.
 8. Rename-file drill (move `reader.env` aside → dt-sql refuses before connecting, no lock) → restore.
 9. `--rotate` dry run → `--verify`.
 9a. **Install the new checker** `comms-infra/staging/dt-install-drift` → `/usr/local/sbin/dt-install-drift` 0700 root:root, and append `<deploy-sha> comms-infra/staging/dt-install-drift` to `/var/lib/dt-install-drift/installed.sha`. *(Langston Step-4 r2 amendment, msg `1574167979351085170`: r1 and r2 both change the checker, live is from `4456f515d`, so without this the three C4 rows are inert at Step 6.)*
