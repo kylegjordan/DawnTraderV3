@@ -219,3 +219,33 @@ Timezone line, then Step 10.
 table rule, which the lane escalated as built. **Whether a critical no-rule alert should carry the table's fallback
 owner or a provisional domain owner is a question for Step 10, not a defect found here. NOT RE-READ:** I have not
 traced which lane branch picked CC-B.
+
+## Daily read — day 2 catch-up (INFRA Codex, run 2026-11-23T22:49:00Z)
+
+**Box:** Helsinki, `Timezone=Etc/UTC` (`timedatectl`) — UTC, so the F-3 and pin legs stand. **Inputs:** tool + lane +
+route + table from the mirror at `187283b5de01acea562b220dac06ccb350da512a` (table blob
+`ff139a8904479c26b1f1048a3bae64ef6a740600`); journal since T'; alerts = a WHOLE copy of staging's
+`system-alerts.jsonl`, **3,587 lines on both sides of the copy**. Self-test **27 checks, 0 failures, exit 0**; read
+exit 0. Window `[2026-11-21T00:13:33, 2026-11-23T22:49:00)`.
+
+| UTC day | lane markers | agree | OWNER DIFFERS | rule not stated | fallback-to-precedent | unjoined | no rule text |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| **2026-11-22 (the complete day-2 population)** | **17** | **17** | **0** | **0** | **0** | **0** | **0** |
+| 2026-11-23 (partial, to 22:49Z) | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+
+- **C-2 largest group, 11-22:** one distinct id, tied across 15 groups; the named representative was
+  `B-TOKEN-WATCH-FOLLOWUP-MEMORY P<N>: the re-registered <N> h store-growth read is due - owner Infra Claude` →
+  CC-INFRA.
+- **F-3:** 0 lane-chose-different notes on 11-22. This is a reading over 17 joined markers, not silence.
+- **F-4:** every marker was recomputed at its batch's pinned commit. Six pinned commits used table blob
+  `a9f00990f721`; one marker pinned at `3a85372e5b2a` used the newer blob `ff139a890447`. The tool therefore measured
+  across a real table edit without substituting the latest table, and all 17 still agreed.
+- **(iii) fallback, 11-22:** no-precedent 0 + to-precedent 0; journal 0.
+- **(iv), 11-22:** lane-post escalations 0; journal escalations 2 (one table-rule) over 13 batches. No 11-22 id
+  changed owner. The whole-window churn remains the day-1 `a3b1bc1e` CC-INFRA → CC-A event already recorded above.
+- **(v):** due now 30; installed `discord-langston-bridge.py`, `alert_lane.py`, and `alert_owner_route.py` all equal
+  the ref. The staging deploy record remains `c21c1502a` at 2026-11-21T05:08:44Z, claimed `cc-c`; no lane file moved.
+
+**Reading:** the complete day-2 population is **17 of 17 agreement, 0 OWNER DIFFERS, 0 fallback and 0 unjoined**.
+The partial 11-23 row is explicitly **EMPTY READ, not a pass**: Langston is off for the Codex shift and his bridge
+logged no lane batch that day. It is carried visibly and is not used to satisfy a daily criterion.
