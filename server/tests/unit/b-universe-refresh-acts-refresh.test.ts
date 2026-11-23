@@ -24,6 +24,7 @@ const h = vi.hoisted(() => {
     pinsThrow: false,
     applyCalls: [] as Array<{ add: string[]; drop: string[]; occurrenceId: string }>,
     untrackedOverflowAdds: [] as string[],
+    addFailures: { rejected: [] as string[], unconfirmed: [] as string[] },
     CFG: {} as Record<string, number>,
   };
 });
@@ -66,7 +67,12 @@ vi.mock('../../db.js', () => {
 });
 
 vi.mock('../../services/passive-archive/crypto-spot-archiver.js', () => ({
-  takeCryptoAddFailures: () => ({ rejected: [], unconfirmed: [] }),
+  takeCryptoAddFailures: () => {
+    const result = { rejected: [...h.addFailures.rejected], unconfirmed: [...h.addFailures.unconfirmed] };
+    h.addFailures.rejected.length = 0;
+    h.addFailures.unconfirmed.length = 0;
+    return result;
+  },
   getCryptoRecorderRunningSymbols: () => [...h.running],
   applyCryptoUniverseChange: async (args: { add: string[]; drop: string[]; occurrenceId: string }) => {
     h.applyCalls.push(args);
@@ -105,8 +111,8 @@ vi.mock('../../services/module-constants-service.js', () => ({
 }));
 
 import {
-  baselineFrom, decideRefresh, nextConsecutiveRefusals, rungBody, rungFor, symmetricDiffShare,
-  RUNG_PREFIX, REFRESH_ACTOR,
+  addFailureFlapSymbols, baselineFrom, decideRefresh, nextConsecutiveRefusals, rungBody, rungFor, symmetricDiffShare,
+  ADD_FLAP_KEY, RUNG_PREFIX, REFRESH_ACTOR,
 } from '../../services/crypto-universe-refresh.js';
 import type * as RefreshModule from '../../services/crypto-universe-refresh.js';
 
@@ -149,6 +155,8 @@ beforeEach(() => {
   h.pinsThrow = false;
   h.applyCalls.length = 0;
   h.untrackedOverflowAdds.length = 0;
+  h.addFailures.rejected.length = 0;
+  h.addFailures.unconfirmed.length = 0;
   h.CFG = { universe_refresh_max_drop_share: 0.30, universe_refresh_confirm_max_diff_share: 0.50 };
   writeFileSync(ALERTS_FILE, '');
   vi.spyOn(console, 'log').mockImplementation(() => {});
@@ -158,6 +166,15 @@ afterEach(() => { vi.restoreAllMocks(); });
 
 // ───────────────────────────────────────────────────────────────────────────────────────────────────────────────
 describe('the pure gate', () => {
+  it('names only a symbol that failed now and in both preceding run rows', () => {
+    const rows = [
+      { rejectedAdds: ['A/USD'], unconfirmedAdds: ['B/USD'] },
+      { rejectedAdds: [], unconfirmedAdds: ['A/USD'] },
+    ];
+    expect(addFailureFlapSymbols({ rejected: ['A/USD', 'B/USD'], unconfirmed: [] }, rows)).toEqual(['A/USD']);
+    expect(addFailureFlapSymbols({ rejected: ['A/USD'], unconfirmed: [] }, rows.slice(0, 1))).toEqual([]);
+  });
+
   it('symmetricDiffShare is |a Δ b| / |b|, and an empty baseline can confirm nothing', () => {
     expect(symmetricDiffShare(['A', 'B', 'C'], ['A', 'B', 'D'])).toBeCloseTo(2 / 3);
     expect(symmetricDiffShare(['A'], [])).toBe(Number.POSITIVE_INFINITY);
@@ -264,6 +281,28 @@ describe('the run — arm (a), degeneracy and arm (b) against the real loader ga
       rejectedAdds: [],
       unconfirmedAdds: [],
       untrackedOverflowAdds: [sym(600)],
+    });
+  });
+
+  it('pages a symbol after three consecutive failed-add handoffs, then clears after a clean noop', async () => {
+    h.universe = universeOf(range(0, 469));
+    for (let i = 0; i < 3; i++) {
+      h.addFailures.rejected = [sym(600)];
+      await run();
+    }
+
+    const open = alerts.readAllAlerts().filter(a => a.dedupe_key === ADD_FLAP_KEY && a.state !== 'resolved');
+    expect(open).toHaveLength(1);
+    expect(open[0].title).toMatch(/3 consecutive daily refreshes/);
+    expect(open[0].metadata).toMatchObject({ symbols_at_mint: [sym(600)], threshold_runs: 3 });
+
+    const clean = await run();
+    expect(clean.outcome).toBe('noop');
+    const closed = alerts.readAllAlerts().filter(a => a.dedupe_key === ADD_FLAP_KEY);
+    expect(closed).toHaveLength(1);
+    expect(closed[0]).toMatchObject({
+      state: 'resolved', resolved_by_claimed: REFRESH_ACTOR, resolved_by_transport: 'engine',
+      resolution_evidence: `crypto_universe_refresh_runs ${lastRow().id}`,
     });
   });
 
