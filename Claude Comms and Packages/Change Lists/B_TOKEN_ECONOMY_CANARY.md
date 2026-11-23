@@ -120,6 +120,7 @@ Precedence audit: none of the five DawnTrader roots has a project `.codex/config
 | ordinary startup | fresh `codex exec` thread `01a20a7b-55eb-7980-989a-75180993ab91` | exact `CANARY_READY`; rollout recorded context window 258,400 and 20,708 total tokens | PASS |
 | auto-compaction mechanism without spending 250k | isolated canary thread `01a20a7c-91e1-7ea0-b4df-91d2bb6c356b`, CLI-only override `model_auto_compact_token_limit=20000`, scope `total` | second turn emitted rollout type `compacted` and `ContextCompaction`; the override was confined to this canary invocation | PASS |
 | continuity across compaction | same low-threshold canary, second turn | exact `POST_COMPACT_OK` after compaction | PASS |
+| five-folder smoke check | `codex --strict-config doctor --json` from PM, OLD, NEW, ANALYST and INFRA roots | all five reported `config.load: ok`, the same user config, parse `ok`, and no project `.codex/config.toml` | PASS (5/5 folders) |
 | production threshold | user config + strict load + precedence audit | 250,000 total tokens | CONFIGURED; an organic 250k crossing is not manufactured because that would waste the allowance this batch is intended to preserve |
 
 **OBJ-3 canary verdict for review:** PASS. Codex accepts the production setting, the five DawnTrader roots have no higher-precedence project value, and an isolated low-threshold control proves that the same setting path causes compaction while preserving the session. The production 250,000-token threshold remains in the user config; the low-threshold override did not persist.
