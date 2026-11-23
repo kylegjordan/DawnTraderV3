@@ -226,6 +226,8 @@ export class RecorderConnection {
   private configMissingWarned = false;
   /** Whether this process has looked for an already-open silent row to adopt (once, at the first tick). */
   private adoptChecked = false;
+  /** Permanent retirement fence. Set synchronously before an emptied shard's final alert resolve. */
+  private retired = false;
 
   constructor(readonly opts: RecorderConnectionOptions) {
     _registry.add(this);
@@ -505,13 +507,14 @@ export class RecorderConnection {
 
   /** One watch tick: the silence check, then the alert raise / clear. */
   async watchTick(nowMs: number): Promise<WatchDecision> {
-    if (!this.opts.isEnabled()) return 'skip';
+    if (this.retired || !this.opts.isEnabled()) return 'skip';
     if (!this.adoptChecked) {
       this.adoptChecked = true;
       try {
         if (await (await _alertDeps()).hasOpen(this.dedupeKey())) this.alertRaised = true; // adopt it: this process can clear it
       } catch { this.adoptChecked = false; /* retry next tick */ }
     }
+    if (this.retired) return 'skip';
     const cfg = this.resolveConfig();
     if (!cfg) return 'skip';
     const decision = decideSilence({
@@ -571,6 +574,7 @@ export class RecorderConnection {
   private dedupeKey(): string { return `passive-archive-silent:${this.opts.recorderKey}`; }
 
   private async raiseSilentAlert(cfg: RecorderWatchConfig, nowMs: number): Promise<void> {
+    if (this.retired) return;
     // Set BEFORE the write: a re-entrancy guard (ticks are not awaited and a slow write can overlap the next one).
     // Reset in the catch: a FAILED write must be retried next tick, or the page is lost for the life of the process
     // on the very connection that is dead (Langston Step-4 BLOCKER).
@@ -580,6 +584,7 @@ export class RecorderConnection {
     const shared = silentOthers.length > 0 && silentOthers.length === all.length - 1;
     try {
       const deps = await _alertDeps();
+      if (this.retired) { this.alertRaised = false; return; }
       await deps.addAlert({
         triggers_at: new Date(nowMs),
         category: 'breakage',
@@ -594,6 +599,16 @@ export class RecorderConnection {
         metadata: { recorderKey: this.opts.recorderKey, consecutiveForced: this.consecutiveForced, forcedInLastHour: this.forcedAtMs.length, sharedPause: shared, silentOthers },
         dedupe_key: this.dedupeKey(),
       });
+      // Retirement can win while the append is in flight. Its first resolve then preceded this new row, so resolve
+      // once more after the write lands; no later watch tick exists for a deregistered connection.
+      if (this.retired) {
+        try {
+          await deps.resolveByKey(this.dedupeKey(), RECORDER_WATCHDOG_ACTOR, 'connection retired while silent alert write was in flight', 'engine');
+          this.alertRaised = false;
+        } catch (err) {
+          console.error(`[B74][${this.opts.label}][WATCH] silent alert landed during retirement and its final resolve failed — resolve it by hand:`, err);
+        }
+      }
     } catch (err) {
       this.alertRaised = false;
       console.error(`[B74][${this.opts.label}][WATCH] failed to raise the silent-connection alert (will retry next tick):`, err);
@@ -648,6 +663,8 @@ export class RecorderConnection {
    * connection that no longer owns any symbol. Returns whether the resolve succeeded.
    */
   async stopAndResolve(evidence: string): Promise<boolean> {
+    // This assignment must precede every await: watch ticks are fire-and-forget and an alert write may already be in flight.
+    this.retired = true;
     let ok = true;
     try {
       const deps = await _alertDeps();
