@@ -217,6 +217,29 @@ describe('an add to a running shard — incremental, with its own req_id, never 
     expect(takeCryptoAddFailures()).toEqual({ rejected: [], unconfirmed: [] });
     expect(getCryptoRecorderRunningSymbols()).toEqual(['B/USD', 'C/USD']);
   });
+
+  it('a queued add survives a socket close and confirms from the no-req_id replies on reopen', async () => {
+    await boot(['A/USD', 'B/USD']);
+    const first = sockets[0];
+    openAndAnswer(first);
+    first._close();
+
+    const res = await applyCryptoUniverseChange({ add: ['C/USD'], drop: [], occurrenceId: 'occ-reopen' });
+    expect(res.added).toEqual(['C/USD']);
+    expect(reqFrames(first, 'subscribe').filter((f: any) => f.params.symbol.includes('C/USD'))).toEqual([]);
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    const reopened = sockets[1];
+    openAndAnswer(reopened);
+    await vi.advanceTimersByTimeAsync(15_001);
+
+    const replayFrames = frames(reopened).filter((f: any) => f.method === 'subscribe' && f.req_id === undefined);
+    expect(replayFrames.length).toBe(2);
+    expect(replayFrames.every((f: any) => f.params.symbol.includes('C/USD'))).toBe(true);
+    expect(getCryptoRecorderRunningSymbols()).toEqual(['A/USD', 'B/USD', 'C/USD']);
+    expect(takeCryptoAddFailures()).toEqual({ rejected: [], unconfirmed: [] });
+    expect(reopened.terminated).toBe(false);
+  });
 });
 
 describe('drops — an emptied shard is resolved, then stopped; ids are never reused', () => {

@@ -80,10 +80,7 @@ export interface Shard {
   ohlcFramesSkipped: number;
 }
 
-const state = {
-  enabled: true,
-  shards: [] as Shard[],
-};
+const state = { shards: [] as Shard[] };
 
 /** B-CRYPTO-FEED-WATCHDOG (C1/P6): the subscribed universe, symbol → shard id. Set at boot, then changed ONLY by
  *  `applyCryptoUniverseChange` and by an add that fails confirmation (B-UNIVERSE-REFRESH-ACTS). */
@@ -410,7 +407,9 @@ function makeShardConnection(shard: Shard): RecorderConnection {
     configAssetClass: ASSET_CLASS,
     onOpen: (ws) => subscribe(shard, ws),
     onMessage: (raw) => handleMessage(shard, raw),
-    isEnabled: () => state.enabled,
+    // The operator switch gates both the archiver start and refresh-cron registration in passive-archive-bootstrap.
+    // Once constructed, a crypto shard stays enabled until its universe retires it through stopAndResolve.
+    isEnabled: () => true,
     // Two channels, one reply per symbol each (wire capture 2026-11-04).
     expectedSubscribeReplies: () => shard.symbols.length * 2,
     onAddResult: (symbol, outcome, nowMs) => onShardAddResult(shard, symbol, outcome, nowMs),
@@ -439,7 +438,7 @@ function launchShard(s: Shard): void {
 
 // Health log every 60s across all shards
 setInterval(() => {
-  if (!state.enabled || state.shards.length === 0) return;
+  if (state.shards.length === 0) return;
   const now = Date.now();
   for (const shard of state.shards) {
     const lastMsgAge = shard.lastMsgAt > 0 ? now - shard.lastMsgAt : -1;
@@ -485,7 +484,6 @@ export async function startCryptoSpotArchiver(): Promise<void> {
   const shardCount = Math.max(1, Math.ceil(symbols.length / shardSize));
   const buckets = assignToShard(symbols, shardCount);
 
-  state.enabled = true;
   symbolShard.clear();
   subscribedAtMs.clear();
   state.shards = buckets.map(symbols => newShard(symbols));
@@ -579,10 +577,7 @@ export async function applyCryptoUniverseChange(
     out.shardsOpened.push(s.id);
     out.added.push(...s.symbols);
   }
-  if (overflow.length > 0) {
-    state.enabled = true;
-    startRecorderWatch();
-  }
+  if (overflow.length > 0) startRecorderWatch();
   return out;
 }
 
@@ -607,7 +602,6 @@ export { handleMessage as _handleCryptoMessageForTests };
 
 /** Test-only: install shards (with optional connections) as the running universe, without opening sockets. */
 export function _installShardsForTests(shards: Shard[]): void {
-  state.enabled = true;
   state.shards = shards;
   symbolShard.clear();
   for (const sh of shards) for (const sym of sh.symbols) symbolShard.set(sym, sh.id);

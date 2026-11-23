@@ -328,6 +328,38 @@ describe('Step-4 BLOCKER — a failed alert write is retried, never lost', () =>
     expect(alerts.resolved).toEqual(['passive-archive-silent:test:shard0']);
     expect(alerts.added.length).toBe(0);
   });
+
+  it('retirement is the last word when a silent-alert write is already in flight', async () => {
+    let releaseWrite!: () => void;
+    let markStarted!: () => void;
+    const writeStarted = new Promise<void>((resolve) => { markStarted = resolve; });
+    const writeGate = new Promise<void>((resolve) => { releaseWrite = resolve; });
+    _setRecorderAlertDepsForTests(async () => ({
+      addAlert: async (o: any) => {
+        alerts.added.push(o);
+        markStarted();
+        await writeGate;
+        return o;
+      },
+      resolveByKey: async (k: string) => { alerts.resolved.push(k); return [k]; },
+      hasOpen: async () => false,
+    }));
+    conn = makeConn();
+    (conn as any).consecutiveForced = 3;
+
+    const tick = conn.watchTick(Date.now());
+    await writeStarted;
+    await conn.stopAndResolve('test retirement');
+    releaseWrite();
+    await tick;
+
+    expect(alerts.added.filter((a) => a.dedupe_key === 'passive-archive-silent:test:shard0').length).toBe(1);
+    expect(alerts.resolved).toEqual([
+      'passive-archive-silent:test:shard0',
+      'passive-archive-silent:test:shard0',
+    ]);
+    expect(await conn.watchTick(Date.now())).toBe('skip');
+  });
 });
 
 describe('P6 — the crypto recorder\'s per-symbol clock (C1, C2)', () => {
