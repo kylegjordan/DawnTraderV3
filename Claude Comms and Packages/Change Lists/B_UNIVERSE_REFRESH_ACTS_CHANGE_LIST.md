@@ -1,6 +1,6 @@
 # B-UNIVERSE-REFRESH-ACTS — STEP 4 CHANGE LIST (plan row 18, #1018, KD-26)
 
-**Owner:** CC-A (OLD Claude) · **Reviewer:** Langston · **Date:** 2026-11-22
+**Owner:** CC-A (OLD Claude / OLD Codex on the Codex shift) · **Reviewer:** Langston, then Coltrane · **Date:** 2026-11-22 to 2026-11-24
 
 ## DISPATCH HEADER (workflow-04, three fields)
 
@@ -124,3 +124,17 @@ Subscribe `[BTC/USD, ETH/USD, NOTAREAL/USD]` with `req_id 4101`, then unsubscrib
 
 ## DEPLOY NOTE
 Agreed with NEW Claude (1574117688643428434): earliest 11-25 02:30Z, folded into that deploy only if Step-4 PROCEED and 4/4 CI land before 11-23 21:00Z.
+
+That fold cutoff was missed. No deploy is authorized here; the existing deploy hold at and after `a2f5cbc6d` remains in force.
+
+## CODEX STEP-4 GATE RECORD
+
+The inherited Step-4 review was split into three one-gate reads. The review refs remain the exact pushed objects even though the working commits were later rebased onto the current shared head.
+
+| gate | exact reviewed/ref-to-review | result / object |
+|---|---|---|
+| A | `fecc618de9bdfa616a3984935767b4cec4437c7c` | **Coltrane PROCEED** 2026-11-23 22:30:31Z; Langston C4 folded by naming both awaits before `decideRefresh` |
+| B | `bd4b0fa164a660da12707254db64f0191dd80ebb` | **Coltrane PROCEED** 2026-11-23 22:46:46Z; retirement fence, reopen replay, dead enabled flag, accepted-vs-placed wording and overflow evidence discharged; 75/75 independent focused tests |
+| C | exact ref in the Gate C Discord dispatch | repeated-add page + clear rule; shared occurrence-runner single-flight location; crypto capture-switch ownership |
+
+Gate C detail and the exact prior-verdict carry are in `Claude Comms and Packages/Langston Design Asks/B_UNIVERSE_REFRESH_ACTS_GATE_C_CODEX_HANDOVER.md`.
