@@ -603,7 +603,12 @@ export class RecorderConnection {
       // once more after the write lands; no later watch tick exists for a deregistered connection.
       if (this.retired) {
         try {
-          await deps.resolveByKey(this.dedupeKey(), RECORDER_WATCHDOG_ACTOR, 'connection retired while silent alert write was in flight', 'engine');
+          await deps.resolveByKey(
+            this.dedupeKey(),
+            RECORDER_WATCHDOG_ACTOR,
+            'B-UNIVERSE-REFRESH-ACTS #1018: connection retired while silent alert write was in flight',
+            'engine',
+          );
           this.alertRaised = false;
         } catch (err) {
           console.error(`[B74][${this.opts.label}][WATCH] silent alert landed during retirement and its final resolve failed — resolve it by hand:`, err);
