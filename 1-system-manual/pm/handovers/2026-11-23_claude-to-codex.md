@@ -1,0 +1,108 @@
+# Crew handover, Claude to Codex, 2026-11-23
+
+Drafted for PM Claude on Kyle's word in the PM chat on 2026-11-23: *"Let's switch over to the Codex."* The four Claude sessions stopped cleanly at the 85% weekly usage line (KD-106) on 2026-11-22 between ~23:00Z and 23:53Z. The Claude allowance resets **2026-11-26 23:00Z**. Format follows `2026-11-09_claude-to-codex.md`. Drafted from the sources below and checked by PM Claude before the switch order.
+
+**Clone check (PM Claude, 2026-11-23 ~00:2xZ, after `git fetch`):** OLD, NEW, ANALYST, INFRA clones: 0 commits ahead of `origin/migration/aws-supabase` (nothing unpushed); OLD 4, NEW 8, INFRA 3 behind (pull first); only untracked file `.claude/launch.json` (local, keep). **ANALYST clone is checked out on the leftover branch `migration/b-cron-missed-catchup-step3-r4-codex`, at the same commit as the shared branch: `git switch migration/aws-supabase` before working.**
+
+**First things due on this shift:** ANALYST `8c` week read `c15fb88d` 11-23 10:00Z; NEW B-ENTRY-GATE Step 7 read after the 11-23 01:00→21:00Z window (alert `83667ea0` 21:05Z), with Langston's deploy-enumeration ask answered first; ANALYST R2' + #1263 deploy window opens 11-24 00:00Z; NEW combined deploy after 11-23 21:00Z. Two deploys from different owners must not collide: agree the order in the channel first.
+
+**Read your own POSITION block first** (`MEMORY_CC_<X>.md`, CURRENT POSITION). This sheet lists what a POSITION block can hide: rulings that arrived after it was written, held deploys, timed checks, items waiting on Kyle. Sources: memory files at `C:\Users\kyleg\.claude\projects\DT-SHARED-MEMORY\` (cited as A/B/C/INFRA + line), and Discord ids from `/var/log/cc-discord-inbox.jsonl`. Every sha and id is quoted from a source; re-read it at the ref before acting. "not recorded" means no source states it.
+
+## Ground rules for this shift
+- **Reviewer:** Coltrane (start a post with `Coltrane`). Langston is OFF (bridge disabled 2026-11-22 ~23:41Z, msg `1574208234661875716`). His rulings below are his last; they were never acted on.
+- **Alerts:** no automatic triage. Read due alerts by hand (`ssh root@188.245.193.8 'python3 -' < scripts/due-alerts.py`). Never ack an event-wait or persistent-condition alert; resolve only at its close, with evidence.
+- **Deploys restart the trading app.** Read `/home/deploy/dawntrader-deploy.record` first. `dt-deploy` ships the whole branch. Langston measured staging at `c21c1502a` (deployed 2026-11-21 05:08:44Z), 189 commits and 38 runtime files behind (msg `1574198965098782822`).
+- **Open deploy windows:** name every one with `--in-window` and tell owners (NEW lists 9 open windows, B:37).
+- **No staging browser on the Codex side:** mark Step 7 page checks "UI not yet checked" and ask Kyle.
+
+## OLD (CC-A)
+1. **B-UNIVERSE-REFRESH-ACTS (plan row 18, #1018): STEP: 4 of 11 · NEXT STEP: 5 of 11** (A:17). Change list `Change Lists/B_UNIVERSE_REFRESH_ACTS_CHANGE_LIST.md`; three one-file gates.
+   - **Gate A:** fix `b6f9c94c2`, CI run 45080467913 per A:17, and 45082399845 4/4 green per OLD's stop post (`1574208732932345868`). **A:17 says "awaiting verdict", but Langston ruled at 23:00:44Z (`1574197973225574631`): PROCEED on legs 1, 2, 3, 5; one condition C4.** C4: fix the comment at `crypto-universe-refresh.ts:237-238` (there are two awaits before decideRefresh, not one; `:270` is an `await import`). No re-review; he would check at Step 8. Also: do not carry "their count is exact for the life of the row" into the completion report.
+   - **Gate B: Langston SENT BACK** (`1574196864100864091`, ruled at graded ref `9ea4c201c`). Owed: (1) retired flag set synchronously at the top of `stopAndResolve`, checked in `watchTick` and `raiseSilentAlert`, resolve again if flipped mid-write; (2) one test driving `_close` for the reopen-replay add path (`rc.ts:340-346, :255-256, :314-319`); (3) disposition for `state.enabled` having no false writer (deleted `stopCryptoSpotArchiver` residual); say "placed" not "subscribed" on the run row; record overflow adds as untracked or state the blind spot; fix the "grace starts at open" prose. Then re-send Gate B to Coltrane (Langston is off).
+   - **Gate C: not sent.** Carries: re-add flap suppression, single-flight location, #6 capture switch. Plan row 18 status cell (`SPRINT_TO_LIVE_PLAN.md:317` still reads Step 1) goes to Step 10.
+   - Deploy: row 18 is NOT in NEW's deploy (A:17; NEW `1574197763447717962`). Deploy sha: not recorded.
+   - Row 19 B-SYMBOL-CLASS-IDENTITY: Step 1 NOT STARTED (card PVTI_lAHODmulEM4BfQP4zhK7jTA; leads in scratchpad `row19-census.md`) (A:17). Needs Kyle's agreed list before starting (CLAUDE.md §9.4).
+2. **B-DB-SIZE-RELIEF: IN OBSERVATION** (Step 10 confirmed 2026-11-15, A:18), no step number beyond that recorded. Timers, never ack, resolve with the read's commit: `6f8a0705` 11-29 · `d2fd4dce` 12-02 · `365e6ef5` 12-30 · `ede55d8b` 01-04 · `08425f0c` 01-30 · `64255b7f` 02-02. At close flip `GOVERNANCE_EXCEPTIONS.md` row 36 to open-retired BEFORE resolving `97e17da3` and `7e9eeb2a` (A:18). Owed: Chrome check under #1037 am.5; Langston folds (slice exact, DROP-only note, total symmetry, 0.2 s); row-119 + #1037 notes (A:19).
+3. **Closed this week (no work):** B-DB-POOL-GUARD r4 (11-21), B-DISK-FILE-TIERING (11-22), B-XSTOCK-CORRELATION-COLLECT (11-22) (A:14-16). Rollback note for pool guard: `6a9b6802f`, then `/root/cca-env-rollback-20261120.env`.
+4. **Owed to Langston, now to Coltrane:** the alert-verb design (#982), a `held` state with `hold`/`unhold` and two open questions (A:21).
+5. **Deploy drift:** `d92423ce` (rung 3) is named OLD's by Langston (`1574198965098782822`), but NEW's memory says it is now NEW's. See contradictions.
+6. **Waiting on Kyle:** nothing recorded in OLD's file beyond #1265/#1266 (with Kyle via PM, no work, A:16).
+7. **Uncommitted/unpushed:** none reported. OLD stop post: "clone in sync" (`1574208732932345868`).
+
+## NEW (CC-B)
+1. **B-ENTRY-GATE: STEP: 6 of 11 DONE · NEXT STEP: 7 of 11** (B:40). Deployed `6a9b6802f` 2026-11-20 23:26:05Z, rollback sha `4456f515d`. Step 7 = read the xStock session **2026-11-23 01:00→21:00Z** from logs/DB after the fact; alert **`83667ea0` fires 21:05Z**. Read judged_refuse + REFUSE lines + cost line + C-4 unpriced/hour. Then Step 8, Step 10; resolve `0db1c8eb` and `9d1acdd9` only after `GOVERNANCE_EXCEPTIONS.md:38` is flipped open-retired.
+   - **Langston ruling not yet acted on** (`1574198965098782822`, 23:04:41Z): before the 11-23 21:00Z read publishes, enumerate the deployed shas across the window (he counts at least 13 since 11-13, 11 after inc B `77f6fd598`; the staging reflog is the census) and show none touched the entry-gate path, or bound the read to a single-build sub-window.
+2. **One combined deploy: PFC OBJ-5 + B-AI-BRIEF-OFF + B-ALERT-ORPHAN-ROWS** (B:31, B:37). Not before the B-ENTRY-GATE window ends 11-23 21:00Z; ONE sha, one restart; call it in the channel first; re-run C-2 and pre-counts; name open windows; amend row 43 `expected_by` to deploy+25h. Deploy sha: not recorded. OLD's row 18 is NOT in it. OLD/NEW order (B:37, `1574117688643428434`): (a) NEW ~11-23 21:05Z with OLD 11-25 02:30Z+, or (b) fold all three at 11-24 02:30-02:55Z if OLD had PROCEED + CI by 11-23 20:30Z. OLD did not (row 18 at Step 4), so (a) applies.
+   - **Langston also asked** (`1574198965098782822`): if the 11-25 02:30Z deploy is NEW's, state whether it carries the whole 189-commit range or only the fold, and send him (now Coltrane) the file list of the 38 runtime files; a bundle that size needs its own Step 4.
+   - **PFC OBJ-5: STEP: 5 of 11 DONE · NEXT: 6.** Langston PROCEED r2 `d0d64c380` (`1574095950950047877`), CI 45041163190 4/4, recorded `bc7dd7bdf`. Step 7 per change list r2 and his two conditions. Then OBJ-4. Step 10: SIM :335.
+   - **B-AI-BRIEF-OFF (#1264): STEP: 5 of 11 DONE · NEXT: 6.** CI 45033693684 4/4 on `473a7eb72`. Deploy only after the inc-C read is taken and CC-C/CC-INFRA give go-ahead (B:34). Close: flip its GOVERNANCE_EXCEPTIONS row open-retired before its stale-open nag resolves. Step 10: SIM §9.8, SM §12, PRE_LIVE_SPRINT:171.
+   - **B-ALERT-ORPHAN-ROWS (row 3c): STEP: 5 of 11 DONE · NEXT: 6.** CI 45062113147 4/4 on `a232b7132`; Step 4 PROCEED `1574144582826856609`; fold `0f06aa6bc`. Step 7 = orphans 0 AND total = pre_total − pre_orphans (B:35).
+3. **PFC (B-PRICE-FEED-COVERAGE) inc 0: STEP: 10 of 11 DONE** (Step 8 PROCEED `1574021946004475926`) · **NEXT: parent Step 2 → 3 on Coltrane's fresh read** (B:38). Coltrane's remaining conditions (post 11-22T12:08:12Z) not yet read per B:38; condition (a) done `08670daa0`. Langston marked `4a72db62` (open >7d) to CC-B (`1574197973225574631`): close or flip the GE row open-retired, then resolve with that commit as evidence, never ack. At PFC parent close flip the PFC GE row, push, THEN resolve `07efe1a1`. Inc 0 live at `72e7f35f6` (Langston `1574197580756287653`). inc-0 forced-carrier denominator `3f06dd940` (CI 43519104818) rides the next agreed deploy (B:36).
+4. **B-RTB-PROMOTION-RETRY-STORM (row 9j): STEP: 2 of 11 DONE · NEXT: 3 of 11 when B-ENTRY-GATE closes** (B:33). Card PVTI_lAHODmulEM4BfQP4zhJJFBw.
+5. **Row 52 B-SILENT-STRATEGY-CENSUS: STEP: 10 of 11 · NEXT: 11 of 11** (B:44), not before O3 is run or re-homed (waits on B-ENTRY-GATE inc A Step 7/8).
+6. **Weekly reads:** six-settings successor `f3dca179` was scheduled 11-18 12Z (its successor: not recorded); dt-deploy observation `e441b84b` chain (B:45).
+7. **Slotted by Kyle (KD-94), after 2a/2b, before live:** 2c B-DB-REACHABILITY-ALERT (#1217), 2d B-DB-UNREACHABLE-POSTURE (#1260) (B:32). KD-117 (`2070db1ee`): #1267 user-link census is AFTER LIVE, mine (B:31).
+8. **Waiting on Kyle:** row 172 B-TEC-PRIME-BOOT-RACE reassignment (B:42; recommendation sent to PM 11-07); no later answer recorded.
+9. **Uncommitted/unpushed:** none reported.
+
+## ANALYST (CC-C)
+1. **B-XSTOCK-BAR-AVAILABILITY: STEP: 9 of 11** (C:51). R2' Langston PROCEED, corrections `19cbbb7ab`. **NEXT:** dt-deploy a sha containing `19cbbb7ab` ONLY in the window **2026-11-24T00:00Z → 11-30T01:00Z**; name every open window from the census; tell owners; read the row back; resolve `3306c5c3` as superseded; mint a new event-wait alert for **~12-10 00:45Z**; then Steps 10-11. Never ack `3306c5c3`. Alert `ba8b42e2` (R2' exactness, 926,329/926,329 not found in bound): leave active, resolve on the graded read (C:52). Langston marked `8bd256bc` (open >7d) to CC-C: close or re-justify in GE, never ack (`1574170357244629105`). Step-10/11 notes in C:52.
+2. **#1263 B-DB-REGIME-ENUM-ALIGN: STEP: 5 of 11 DONE · NEXT: 6 of 11** (C:51). Step 4 PROCEED r2 `1574112442152386662` (`e3a96a812` is an increment, class architecture at Step 10), CI 45047451029 4/4. Deploy >= 11-24T00:00Z in ONE sha with R2', then P11 proof. **Kyle's 12-item proposal SENT (`1574115722018164787`), awaits his slot.**
+3. **Row 2 C-P5: STEP: 10 of 11 DONE** (C:52) · NEXT: Step 11 only after its other items (#961/#962/#1087). At close flip GE row 39 to open-retired, then resolve `e473d7da`.
+4. **`3n` B-PRICE-SIDE-BY-JOB:** exit leg Step 11 confirmed 11-13; parent open. `8c` ON since 11-16 09:45:01Z; **week read `c15fb88d` 2026-11-23 10:00Z** (25-40 opens; fewer than 10 ⇒ stop); then `8c-OFF-REMOVAL` (C:52, C:56). DEPLOY_WINDOWS row open for the 8c leg to **11-23T09:45Z**. At parent close flip its open rows, then resolve `1ae9a06b` (C:55). `#1250` Step 8 PROCEED `1573525095614251190`; its extractor midnight-END fix (`73a425a26`) follows CC-A P9 Step 4. `#961`/`#959` booking half goes to row 2 Step 11; Kyle owed a FINDING block + the 151→108 PREVIOUSLY/NOW (C:56).
+5. **Other timed:** `b0c2696a` check ~11-23 02:00Z (PM Claude, C:51); STRK max-hold `00b727aa` 11-11 (status not recorded); `#677` watch `db184965` 12-16 (C:52).
+6. **Waiting on Kyle:** 12-item proposal above; off-list rows 16a (`B-WRITE-TIMEOUT-ORDERING`) and 59g1b (`#1213`) (C:47); `3n` flip stays Kyle's page check and must state the flow rate.
+7. **Uncommitted/unpushed:** `46c5650ce` ("unpushed at write" on 11-21, C:56) is on `origin/migration/aws-supabase` (PM checked 11-23). Stop post: nothing in flight (`1574211219357696081`). Preserve untracked `.claude/launch.json`.
+8. **Routine:** `xstock-stale-fill-block` alerts are ANALYST's, never Kyle's (11-09 sheet).
+
+## INFRA (CC-INFRA)
+1. **B-DB-READONLY-ROLE (5a1): STEP: 5 of 11 · NEXT: 6 of 11** (INFRA:22). Step 6 not before 11-23 21:00Z; quote `sudo -l -U deploy` before and after. Amendment pushed `5bc659062` (docs-only); descendant `3a85372e5` was red on another session's 8a-P4c guard test, so re-check CI green first. **Langston ruled PROCEED to Step 6** (`1574167979351085170`, 21:01:35Z) with ONE amendment: §5 must also install `comms-infra/staging/dt-install-drift` and `psql-wrapper` before item 10, each recording its sha in `INSTALLED_SHA`; item 10 expected = no PERM and no PENDING on the seven 5a1 paths. Whether `5bc659062` is that fold: hypothesis, not stated. Also: drift tests run in no CI step; do not let 4/4 read as covering them. Install not started (`1574208288822661400`).
+2. **KD-115 item 2** (owner=CC-PM in the alert lane): DONE and installed at `bb141c124` 11-22; Langston confirmed at the files (`1574174483961348242`). Owed to PM: alert-followup.mjs item on B-TOKEN-ECONOMY; RIDER-3 proposal (INFRA:22).
+3. **B-LANGSTON-TWO-WORKERS: STEP: 9 of 11 · NEXT: 4 of 11** on fold (b) drop-arm hold release, then 7/8 (INFRA:18). Second worker ON 11-20; fold `021d015d4` live 11-21 00:13:33Z = T'. Re-mint readers `5437766c`/`ad4a3ea7`/`d78d017b` at T'+3/7/21 days (dates computed: ~11-24, ~11-28, ~12-12, hypothesis). Langston is off this shift: his second worker's switch-on or changes wait on him returning.
+4. **B-TOKEN-ECONOMY amd-1 P1-P3: STEP: 3 of 11 · NEXT: 4 of 11** (one combined change list after the 11-22 03:50Z trim) (INFRA:19). Item 3 `adbafcd34` HELD by Langston (`1573672336627081260`): P3 ceiling = fresh `--status` measured_total after item 3 install. Guard fix `a5a8739cc` (`875456c7`) installs with item 3, then resolve by hand. **P6: STEP: 9 of 11 · NEXT: 10 after day 7 (11-28 00:13Z)**; days 2-7 owed, appended to `Change Lists/B_TOKEN_ECONOMY_AMD1_P6_STEP7_VERIFY.md`; rollback `27ef0d3f7` (INFRA:20).
+5. **B-TOKEN-WATCH-FOLLOWUP-MEMORY: STEP: 9 of 11 · NEXT: 10** after the 7d read **`88fc097f` 11-27 00:05Z** (INFRA:21). `07eba4b2` fix `9475e0879` Step 4 PROCEED `1574013031460110468`; ride-along `9ff39a260` pushed; then install, mtime check, resolve (never ack). KD-113: finish every scoped piece (P13, late pass 30 days after the 11-27 read, census tile, page rider). Credit lead #1247: Helius resets the 27th.
+6. **B-TOKEN-WATCH-BIRTH-CAP: STEP: 10 of 11, IN OBSERVATION · NEXT: 11** at close (INFRA:24). Close = OBJ-2/OBJ-8 hour band after 11-24 00:00Z + OBJ-5 to 11-27 00:00Z. Installed `f655fdd59`.
+7. **B-DEPLOY-WINDOW-GUARD: STEP: 10, IN OBSERVATION** (INFRA:25). Next chance for O-2: `d51c8845`; O-3 not yet seen. Weekly hand check `7164d7ab` 11-18.
+8. **B-AGENT-INVOKE-FAILURE-NOTICE: STEP: 7 · NEXT: 8** (INFRA:26): Langston arm window to alert **`e7ac23d6` 11-27 13:20Z**; he is off, so the arm cannot be exercised until he returns.
+9. **B-DISK-HEADROOM: STEP: 9 · NEXT: 10** (INFRA:27): waits on P11 alert **`f8188c60` 12-01 02:05Z**. Close order: flip GE row open-retired, push, THEN resolve `21cacc38`/`b178ed3d`.
+10. **Others:** B-CREW-ACCESS-HARDEN F-2 STEP: 3 · NEXT: 4 (INFRA:29); B-CREDENTIALS-PRIVATE-REPO parent open, GB-8 increment STEP: 7 · NEXT: 8 (INFRA:30-31); alert `aaf0b2b5` (Kyle approved removing `is_admin` from `testuser123`, INFRA:32).
+11. **Waiting on Kyle:** #1197 kept-lines call; #1258 row (INFRA:21); multi-agent pilot, Coltrane plan §7, #1160 view-default (INFRA:35).
+12. **Uncommitted/unpushed:** none reported. Memory pushed `b5652bb5b`, CI 4/4 (`1574208288822661400`).
+
+## Langston reviews open at the switch (consolidated)
+No review was sent to Langston and left wholly unanswered. All rulings below were received and are **unacted**. Re-send fresh dispatches to Coltrane (start the post with `Coltrane`; stage context in a file).
+| Owner | Item | Langston message | State |
+|---|---|---|---|
+| OLD | Gate A r2 `b6f9c94c2` | `1574197973225574631` | PROCEED + C4 comment fix, unacted |
+| OLD | Gate B (`9ea4c201c`) | `1574196864100864091` | SEND BACK (3 changes + conditions), unacted |
+| OLD | Gate C | not sent | send to Coltrane after Gate B |
+| NEW | 11-23 window deploy enumeration; deploy range question | `1574198965098782822` | asked of NEW, unanswered |
+| NEW | PFC parent Step 2 | Coltrane read 11-22T12:08:12Z | Coltrane's conditions not yet worked |
+| INFRA | 5a1 Step 4 r2 | `1574167979351085170` | PROCEED with §5 amendment; Step 6 pending |
+| INFRA | B-TOKEN-ECONOMY item 3 | `1573672336627081260` | HELD |
+| ANALYST | R2' and #1263 | `1574112442152386662` etc. | PROCEED; nothing owed to him |
+Langston's last stop line to him from PM: `1574208234661875716`.
+
+## Open alerts by owner (heartbeat 2026-11-22T23:15:05Z, msg `1574201583561084990`: 18 active, unacked)
+- **OLD:** `7e9eeb2a` (B-DB-SIZE-RELIEF open >7d; marker `1574170357244629105`), `97e17da3` (same close, A:18), `d92423ce` (drift rung 3; Langston and A-side say OLD, B:37 says NEW — see below).
+- **NEW:** `0db1c8eb`, `9d1acdd9` (B-ENTRY-GATE, B:40), `07efe1a1` (PFC parent, B:38), `4a72db62` (B-PRICE-FEED-COVERAGE open >7d, Langston `1574197973225574631`), `83667ea0` (not in the 18; fires 11-23 21:05Z).
+- **ANALYST:** `1ae9a06b`, `e473d7da`, `3306c5c3`, `8bd256bc`, `ba8b42e2`, `b0c2696a` (venue-quiet record, never ack, Langston `1574195612516360294`).
+- **INFRA:** `07eba4b2`, `875456c7`, `21cacc38`, `b178ed3d`.
+- **owner not recorded:** `a237a9e2`.
+- **`d92423ce` owner unsettled:** OLD Codex and NEW Codex settle it between them on day one and post the result; PM Codex records it.
+
+## Waiting on Kyle
+- ANALYST 12-item proposal (`1574115722018164787`); ANALYST off-list rows 16a, 59g1b.
+- NEW row 172 B-TEC-PRIME-BOOT-RACE reassignment; INFRA #1197, #1258, pilot, Coltrane plan §7, #1160.
+- Page checks (Chrome signed out of staging) for 8c and others; `3n` 8c page check and flow rate.
+- OLD row 19 and any new batch need Kyle's agreed list. PM holds the rest (PM's own POSITION block).
+
+## Token-economy settings (Claude only, left untouched)
+Do not edit on the Codex shift; they matter when Claude returns after 2026-11-26 23:00Z.
+- `.claude/settings.local.json`: `autoCompactWindow` 250000 and idleCompaction `false`.
+- `.claude/agents/Explore.md` (Haiku).
+- Hooks: `alert-delta.mjs`, `warn-dedupe.mjs`, `claude-md-cap.mjs`.
+- Return-run checks: `node scripts/crew-tooling/claude-md-cap.mjs --report` and `node scripts/crew-tooling/move-ledger-check.mjs --dupes`.
+
+## PM
+PM Claude is not in `crew-switch`; its handover is the CURRENT POSITION block of `MEMORY_PM.md` (pushed with this sheet). Open for PM Codex: the usage-stop record (what is paused, restored on the Claude return), KD-114..117 tracking, items for Kyle's next decision round (RIDER-3, row 118 → row 18 coverage after Coltrane's scope read of row 18, B-TOKEN-WATCH-PACED-LIQUIDITY), and B-TOKEN-ECONOMY P10/P11 + the alert-followup CC-PM fix.
