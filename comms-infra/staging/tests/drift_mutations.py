@@ -101,7 +101,10 @@ MUTATIONS = [
      '        for who in ("dtapi", "dtmint", "dtsql"):\n            try:\n                gid = pwd',
      '        for who in ("dtapi", "dtmint"):\n            try:\n                gid = pwd'),
     ("drift", "5a1: dtsql's own drop-in is not its home", '"dtsql": P("/etc/sudoers.d/dtsql")}', '"dtsql": None}'),
-    ("drift", "5a1: dtsql is not policed in sudoers at all", ', "dtsql": P("/etc/sudoers.d/dtsql")}', "}"),
+    ("drift", "5a1: dtsql is not policed in sudoers at all",
+     ',\n               "dtsql": P("/etc/sudoers.d/dtsql")}', "}"),
+    ("drift", "5a1 live: dtmint's reviewed mint-only rule is not assigned to the dtapi drop-in",
+     '"dtmint": P("/etc/sudoers.d/dtapi")', '"dtmint": None'),
     # B-DB-READONLY-ROLE Step-4 r2 (Langston C4): dt-sql's state files in the 0755 dir
     ("drift", "C4: the transient rows are never checked", '    for f, mode, user, group in box.get("transient", []):\n',
      "    for f, mode, user, group in []:\n"),

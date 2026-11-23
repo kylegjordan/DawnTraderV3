@@ -360,14 +360,15 @@ open(T + "/etc/sudoers", "w").write("root ALL=(ALL) ALL" + NL + "dtmint ALL=(ALL
 open(T + "/etc/sudoers.extra", "w").write("# pulled in by @include" + NL + "dtapi ALL=(root) ALL" + NL)
 os.makedirs(T + "/etc/sudoers.d", exist_ok=True)
 open(T + "/etc/sudoers.d/zz-everyone", "w").write("ALL ALL=(ALL) NOPASSWD: /bin/true" + NL)
-open(T + "/etc/sudoers.d/dtapi", "w").write("deploy ALL=(dtapi) NOPASSWD: /usr/local/bin/dt-api GET *" + NL)
+shutil.copy(os.path.join(HERE, "..", "sudoers-dtapi"), T + "/etc/sudoers.d/dtapi")
 c, o = run()
 check("r2: dtmint locked with '!' is flagged (the mint needs '*')", "dtmint's password field is" in o, o)
 check("r2: dtapi '!$6$...' (locked with a hash) is NOT flagged", "dtapi has a usable password hash" not in o, o)
 check("r2: a grant in the MAIN sudoers file is flagged", "%s/etc/sudoers also mentions" % T in o, o)
 check("r3: a file pulled in by @include is followed and flagged", "%s/etc/sudoers.extra also mentions" % T in o, o)
 check("r3: a rule for ALL users (in an @includedir file) is flagged", "zz-everyone has a rule for ALL users" in o, o)
-check("r3: /etc/sudoers.d/dtapi itself is NOT flagged for naming dtapi", "sudoers.d/dtapi also mentions" not in o, o)
+check("r3: the real /etc/sudoers.d/dtapi is NOT flagged for naming dtapi or its mint-only dtmint caller",
+      "sudoers.d/dtapi also mentions" not in o, o)
 # B-DB-READONLY-ROLE: dtsql gets the same two checks — its own drop-in may name it, nothing else may
 shutil.copy(os.path.join(HERE, "..", "sudoers-dtsql"), T + "/etc/sudoers.d/dtsql")
 open(T + "/etc/sudoers.d/zz-dtsql-extra", "w").write("dtsql ALL=(root) NOPASSWD: ALL" + NL)

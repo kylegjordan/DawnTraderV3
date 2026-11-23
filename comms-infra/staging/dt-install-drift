@@ -700,8 +700,10 @@ def check_extra(name, box):
         # r2: the main file too, not only the drop-in dir. r3: and every file an @include /
         # @includedir (or the older #include / #includedir) pulls in, followed to any depth.
         todo, seen = [P("/etc/sudoers")], set()
-        # B-DB-READONLY-ROLE: each account may be named only by its OWN drop-in (dtmint by none)
-        own = {"dtapi": P("/etc/sudoers.d/dtapi"), "dtmint": None, "dtsql": P("/etc/sudoers.d/dtsql")}
+        # B-DB-READONLY-ROLE: each account may be named only by its OWN reviewed drop-in. dtmint's
+        # mint-only rule deliberately shares dtapi's drop-in; every other sudoers file remains forbidden.
+        own = {"dtapi": P("/etc/sudoers.d/dtapi"), "dtmint": P("/etc/sudoers.d/dtapi"),
+               "dtsql": P("/etc/sudoers.d/dtsql")}
         while todo:
             fp = todo.pop(0)
             if fp in seen:
