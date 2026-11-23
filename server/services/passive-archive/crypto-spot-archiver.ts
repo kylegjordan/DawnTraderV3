@@ -379,7 +379,7 @@ function onShardAddResult(shard: Shard, symbol: string, outcome: AddOutcome, now
     const conn = shard.conn;
     shard.conn = null;
     state.shards = state.shards.filter(s => s !== shard);
-    void conn?.stopAndResolve(`shard emptied by withdrawn add of ${symbol}`);
+    void conn?.stopAndResolve(`B-UNIVERSE-REFRESH-ACTS #1018: shard emptied by withdrawn add of ${symbol}`);
     return;
   }
   shard.conn?.sendUnsubscribe([symbol], unsubscribeFrames([symbol]));
@@ -500,6 +500,8 @@ export async function startCryptoSpotArchiver(): Promise<void> {
 export interface CryptoUniverseChangeResult {
   added: string[];
   dropped: string[];
+  /** Symbols placed on newly opened shards. Their open-time replies carry no req_id, so add failures are not tracked. */
+  untrackedOverflowAdds: string[];
   shardsOpened: number[];
   shardsStopped: number[];
 }
@@ -514,7 +516,9 @@ export interface CryptoUniverseChangeResult {
 export async function applyCryptoUniverseChange(
   { add, drop, occurrenceId }: { add: string[]; drop: string[]; occurrenceId: string },
 ): Promise<CryptoUniverseChangeResult> {
-  const out: CryptoUniverseChangeResult = { added: [], dropped: [], shardsOpened: [], shardsStopped: [] };
+  const out: CryptoUniverseChangeResult = {
+    added: [], dropped: [], untrackedOverflowAdds: [], shardsOpened: [], shardsStopped: [],
+  };
   const now = Date.now();
 
   // ── drops ──
@@ -533,7 +537,9 @@ export async function applyCryptoUniverseChange(
     out.dropped.push(...syms);
     if (shard.symbols.length === 0) {
       // §2.9: an emptied shard's own alerts are resolved before its socket closes, so nothing is left firing for it.
-      await shard.conn?.stopAndResolve(`shard emptied by crypto universe refresh, occurrence ${occurrenceId}`);
+      await shard.conn?.stopAndResolve(
+        `B-UNIVERSE-REFRESH-ACTS #1018: shard emptied by crypto universe refresh, occurrence ${occurrenceId}`,
+      );
       shard.conn = null;
       state.shards = state.shards.filter(s => s !== shard);
       out.shardsStopped.push(id);
@@ -576,6 +582,7 @@ export async function applyCryptoUniverseChange(
     launchShard(s);
     out.shardsOpened.push(s.id);
     out.added.push(...s.symbols);
+    out.untrackedOverflowAdds.push(...s.symbols);
   }
   if (overflow.length > 0) startRecorderWatch();
   return out;
