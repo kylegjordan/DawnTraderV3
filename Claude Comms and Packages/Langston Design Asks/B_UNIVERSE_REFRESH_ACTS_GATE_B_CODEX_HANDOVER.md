@@ -90,12 +90,19 @@ The module-local flag had no false writer after `stopCryptoSpotArchiver` was del
 ## Accuracy conditions folded
 
 - The change list now says the run row's `added` list means **placed in recorder state**, not confirmed subscribed.
-- New-shard overflow additions use the open-time subscription path and are not tracked in `pendingAdds`; if `shardsOpened` is non-empty, zero `rejected_adds` / `unconfirmed_adds` is explicitly not evidence that every overflow addition was accepted.
+- New-shard overflow additions use the open-time subscription path and are not tracked in `pendingAdds`; their exact symbols are persisted on the run row in `untracked_overflow_adds`, so zero `rejected_adds` / `unconfirmed_adds` is explicitly not evidence that every overflow addition was accepted.
 - The new-shard grace clock starts at apply time, matching the implementation, not at socket open.
+
+## Coltrane round 2 — SEND BACK at 2026-11-23 22:36:07Z
+
+Coltrane found two remaining blockers at `09abb5c245d03009f60e7e9724d0f326edd30924`:
+
+1. The withdrawal path now calls `stopAndResolve` with `B-UNIVERSE-REFRESH-ACTS #1018` evidence. The drop path carries the same explicit reference. The recorder suite feeds every archiver retirement resolve through the production `isValidResolutionEvidence` function, and a new test rejects the sole pending add after the other shard symbol is dropped, thereby executing the emptied-by-withdrawal caller.
+2. `CryptoUniverseChangeResult` now carries `untrackedOverflowAdds`; `runCryptoUniverseRefresh` persists it as `crypto_universe_refresh_runs.untracked_overflow_adds`; the Drizzle schema and forward migration carry the non-null JSON array. The refresh suite proves both the empty control and a row containing the exact overflow symbol.
 
 ## Checks
 
-- `server/tests/unit/b-universe-refresh-acts-recorder.test.ts` and `server/tests/unit/b-crypto-feed-watchdog.test.ts`: 47 of 47 tests passed.
+- `server/tests/unit/b-universe-refresh-acts-recorder.test.ts`, `server/tests/unit/b-universe-refresh-acts-refresh.test.ts`, and `server/tests/unit/b-crypto-feed-watchdog.test.ts`: 75 of 75 tests passed.
 - TypeScript baseline: current 314 errors, baseline 314 errors; no regression.
 
 ## Fresh-reader record

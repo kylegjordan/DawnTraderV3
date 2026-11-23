@@ -23,6 +23,7 @@ const h = vi.hoisted(() => {
     pins: [] as string[],
     pinsThrow: false,
     applyCalls: [] as Array<{ add: string[]; drop: string[]; occurrenceId: string }>,
+    untrackedOverflowAdds: [] as string[],
     CFG: {} as Record<string, number>,
   };
 });
@@ -71,7 +72,10 @@ vi.mock('../../services/passive-archive/crypto-spot-archiver.js', () => ({
     h.applyCalls.push(args);
     const drop = new Set(args.drop);
     h.running = [...h.running.filter(s => !drop.has(s)), ...args.add];
-    return { added: [...args.add], dropped: [...args.drop], shardsOpened: 0, shardsStopped: 0 };
+    return {
+      added: [...args.add], dropped: [...args.drop],
+      untrackedOverflowAdds: [...h.untrackedOverflowAdds], shardsOpened: [], shardsStopped: [],
+    };
   },
 }));
 
@@ -144,6 +148,7 @@ beforeEach(() => {
   h.pins = [];
   h.pinsThrow = false;
   h.applyCalls.length = 0;
+  h.untrackedOverflowAdds.length = 0;
   h.CFG = { universe_refresh_max_drop_share: 0.30, universe_refresh_confirm_max_diff_share: 0.50 };
   writeFileSync(ALERTS_FILE, '');
   vi.spyOn(console, 'log').mockImplementation(() => {});
@@ -243,8 +248,23 @@ describe('the run — arm (a), degeneracy and arm (b) against the real loader ga
     expect(r).toMatchObject({ outcome: 'applied', refusalReason: null, countBefore: 469, countAfter: 371,
       addedCount: 12, droppedCount: 110, consecutiveRefusals: 0 });
     expect(lastRow()).toMatchObject({ outcome: 'applied', confirmable: true, countBefore: 469, countAfter: 371,
-      triggerSource: 'cron', maxDropShare: 0.30, confirmMaxDiffShare: 0.50 });
+      triggerSource: 'cron', maxDropShare: 0.30, confirmMaxDiffShare: 0.50,
+      untrackedOverflowAdds: [] });
     expect(rungRows()).toHaveLength(0);
+  });
+
+  it('persists the exact overflow symbols whose open-time subscribe replies are not add-tracked', async () => {
+    h.universe = universeOf([...range(0, 469), sym(600)]);
+    h.untrackedOverflowAdds = [sym(600)];
+    const r = await run();
+
+    expect(r).toMatchObject({ outcome: 'applied', addedCount: 1, droppedCount: 0 });
+    expect(lastRow()).toMatchObject({
+      added: [sym(600)],
+      rejectedAdds: [],
+      unconfirmedAdds: [],
+      untrackedOverflowAdds: [sym(600)],
+    });
   });
 
   it('the 2026-10-30 fixture (every ticker answer empty, all 428 would go) is refused by arm (a), not reached by arm (b)', async () => {

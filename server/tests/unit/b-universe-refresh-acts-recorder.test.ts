@@ -71,6 +71,7 @@ import {
   getCryptoRecorderRunningSymbols,
   _resetCryptoRecorderClockForTests,
 } from '../../services/passive-archive/crypto-spot-archiver.js';
+import { isValidResolutionEvidence } from '../../services/system-alerts.js';
 
 const T0 = new Date('2026-11-05T10:00:00Z').getTime();
 const WINDOW = 60_000;
@@ -116,7 +117,8 @@ beforeEach(() => {
   alerts.resolved = [];
   _setRecorderAlertDepsForTests(async () => ({
     addAlert: async (o: any) => o,
-    resolveByKey: async (k: string) => {
+    resolveByKey: async (k: string, _by: string, evidence: string) => {
+      expect(isValidResolutionEvidence(evidence)).toBe(true);
       const id = Number(k.split(':shard')[1]);
       alerts.resolved.push({ key: k, socketTerminated: socketOfShard.get(id)?.terminated ?? null });
       return [k];
@@ -140,7 +142,9 @@ describe('an add to a running shard — incremental, with its own req_id, never 
     const s = sockets[0];
     openAndAnswer(s);
     const res = await applyCryptoUniverseChange({ add: ['C/USD'], drop: [], occurrenceId: 'occ-1' });
-    expect(res).toEqual({ added: ['C/USD'], dropped: [], shardsOpened: [], shardsStopped: [] });
+    expect(res).toEqual({
+      added: ['C/USD'], dropped: [], untrackedOverflowAdds: [], shardsOpened: [], shardsStopped: [],
+    });
     const adds = reqFrames(s, 'subscribe');
     expect(adds.map((f: any) => f.params.channel)).toEqual(['ohlc', 'ticker']);
     expect(adds.every((f: any) => JSON.stringify(f.params.symbol) === '["C/USD"]')).toBe(true);
@@ -185,6 +189,21 @@ describe('an add to a running shard — incremental, with its own req_id, never 
     expect(unsub.every((f: any) => JSON.stringify(f.params.symbol) === '["C/USD"]')).toBe(true);
     expect(sockets.length).toBe(1);
     expect(s.terminated).toBe(false);
+  });
+
+  it('a rejected add that empties its shard retires it with evidence accepted by the production validator', async () => {
+    await boot(['A/USD'], 2);
+    const s = sockets[0];
+    openAndAnswer(s);
+    await applyCryptoUniverseChange({ add: ['C/USD'], drop: [], occurrenceId: 'occ-1' });
+    const r = reqFrames(s, 'subscribe')[0].req_id;
+    await applyCryptoUniverseChange({ add: [], drop: ['A/USD'], occurrenceId: 'occ-2' });
+    s._msg({ method: 'subscribe', success: false, symbol: 'C/USD', req_id: r, error: 'Currency pair not supported' });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(getCryptoRecorderRunningSymbols()).toEqual([]);
+    expect(takeCryptoAddFailures()).toEqual({ rejected: ['C/USD'], unconfirmed: [] });
+    expect(alerts.resolved.some((x) => x.key.endsWith(':shard0'))).toBe(true);
   });
 
   it('no reply within the timeout withdraws it as unconfirmed, unsubscribed, no reconnect', async () => {
@@ -291,6 +310,7 @@ describe('drops — an emptied shard is resolved, then stopped; ids are never re
     const adds = Array.from({ length: left + 1 }, (_, i) => `N${i}/USD`); // one more than a shard holds: two new shards
     const res = await applyCryptoUniverseChange({ add: adds, drop: [], occurrenceId: 'occ-2' });
     expect(res.shardsOpened).toEqual([2, 3]);
+    expect(res.untrackedOverflowAdds).toEqual(adds);
     expect(getCryptoRecorderShardIds()).toEqual([0, 2, 3]);
   });
 

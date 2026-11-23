@@ -37,6 +37,9 @@ CREATE TABLE IF NOT EXISTS crypto_universe_refresh_runs (
   pinned                  jsonb NOT NULL,
   rejected_adds           jsonb NOT NULL,
   unconfirmed_adds        jsonb NOT NULL,
+  -- New-shard open-time replies have no req_id; preserve the affected symbols so an empty failure list is not
+  -- misread as proof that every overflow add was accepted.
+  untracked_overflow_adds jsonb NOT NULL,
   batches                 jsonb NOT NULL,
   volumes                 jsonb NOT NULL,
   floor_usd               double precision,
@@ -52,6 +55,12 @@ CREATE TABLE IF NOT EXISTS crypto_universe_refresh_runs (
   CONSTRAINT crypto_universe_refresh_runs_trigger_chk
     CHECK (trigger_source IN ('cron', 'missed_catchup'))
 );
+
+-- Idempotent repair for a table created by an interrupted/manual pre-deploy run of an earlier draft.
+ALTER TABLE crypto_universe_refresh_runs
+  ADD COLUMN IF NOT EXISTS untracked_overflow_adds jsonb NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE crypto_universe_refresh_runs
+  ALTER COLUMN untracked_overflow_adds DROP DEFAULT;
 
 CREATE INDEX IF NOT EXISTS crypto_universe_refresh_runs_started_at_idx
   ON crypto_universe_refresh_runs (started_at DESC);
