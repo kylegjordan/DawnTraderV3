@@ -1,11 +1,11 @@
 # B-ENTRY-GATE (`#1224`) — PROGRESS REPORT
 
-## OPEN — both increments live and verified; the xStock week read (2026-11-20) is owed
+## OPEN — increments A/B live; increment C backend read captured, UI and Step 8 open
 
-**Owner:** CC-B (NEW Codex for increment A; NEW Claude for increment B)
+**Owner:** CC-B (NEW Codex on the current increment-C verification)
 **Change-class:** `architecture`
 **Plan home:** CC-B pre-sprint list item 2
-**Parent state:** OPEN (board column Observation) — increment A live and verified (Coltrane `56509024d`); increment B live since 2026-11-13 and verified on its 24 h read (Langston Step-8 PROCEED, Review = Approved, 2026-11-14). The parent closes after the xStock week read, alert `7de9caf9` (2026-11-20T21:04Z).
+**Parent state:** OPEN (board column Verification) — increment A live and verified (Coltrane `56509024d`); increment B live since 2026-11-13 and verified on its 24 h read (Langston Step-8 PROCEED, Review = Approved, 2026-11-14); the xStock week read led to increment C. Increment C's 2026-11-23 first-session backend read is captured in `Change Lists/B_ENTRY_GATE_INC_C_STEP7_2026-11-23.md`: 0/21 judged xStock birth-phase outcomes refused, with 40 xStock unpriced promotion-refusal events. Step 7 still owes the staging UI smoke-check, then Coltrane's Step 8.
 
 ## 1. What the batch is for
 
@@ -15,6 +15,7 @@ The parent was split deliberately:
 
 - **Increment A — fill-time contract:** live and verified.
 - **Increment B — SQE, refresh and promotion contract:** live since `77f6fd598` (2026-11-13T21:03:55Z) and verified on its 24 h read; its xStock-only arms are read in the week to 2026-11-20.
+- **Increment C — per-class birth switch and xStock promotion-age seed:** live since `6a9b6802f` (2026-11-20T23:26:05Z); backend first-session read captured 2026-11-23, UI and Step 8 open.
 
 ## 2. Increment A — what shipped
 
@@ -92,6 +93,14 @@ Increment A changes which fills enter the paper/VTS outcome populations, so it h
 - The xStock promotion ceiling is unseeded; its value is decided by the week's record against the prediction filed before it.
 - **Increment A carry:** the three inc-A resting-maker watch-only lines in the window (`MAKER_WOULD_CANCEL`, all `outcome=fill`) include UAI at `max_adverse_r = 0.9763` — a fill nearly a full planned risk adverse — recorded for the parent's close.
 
+## 6a. Increment C — first full xStock session
+
+Increment C made the birth EntryWindow switch class-specific (`xstock_spot=true`, `crypto_spot=false`) and seeded xStock promotion-price freshness at 300,000 ms. The authoritative deploy-window amendment registered one full session, 2026-11-23 01:00Z–21:00Z; the alert title's older 11-22 start is superseded by that amendment.
+
+The complete recorded backend population ran on one build, `c21c1502a`, with no app-process or paper-engine restart. The xStock birth tally judged **21 birth-phase outcomes**: **21 passed and 0 refused (0.0%)**, below the >25% INVESTIGATE line. No refusal means no cost cohort: the promised later-open test is N/A, not zero. Crypto remained shadowed and emitted zero live refusal lines. C-4 recorded **40** xStock unpriced promotion-refusal events over **19** distinct RTB rows: **37 events / 17 rows** before 14:30Z and **3 events / 2 rows** during the regular session; all 40 carrier lines paired to their separate unpriced-claim line.
+
+The detailed evidence, controls, rotation census and Step-8 recipe are in `Change Lists/B_ENTRY_GATE_INC_C_STEP7_2026-11-23.md`. Step 7 remains open only for the staging UI smoke-check required by the Codex handover; after that, Coltrane receives the exact pushed ref.
+
 ## 7. Pre-registered parent close criterion
 
 The parent may convert this file to `B_ENTRY_GATE_COMPLETION_REPORT.md` only after all of these are true:
@@ -104,7 +113,7 @@ The parent may convert this file to `B_ENTRY_GATE_COMPLETION_REPORT.md` only aft
 6. Coltrane independently confirms the evidence at an exact pushed ref;
 7. Step 9 rechecks the whole parent objective set, Step 10 reconciles governance again, and Step 11 records both the increment-B data and the action/decision taken on it.
 
-**Status against this criterion, 2026-11-14 (written before the xStock week's data):** (1) ✅ not byte-identical — the rebase onto `dc18a0228` was re-reviewed by Langston at Step-4 r5 and landed as `9d903ea9c`; (2) ✅ CI `43467219963` (candidate) and `43505196746` (deployed sha) each 4/4; (3) ✅ deployed `77f6fd598`, restart 698, identity and migration objects recorded; (4) ◑ crypto half read (§6); the xStock half — P7's five predictions, P2's birth-shadow would-refuse share for the live-switch decision, the EntryWindow judged arm and the P6 taker arm (prediction file items 1-7) — is read on 2026-11-20; (5) nothing has failed yet; (6) ◑ increment B's second pass was Langston's (Coltrane off shift), PROCEED with Review = Approved — the xStock week read gets its own second pass; (7) open.
+**Status against this criterion, 2026-11-23:** (1) ✅ increment B landed after re-review; (2) ✅ candidate and deployed CI were each 4/4, and the single build serving increment C's session has CI `44847250518` 4/4; (3) ✅ increment C deployed at `6a9b6802f`, with the full registered session served by `c21c1502a`, restart 714; (4) ✅ the xStock week read and increment-C backend first-session read are captured, including the class-separated birth denominator and promotion-freshness result; (5) ✅ no registered failure fired — xStock birth refusals were 0/21; (6) ◑ Coltrane's increment-C second pass waits on the UI smoke-check and pushed evidence ref; (7) open.
 
 ## 8. Governance files changed so far
 
