@@ -135,6 +135,6 @@ The inherited Step-4 review was split into three one-gate reads. The review refs
 |---|---|---|
 | A | `fecc618de9bdfa616a3984935767b4cec4437c7c` | **Coltrane PROCEED** 2026-11-23 22:30:31Z; Langston C4 folded by naming both awaits before `decideRefresh` |
 | B | `bd4b0fa164a660da12707254db64f0191dd80ebb` | **Coltrane PROCEED** 2026-11-23 22:46:46Z; retirement fence, reopen replay, dead enabled flag, accepted-vs-placed wording and overflow evidence discharged; 75/75 independent focused tests |
-| C | exact ref in the Gate C Discord dispatch | repeated-add page + clear rule + CC-A owner mapping; shared occurrence-runner single-flight location; crypto capture-switch ownership |
+| C | exact ref in the Gate C Discord dispatch | repeated-add page + clear rule + CC-A owner mapping; shared occurrence-runner single-flight location with the lock-session limit stated; boot-time crypto capture-switch ownership |
 
 Gate C detail and the exact prior-verdict carry are in `Claude Comms and Packages/Langston Design Asks/B_UNIVERSE_REFRESH_ACTS_GATE_C_CODEX_HANDOVER.md`.
