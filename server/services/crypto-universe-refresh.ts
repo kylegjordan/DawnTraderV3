@@ -39,6 +39,7 @@ const MODULE = 'crypto_spot' as const;
 export const MAX_DROP_SHARE_KEY = 'universe_refresh_max_drop_share';
 export const CONFIRM_MAX_DIFF_SHARE_KEY = 'universe_refresh_confirm_max_diff_share';
 export const RUNG_PREFIX = 'crypto-universe-refresh-rung-';
+export const ADD_FLAP_KEY = 'crypto-universe-add-flap';
 export const REFRESH_ACTOR = 'crypto-universe-refresh';
 const LOG = '[B-UNIVERSE-REFRESH-ACTS][refresh]';
 
@@ -135,6 +136,29 @@ export function nextConsecutiveRefusals(prev: number, outcome: RefreshOutcome): 
   return outcome === 'refused' || outcome === 'applied_confirmed' ? prev + 1 : 0;
 }
 
+type AddFailures = { rejected: string[]; unconfirmed: string[] };
+type StoredAddFailures = { rejectedAdds: unknown; unconfirmedAdds: unknown };
+
+const stringArray = (value: unknown): string[] =>
+  Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+
+/**
+ * Symbols whose incremental add failed in this run handoff and in each of the two preceding stored run rows.
+ * The current failures are consumed before this run row exists; the two stored rows therefore make the third
+ * consecutive daily failure durable across process restarts.
+ */
+export function addFailureFlapSymbols(
+  current: AddFailures,
+  previousNewestFirst: readonly StoredAddFailures[],
+): string[] {
+  const currentSymbols = [...new Set([...current.rejected, ...current.unconfirmed])].sort();
+  if (previousNewestFirst.length < 2) return [];
+  return currentSymbols.filter((symbol) => previousNewestFirst.slice(0, 2).every((row) => {
+    const failed = new Set([...stringArray(row.rejectedAdds), ...stringArray(row.unconfirmedAdds)]);
+    return failed.has(symbol);
+  }));
+}
+
 /** Episode baseline from the latest confirmable row: usable only while that row is still inside an episode. */
 export function baselineFrom(row: { outcome: string; computedSymbols: unknown } | null): string[] | null {
   if (!row) return null;
@@ -217,9 +241,14 @@ export async function runCryptoUniverseRefresh(
   const computed = [...new Set(universe.symbols)].sort();
 
   // Previous rows: the counter, the episode baseline, and the age of the running set.
-  const [lastRow] = await db.select({ consecutiveRefusals: cryptoUniverseRefreshRuns.consecutiveRefusals })
-    .from(cryptoUniverseRefreshRuns).orderBy(desc(cryptoUniverseRefreshRuns.startedAt)).limit(1);
+  const recentRows = await db.select({
+    consecutiveRefusals: cryptoUniverseRefreshRuns.consecutiveRefusals,
+    rejectedAdds: cryptoUniverseRefreshRuns.rejectedAdds,
+    unconfirmedAdds: cryptoUniverseRefreshRuns.unconfirmedAdds,
+  }).from(cryptoUniverseRefreshRuns).orderBy(desc(cryptoUniverseRefreshRuns.startedAt)).limit(2);
+  const [lastRow] = recentRows;
   const prevConsecutive = lastRow?.consecutiveRefusals ?? 0;
+  const addFlapSymbols = addFailureFlapSymbols(addFailures, recentRows);
   const [lastConfirmable] = await db.select({
     outcome: cryptoUniverseRefreshRuns.outcome, computedSymbols: cryptoUniverseRefreshRuns.computedSymbols,
   }).from(cryptoUniverseRefreshRuns).where(eq(cryptoUniverseRefreshRuns.confirmable, true))
@@ -329,6 +358,30 @@ export async function runCryptoUniverseRefresh(
 
   // Alerts.
   const alerts = await import('./system-alerts.js');
+  if (addFlapSymbols.length > 0) {
+    await alerts.addAlert({
+      triggers_at: new Date(),
+      category: 'health_check',
+      severity: 'warning',
+      title: 'Crypto universe add failed in 3 consecutive daily refreshes',
+      body: `At mint, the same incremental add failed in three consecutive refresh rows. ` +
+        `Read the latest crypto_universe_refresh_runs rows (rejected_adds and unconfirmed_adds) for the live streak. ` +
+        `Mint row ${runId}; symbols at mint: ${addFlapSymbols.join(', ')}. The alert resolves only after a clean ` +
+        `applied/noop run reports no add failures.`,
+      dedupe_key: ADD_FLAP_KEY,
+      metadata: {
+        batch: 'B-UNIVERSE-REFRESH-ACTS', ledger: '#1018', run_id: runId,
+        occurrence_id: occurrenceId, symbols_at_mint: addFlapSymbols, threshold_runs: 3,
+      },
+    });
+  } else if (
+    addFailures.rejected.length === 0 && addFailures.unconfirmed.length === 0
+    && (outcome === 'applied' || outcome === 'noop')
+  ) {
+    await alerts.resolveAlertsByDedupeKey(
+      ADD_FLAP_KEY, REFRESH_ACTOR, `crypto_universe_refresh_runs ${runId}`, 'engine',
+    );
+  }
   if (outcome === 'refused' || outcome === 'applied_confirmed') {
     const rung = rungFor(consecutiveRefusals);
     await alerts.addAlert({
