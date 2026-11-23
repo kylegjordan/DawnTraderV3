@@ -133,6 +133,8 @@ export const cryptoUniverseRefreshRuns = pgTable("crypto_universe_refresh_runs",
   pinned: jsonb("pinned").notNull(),
   rejectedAdds: jsonb("rejected_adds").notNull(),
   unconfirmedAdds: jsonb("unconfirmed_adds").notNull(),
+  // Symbols assigned to newly opened shards. Their open-time replies have no req_id, so failures are not attributable.
+  untrackedOverflowAdds: jsonb("untracked_overflow_adds").notNull(),
   batches: jsonb("batches").notNull(),
   volumes: jsonb("volumes").notNull(),
   floorUsd: doublePrecision("floor_usd"),

@@ -285,10 +285,12 @@ export async function runCryptoUniverseRefresh(
   // 6. Apply.
   let added: string[] = [];
   let droppedApplied: string[] = [];
+  let untrackedOverflowAdds: string[] = [];
   if (decision && (decision.add.length || decision.drop.length)) {
     const r = await archiver.applyCryptoUniverseChange({ add: decision.add, drop: decision.drop, occurrenceId });
     added = r.added;
     droppedApplied = r.dropped;
+    untrackedOverflowAdds = r.untrackedOverflowAdds;
   }
   const countAfter = archiver.getCryptoRecorderRunningSymbols().length;
   const consecutiveRefusals = nextConsecutiveRefusals(prevConsecutive, outcome);
@@ -313,6 +315,7 @@ export async function runCryptoUniverseRefresh(
     pinned: pins,
     rejectedAdds: addFailures.rejected,
     unconfirmedAdds: addFailures.unconfirmed,
+    untrackedOverflowAdds,
     batches: universe.batches,
     volumes: universe.volumeUsdBySymbol,
     floorUsd: universe.floorUsd,
