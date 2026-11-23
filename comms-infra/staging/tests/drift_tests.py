@@ -365,6 +365,8 @@ c, o = run()
 check("r2: dtmint locked with '!' is flagged (the mint needs '*')", "dtmint's password field is" in o, o)
 check("r2: dtapi '!$6$...' (locked with a hash) is NOT flagged", "dtapi has a usable password hash" not in o, o)
 check("r2: a grant in the MAIN sudoers file is flagged", "%s/etc/sudoers also mentions" % T in o, o)
+check("5a1 live: a stray dtmint rule names the mapped dtapi drop-in as its sole allowed home",
+      ("%s/etc/sudoers also mentions dtmint — only %s/etc/sudoers.d/dtapi may" % (T, T)) in o, o)
 check("r3: a file pulled in by @include is followed and flagged", "%s/etc/sudoers.extra also mentions" % T in o, o)
 check("r3: a rule for ALL users (in an @includedir file) is flagged", "zz-everyone has a rule for ALL users" in o, o)
 check("r3: the real /etc/sudoers.d/dtapi is NOT flagged for naming dtapi or its mint-only dtmint caller",

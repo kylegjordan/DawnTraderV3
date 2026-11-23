@@ -730,7 +730,7 @@ def check_extra(name, box):
                         % (fp, ln.strip()[:80]), "SUDO", fp)
             for who, home in own.items():
                 if who in txt and fp != home:
-                    out("STATE", "%s also mentions %s — only %s may" % (fp, who, "/etc/sudoers.d/" + who if home else "no sudoers file"),
+                    out("STATE", "%s also mentions %s — only %s may" % (fp, who, home if home else "no sudoers file"),
                         "SUDO", fp)
     elif name == "no_authorized_keys2":
         p = P("/home/dtmint/.ssh/authorized_keys2")
