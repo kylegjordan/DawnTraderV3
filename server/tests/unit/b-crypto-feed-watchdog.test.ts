@@ -75,6 +75,7 @@ import {
 } from '../../services/passive-archive/crypto-spot-archiver.js';
 import { decideWitnessVouch } from '../../core/trading/witness-vouch.js';
 import { proportionFresh } from '../../services/market-data/feed-health-aggregate.js';
+import { isValidResolutionEvidence } from '../../services/system-alerts.js';
 
 const alerts = { added: [] as any[], resolved: [] as string[], throwOnAdd: 0, open: new Set<string>() };
 const T0 = new Date('2026-11-05T10:00:00Z').getTime();
@@ -341,7 +342,11 @@ describe('Step-4 BLOCKER — a failed alert write is retried, never lost', () =>
         await writeGate;
         return o;
       },
-      resolveByKey: async (k: string) => { alerts.resolved.push(k); return [k]; },
+      resolveByKey: async (k: string, _by: string, evidence: string) => {
+        expect(isValidResolutionEvidence(evidence)).toBe(true);
+        alerts.resolved.push(k);
+        return [k];
+      },
       hasOpen: async () => false,
     }));
     conn = makeConn();
@@ -349,7 +354,7 @@ describe('Step-4 BLOCKER — a failed alert write is retried, never lost', () =>
 
     const tick = conn.watchTick(Date.now());
     await writeStarted;
-    await conn.stopAndResolve('test retirement');
+    await conn.stopAndResolve('B-UNIVERSE-REFRESH-ACTS #1018 test retirement');
     releaseWrite();
     await tick;
 
