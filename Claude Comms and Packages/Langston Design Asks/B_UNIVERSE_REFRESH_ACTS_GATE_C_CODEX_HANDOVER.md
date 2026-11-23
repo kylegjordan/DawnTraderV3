@@ -29,6 +29,7 @@ File: `server/services/crypto-universe-refresh.ts`
 - At the start of each recorded refresh, the settled incremental-add failures are taken from the recorder. The first run-row query now loads the two newest stored rows' `rejected_adds` and `unconfirmed_adds` alongside the refusal counter.
 - `addFailureFlapSymbols` intersects the current failed symbols with each of those two rows. A symbol therefore qualifies only when the same add failed in three consecutive recorded refresh handoffs. The two stored rows make the streak survive a process restart.
 - One aggregate warning uses dedupe key `crypto-universe-add-flap`; the row records the symbols at mint, run id, occurrence id and threshold.
+- The PM alert-owner builder maps that exact family to CC-A / `B-UNIVERSE-REFRESH-ACTS`, so the new page does not enter the unknown-owner lane.
 - The row resolves only when the current handoff contains zero rejected and zero unconfirmed adds **and** this refresh reaches `applied` or `noop`. A refusal, a confirmed large-drop step, or another symbol's add failure does not clear it.
 - Honest limit carried from Gate B: new-shard overflow adds use the open-time subscription path and are not in the tracked failure handoff. They are persisted separately as `untracked_overflow_adds`; they neither qualify for this streak nor get misreported as confirmed.
 
@@ -63,6 +64,7 @@ Against the rebased Gate B content, Gate C changes only:
 
 - `server/services/crypto-universe-refresh.ts`
 - `server/tests/unit/b-universe-refresh-acts-refresh.test.ts`
+- `scripts/pm/build-alert-owner-table.py`
 - `Claude Comms and Packages/Change Lists/B_UNIVERSE_REFRESH_ACTS_CHANGE_LIST.md`
 - this handover
 
