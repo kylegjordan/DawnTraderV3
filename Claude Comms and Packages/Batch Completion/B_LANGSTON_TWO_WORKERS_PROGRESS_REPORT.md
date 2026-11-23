@@ -127,6 +127,22 @@ The Step 9 fold (code `021d015d4`, merged at `2b7396593`) changes which invokes 
 - **Reader rule added by the fold:** a `dropped_not_ready` row is not an invoke. It is left out of q5's per-day invoke count and reported as its own count. It is not a q6 degraded invoke either: the item was never invoked.
 - **`DEPLOY_WINDOWS.jsonl`: no row needed.** That register guards staging app deploys made by `dt-deploy`. This observation lives in the Langston bridge on Helsinki, which no `dt-deploy` touches. The only thing that disturbs it is a bridge install, and that is this batch's own, owner CC-INFRA.
 
+## 6c. Early legacy reader and corrected day-3 arm — 2026-11-23
+
+The graded window starts at the fold install, `T' = 2026-11-21T00:13:33Z`, so its true day-3 reader is due at `2026-11-24T00:13:33Z`. The original alert `5437766c-fc28-4bf2-a409-2b0d73c6d9c6` retained the pre-fold schedule and fired at `2026-11-23T18:41:00Z`, about five hours early. The complete task-log population at the early safety read was 88 rows started at or after `T'`; zero were `dropped_not_ready`, so the invoke population was 88. The task log held 925 rows with `started` in total, which is the file-read positive control.
+
+| UTC day | invokes | q5 failure outcomes | q5 failure share | overlapped invokes | mean duration of overlapped invokes | q5 stop? | q6 degraded invokes | q6 stop? |
+|---|---:|---:|---:|---:|---:|---|---:|---|
+| 2026-11-21 | 26 | 0 | 0.000% | 12 | 329.315 s | **NO** | 0 | **NO** |
+| 2026-11-22 | 62 | 1 timeout | 1.613% | 34 | 413.283 s | **NO** | 0 | **NO** |
+| 2026-11-23 through 22:54Z | 0 | 0 | N/A | 0 | N/A | **NO** | 0 | **NO** |
+
+- **q5 outcome leg:** the 2026-11-22 timeout is message `1574185381199487010`. One outcome is not more than three and 1.613% is not more than 5%, so the conjunctive stop does not fire. There were no q5 failure outcomes on 2026-11-21.
+- **q5 duration leg:** 2026-11-22 has at least 20 overlapped invokes, but their 413.283 s mean is below 600 s. The overlap reader's live positive control is messages `1573508431829016618` and `1573508961045577891`, which overlapped for 412.747 s.
+- **q6:** across the 88 invokes there were zero `post_failed`; all 87 replies were at least 2,202 characters, so no gate reply can be under 40 characters; and there were zero self-advance invokes, so there cannot be a self-advance parked for a missing marker. The task-log kind reader finds 15 historical self-advance rows, most recently `adv-1573462006424670410`, so the zero after `T'` is not a blind kind reader. The reader's in-memory threshold self-test also classifies a synthetic `post_failed`, a 12-character gate reply and a self-advance missing-marker row before it reads the live file.
+- **Decision at the early read:** neither pre-registered q5 stop nor q6 stop had fired, and the one-worker flag remained off. This is not the day-3 completion because the replacement window had not elapsed.
+- **Corrected readers:** `94c24825-f527-4aff-ae39-623ada338b19` is scheduled for exactly `T' + 3 d`; `1bb7196a-1042-44d7-89d3-966414bfc61a` for `T' + 7 d`; and `12875bf3-97b5-435c-9809-c55a00b7e002` for `T' + 21 d`. Each body names the observation restart. The three obsolete pre-fold alerts `5437766c-fc28-4bf2-a409-2b0d73c6d9c6`, `ad4a3ea7-141a-4da1-9040-06bd87921f21` and `d78d017b-5724-472b-a4aa-375d90f3dd14` are resolved with their replacement ids as evidence; none was manually acknowledged.
+
 ## 7. The pre-registered close criterion (quoted from `B_LANGSTON_TWO_WORKERS_PRE_REGISTRATION.md` §4, unchanged)
 
 - **W:** "PASS: under 20 min on the first qualifying day after switch-on"; the 7-day median is reported beside it. Per A-1, a miss is read beside the after-window's shared-lane share.
