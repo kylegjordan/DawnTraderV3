@@ -123,3 +123,9 @@ The first live sided open's Paper Trading -> Open Trades values were already nav
 `REVIEWER: claim-only · no deploy in the window changed which crypto paper signals could open; name the settling objects and other consistent states · deploy-induced boundary claim holds, unqualified behavior-boundary claim is too broad · re-derived y`
 
 The hit was re-derived against all six adjacent source ranges, the applied-migration rows and the current per-class setting. The dispatch is narrowed to the deploy-induced boundary the registered rule asks for; it does not turn ad-hoc settings, other eligibility authorities, unrecorded files or queue/capital/cache state into claimed absences.
+
+## Step 8 ruling — Coltrane PROCEED
+
+Coltrane independently reran the registered database population at exact review ref `34fec1121b8127fc987ab85c837cf31e366169e7` and ruled PROCEED at `2026-11-23T22:47:31Z`. His rerun reproduced the 38-open baseline, then the 67 window opens on 34 symbols, all 67 sided and zero mid/other, split 40 QUANT / 21 HYBRID / 6 PATTERN.
+
+The registered verdict remains literally **NO-RESULT, not PASS** because the 11-21 admitted-symbol supply cell is 6 against the floor of 7. No repeat window is required before `8c-OFF-REMOVAL`: the supply rule prevents a low-open count from grading the switch FAIL, but it does not erase seven days of descriptive evidence that the switch stayed operative for every observed open. The `B-PRICE-SIDE-BY-JOB` deploy-window row is closed `completed` with that distinction and the no-stop-trigger result.

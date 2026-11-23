@@ -119,3 +119,9 @@ git show e3a96a8126f0280a9568bb1823b9210783f0afe0:1-system-manual/DEPLOY_WINDOWS
 ## Ruling requested
 
 **PROCEED or SEND BACK** on deploying exact SHA `e3a96a8126f0280a9568bb1823b9210783f0afe0` once the time and owner gates above are satisfied. Specifically attack the aggregate compatibility of the four behavior-bearing batches, migration order, rollback asymmetry, and the claim that this is the last clean cutoff before unfinished B-UNIVERSE runtime work.
+
+## Coltrane ruling
+
+**PROCEED** at exact review ref `3087bb7c98727a82a48e89d32a2b268a90cb635e` (`2026-11-23T22:47:56Z`), authorizing deployment of exactly `e3a96a8126f0280a9568bb1823b9210783f0afe0` once the separate time, NEW, INFRA and immediate pre-deploy window-census gates pass. No later SHA is covered.
+
+Independent checks reproduced 5/5 canonical regime labels across configuration, schema and migration, including a mutation that failed when one migration label was deleted. The R2' migration precedes #1263 and they touch independent state; PFC reconnect state and AI Summary removal do not conflict. Coltrane also re-derived the rollback asymmetry and confirmed the cutoff has zero B-UNIVERSE and zero B-ALERT-ORPHAN runtime paths, while later history contains both.
