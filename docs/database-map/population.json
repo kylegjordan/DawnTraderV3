@@ -22,33 +22,6 @@
       "classifier": "suffix",
       "evidenceClass": "runtime",
       "mode": "100644",
-      "oid": "c0b2da7907aa9a9a71debbea86fc043334f0f309",
-      "path": "attached_assets/filter-insights (11.18.25)_1763821067417.tsx",
-      "reason": "document_or_output_root:attached_assets",
-      "type": "blob"
-    },
-    {
-      "classifier": "suffix",
-      "evidenceClass": "runtime",
-      "mode": "100644",
-      "oid": "fc37430f427a31e2a770035dc5a50c1feae0b766",
-      "path": "attached_assets/REPLIT_VALIDATION_1771706539255.sh",
-      "reason": "document_or_output_root:attached_assets",
-      "type": "blob"
-    },
-    {
-      "classifier": "suffix",
-      "evidenceClass": "runtime",
-      "mode": "100644",
-      "oid": "fc2e2b98001ba481c7bff6bd444ca758ddf3cfa9",
-      "path": "backups and data dumps/pre_phase27f15_full.sql",
-      "reason": "document_or_output_root:backups and data dumps",
-      "type": "blob"
-    },
-    {
-      "classifier": "suffix",
-      "evidenceClass": "runtime",
-      "mode": "100644",
       "oid": "01c1ec90ee341a4a3d4b0003054995406bb4823b",
       "path": "Claude Comms and Packages/Batch Completion/B_REACH_BASELINE_ADJUST_EVIDENCE/paper_cells_pre_post.sql",
       "reason": "document_or_output_root:Claude Comms and Packages",
@@ -67,15 +40,6 @@
       "classifier": "suffix",
       "evidenceClass": "runtime",
       "mode": "100644",
-      "oid": "5aa5fd92a41e40a3d7662bb338f0c3fdf501ee24",
-      "path": "Claude Comms and Packages/Batch Completion/B_XSTOCK_FEE_CONTRACT_EVIDENCE/armb_fine_final.sql",
-      "reason": "document_or_output_root:Claude Comms and Packages",
-      "type": "blob"
-    },
-    {
-      "classifier": "suffix",
-      "evidenceClass": "runtime",
-      "mode": "100644",
       "oid": "30c566ce06bb50cb83b13a3efe713b03f64918d0",
       "path": "Claude Comms and Packages/Batch Completion/B_XSTOCK_FEE_CONTRACT_EVIDENCE/armb_fine.sql",
       "reason": "document_or_output_root:Claude Comms and Packages",
@@ -85,8 +49,8 @@
       "classifier": "suffix",
       "evidenceClass": "runtime",
       "mode": "100644",
-      "oid": "07ea0adce7b9808cfc040042648c359440164a2d",
-      "path": "Claude Comms and Packages/Batch Completion/B_XSTOCK_FEE_CONTRACT_EVIDENCE/armb_read_final.sql",
+      "oid": "5aa5fd92a41e40a3d7662bb338f0c3fdf501ee24",
+      "path": "Claude Comms and Packages/Batch Completion/B_XSTOCK_FEE_CONTRACT_EVIDENCE/armb_fine_final.sql",
       "reason": "document_or_output_root:Claude Comms and Packages",
       "type": "blob"
     },
@@ -103,15 +67,6 @@
       "classifier": "suffix",
       "evidenceClass": "runtime",
       "mode": "100644",
-      "oid": "997acaa9c003bf9e1cbba392a487c19b1c7ed8dd",
-      "path": "Claude Comms and Packages/Batch Completion/B_XSTOCK_FEE_CONTRACT_EVIDENCE/armb_read2_final.sql",
-      "reason": "document_or_output_root:Claude Comms and Packages",
-      "type": "blob"
-    },
-    {
-      "classifier": "suffix",
-      "evidenceClass": "runtime",
-      "mode": "100644",
       "oid": "c31cc9dd069575b6a8d6dfec414d3fac2cd445ad",
       "path": "Claude Comms and Packages/Batch Completion/B_XSTOCK_FEE_CONTRACT_EVIDENCE/armb_read2.sql",
       "reason": "document_or_output_root:Claude Comms and Packages",
@@ -121,8 +76,17 @@
       "classifier": "suffix",
       "evidenceClass": "runtime",
       "mode": "100644",
-      "oid": "a7366c56ada33a259e4bd42e1ab1844e1ad48d97",
-      "path": "Claude Comms and Packages/Batch Completion/B_XSTOCK_FEE_CONTRACT_EVIDENCE/p8_fine_final.sql",
+      "oid": "997acaa9c003bf9e1cbba392a487c19b1c7ed8dd",
+      "path": "Claude Comms and Packages/Batch Completion/B_XSTOCK_FEE_CONTRACT_EVIDENCE/armb_read2_final.sql",
+      "reason": "document_or_output_root:Claude Comms and Packages",
+      "type": "blob"
+    },
+    {
+      "classifier": "suffix",
+      "evidenceClass": "runtime",
+      "mode": "100644",
+      "oid": "07ea0adce7b9808cfc040042648c359440164a2d",
+      "path": "Claude Comms and Packages/Batch Completion/B_XSTOCK_FEE_CONTRACT_EVIDENCE/armb_read_final.sql",
       "reason": "document_or_output_root:Claude Comms and Packages",
       "type": "blob"
     },
@@ -139,8 +103,8 @@
       "classifier": "suffix",
       "evidenceClass": "runtime",
       "mode": "100644",
-      "oid": "0303367eb1b00fcd0c761979414612b2b32165b5",
-      "path": "Claude Comms and Packages/Batch Completion/B_XSTOCK_FEE_CONTRACT_EVIDENCE/p8_q1_final.sql",
+      "oid": "a7366c56ada33a259e4bd42e1ab1844e1ad48d97",
+      "path": "Claude Comms and Packages/Batch Completion/B_XSTOCK_FEE_CONTRACT_EVIDENCE/p8_fine_final.sql",
       "reason": "document_or_output_root:Claude Comms and Packages",
       "type": "blob"
     },
@@ -157,8 +121,8 @@
       "classifier": "suffix",
       "evidenceClass": "runtime",
       "mode": "100644",
-      "oid": "2a1e25cc500f6c5a377c99d4cd20bbcce0260b0c",
-      "path": "Claude Comms and Packages/Batch Completion/B_XSTOCK_FEE_CONTRACT_EVIDENCE/p8_q2_final.sql",
+      "oid": "0303367eb1b00fcd0c761979414612b2b32165b5",
+      "path": "Claude Comms and Packages/Batch Completion/B_XSTOCK_FEE_CONTRACT_EVIDENCE/p8_q1_final.sql",
       "reason": "document_or_output_root:Claude Comms and Packages",
       "type": "blob"
     },
@@ -175,6 +139,15 @@
       "classifier": "suffix",
       "evidenceClass": "runtime",
       "mode": "100644",
+      "oid": "2a1e25cc500f6c5a377c99d4cd20bbcce0260b0c",
+      "path": "Claude Comms and Packages/Batch Completion/B_XSTOCK_FEE_CONTRACT_EVIDENCE/p8_q2_final.sql",
+      "reason": "document_or_output_root:Claude Comms and Packages",
+      "type": "blob"
+    },
+    {
+      "classifier": "suffix",
+      "evidenceClass": "runtime",
+      "mode": "100644",
       "oid": "bd66d19fd9ecedcfb78c355ab654bae879798304",
       "path": "Claude Comms and Packages/Batch Completion/B_XSTOCK_FEE_CONTRACT_EVIDENCE/p8_q3.sql",
       "reason": "document_or_output_root:Claude Comms and Packages",
@@ -184,8 +157,8 @@
       "classifier": "suffix",
       "evidenceClass": "runtime",
       "mode": "100644",
-      "oid": "c8ee4d2db614a4ff722009cb77d353cd925258f1",
-      "path": "Claude Comms and Packages/Batch Completion/B_XSTOCK_FEE_CONTRACT_EVIDENCE/p8_q4_final.sql",
+      "oid": "71cca57138f99bd2684c48a54a8ed77c82877f62",
+      "path": "Claude Comms and Packages/Batch Completion/B_XSTOCK_FEE_CONTRACT_EVIDENCE/p8_q4.sql",
       "reason": "document_or_output_root:Claude Comms and Packages",
       "type": "blob"
     },
@@ -193,8 +166,8 @@
       "classifier": "suffix",
       "evidenceClass": "runtime",
       "mode": "100644",
-      "oid": "71cca57138f99bd2684c48a54a8ed77c82877f62",
-      "path": "Claude Comms and Packages/Batch Completion/B_XSTOCK_FEE_CONTRACT_EVIDENCE/p8_q4.sql",
+      "oid": "c8ee4d2db614a4ff722009cb77d353cd925258f1",
+      "path": "Claude Comms and Packages/Batch Completion/B_XSTOCK_FEE_CONTRACT_EVIDENCE/p8_q4_final.sql",
       "reason": "document_or_output_root:Claude Comms and Packages",
       "type": "blob"
     },
@@ -220,8 +193,8 @@
       "classifier": "suffix",
       "evidenceClass": "runtime",
       "mode": "100644",
-      "oid": "56c7334f52a7bb24ab3cfe28803895871b1ec7fc",
-      "path": "Claude Comms and Packages/Batch Completion/B_XSTOCK_FEE_CONTRACT_EVIDENCE/rv_armb_main_7c2_final.sql",
+      "oid": "4d94dbd4d768d7b3d96239003c91fbaec3da1017",
+      "path": "Claude Comms and Packages/Batch Completion/B_XSTOCK_FEE_CONTRACT_EVIDENCE/rv_armb_main_7c2.sql",
       "reason": "document_or_output_root:Claude Comms and Packages",
       "type": "blob"
     },
@@ -229,8 +202,8 @@
       "classifier": "suffix",
       "evidenceClass": "runtime",
       "mode": "100644",
-      "oid": "4d94dbd4d768d7b3d96239003c91fbaec3da1017",
-      "path": "Claude Comms and Packages/Batch Completion/B_XSTOCK_FEE_CONTRACT_EVIDENCE/rv_armb_main_7c2.sql",
+      "oid": "56c7334f52a7bb24ab3cfe28803895871b1ec7fc",
+      "path": "Claude Comms and Packages/Batch Completion/B_XSTOCK_FEE_CONTRACT_EVIDENCE/rv_armb_main_7c2_final.sql",
       "reason": "document_or_output_root:Claude Comms and Packages",
       "type": "blob"
     },
@@ -499,24 +472,6 @@
       "classifier": "suffix",
       "evidenceClass": "runtime",
       "mode": "100644",
-      "oid": "21b0c17668dcf6c477b67294838e1a5a2c238723",
-      "path": "Claude Comms and Packages/comms-infra/cc-comms-bridge.py",
-      "reason": "document_or_output_root:Claude Comms and Packages",
-      "type": "blob"
-    },
-    {
-      "classifier": "suffix",
-      "evidenceClass": "runtime",
-      "mode": "100644",
-      "oid": "43990912777ab5731f99bbbc26a3f69289654615",
-      "path": "Claude Comms and Packages/comms-infra/langston-call.sh",
-      "reason": "document_or_output_root:Claude Comms and Packages",
-      "type": "blob"
-    },
-    {
-      "classifier": "suffix",
-      "evidenceClass": "runtime",
-      "mode": "100644",
       "oid": "196b30e046e77814a0d8022edc28526034f4aab3",
       "path": "Claude Comms and Packages/Langston Design Asks/KD84_refusals_read.py",
       "reason": "document_or_output_root:Claude Comms and Packages",
@@ -528,6 +483,15 @@
       "mode": "100644",
       "oid": "bbf9eb800146fab6f9674a1cdb8026c02af90089",
       "path": "Claude Comms and Packages/Langston/langston-call.sh",
+      "reason": "document_or_output_root:Claude Comms and Packages",
+      "type": "blob"
+    },
+    {
+      "classifier": "suffix",
+      "evidenceClass": "runtime",
+      "mode": "100644",
+      "oid": "e25641a77777376585bc3a9eee202b982cd4858c",
+      "path": "Claude Comms and Packages/Scope Files/B63_ITEM13_EVIDENCE_SCRIPT.py",
       "reason": "document_or_output_root:Claude Comms and Packages",
       "type": "blob"
     },
@@ -571,15 +535,6 @@
       "classifier": "suffix",
       "evidenceClass": "runtime",
       "mode": "100644",
-      "oid": "e25641a77777376585bc3a9eee202b982cd4858c",
-      "path": "Claude Comms and Packages/Scope Files/B63_ITEM13_EVIDENCE_SCRIPT.py",
-      "reason": "document_or_output_root:Claude Comms and Packages",
-      "type": "blob"
-    },
-    {
-      "classifier": "suffix",
-      "evidenceClass": "runtime",
-      "mode": "100644",
       "oid": "876a30d9962a10d39ee4a20ad3f3d401b9f19763",
       "path": "Claude Comms and Packages/Scope Files/b656_classifier_replay_04_18.py",
       "reason": "document_or_output_root:Claude Comms and Packages",
@@ -607,8 +562,8 @@
       "classifier": "suffix",
       "evidenceClass": "runtime",
       "mode": "100644",
-      "oid": "d89d357ef368a42513683b0d9b93c415a6f3b748",
-      "path": "Claude Comms and Packages/Scope Files/b656_phase_a_track1.py",
+      "oid": "de9c5723c27ef66816d71942e9e6e01bea69944d",
+      "path": "Claude Comms and Packages/Scope Files/b656_phase_a.py",
       "reason": "document_or_output_root:Claude Comms and Packages",
       "type": "blob"
     },
@@ -616,8 +571,8 @@
       "classifier": "suffix",
       "evidenceClass": "runtime",
       "mode": "100644",
-      "oid": "de9c5723c27ef66816d71942e9e6e01bea69944d",
-      "path": "Claude Comms and Packages/Scope Files/b656_phase_a.py",
+      "oid": "d89d357ef368a42513683b0d9b93c415a6f3b748",
+      "path": "Claude Comms and Packages/Scope Files/b656_phase_a_track1.py",
       "reason": "document_or_output_root:Claude Comms and Packages",
       "type": "blob"
     },
@@ -646,6 +601,51 @@
       "oid": "486b71c42735cbcb8e526a0b49995f69c6494b7e",
       "path": "Claude Comms and Packages/Scope Files/b656_track2_step3_clean_days.py",
       "reason": "document_or_output_root:Claude Comms and Packages",
+      "type": "blob"
+    },
+    {
+      "classifier": "suffix",
+      "evidenceClass": "runtime",
+      "mode": "100644",
+      "oid": "21b0c17668dcf6c477b67294838e1a5a2c238723",
+      "path": "Claude Comms and Packages/comms-infra/cc-comms-bridge.py",
+      "reason": "document_or_output_root:Claude Comms and Packages",
+      "type": "blob"
+    },
+    {
+      "classifier": "suffix",
+      "evidenceClass": "runtime",
+      "mode": "100644",
+      "oid": "43990912777ab5731f99bbbc26a3f69289654615",
+      "path": "Claude Comms and Packages/comms-infra/langston-call.sh",
+      "reason": "document_or_output_root:Claude Comms and Packages",
+      "type": "blob"
+    },
+    {
+      "classifier": "suffix",
+      "evidenceClass": "runtime",
+      "mode": "100644",
+      "oid": "fc37430f427a31e2a770035dc5a50c1feae0b766",
+      "path": "attached_assets/REPLIT_VALIDATION_1771706539255.sh",
+      "reason": "document_or_output_root:attached_assets",
+      "type": "blob"
+    },
+    {
+      "classifier": "suffix",
+      "evidenceClass": "runtime",
+      "mode": "100644",
+      "oid": "c0b2da7907aa9a9a71debbea86fc043334f0f309",
+      "path": "attached_assets/filter-insights (11.18.25)_1763821067417.tsx",
+      "reason": "document_or_output_root:attached_assets",
+      "type": "blob"
+    },
+    {
+      "classifier": "suffix",
+      "evidenceClass": "runtime",
+      "mode": "100644",
+      "oid": "fc2e2b98001ba481c7bff6bd444ca758ddf3cfa9",
+      "path": "backups and data dumps/pre_phase27f15_full.sql",
+      "reason": "document_or_output_root:backups and data dumps",
       "type": "blob"
     },
     {
@@ -929,7 +929,7 @@
     }
   ],
   "excluded_count": 103,
-  "excluded_path_sha256": "88ff8644ac26ae2b25dd40386dada10259d6e238811b093f1d223ea229f36e37",
+  "excluded_path_sha256": "78cc2e107757d69a1c5938cdab0f3268145a184c5ad5836e5b8338aaf2a223a1",
   "included": [
     {
       "classifier": "suffix",
@@ -1119,8 +1119,32 @@
       "classifier": "suffix",
       "evidenceClass": "operator",
       "mode": "100644",
-      "oid": "557a6584cf0f248ac98ab4a1dbd74b3c3a1fb5f0",
+      "oid": "2e78d1a78721eb5729d1afa683522d2c99444fb3",
       "path": ".github/workflows/ci.yml",
+      "type": "blob"
+    },
+    {
+      "classifier": "root_dockerfile",
+      "evidenceClass": "runtime",
+      "mode": "100644",
+      "oid": "c3d6185643f9567646b2441e1be299fa710bbbef",
+      "path": "Dockerfile",
+      "type": "blob"
+    },
+    {
+      "classifier": "suffix",
+      "evidenceClass": "runtime",
+      "mode": "100644",
+      "oid": "bb41ca4666deefa765d07c6210a6d3880c9fe1ed",
+      "path": "PHASE_27.F.13.O_BACKUP.sql",
+      "type": "blob"
+    },
+    {
+      "classifier": "suffix",
+      "evidenceClass": "runtime",
+      "mode": "100644",
+      "oid": "fc37430f427a31e2a770035dc5a50c1feae0b766",
+      "path": "REPLIT_VALIDATION.sh",
       "type": "blob"
     },
     {
@@ -1209,6 +1233,38 @@
       "mode": "100644",
       "oid": "53f79840bdf4ec1f8ab6521f665d6aa64220f3a8",
       "path": "client/src/App.tsx",
+      "type": "blob"
+    },
+    {
+      "classifier": "suffix",
+      "evidenceClass": "runtime",
+      "mode": "100644",
+      "oid": "51997667c76617cffc476f1c435d3446f0661415",
+      "path": "client/src/components/AuditLogViewer.tsx",
+      "type": "blob"
+    },
+    {
+      "classifier": "suffix",
+      "evidenceClass": "runtime",
+      "mode": "100644",
+      "oid": "9f370ec70eeb97dcb08646b244fe4dabba7d08ac",
+      "path": "client/src/components/ConfigSnapshotViewer.tsx",
+      "type": "blob"
+    },
+    {
+      "classifier": "suffix",
+      "evidenceClass": "runtime",
+      "mode": "100644",
+      "oid": "24d08ea2b0a6f899f6eaa5fc926b35dd475b9ff6",
+      "path": "client/src/components/DailyBriefCard.tsx",
+      "type": "blob"
+    },
+    {
+      "classifier": "suffix",
+      "evidenceClass": "runtime",
+      "mode": "100644",
+      "oid": "7f625797630e9d661c40545b1845b76d7361fb52",
+      "path": "client/src/components/OverrideFrequencyChart.tsx",
       "type": "blob"
     },
     {
@@ -1305,30 +1361,6 @@
       "mode": "100644",
       "oid": "31996f2c9002e64627ef8688531f8313682501b5",
       "path": "client/src/components/analytics/governance-section.tsx",
-      "type": "blob"
-    },
-    {
-      "classifier": "suffix",
-      "evidenceClass": "runtime",
-      "mode": "100644",
-      "oid": "51997667c76617cffc476f1c435d3446f0661415",
-      "path": "client/src/components/AuditLogViewer.tsx",
-      "type": "blob"
-    },
-    {
-      "classifier": "suffix",
-      "evidenceClass": "runtime",
-      "mode": "100644",
-      "oid": "9f370ec70eeb97dcb08646b244fe4dabba7d08ac",
-      "path": "client/src/components/ConfigSnapshotViewer.tsx",
-      "type": "blob"
-    },
-    {
-      "classifier": "suffix",
-      "evidenceClass": "runtime",
-      "mode": "100644",
-      "oid": "24d08ea2b0a6f899f6eaa5fc926b35dd475b9ff6",
-      "path": "client/src/components/DailyBriefCard.tsx",
       "type": "blob"
     },
     {
@@ -1585,14 +1617,6 @@
       "mode": "100644",
       "oid": "23bd2a7e5a746fc1926b3ab700afb010de3a0b2f",
       "path": "client/src/components/monitoring/engine-telemetry.tsx",
-      "type": "blob"
-    },
-    {
-      "classifier": "suffix",
-      "evidenceClass": "runtime",
-      "mode": "100644",
-      "oid": "7f625797630e9d661c40545b1845b76d7361fb52",
-      "path": "client/src/components/OverrideFrequencyChart.tsx",
       "type": "blob"
     },
     {
@@ -2885,6 +2909,14 @@
     },
     {
       "classifier": "suffix",
+      "evidenceClass": "operator",
+      "mode": "100644",
+      "oid": "9f06e2d83422405d9923bbdc005090136d1181bd",
+      "path": "comms-infra/discord/address_list.py",
+      "type": "blob"
+    },
+    {
+      "classifier": "suffix",
       "evidenceClass": "test_only",
       "mode": "100644",
       "oid": "da604d3ef13ab9ed04da586754ffc73e977603d4",
@@ -2895,8 +2927,8 @@
       "classifier": "suffix",
       "evidenceClass": "operator",
       "mode": "100644",
-      "oid": "9f06e2d83422405d9923bbdc005090136d1181bd",
-      "path": "comms-infra/discord/address_list.py",
+      "oid": "02c090189e9c303c410060719a9fc005d3d610cf",
+      "path": "comms-infra/discord/alert_lane.py",
       "type": "blob"
     },
     {
@@ -2927,8 +2959,8 @@
       "classifier": "suffix",
       "evidenceClass": "operator",
       "mode": "100644",
-      "oid": "02c090189e9c303c410060719a9fc005d3d610cf",
-      "path": "comms-infra/discord/alert_lane.py",
+      "oid": "82535b2fb445efcccd2d8d3d3d917844dce0be48",
+      "path": "comms-infra/discord/alert_owner_route.py",
       "type": "blob"
     },
     {
@@ -2937,14 +2969,6 @@
       "mode": "100644",
       "oid": "d7cd477ffadf47fdc1417e68a124718ad7fad27f",
       "path": "comms-infra/discord/alert_owner_route_test.py",
-      "type": "blob"
-    },
-    {
-      "classifier": "suffix",
-      "evidenceClass": "operator",
-      "mode": "100644",
-      "oid": "82535b2fb445efcccd2d8d3d3d917844dce0be48",
-      "path": "comms-infra/discord/alert_owner_route.py",
       "type": "blob"
     },
     {
@@ -2975,14 +2999,6 @@
       "classifier": "suffix",
       "evidenceClass": "operator",
       "mode": "100644",
-      "oid": "6bf693943ffc39624790aa8910289650068e9472",
-      "path": "comms-infra/discord/discord_common.py",
-      "type": "blob"
-    },
-    {
-      "classifier": "suffix",
-      "evidenceClass": "operator",
-      "mode": "100644",
       "oid": "4a96b71cff7dc50418d1af6ecc4ccaaa3f0b5ada",
       "path": "comms-infra/discord/discord-cc-bridge.py",
       "type": "blob"
@@ -2993,6 +3009,14 @@
       "mode": "100644",
       "oid": "3629a5c7d4e6b2bc78883d9f8f00b577ec92aa02",
       "path": "comms-infra/discord/discord-langston-bridge.py",
+      "type": "blob"
+    },
+    {
+      "classifier": "suffix",
+      "evidenceClass": "operator",
+      "mode": "100644",
+      "oid": "6bf693943ffc39624790aa8910289650068e9472",
+      "path": "comms-infra/discord/discord_common.py",
       "type": "blob"
     },
     {
@@ -3021,14 +3045,6 @@
     },
     {
       "classifier": "suffix",
-      "evidenceClass": "test_only",
-      "mode": "100644",
-      "oid": "3a29bcadc5d332d750d6f8c0ec52c6481066f187",
-      "path": "comms-infra/discord/gateway_watchdog_test.py",
-      "type": "blob"
-    },
-    {
-      "classifier": "suffix",
       "evidenceClass": "operator",
       "mode": "100644",
       "oid": "21a0a0dee9b57dc82945e9c3777c1d88567b13aa",
@@ -3037,34 +3053,10 @@
     },
     {
       "classifier": "suffix",
-      "evidenceClass": "operator",
-      "mode": "100644",
-      "oid": "60d2aa4cf81ca1e35de94fdc50136a6996ad655a",
-      "path": "comms-infra/discord/langston_alert_lane_probe.py",
-      "type": "blob"
-    },
-    {
-      "classifier": "suffix",
-      "evidenceClass": "operator",
-      "mode": "100644",
-      "oid": "978db46f14d0e4ee72c8755d5e50765c33ee1c30",
-      "path": "comms-infra/discord/langston_bridge_recovery_probe.py",
-      "type": "blob"
-    },
-    {
-      "classifier": "suffix",
       "evidenceClass": "test_only",
       "mode": "100644",
-      "oid": "c6c4ff37c388274f4bcc13e1ad364962a97cdb46",
-      "path": "comms-infra/discord/langston_queue_test.py",
-      "type": "blob"
-    },
-    {
-      "classifier": "suffix",
-      "evidenceClass": "operator",
-      "mode": "100644",
-      "oid": "4998af5ab2b24e75cc8ac765c4e603e1f2d32626",
-      "path": "comms-infra/discord/langston_queue.py",
+      "oid": "3a29bcadc5d332d750d6f8c0ec52c6481066f187",
+      "path": "comms-infra/discord/gateway_watchdog_test.py",
       "type": "blob"
     },
     {
@@ -3089,6 +3081,38 @@
       "mode": "100755",
       "oid": "e7a5203b37d5dd374ca5a2ba0c9e5af36ebe8b2b",
       "path": "comms-infra/discord/langston-concurrency-smoke",
+      "type": "blob"
+    },
+    {
+      "classifier": "suffix",
+      "evidenceClass": "operator",
+      "mode": "100644",
+      "oid": "60d2aa4cf81ca1e35de94fdc50136a6996ad655a",
+      "path": "comms-infra/discord/langston_alert_lane_probe.py",
+      "type": "blob"
+    },
+    {
+      "classifier": "suffix",
+      "evidenceClass": "operator",
+      "mode": "100644",
+      "oid": "978db46f14d0e4ee72c8755d5e50765c33ee1c30",
+      "path": "comms-infra/discord/langston_bridge_recovery_probe.py",
+      "type": "blob"
+    },
+    {
+      "classifier": "suffix",
+      "evidenceClass": "operator",
+      "mode": "100644",
+      "oid": "4998af5ab2b24e75cc8ac765c4e603e1f2d32626",
+      "path": "comms-infra/discord/langston_queue.py",
+      "type": "blob"
+    },
+    {
+      "classifier": "suffix",
+      "evidenceClass": "test_only",
+      "mode": "100644",
+      "oid": "c6c4ff37c388274f4bcc13e1ad364962a97cdb46",
+      "path": "comms-infra/discord/langston_queue_test.py",
       "type": "blob"
     },
     {
@@ -3244,22 +3268,6 @@
       "type": "blob"
     },
     {
-      "classifier": "suffix",
-      "evidenceClass": "operator",
-      "mode": "100644",
-      "oid": "8127f1b35fdb981a703d35590ca09db9caee4cb3",
-      "path": "comms-infra/langston-memory/bin/langston_memory_allowlist.py",
-      "type": "blob"
-    },
-    {
-      "classifier": "suffix",
-      "evidenceClass": "operator",
-      "mode": "100644",
-      "oid": "21c5d70a09e3f63605224a0626ba10aa6de28805",
-      "path": "comms-infra/langston-memory/bin/langston_memory.py",
-      "type": "blob"
-    },
-    {
       "classifier": "shebang",
       "evidenceClass": "operator",
       "mode": "100644",
@@ -3335,6 +3343,22 @@
       "classifier": "suffix",
       "evidenceClass": "operator",
       "mode": "100644",
+      "oid": "21c5d70a09e3f63605224a0626ba10aa6de28805",
+      "path": "comms-infra/langston-memory/bin/langston_memory.py",
+      "type": "blob"
+    },
+    {
+      "classifier": "suffix",
+      "evidenceClass": "operator",
+      "mode": "100644",
+      "oid": "8127f1b35fdb981a703d35590ca09db9caee4cb3",
+      "path": "comms-infra/langston-memory/bin/langston_memory_allowlist.py",
+      "type": "blob"
+    },
+    {
+      "classifier": "suffix",
+      "evidenceClass": "operator",
+      "mode": "100644",
       "oid": "599f686700cbdd8cf63a89061b03240ebae537b2",
       "path": "comms-infra/langston-memory/bin/mutate_index_guard.py",
       "type": "blob"
@@ -3361,14 +3385,6 @@
       "mode": "100644",
       "oid": "f0f8ec6f757a14034bbe7f743f3ee2f55f54b839",
       "path": "comms-infra/langston-memory/bin/mutate_size_watch_alerts.py",
-      "type": "blob"
-    },
-    {
-      "classifier": "suffix",
-      "evidenceClass": "operator",
-      "mode": "100644",
-      "oid": "de15f1ddfda46108a2e7c5bca483203526ddf3c5",
-      "path": "comms-infra/langston-memory/bin/obj_state_dir_move.py",
       "type": "blob"
     },
     {
@@ -3415,6 +3431,14 @@
       "classifier": "suffix",
       "evidenceClass": "operator",
       "mode": "100644",
+      "oid": "de15f1ddfda46108a2e7c5bca483203526ddf3c5",
+      "path": "comms-infra/langston-memory/bin/obj_state_dir_move.py",
+      "type": "blob"
+    },
+    {
+      "classifier": "suffix",
+      "evidenceClass": "operator",
+      "mode": "100644",
       "oid": "6640611de4539620b8ddd76281fd51c907d9c6c8",
       "path": "comms-infra/langston-memory/bin/run_memory_suites.sh",
       "type": "blob"
@@ -3438,17 +3462,17 @@
     {
       "classifier": "suffix",
       "evidenceClass": "operator",
-      "mode": "100755",
-      "oid": "02facce26c855b1af1d947b5a7b1469dad0e6796",
-      "path": "comms-infra/langston-memory/bin/test_memory_fence_root.py",
+      "mode": "100644",
+      "oid": "50fc6989d2a324d6dd3145f578621ae14535a161",
+      "path": "comms-infra/langston-memory/bin/test_memory_fence.py",
       "type": "blob"
     },
     {
       "classifier": "suffix",
       "evidenceClass": "operator",
-      "mode": "100644",
-      "oid": "50fc6989d2a324d6dd3145f578621ae14535a161",
-      "path": "comms-infra/langston-memory/bin/test_memory_fence.py",
+      "mode": "100755",
+      "oid": "02facce26c855b1af1d947b5a7b1469dad0e6796",
+      "path": "comms-infra/langston-memory/bin/test_memory_fence_root.py",
       "type": "blob"
     },
     {
@@ -3647,6 +3671,14 @@
       "classifier": "suffix",
       "evidenceClass": "operator",
       "mode": "100644",
+      "oid": "9e7f4e62b882fd7df04ebb407f975dbd52536757",
+      "path": "comms-infra/laptop/transcript-archive/dt_archive.py",
+      "type": "blob"
+    },
+    {
+      "classifier": "suffix",
+      "evidenceClass": "operator",
+      "mode": "100644",
       "oid": "e78ca6298641815d30394ffee9cc86db788815cb",
       "path": "comms-infra/laptop/transcript-archive/dt_archive_run.py",
       "type": "blob"
@@ -3657,14 +3689,6 @@
       "mode": "100644",
       "oid": "914727630f0351c4fafa06ec4fa10ebd5500f183",
       "path": "comms-infra/laptop/transcript-archive/dt_archive_trigger.py",
-      "type": "blob"
-    },
-    {
-      "classifier": "suffix",
-      "evidenceClass": "operator",
-      "mode": "100644",
-      "oid": "9e7f4e62b882fd7df04ebb407f975dbd52536757",
-      "path": "comms-infra/laptop/transcript-archive/dt_archive.py",
       "type": "blob"
     },
     {
@@ -3743,6 +3767,14 @@
       "classifier": "suffix",
       "evidenceClass": "operator",
       "mode": "100644",
+      "oid": "e3320a73c835e1a157d96757f273ab030f700afc",
+      "path": "comms-infra/laptop/transcript-archive/mutate_dt_archive.py",
+      "type": "blob"
+    },
+    {
+      "classifier": "suffix",
+      "evidenceClass": "operator",
+      "mode": "100644",
       "oid": "08af91581a012a37c279edf8b10ef2dab81a4b87",
       "path": "comms-infra/laptop/transcript-archive/mutate_dt_archive_run.py",
       "type": "blob"
@@ -3753,14 +3785,6 @@
       "mode": "100644",
       "oid": "0f128d48aac58f644f1f50087b894b1c441a11db",
       "path": "comms-infra/laptop/transcript-archive/mutate_dt_archive_trigger.py",
-      "type": "blob"
-    },
-    {
-      "classifier": "suffix",
-      "evidenceClass": "operator",
-      "mode": "100644",
-      "oid": "e3320a73c835e1a157d96757f273ab030f700afc",
-      "path": "comms-infra/laptop/transcript-archive/mutate_dt_archive.py",
       "type": "blob"
     },
     {
@@ -3831,6 +3855,14 @@
       "classifier": "suffix",
       "evidenceClass": "operator",
       "mode": "100644",
+      "oid": "878239889aa928be2dd351f21107364783541fc6",
+      "path": "comms-infra/laptop/transcript-archive/test_dt_archive.py",
+      "type": "blob"
+    },
+    {
+      "classifier": "suffix",
+      "evidenceClass": "operator",
+      "mode": "100644",
       "oid": "b580283ead1975ff41bf05729e2109fe670d3ce6",
       "path": "comms-infra/laptop/transcript-archive/test_dt_archive_run.py",
       "type": "blob"
@@ -3841,14 +3873,6 @@
       "mode": "100644",
       "oid": "43ab6f7319d8ed5fb67136b5349ff34cd2d423fe",
       "path": "comms-infra/laptop/transcript-archive/test_dt_archive_trigger.py",
-      "type": "blob"
-    },
-    {
-      "classifier": "suffix",
-      "evidenceClass": "operator",
-      "mode": "100644",
-      "oid": "878239889aa928be2dd351f21107364783541fc6",
-      "path": "comms-infra/laptop/transcript-archive/test_dt_archive.py",
       "type": "blob"
     },
     {
@@ -3967,7 +3991,7 @@
       "classifier": "suffix",
       "evidenceClass": "operator",
       "mode": "100644",
-      "oid": "a62bede2d5e0a094b654c643e9e283777b6b259f",
+      "oid": "51e475c19149c199366dd5c40d83ab17a90fe320",
       "path": "comms-infra/staging/dt-db-map-policy.mjs",
       "type": "blob"
     },
@@ -3975,7 +3999,7 @@
       "classifier": "suffix",
       "evidenceClass": "operator",
       "mode": "100644",
-      "oid": "fb81091ee62531b8efa0c4d611ea7c0cd6c32e4c",
+      "oid": "094c7e5ead6f5cab4e12ed1c6e0bf69452acd9d0",
       "path": "comms-infra/staging/dt-db-map-runner.mjs",
       "type": "blob"
     },
@@ -4007,7 +4031,7 @@
       "classifier": "shebang",
       "evidenceClass": "operator",
       "mode": "100755",
-      "oid": "2003e8571dff0db632b003ce24dbf91752f30d58",
+      "oid": "88e378273410821e43839e93eb5190fa4abd28c4",
       "path": "comms-infra/staging/dt-install-drift",
       "type": "blob"
     },
@@ -4047,7 +4071,7 @@
       "classifier": "shebang",
       "evidenceClass": "operator",
       "mode": "100644",
-      "oid": "d30f9fe6b05f15320c6f2a72393412a07d9e8f41",
+      "oid": "78af26d95f54f8c2d4da6900713fdd86d9a31321",
       "path": "comms-infra/staging/install-dt-db-map",
       "type": "blob"
     },
@@ -4158,17 +4182,17 @@
     {
       "classifier": "suffix",
       "evidenceClass": "test_only",
-      "mode": "100644",
-      "oid": "f8b9b5a4a9951957baaa396975a25f400e11f66a",
-      "path": "comms-infra/staging/tests/fakepsql_outcomes.py",
+      "mode": "100755",
+      "oid": "14d6cfc54839e41f6329ca2a6476e857e8c033b0",
+      "path": "comms-infra/staging/tests/fakepsql.py",
       "type": "blob"
     },
     {
       "classifier": "suffix",
       "evidenceClass": "test_only",
-      "mode": "100755",
-      "oid": "14d6cfc54839e41f6329ca2a6476e857e8c033b0",
-      "path": "comms-infra/staging/tests/fakepsql.py",
+      "mode": "100644",
+      "oid": "f8b9b5a4a9951957baaa396975a25f400e11f66a",
+      "path": "comms-infra/staging/tests/fakepsql_outcomes.py",
       "type": "blob"
     },
     {
@@ -4313,14 +4337,6 @@
       "mode": "100644",
       "oid": "2ec78e14f32333d551770ee2094683badddc3dfe",
       "path": "docker-compose.yml",
-      "type": "blob"
-    },
-    {
-      "classifier": "root_dockerfile",
-      "evidenceClass": "runtime",
-      "mode": "100644",
-      "oid": "c3d6185643f9567646b2441e1be299fa710bbbef",
-      "path": "Dockerfile",
       "type": "blob"
     },
     {
@@ -7438,14 +7454,6 @@
     {
       "classifier": "suffix",
       "evidenceClass": "runtime",
-      "mode": "100644",
-      "oid": "bb41ca4666deefa765d07c6210a6d3880c9fe1ed",
-      "path": "PHASE_27.F.13.O_BACKUP.sql",
-      "type": "blob"
-    },
-    {
-      "classifier": "suffix",
-      "evidenceClass": "runtime",
       "mode": "100755",
       "oid": "b6e2914d6f64d9c41457bcef5bc996eba12d436a",
       "path": "phase_41d_validation.sh",
@@ -7469,10 +7477,50 @@
     },
     {
       "classifier": "suffix",
-      "evidenceClass": "runtime",
+      "evidenceClass": "operator",
       "mode": "100644",
-      "oid": "fc37430f427a31e2a770035dc5a50c1feae0b766",
-      "path": "REPLIT_VALIDATION.sh",
+      "oid": "2976d40ba6efce9a4429665f4bc25af837c93490",
+      "path": "scripts/analysis/b-instruments-over-rules-lsp-usage.py",
+      "type": "blob"
+    },
+    {
+      "classifier": "suffix",
+      "evidenceClass": "operator",
+      "mode": "100644",
+      "oid": "c684706e51159aaf0bd5ddaed0fcec454d38231a",
+      "path": "scripts/analysis/b-token-burn-cut-wake-audit.py",
+      "type": "blob"
+    },
+    {
+      "classifier": "suffix",
+      "evidenceClass": "operator",
+      "mode": "100644",
+      "oid": "18faa80ee955891279aedfc2430a3c2c31a0498f",
+      "path": "scripts/analysis/b-wake-arm-exclusive-c1-measure.py",
+      "type": "blob"
+    },
+    {
+      "classifier": "suffix",
+      "evidenceClass": "operator",
+      "mode": "100644",
+      "oid": "741e0a09818a1a92b5a5bd6ae251d846e6b2b53a",
+      "path": "scripts/analysis/b1250_exit_book_age.sql",
+      "type": "blob"
+    },
+    {
+      "classifier": "suffix",
+      "evidenceClass": "operator",
+      "mode": "100644",
+      "oid": "f9efcf49bc1ebbdffb3aac7875f737259c080723",
+      "path": "scripts/analysis/b1250_step7_five_session.sql",
+      "type": "blob"
+    },
+    {
+      "classifier": "suffix",
+      "evidenceClass": "operator",
+      "mode": "100644",
+      "oid": "c13b43292cbc78d4ed8f473feb3a9e506a9cc641",
+      "path": "scripts/analysis/b1250_step9_reread.sql",
       "type": "blob"
     },
     {
@@ -7727,64 +7775,8 @@
       "classifier": "suffix",
       "evidenceClass": "operator",
       "mode": "100644",
-      "oid": "2976d40ba6efce9a4429665f4bc25af837c93490",
-      "path": "scripts/analysis/b-instruments-over-rules-lsp-usage.py",
-      "type": "blob"
-    },
-    {
-      "classifier": "suffix",
-      "evidenceClass": "operator",
-      "mode": "100644",
-      "oid": "c684706e51159aaf0bd5ddaed0fcec454d38231a",
-      "path": "scripts/analysis/b-token-burn-cut-wake-audit.py",
-      "type": "blob"
-    },
-    {
-      "classifier": "suffix",
-      "evidenceClass": "operator",
-      "mode": "100644",
-      "oid": "18faa80ee955891279aedfc2430a3c2c31a0498f",
-      "path": "scripts/analysis/b-wake-arm-exclusive-c1-measure.py",
-      "type": "blob"
-    },
-    {
-      "classifier": "suffix",
-      "evidenceClass": "operator",
-      "mode": "100644",
-      "oid": "741e0a09818a1a92b5a5bd6ae251d846e6b2b53a",
-      "path": "scripts/analysis/b1250_exit_book_age.sql",
-      "type": "blob"
-    },
-    {
-      "classifier": "suffix",
-      "evidenceClass": "operator",
-      "mode": "100644",
-      "oid": "f9efcf49bc1ebbdffb3aac7875f737259c080723",
-      "path": "scripts/analysis/b1250_step7_five_session.sql",
-      "type": "blob"
-    },
-    {
-      "classifier": "suffix",
-      "evidenceClass": "operator",
-      "mode": "100644",
-      "oid": "c13b43292cbc78d4ed8f473feb3a9e506a9cc641",
-      "path": "scripts/analysis/b1250_step9_reread.sql",
-      "type": "blob"
-    },
-    {
-      "classifier": "suffix",
-      "evidenceClass": "operator",
-      "mode": "100644",
       "oid": "d08aaee12f6098d33d85ea277e59695f1c7f9b61",
       "path": "scripts/analysis/bbo_trigger_ack_probe.mjs",
-      "type": "blob"
-    },
-    {
-      "classifier": "suffix",
-      "evidenceClass": "operator",
-      "mode": "100644",
-      "oid": "5f4b657103d96c55b4313c6239974eed956b2130",
-      "path": "scripts/analysis/book_ticker_alignment_probe.mjs",
       "type": "blob"
     },
     {
@@ -7801,6 +7793,14 @@
       "mode": "100644",
       "oid": "c4e0ad48468e901e43360cbc99c919efa2ce99fb",
       "path": "scripts/analysis/book-vs-ticker-divergence.mjs",
+      "type": "blob"
+    },
+    {
+      "classifier": "suffix",
+      "evidenceClass": "operator",
+      "mode": "100644",
+      "oid": "5f4b657103d96c55b4313c6239974eed956b2130",
+      "path": "scripts/analysis/book_ticker_alignment_probe.mjs",
       "type": "blob"
     },
     {
@@ -7839,8 +7839,8 @@
       "classifier": "suffix",
       "evidenceClass": "operator",
       "mode": "100644",
-      "oid": "6872ece474a6ac5178451dc9e16d7715088dad86",
-      "path": "scripts/analysis/cohort_composition_b2_decomp.sql",
+      "oid": "08bdef7233cd8912cd9aa354d29d4c9fe57e9847",
+      "path": "scripts/analysis/cohort_composition.sql",
       "type": "blob"
     },
     {
@@ -7855,8 +7855,8 @@
       "classifier": "suffix",
       "evidenceClass": "operator",
       "mode": "100644",
-      "oid": "08bdef7233cd8912cd9aa354d29d4c9fe57e9847",
-      "path": "scripts/analysis/cohort_composition.sql",
+      "oid": "6872ece474a6ac5178451dc9e16d7715088dad86",
+      "path": "scripts/analysis/cohort_composition_b2_decomp.sql",
       "type": "blob"
     },
     {
@@ -7871,16 +7871,16 @@
       "classifier": "suffix",
       "evidenceClass": "operator",
       "mode": "100644",
-      "oid": "1f18d26e6f75e8dc118add064ea1c562931a1d79",
-      "path": "scripts/analysis/cohort_liveness_tail.sql",
+      "oid": "482d896359a2ec8b2a737b72955fac2459a1918c",
+      "path": "scripts/analysis/cohort_liveness.sql",
       "type": "blob"
     },
     {
       "classifier": "suffix",
       "evidenceClass": "operator",
       "mode": "100644",
-      "oid": "482d896359a2ec8b2a737b72955fac2459a1918c",
-      "path": "scripts/analysis/cohort_liveness.sql",
+      "oid": "1f18d26e6f75e8dc118add064ea1c562931a1d79",
+      "path": "scripts/analysis/cohort_liveness_tail.sql",
       "type": "blob"
     },
     {
@@ -8015,14 +8015,6 @@
       "classifier": "suffix",
       "evidenceClass": "operator",
       "mode": "100644",
-      "oid": "55141e5a9990a31f89ef80f7ba929ce7cf1b80e7",
-      "path": "scripts/analysis/obj_pa_pb.cjs",
-      "type": "blob"
-    },
-    {
-      "classifier": "suffix",
-      "evidenceClass": "operator",
-      "mode": "100644",
       "oid": "4216c2dd7faa85658c5deadaaf4218f004d37ab8",
       "path": "scripts/analysis/obj9_counts_v2.sql",
       "type": "blob"
@@ -8049,6 +8041,14 @@
       "mode": "100644",
       "oid": "a3c54c854df0957d29b8a5d4e366acd2269b314f",
       "path": "scripts/analysis/obj9_timeweighted.sql",
+      "type": "blob"
+    },
+    {
+      "classifier": "suffix",
+      "evidenceClass": "operator",
+      "mode": "100644",
+      "oid": "55141e5a9990a31f89ef80f7ba929ce7cf1b80e7",
+      "path": "scripts/analysis/obj_pa_pb.cjs",
       "type": "blob"
     },
     {
@@ -8215,16 +8215,16 @@
       "classifier": "suffix",
       "evidenceClass": "operator",
       "mode": "100644",
-      "oid": "89fd7216b38b8208d1fdf6dcac5e98998ded9170",
-      "path": "scripts/analysis/xs_frame_false_hollow_snaps.sql",
+      "oid": "ab83bf4b6d7ec00347e4afbf7ea5038dfab1fda8",
+      "path": "scripts/analysis/xs_frame_false_hollow.py",
       "type": "blob"
     },
     {
       "classifier": "suffix",
       "evidenceClass": "operator",
       "mode": "100644",
-      "oid": "ab83bf4b6d7ec00347e4afbf7ea5038dfab1fda8",
-      "path": "scripts/analysis/xs_frame_false_hollow.py",
+      "oid": "89fd7216b38b8208d1fdf6dcac5e98998ded9170",
+      "path": "scripts/analysis/xs_frame_false_hollow_snaps.sql",
       "type": "blob"
     },
     {
@@ -8903,7 +8903,7 @@
       "classifier": "suffix",
       "evidenceClass": "operator",
       "mode": "100644",
-      "oid": "52d5761b28395246ab638d88cd2788c9bb5daa43",
+      "oid": "fb16a3d0d6888c25ab971e51a67f99cee7501e90",
       "path": "scripts/db-map/adapter.mjs",
       "type": "blob"
     },
@@ -8911,7 +8911,7 @@
       "classifier": "suffix",
       "evidenceClass": "operator",
       "mode": "100644",
-      "oid": "c689f5ab1e45c2929285124425fd4f5f2c18749c",
+      "oid": "5ff724562e011534c0151b7f627f36e63ed71536",
       "path": "scripts/db-map/catalog.mjs",
       "type": "blob"
     },
@@ -8927,7 +8927,7 @@
       "classifier": "suffix",
       "evidenceClass": "operator",
       "mode": "100644",
-      "oid": "aea15ce6ae1d34ac6b78c08fe5ac3a670d586704",
+      "oid": "80ceb654cda002d6735704d183f52342b623f3d0",
       "path": "scripts/db-map/config.mjs",
       "type": "blob"
     },
@@ -8935,7 +8935,7 @@
       "classifier": "suffix",
       "evidenceClass": "operator",
       "mode": "100644",
-      "oid": "52e08ede32e8b52d6567423202ededdf84ce8398",
+      "oid": "053a45d777a8d3493933fb1b2b04854c83562bd0",
       "path": "scripts/db-map/generate.mjs",
       "type": "blob"
     },
@@ -8943,7 +8943,7 @@
       "classifier": "suffix",
       "evidenceClass": "operator",
       "mode": "100644",
-      "oid": "234fc85cd28ccf3b05f80048d2967af84061eac0",
+      "oid": "dbc675658271cd4542dd921b2ec994f7b3e2eda5",
       "path": "scripts/db-map/population.mjs",
       "type": "blob"
     },
@@ -8959,7 +8959,7 @@
       "classifier": "suffix",
       "evidenceClass": "operator",
       "mode": "100644",
-      "oid": "84c3cd3dd1ea9eaac3cbc273c2a7c2c205d7ed32",
+      "oid": "f5999a84771fbf3d03a568d89494e800c31e7b0b",
       "path": "scripts/db-map/scanner.mjs",
       "type": "blob"
     },
@@ -8975,7 +8975,7 @@
       "classifier": "suffix",
       "evidenceClass": "test_only",
       "mode": "100644",
-      "oid": "1ea81470f6513ccb223e8c8eb3c3fa5b75a09025",
+      "oid": "21379fd0a1077f196660d572a08525fd7adde2f3",
       "path": "scripts/db-map/tests/core.test.mjs",
       "type": "blob"
     },
@@ -8991,7 +8991,7 @@
       "classifier": "suffix",
       "evidenceClass": "test_only",
       "mode": "100644",
-      "oid": "104ff4e227ed20016950010944971b63aaba15d0",
+      "oid": "f99cdb1c682fb9cafceae8727ae37d33312f6ba9",
       "path": "scripts/db-map/tests/fixture.mjs",
       "type": "blob"
     },
@@ -8999,7 +8999,7 @@
       "classifier": "suffix",
       "evidenceClass": "test_only",
       "mode": "100644",
-      "oid": "3ef7c96323c0448fb8e3b0f6a399e09e41579c26",
+      "oid": "5d89a1c470bd6fa1a607bc63c9e02df658b81c19",
       "path": "scripts/db-map/tests/mutations.test.mjs",
       "type": "blob"
     },
@@ -9007,7 +9007,7 @@
       "classifier": "suffix",
       "evidenceClass": "test_only",
       "mode": "100644",
-      "oid": "bc1d16c8f20c7a14f023dd23eb5be38e3f203af5",
+      "oid": "cc45daffb317b57355494288285ad023407a8125",
       "path": "scripts/db-map/tests/render-control.mjs",
       "type": "blob"
     },
@@ -9015,7 +9015,7 @@
       "classifier": "suffix",
       "evidenceClass": "test_only",
       "mode": "100644",
-      "oid": "1a5672a1722dd5e84adc916b5e8b0ac8c5ddc24b",
+      "oid": "7ccb3af662f8dc57b0dad4e4548c954eec7b541f",
       "path": "scripts/db-map/tests/schedule.test.mjs",
       "type": "blob"
     },
@@ -9031,7 +9031,7 @@
       "classifier": "suffix",
       "evidenceClass": "operator",
       "mode": "100644",
-      "oid": "76e74a497af01bbdad6b005c8b033262d809a533",
+      "oid": "b502cace517dd0ea7655c4c6499d7d01fb35fba6",
       "path": "scripts/db-map/util.mjs",
       "type": "blob"
     },
@@ -9039,7 +9039,7 @@
       "classifier": "suffix",
       "evidenceClass": "operator",
       "mode": "100644",
-      "oid": "3affac836e4d6e9ddd7a33576a4a44563431a96e",
+      "oid": "ae32a36c741a228505bc7ef81e873edb5a0998fb",
       "path": "scripts/db-map/verify.mjs",
       "type": "blob"
     },
@@ -9535,16 +9535,16 @@
       "classifier": "suffix",
       "evidenceClass": "operator",
       "mode": "100644",
-      "oid": "1c97747b002b0be9e886d123b188acc27219fec3",
-      "path": "scripts/phase15b/a3_global_dbs_methodology_v2.py",
+      "oid": "d6b963e60926e0be501ca0d9f5a5d2328cfac3b1",
+      "path": "scripts/phase15b/a3_global_dbs_methodology.py",
       "type": "blob"
     },
     {
       "classifier": "suffix",
       "evidenceClass": "operator",
       "mode": "100644",
-      "oid": "d6b963e60926e0be501ca0d9f5a5d2328cfac3b1",
-      "path": "scripts/phase15b/a3_global_dbs_methodology.py",
+      "oid": "1c97747b002b0be9e886d123b188acc27219fec3",
+      "path": "scripts/phase15b/a3_global_dbs_methodology_v2.py",
       "type": "blob"
     },
     {
@@ -11335,16 +11335,16 @@
       "classifier": "suffix",
       "evidenceClass": "runtime",
       "mode": "100644",
-      "oid": "bbfefea16d9f504f91472679b0c7769e808ddae1",
-      "path": "server/migrations/manual/B82_asset_class_indexes_rollback.sql",
+      "oid": "5b97c5c1b8f2fc4ebc4d060fae68a14664ea0075",
+      "path": "server/migrations/manual/B82_asset_class_indexes.sql",
       "type": "blob"
     },
     {
       "classifier": "suffix",
       "evidenceClass": "runtime",
       "mode": "100644",
-      "oid": "5b97c5c1b8f2fc4ebc4d060fae68a14664ea0075",
-      "path": "server/migrations/manual/B82_asset_class_indexes.sql",
+      "oid": "bbfefea16d9f504f91472679b0c7769e808ddae1",
+      "path": "server/migrations/manual/B82_asset_class_indexes_rollback.sql",
       "type": "blob"
     },
     {
@@ -17223,6 +17223,14 @@
       "classifier": "suffix",
       "evidenceClass": "test_only",
       "mode": "100644",
+      "oid": "1940d2d5fa10ef6cc79715dedffdcb13da13aac2",
+      "path": "server/tests/unit/b79-0L-market-hours-extended-hours.test.ts",
+      "type": "blob"
+    },
+    {
+      "classifier": "suffix",
+      "evidenceClass": "test_only",
+      "mode": "100644",
       "oid": "49a43182398d0e8ace49f1ba5b65a1266d699308",
       "path": "server/tests/unit/b79-0a-arm-injection.test.ts",
       "type": "blob"
@@ -17281,14 +17289,6 @@
       "mode": "100644",
       "oid": "65f0d37b4fd54f3abfa1518c68fa24e9dc59ff0c",
       "path": "server/tests/unit/b79-0g-vts-trade-persistence.test.ts",
-      "type": "blob"
-    },
-    {
-      "classifier": "suffix",
-      "evidenceClass": "test_only",
-      "mode": "100644",
-      "oid": "1940d2d5fa10ef6cc79715dedffdcb13da13aac2",
-      "path": "server/tests/unit/b79-0L-market-hours-extended-hours.test.ts",
       "type": "blob"
     },
     {
@@ -17695,16 +17695,16 @@
       "classifier": "suffix",
       "evidenceClass": "test_only",
       "mode": "100644",
-      "oid": "bf368c1d3ba4545e2eca2e0b33e3c85cae4cf0ba",
-      "path": "server/tests/unit/canonical_source_lock.test.ts",
+      "oid": "4e66c92849ccae89bae7b1b3be309843c0e38214",
+      "path": "server/tests/unit/canonical-validation.test.ts",
       "type": "blob"
     },
     {
       "classifier": "suffix",
       "evidenceClass": "test_only",
       "mode": "100644",
-      "oid": "4e66c92849ccae89bae7b1b3be309843c0e38214",
-      "path": "server/tests/unit/canonical-validation.test.ts",
+      "oid": "bf368c1d3ba4545e2eca2e0b33e3c85cae4cf0ba",
+      "path": "server/tests/unit/canonical_source_lock.test.ts",
       "type": "blob"
     },
     {
@@ -18567,16 +18567,16 @@
       "classifier": "suffix",
       "evidenceClass": "test_only",
       "mode": "100644",
-      "oid": "8847a271a09254d92004ff843129dbe03eb225d3",
-      "path": "server/tests/unit/signal_mapping_integrity.test.ts",
+      "oid": "f8881d350281282ec1ad1e28cce9c93a9f09ed1d",
+      "path": "server/tests/unit/signal-id-format.test.ts",
       "type": "blob"
     },
     {
       "classifier": "suffix",
       "evidenceClass": "test_only",
       "mode": "100644",
-      "oid": "f8881d350281282ec1ad1e28cce9c93a9f09ed1d",
-      "path": "server/tests/unit/signal-id-format.test.ts",
+      "oid": "8847a271a09254d92004ff843129dbe03eb225d3",
+      "path": "server/tests/unit/signal_mapping_integrity.test.ts",
       "type": "blob"
     },
     {
@@ -19015,6 +19015,14 @@
       "classifier": "suffix",
       "evidenceClass": "runtime",
       "mode": "100755",
+      "oid": "3cbc1d03ee8949695a2506714ce7fd8893418c7e",
+      "path": "test-scripts/phase-41F-E-validation.sh",
+      "type": "blob"
+    },
+    {
+      "classifier": "suffix",
+      "evidenceClass": "runtime",
+      "mode": "100755",
       "oid": "35e3b36d92a2107ade274c38165b18d8f43a8601",
       "path": "test_825.sh",
       "type": "blob"
@@ -19073,14 +19081,6 @@
       "mode": "100755",
       "oid": "c3a08b11bfccd53c84147a2f10845ce3cde6239b",
       "path": "test_other_post.sh",
-      "type": "blob"
-    },
-    {
-      "classifier": "suffix",
-      "evidenceClass": "runtime",
-      "mode": "100755",
-      "oid": "3cbc1d03ee8949695a2506714ce7fd8893418c7e",
-      "path": "test-scripts/phase-41F-E-validation.sh",
       "type": "blob"
     },
     {
@@ -19279,16 +19279,16 @@
       "classifier": "suffix",
       "evidenceClass": "test_only",
       "mode": "100644",
-      "oid": "11dda078c41bed50037ba370b5cb6525faaf5222",
-      "path": "token-watch/tests/mutate_birthcap_review_export.py",
+      "oid": "be1c59aad63cc3620a49d6d3af0c379e9ff12d2f",
+      "path": "token-watch/tests/mutate_birthcap.py",
       "type": "blob"
     },
     {
       "classifier": "suffix",
       "evidenceClass": "test_only",
       "mode": "100644",
-      "oid": "be1c59aad63cc3620a49d6d3af0c379e9ff12d2f",
-      "path": "token-watch/tests/mutate_birthcap.py",
+      "oid": "11dda078c41bed50037ba370b5cb6525faaf5222",
+      "path": "token-watch/tests/mutate_birthcap_review_export.py",
       "type": "blob"
     },
     {
@@ -19327,16 +19327,16 @@
       "classifier": "suffix",
       "evidenceClass": "test_only",
       "mode": "100644",
-      "oid": "8e152791206f8b139013dd379460046a9fd29a9a",
-      "path": "token-watch/tests/mutate_p2b_fixes.py",
+      "oid": "34053cfc252ca93b865c487be63f6c4926a49dd0",
+      "path": "token-watch/tests/mutate_p2b2_fixes.py",
       "type": "blob"
     },
     {
       "classifier": "suffix",
       "evidenceClass": "test_only",
       "mode": "100644",
-      "oid": "34053cfc252ca93b865c487be63f6c4926a49dd0",
-      "path": "token-watch/tests/mutate_p2b2_fixes.py",
+      "oid": "8e152791206f8b139013dd379460046a9fd29a9a",
+      "path": "token-watch/tests/mutate_p2b_fixes.py",
       "type": "blob"
     },
     {
@@ -19391,16 +19391,16 @@
       "classifier": "suffix",
       "evidenceClass": "test_only",
       "mode": "100644",
-      "oid": "4729fda63ca20aa9de5dc4ba9dd1b6cbf0d2b8d8",
-      "path": "token-watch/tests/test_birthcap_review_export.py",
+      "oid": "834d892cd2b87c7f9bef0eb448c14d3b2872c155",
+      "path": "token-watch/tests/test_birthcap.py",
       "type": "blob"
     },
     {
       "classifier": "suffix",
       "evidenceClass": "test_only",
       "mode": "100644",
-      "oid": "834d892cd2b87c7f9bef0eb448c14d3b2872c155",
-      "path": "token-watch/tests/test_birthcap.py",
+      "oid": "4729fda63ca20aa9de5dc4ba9dd1b6cbf0d2b8d8",
+      "path": "token-watch/tests/test_birthcap_review_export.py",
       "type": "blob"
     },
     {
@@ -19527,16 +19527,16 @@
       "classifier": "suffix",
       "evidenceClass": "test_only",
       "mode": "100644",
-      "oid": "26f3554883f146055f3b0b309dd9653f2761825e",
-      "path": "token-watch/tests/test_p2b_memory_fixes.py",
+      "oid": "daa1b4d3f45a026164f36e382e2cce33f02fd09d",
+      "path": "token-watch/tests/test_p2b2_memory_fixes.py",
       "type": "blob"
     },
     {
       "classifier": "suffix",
       "evidenceClass": "test_only",
       "mode": "100644",
-      "oid": "daa1b4d3f45a026164f36e382e2cce33f02fd09d",
-      "path": "token-watch/tests/test_p2b2_memory_fixes.py",
+      "oid": "26f3554883f146055f3b0b309dd9653f2761825e",
+      "path": "token-watch/tests/test_p2b_memory_fixes.py",
       "type": "blob"
     },
     {
@@ -20021,6 +20021,6 @@
     }
   ],
   "included_count": 2386,
-  "included_path_sha256": "9788c4e2c8befb9895026eced9ae1d40bdfa917858006018663939c7fb33343f",
-  "included_tuple_sha256": "f169316663b42eb57216969ebf175a45f6ace32116689177d61367341eaa30fd"
+  "included_path_sha256": "743a43c861e4157a0825225e10dc23438018b0ae57322f58e811db2dd1937cf2",
+  "included_tuple_sha256": "04c1530ce8e6d227e4283e7575bc7fc140706123c738b6e910086c92c5c52445"
 }
