@@ -1,0 +1,662 @@
+{
+  "schema_version": 1,
+  "batch": "B-DB-HELPER-RETIRE",
+  "paths": [
+    {
+      "path": ".github/workflows/ci.yml",
+      "markers": {
+        "database_url": 6
+      }
+    },
+    {
+      "path": "comms-infra/laptop/transcript-archive/dt_archive_run.py",
+      "markers": {
+        "database_url": 1
+      }
+    },
+    {
+      "path": "comms-infra/laptop/transcript-archive/dt_secret_hashes.py",
+      "markers": {
+        "database_url": 1
+      }
+    },
+    {
+      "path": "comms-infra/laptop/transcript-archive/dt_transcript.py",
+      "markers": {
+        "database_url": 1
+      }
+    },
+    {
+      "path": "comms-infra/laptop/transcript-archive/test_dt_secret_hashes.py",
+      "markers": {
+        "database_url": 5
+      }
+    },
+    {
+      "path": "comms-infra/laptop/transcript-archive/test_dt_transcript.py",
+      "markers": {
+        "database_url": 7,
+        "direct_psql": 1,
+        "pgpassword": 1
+      }
+    },
+    {
+      "path": "comms-infra/security/reviewer-staging-access/reviewer_staging_access.py",
+      "markers": {
+        "database_url": 2,
+        "direct_psql": 8,
+        "dt_sql": 51,
+        "installed_psql_path": 3
+      }
+    },
+    {
+      "path": "comms-infra/staging/dt-api-set-crew-password",
+      "markers": {
+        "direct_psql": 9,
+        "installed_psql_path": 1
+      }
+    },
+    {
+      "path": "comms-infra/staging/dt-db-map-runner.mjs",
+      "markers": {
+        "dt_sql": 1
+      }
+    },
+    {
+      "path": "comms-infra/staging/dt-install-drift",
+      "markers": {
+        "direct_psql": 5,
+        "dt_sql": 20,
+        "installed_psql_path": 2
+      }
+    },
+    {
+      "path": "comms-infra/staging/dt-sql",
+      "markers": {
+        "direct_psql": 22,
+        "dt_sql": 73,
+        "installed_psql_path": 1
+      }
+    },
+    {
+      "path": "comms-infra/staging/dt-sql-login",
+      "markers": {
+        "direct_psql": 14,
+        "dt_sql": 36,
+        "installed_psql_path": 1,
+        "pgpassword": 1
+      }
+    },
+    {
+      "path": "comms-infra/staging/dt-sql-role-setup",
+      "markers": {
+        "database_url": 11,
+        "direct_psql": 4,
+        "dt_sql": 40,
+        "installed_psql_path": 1,
+        "pgpassword": 1
+      }
+    },
+    {
+      "path": "comms-infra/staging/psql-wrapper",
+      "markers": {
+        "direct_psql": 6,
+        "dt_sql": 6,
+        "installed_psql_path": 3
+      }
+    },
+    {
+      "path": "comms-infra/staging/tests/drift_mutations.py",
+      "markers": {
+        "dt_sql": 7
+      }
+    },
+    {
+      "path": "comms-infra/staging/tests/drift_tests.py",
+      "markers": {
+        "dt_sql": 16
+      }
+    },
+    {
+      "path": "comms-infra/staging/tests/dt_sql_login_tests.py",
+      "markers": {
+        "direct_psql": 23,
+        "dt_sql": 24,
+        "pgpassword": 3
+      }
+    },
+    {
+      "path": "comms-infra/staging/tests/dt_sql_mutations.py",
+      "markers": {
+        "direct_psql": 9,
+        "dt_sql": 101
+      }
+    },
+    {
+      "path": "comms-infra/staging/tests/dt_sql_role_setup_tests.py",
+      "markers": {
+        "database_url": 6,
+        "direct_psql": 12,
+        "dt_sql": 18,
+        "pgpassword": 5
+      }
+    },
+    {
+      "path": "comms-infra/staging/tests/dt_sql_tests.py",
+      "markers": {
+        "direct_psql": 38,
+        "dt_sql": 33,
+        "installed_psql_path": 5,
+        "pgpassword": 6
+      }
+    },
+    {
+      "path": "comms-infra/staging/tests/fakepsql_outcomes.py",
+      "markers": {
+        "direct_psql": 3,
+        "dt_sql": 6,
+        "pgpassword": 3
+      }
+    },
+    {
+      "path": "comms-infra/staging/tests/fakepsql.py",
+      "markers": {
+        "direct_psql": 1
+      }
+    },
+    {
+      "path": "comms-infra/staging/tests/setter_mutations.py",
+      "markers": {
+        "direct_psql": 2
+      }
+    },
+    {
+      "path": "comms-infra/staging/tests/setter_tests.py",
+      "markers": {
+        "direct_psql": 2
+      }
+    },
+    {
+      "path": "drizzle.config.ts",
+      "markers": {
+        "database_url": 3
+      }
+    },
+    {
+      "path": "package.json",
+      "markers": {
+        "database_url": 1,
+        "direct_psql": 1
+      }
+    },
+    {
+      "path": "scripts/analysis/b_price_side_8c_rescore.py",
+      "markers": {
+        "database_url": 1,
+        "direct_psql": 2
+      }
+    },
+    {
+      "path": "scripts/analysis/b_price_side_alias_census.sh",
+      "markers": {
+        "dt_sql": 2
+      }
+    },
+    {
+      "path": "scripts/analysis/xs_frame_false_hollow.py",
+      "markers": {
+        "direct_psql": 1
+      }
+    },
+    {
+      "path": "scripts/b-new-34b-prewarm-snapshot.ts",
+      "markers": {
+        "database_url": 9,
+        "node_postgres_constructor": 1
+      }
+    },
+    {
+      "path": "scripts/b5-amr-correctness-audit.ts",
+      "markers": {
+        "dt_sql": 2
+      }
+    },
+    {
+      "path": "scripts/db-helper-retire/tests/validator.test.mjs",
+      "markers": {
+        "database_url": 5,
+        "direct_psql": 5,
+        "installed_psql_path": 3,
+        "node_postgres_alias_constructor": 3,
+        "node_postgres_constructor": 4
+      }
+    },
+    {
+      "path": "scripts/db-helper-retire/validate.mjs",
+      "markers": {
+        "direct_psql": 6,
+        "dt_sql": 3
+      }
+    },
+    {
+      "path": "scripts/db-map/generate.mjs",
+      "markers": {
+        "dt_sql": 2
+      }
+    },
+    {
+      "path": "scripts/db-map/remote-baseline.sh",
+      "markers": {
+        "dt_sql": 1
+      }
+    },
+    {
+      "path": "scripts/db-map/scanner.mjs",
+      "markers": {
+        "direct_psql": 1,
+        "dt_sql": 2
+      }
+    },
+    {
+      "path": "scripts/db-map/tests/connection-control.mjs",
+      "markers": {
+        "dt_sql": 2
+      }
+    },
+    {
+      "path": "scripts/db-map/tests/core.test.mjs",
+      "markers": {
+        "direct_psql": 1,
+        "dt_sql": 3,
+        "node_postgres_constructor": 1
+      }
+    },
+    {
+      "path": "scripts/db-map/tests/snapshot-control.mjs",
+      "markers": {
+        "database_url": 2,
+        "node_postgres_constructor": 2
+      }
+    },
+    {
+      "path": "scripts/db-migrate.ts",
+      "markers": {
+        "database_url": 2,
+        "direct_psql": 1,
+        "node_postgres_constructor": 1
+      }
+    },
+    {
+      "path": "scripts/measure-gate/test-guard-result-shape.mjs",
+      "markers": {
+        "direct_psql": 4
+      }
+    },
+    {
+      "path": "scripts/xstock-hollow-recut.ts",
+      "markers": {
+        "database_url": 1,
+        "node_postgres_constructor": 1
+      }
+    },
+    {
+      "path": "server/config/index.ts",
+      "markers": {
+        "database_url": 2
+      }
+    },
+    {
+      "path": "server/db-pool-alerts.ts",
+      "markers": {
+        "database_url": 1,
+        "dt_sql": 5,
+        "node_postgres_constructor": 1
+      }
+    },
+    {
+      "path": "server/db-tls-boot-check.ts",
+      "markers": {
+        "database_url": 8
+      }
+    },
+    {
+      "path": "server/db-tls-boot-gate.ts",
+      "markers": {
+        "database_url": 1
+      }
+    },
+    {
+      "path": "server/db.ts",
+      "markers": {
+        "database_url": 4,
+        "node_postgres_constructor": 2
+      }
+    },
+    {
+      "path": "server/routes/status.ts",
+      "markers": {
+        "database_url": 2
+      }
+    },
+    {
+      "path": "server/scripts/b-disk-file-tiering.ts",
+      "markers": {
+        "database_url": 2,
+        "node_postgres_constructor": 1
+      }
+    },
+    {
+      "path": "server/scripts/b-storage-archival-health.ts",
+      "markers": {
+        "database_url": 6,
+        "node_postgres_constructor": 2
+      }
+    },
+    {
+      "path": "server/scripts/b-xstock-bar-availability-capacity-gate.ts",
+      "markers": {
+        "database_url": 3,
+        "node_postgres_constructor": 1
+      }
+    },
+    {
+      "path": "server/scripts/b-xstock-bar-availability-verdict-runner.ts",
+      "markers": {
+        "database_url": 3,
+        "node_postgres_constructor": 1
+      }
+    },
+    {
+      "path": "server/scripts/b-xstock-freshness-monitor.ts",
+      "markers": {
+        "database_url": 3,
+        "node_postgres_constructor": 1
+      }
+    },
+    {
+      "path": "server/scripts/b70-b62-relabel-runner.ts",
+      "markers": {
+        "database_url": 2,
+        "node_postgres_constructor": 1
+      }
+    },
+    {
+      "path": "server/scripts/b70-create-monthly-partitions.ts",
+      "markers": {
+        "database_url": 2,
+        "node_postgres_constructor": 1
+      }
+    },
+    {
+      "path": "server/scripts/b70-table-export.ts",
+      "markers": {
+        "database_url": 2,
+        "node_postgres_constructor": 1
+      }
+    },
+    {
+      "path": "server/scripts/b75-cold-audit.ts",
+      "markers": {
+        "database_url": 1,
+        "node_postgres_constructor": 1
+      }
+    },
+    {
+      "path": "server/scripts/b75-cold-bind.ts",
+      "markers": {
+        "database_url": 1,
+        "node_postgres_constructor": 1
+      }
+    },
+    {
+      "path": "server/scripts/b75-cold-liveness.ts",
+      "markers": {
+        "database_url": 3,
+        "node_postgres_constructor": 1
+      }
+    },
+    {
+      "path": "server/scripts/b75-cold-proof.ts",
+      "markers": {
+        "database_url": 1,
+        "node_postgres_constructor": 1
+      }
+    },
+    {
+      "path": "server/scripts/b75-cold-rotator.ts",
+      "markers": {
+        "database_url": 6,
+        "node_postgres_constructor": 4
+      }
+    },
+    {
+      "path": "server/scripts/b75-rehydrate.ts",
+      "markers": {
+        "database_url": 3,
+        "node_postgres_constructor": 1
+      }
+    },
+    {
+      "path": "server/scripts/b75-retention-sweep.ts",
+      "markers": {
+        "database_url": 8,
+        "node_postgres_constructor": 6
+      }
+    },
+    {
+      "path": "server/scripts/backup-verify.ts",
+      "markers": {
+        "database_url": 1
+      }
+    },
+    {
+      "path": "server/scripts/context-bridge-log-ttl.ts",
+      "markers": {
+        "database_url": 8,
+        "node_postgres_constructor": 6
+      }
+    },
+    {
+      "path": "server/scripts/perpfeed-daily-probe.ts",
+      "markers": {
+        "database_url": 2,
+        "node_postgres_constructor": 1
+      }
+    },
+    {
+      "path": "server/scripts/perpfeed-gate-test.ts",
+      "markers": {
+        "database_url": 2,
+        "node_postgres_constructor": 1
+      }
+    },
+    {
+      "path": "server/services/crew-coordination.ts",
+      "markers": {
+        "database_url": 2,
+        "node_postgres_constructor": 1
+      }
+    },
+    {
+      "path": "server/services/data-archive/storage-client.ts",
+      "markers": {
+        "database_url": 4
+      }
+    },
+    {
+      "path": "server/services/passive-archive/xstock-db-snapshot.ts",
+      "markers": {
+        "database_url": 1,
+        "node_postgres_constructor": 1
+      }
+    },
+    {
+      "path": "server/services/trailing-exit-controller.ts",
+      "markers": {
+        "direct_psql": 1
+      }
+    },
+    {
+      "path": "server/tests/enum-parity/enum-parity.parity.ts",
+      "markers": {
+        "database_url": 1,
+        "node_postgres_constructor": 2
+      }
+    },
+    {
+      "path": "server/tests/integration/b-alert-insert-contract-db.test.ts",
+      "markers": {
+        "database_url": 2
+      }
+    },
+    {
+      "path": "server/tests/integration/b-balance-truth-mode-partition-fence.test.ts",
+      "markers": {
+        "database_url": 1
+      }
+    },
+    {
+      "path": "server/tests/integration/b-cron-fire-evidence-legacy-clock.test.ts",
+      "markers": {
+        "database_url": 1,
+        "node_postgres_constructor": 2
+      }
+    },
+    {
+      "path": "server/tests/integration/b-db-size-relief-cutover.test.ts",
+      "markers": {
+        "database_url": 2,
+        "node_postgres_constructor": 2
+      }
+    },
+    {
+      "path": "server/tests/integration/b-expectancy-tuning-rows-retire.test.ts",
+      "markers": {
+        "database_url": 1
+      }
+    },
+    {
+      "path": "server/tests/integration/b-killswitch-window.test.ts",
+      "markers": {
+        "database_url": 2
+      }
+    },
+    {
+      "path": "server/tests/integration/b-loss-window-operator-closes-db.test.ts",
+      "markers": {
+        "database_url": 1
+      }
+    },
+    {
+      "path": "server/tests/integration/b-sizing-inc1-guardrails-db.test.ts",
+      "markers": {
+        "database_url": 1
+      }
+    },
+    {
+      "path": "server/tests/integration/b-sizing-inc2b-cooldown-db.test.ts",
+      "markers": {
+        "database_url": 1
+      }
+    },
+    {
+      "path": "server/tests/integration/b-sizing-inc3-db.test.ts",
+      "markers": {
+        "database_url": 1
+      }
+    },
+    {
+      "path": "server/tests/integration/b-xstock-bar-availability-gate-read.test.ts",
+      "markers": {
+        "database_url": 1,
+        "node_postgres_constructor": 2
+      }
+    },
+    {
+      "path": "server/tests/integration/b-xstock-bar-availability-revision.test.ts",
+      "markers": {
+        "database_url": 1,
+        "node_postgres_constructor": 8
+      }
+    },
+    {
+      "path": "server/tests/integration/b-xstock-snapshot-retention-db.test.ts",
+      "markers": {
+        "database_url": 2,
+        "node_postgres_constructor": 4
+      }
+    },
+    {
+      "path": "server/tests/integration/b72-dbs-routing-guards-consistency.test.ts",
+      "markers": {
+        "database_url": 1
+      }
+    },
+    {
+      "path": "server/tests/integration/f-g-1-ohlc-arrival-guard.test.ts",
+      "markers": {
+        "database_url": 1
+      }
+    },
+    {
+      "path": "server/tests/integration/p19-perpfeed-ohlc-upsert-constraint-fence.test.ts",
+      "markers": {
+        "database_url": 1
+      }
+    },
+    {
+      "path": "server/tests/unit/b-b75-script-test-harness.test.ts",
+      "markers": {
+        "database_url": 2
+      }
+    },
+    {
+      "path": "server/tests/unit/b-db-app-tls-boot-check.test.ts",
+      "markers": {
+        "database_url": 2
+      }
+    },
+    {
+      "path": "server/tests/unit/b-db-pool-guard-p3.test.ts",
+      "markers": {
+        "database_url": 1
+      }
+    },
+    {
+      "path": "server/tests/unit/b-db-pool-guard.test.ts",
+      "markers": {
+        "node_postgres_constructor": 2
+      }
+    },
+    {
+      "path": "server/tests/unit/b-disk-file-tiering-amendment2.test.ts",
+      "markers": {
+        "database_url": 3
+      }
+    },
+    {
+      "path": "server/tests/unit/b-disk-file-tiering.test.ts",
+      "markers": {
+        "database_url": 2
+      }
+    },
+    {
+      "path": "server/tests/unit/b-xstock-snapshot-retention.test.ts",
+      "markers": {
+        "database_url": 1
+      }
+    },
+    {
+      "path": "token-watch/config.py",
+      "markers": {
+        "database_url": 1
+      }
+    },
+    {
+      "path": "vitest.config.ts",
+      "markers": {
+        "database_url": 1
+      }
+    }
+  ]
+}
