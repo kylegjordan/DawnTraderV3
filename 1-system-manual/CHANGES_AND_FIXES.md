@@ -1,5 +1,13 @@
 # DawnTrader: Changes, Fixes & Improvements Registry
 
+## FIX-2026-11-24-A — `B-DB-READONLY-ROLE` (`#1259`, Infra Codex): the crew's standard database tool still carried the app's write authority
+
+**CLASS: `non_architecture`. RISK:** `dt-sql` wrapped the app's `postgres` login in a read-only session setting. The setting stopped an ordinary accidental write through the tool, but it was not a database privilege boundary; the credential itself could still write, and a copied login retained the app's authority.
+
+**FIX:** `dt-sql` now logs in as dedicated role `dt_reader`, whose only memberships are `pg_read_all_data` and `pg_monitor` and which has no elevated attributes, owned relations or direct write grants. A locked `dtsql` account alone reads the credential; the guarded login helper requires the caller's lock and INTENT, makes one `verify-full` attempt against the pinned Supabase CA and checks TLS in-session. The session read-only setting remains a second layer.
+
+**Verified:** all seven governed persistent-write classes returned `42501` with the session setting off; production `dt-sql` returned the second-layer `25006`; all eight pre-registered crew-read objects succeeded; Coltrane independently re-derived the role and both refusal layers at exact ref `85b101adecb65ec24dfdd2f493785bfe58fc4e59`. **Residual:** TEMP tables and advisory locks remain possible, and RLS makes 26 `auth`/`storage` tables read as empty.
+
 ## FIX-2026-11-16-A — `B-XSTOCK-BID-TRIGGER-RELAND` C-P5 retirement (row 2, CC-C) — paper xStock exits were frozen for 20 minutes at every venue handoff, whatever the book
 
 **CLASS: `sub_batch` (row 2's C-P5 outcome). SYMPTOM:** the C-P2 block skipped every paper xStock exit decision inside the 16:15 ET, 20:15 ET and Sunday-reopen windows, so a stop or target crossed on a tight, tradable book waited for the window to end. The four-week read (20 weekdays to 2026-11-16) ruled RETIRE on mechanism (Langston), the broken-book case being covered by objective 6's `spread_blown` arm.

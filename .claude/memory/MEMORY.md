@@ -58,6 +58,8 @@
 
 **★ OPERATOR ALERTS ARE REPEAT-SAFE (`#1255`):** `createAlert` upserts on `unique_global_alert`; an acked row re-opens only after a healthy cycle. The app's table, not the staging queue.
 
+**★ CREW DATABASE READS (`B-DB-READONLY-ROLE`, `#1259`):** only `dt-sql`; it uses database-enforced read-only role `dt_reader`, one verified-TLS attempt and the fail-closed lock. An empty `auth`/`storage` result is not absence: RLS makes 26 such tables read as empty.
+
 **★ TRADE RECORDS (B-CLOSE-WRITER-COSTS, closed 2026-11-14):** a close books against exactly ONE record (symbol + asset class + mode) or refuses and keeps the position (critical `close-record-unresolved-*`); the trade tables carry NO default on cost, class or mode — every writer states them.
 
 **★ ALERT IDENTITY IS CANONICAL SINCE 2026-09-02 (`#987`, CC-B, `fa563982c`):** `--by` on ack/resolve must be an exact canonical actor or it is REFUSED; the `cc-session-<date>` form is retired. ⛔ **Read the set from `ALERT_ACTORS` in `server/services/system-alerts.ts`, never from here.**

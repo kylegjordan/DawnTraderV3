@@ -342,8 +342,8 @@ ssh root@188.245.193.8 "su - deploy -c 'pm2 list'"
 # Authenticated API read (server-held crew login; writes are denied by default):
 ssh root@188.245.193.8 "su - deploy -c 'sudo -n -u dtapi /usr/local/bin/dt-api GET /api/vts/filter-diagnostics'"
 
-# Database read (B-DB-READ-TOOL, KD-96): the ONLY way to query the staging database by hand. One login attempt, read-only
-# guard, and it LOCKS after any refused or unclear login (a second wrong password from this address = a Supabase ban, #1259):
+# Database read (KD-96/KD-100): the ONLY hand-query path; database-enforced dt_reader, one verified-TLS attempt,
+# LOCKS after a refused/unclear login. RLS makes 26 auth/storage tables read empty — not proof of absence (#1259).
 ssh root@188.245.193.8 "dt-sql -c 'select count(*) from paper_trades'"    # or: --csv · -f <file> · SQL on stdin
 ssh root@188.245.193.8 "dt-sql --status"                                  # LOCKED? which arm: credential | ambiguous
 ssh root@188.245.193.8 "dt-sql --unlock --by cc-infra"                    # ONLY after finding WHY it locked

@@ -45,6 +45,11 @@ standard scheduled-job `onfailure.conf` drop-in. The daily timer turns a later k
 authorization, log or database-path break into a crew-channel failure instead of leaving a
 one-time proof to go stale.
 
+The database leg goes through `dt-sql` and requires `current_user = dt_reader`. That role is the
+database-enforced read boundary added by B-DB-READONLY-ROLE; the existing write probe separately
+proves the session read-only layer. Do not treat an empty result from the `auth` or `storage`
+schemas as absence: row-level security makes 26 tables there read as empty to this role.
+
 ## Recovery boundary
 
 The repository deliberately stores fingerprints and labels, never private keys. If one reviewer
