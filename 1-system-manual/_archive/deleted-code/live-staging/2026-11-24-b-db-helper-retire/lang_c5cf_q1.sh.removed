@@ -1,0 +1,12 @@
+cd /home/deploy/dawntrader
+export $(grep -E '^DATABASE_URL=' .env | head -1)
+echo "=== NOW ==="
+psql "$DATABASE_URL" -A -F'|' -c "select now();"
+echo "=== module_constants data_lifecycle retention keys (all columns) ==="
+psql "$DATABASE_URL" -A -F'|' -c "select * from module_constants where constant_key like '%retention%' and (module like '%lifecycle%' or constant_key like '%vts_open_trades%' or constant_key like '%closed_trades%');"
+echo "=== vts_open_trades census ==="
+psql "$DATABASE_URL" -A -F'|' -c "select count(*) total, count(*) filter (where closed) closed_rows, min(closed_at) oldest_close, max(closed_at) newest_close, count(*) filter (where closed and closed_at < now() - interval '365 days') past_365, count(*) filter (where closed and closed_at < now() - interval '90 days') past_90 from vts_open_trades;"
+echo "=== size ==="
+psql "$DATABASE_URL" -A -F'|' -c "select pg_size_pretty(pg_total_relation_size('vts_open_trades')) vts_size, pg_size_pretty(pg_database_size(current_database())) db_size;"
+echo "=== manifest: vts_open_trades vs control ==="
+psql "$DATABASE_URL" -A -F'|' -c "select source_table, count(*) from data_archive_manifest group by source_table order by 2 desc;"

@@ -1768,3 +1768,16 @@ Archive: git history is authoritative (this is a field-retirement within live fi
 **LEFT INTENTIONALLY:** nothing.
 **ARCHIVE:** `1-system-manual/_archive/deleted-code/stopCryptoSpotArchiver.20261122-B-UNIVERSE-REFRESH-ACTS.ts.removed`.
 **COMMIT:** deleted in `a232b7132` (Step 3 P3+P4+P5); this entry rides the P7-P10 commit, as that commit's message said it would.
+
+## 2026-11-24 — 33 obsolete checked-in database-login surfaces plus one sole-use processor — B-DB-HELPER-RETIRE Step 3 (rule 18), INFRA Codex
+| removed | exact identity | why / blast radius |
+|---|---|---|
+| 33 one-off database helpers, replays, studies, diagnostics and completed writers | `scripts/db-helper-retire/disposition-ledger.json` checked-in rows whose disposition is `RETIRE` (rows 22–31, 33–49, 53–54, 87–88, 90 and 92; 33 exact source paths) | Every path was owner-released or had no surviving production/scheduled entry point. Row 92 is the legacy Phase-31H audit found by the Step-3 default-deny fence and independently approved at the correction ref. The only two manual entry points were handled atomically: stale `b-phase-a2:backfill` was removed; owner-held `b-xstock-feed-sanity:recut` and its source/tests stay. Deleting former writer source does not delete the durable rows it wrote. |
+| `scripts/analysis/b_price_side_p7h_limiter_class_census.py` | sole processor named by retired row 90, `b_price_side_p7h_limiter_class_census.sh` | The bounded September result is durable; no independent caller or later registered read exists, so retaining the processor would strand dead executable code. |
+| `tsconfig.w20c-census.json` | sole-input config for retired `scripts/b5-w20c-provenance-replay.ts` | No other TypeScript input or command uses this config. |
+
+**WHAT STAYS:** 36 governed direct surfaces, 20 isolated test-local surfaces, the two reads rerouted through `/usr/local/bin/dt-sql`, and `scripts/xstock-hollow-recut.ts` under its explicit owner hold. Current application pools, migrations, scheduled writers, the B69 command and the prewarm lifecycle hook are unchanged.
+**REFERENCES REPAIRED:** the phase-A2 package command and W20c config are removed; hot-horizon tests now use surviving readers/synthetic controls; the regime-threshold comments cite immutable archive evidence. The fail-closed validator requires the reviewed 92-row disposition equality and refuses a missing, duplicate, unknown or newly unclassified connection surface.
+**RESTORE PATH:** exact pre-removal Git bytes at reviewed correction ref `231a8c1948e1774817e93adde8204783f36a5139`, or the byte-identical quick-browse files below. Restoring or executing any former writer requires a new reviewed action.
+**ARCHIVE:** `1-system-manual/_archive/deleted-code/b-db-helper-retire/2026-11-24/`; each filename is its former repository path with `/` encoded as `__` and `.removed` appended. The 53 separate live staging helpers are preserved under `1-system-manual/_archive/deleted-code/live-staging/2026-11-24-b-db-helper-retire/` with their machine-readable manifest; they are not deleted during Step 3.
+**COMMIT:** the B-DB-HELPER-RETIRE Step-3 implementation commit that adds this entry.

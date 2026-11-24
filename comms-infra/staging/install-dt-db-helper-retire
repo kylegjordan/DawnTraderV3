@@ -1,0 +1,25 @@
+#!/bin/sh
+# Install only the reviewed B-DB-HELPER-RETIRE remover and its immutable manifest.
+set -eu
+
+if [ "$(id -u)" -ne 0 ]; then
+  echo "install-dt-db-helper-retire: root required" >&2
+  exit 2
+fi
+
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+SRC=$ROOT/comms-infra/staging/dt-db-helper-retire
+MANIFEST_SRC=$ROOT/1-system-manual/_archive/deleted-code/live-staging/2026-11-24-b-db-helper-retire/manifest.json
+DEST=/usr/local/sbin/dt-db-helper-retire
+SHARE=/usr/local/share/dawntrader
+MANIFEST_DEST=$SHARE/b-db-helper-retire-manifest.json
+
+test -f "$SRC"
+test -f "$MANIFEST_SRC"
+python3 -m py_compile "$SRC"
+python3 -c 'import json,sys; x=json.load(open(sys.argv[1])); assert x["batch"] == "B-DB-HELPER-RETIRE" and len(x["files"]) == 53' "$MANIFEST_SRC"
+
+install -d -o root -g root -m 0755 "$SHARE"
+install -o root -g root -m 0755 "$SRC" "$DEST"
+install -o root -g root -m 0644 "$MANIFEST_SRC" "$MANIFEST_DEST"
+echo "installed dt-db-helper-retire and 53-row reviewed manifest; removal NOT run"

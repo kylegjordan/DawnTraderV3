@@ -1,0 +1,7 @@
+cd /home/deploy/dawntrader
+export $(grep -E '^DATABASE_URL=' .env | head -1)
+psql "$DATABASE_URL" -A -F'|' <<'SQL'
+\echo == LIVE break_even_enabled rows ==
+select asset_class, strategy, regime, value, updated_by from module_constants
+ where module_name='trailing_exit' and constant_name='break_even_enabled' order by asset_class;
+SQL

@@ -1,0 +1,10 @@
+cd /home/deploy/dawntrader
+export $(grep -E '^DATABASE_URL=' .env | head -1)
+echo "=== top-level keys of state_snapshot, vts-runner, last 7d ==="
+psql "$DATABASE_URL" -A -F'|' -c "
+select k, count(*) from exit_decision_archive, jsonb_object_keys(state_snapshot) k
+where captured_at > now() - interval '7 days' and source='vts-runner' group by 1 order by 2 desc;"
+echo "=== one sample row (keys only, 2 levels) ==="
+psql "$DATABASE_URL" -A -t -c "
+select jsonb_pretty(state_snapshot) from exit_decision_archive
+where captured_at > now() - interval '2 days' and source='vts-runner' limit 1;"

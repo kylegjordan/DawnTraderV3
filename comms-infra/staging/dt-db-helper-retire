@@ -1,0 +1,188 @@
+#!/usr/bin/env python3
+"""Remove only the 53 reviewed B-DB-HELPER-RETIRE live helpers.
+
+Default mode is verification. Removal is root-only, manifest-driven, and happens
+only after every path's bytes and metadata match. It never touches the app
+checkout, the database, a process, a service, or a directory tree.
+"""
+
+import datetime
+import grp
+import hashlib
+import json
+import os
+import pwd
+import stat
+import sys
+
+# ── CONSTANTS (the test harness substitutes only this block) ──
+MANIFEST = "/usr/local/share/dawntrader/b-db-helper-retire-manifest.json"
+STATE_DIR = "/var/lib/dt-db-helper-retire"
+TARGET_DIR = "/home/deploy"
+EXPECTED_COUNT = 53
+REVIEWED_REF = "3261801a157a66e1fdf36eae69b66b86893786a8"
+ALLOWED_ACTORS = ("cc-infra", "codex-infra", "kyle")
+REQUIRE_ROOT = True
+# ── END CONSTANTS ──
+
+
+class Refusal(Exception):
+    pass
+
+
+def load_manifest():
+    with open(MANIFEST, encoding="utf-8") as fh:
+        manifest = json.load(fh)
+    if manifest.get("schema_version") != 1 or manifest.get("batch") != "B-DB-HELPER-RETIRE":
+        raise Refusal("manifest identity/version differs")
+    if manifest.get("reviewed_ref") != REVIEWED_REF:
+        raise Refusal("manifest reviewed_ref differs")
+    files = manifest.get("files")
+    if not isinstance(files, list) or len(files) != EXPECTED_COUNT:
+        raise Refusal("manifest file population differs")
+    paths = [row.get("path") for row in files]
+    if len(set(paths)) != EXPECTED_COUNT:
+        raise Refusal("manifest paths are missing or duplicated")
+    for row in files:
+        path = row.get("path")
+        if not isinstance(path, str) or os.path.dirname(path) != TARGET_DIR or os.path.basename(path) in ("", ".", ".."):
+            raise Refusal("manifest contains a path outside the reviewed top-level /home/deploy set")
+        if row.get("disposition") != "RETIRE" or row.get("source_batch") != "B-DB-HELPER-RETIRE":
+            raise Refusal("manifest contains an unreviewed disposition/source")
+        if not isinstance(row.get("sha256"), str) or len(row["sha256"]) != 64:
+            raise Refusal("manifest contains an invalid SHA-256")
+    return manifest
+
+
+def digest_fd(fd):
+    value = hashlib.sha256()
+    os.lseek(fd, 0, os.SEEK_SET)
+    while True:
+        block = os.read(fd, 1024 * 1024)
+        if not block:
+            break
+        value.update(block)
+    return value.hexdigest()
+
+
+def verify_row(row):
+    path = row["path"]
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        fd = os.open(path, flags)
+    except OSError as exc:
+        raise Refusal("%s cannot be opened as a regular file: %s" % (path, exc)) from exc
+    try:
+        found = os.fstat(fd)
+        if not stat.S_ISREG(found.st_mode):
+            raise Refusal("%s is not a regular file" % path)
+        expected_mode = int(row["mode"], 8)
+        checks = {
+            "bytes": (found.st_size, row["bytes"]),
+            "mode": (stat.S_IMODE(found.st_mode), expected_mode),
+            "owner": (pwd.getpwuid(found.st_uid).pw_name, row["owner"]),
+            "group": (grp.getgrgid(found.st_gid).gr_name, row["group"]),
+            "mtime_ns": (found.st_mtime_ns, int(row["mtime_ns"])),
+            "sha256": (digest_fd(fd), row["sha256"]),
+        }
+        differences = [name for name, pair in checks.items() if pair[0] != pair[1]]
+        if differences:
+            raise Refusal("%s drifted in %s" % (path, ", ".join(differences)))
+        return fd, found
+    except Exception:
+        os.close(fd)
+        raise
+
+
+def verify_all(manifest):
+    verified = []
+    try:
+        for row in manifest["files"]:
+            fd, found = verify_row(row)
+            verified.append((row, fd, found))
+        return verified
+    except Exception:
+        for _, fd, _ in verified:
+            os.close(fd)
+        raise
+
+
+def close_all(verified):
+    for _, fd, _ in verified:
+        os.close(fd)
+
+
+def remove_all(manifest, actor):
+    if REQUIRE_ROOT and os.geteuid() != 0:
+        raise Refusal("--remove requires root")
+    if actor not in ALLOWED_ACTORS:
+        raise Refusal("--by must be an allowed actor")
+    verified = verify_all(manifest)
+    parent_fd = os.open(TARGET_DIR, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    try:
+        # A second inode check closes the gap between the byte read and removal.
+        for row, _, before in verified:
+            name = os.path.basename(row["path"])
+            current = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+            if (current.st_dev, current.st_ino) != (before.st_dev, before.st_ino):
+                raise Refusal("%s changed identity after verification" % row["path"])
+        for row, _, _ in verified:
+            os.unlink(os.path.basename(row["path"]), dir_fd=parent_fd)
+        os.fsync(parent_fd)
+    finally:
+        os.close(parent_fd)
+        close_all(verified)
+
+    os.makedirs(STATE_DIR, mode=0o700, exist_ok=True)
+    receipt = {
+        "schema_version": 1,
+        "batch": "B-DB-HELPER-RETIRE",
+        "reviewed_ref": REVIEWED_REF,
+        "actor": actor,
+        "removed_count": EXPECTED_COUNT,
+        "removed_paths": [row["path"] for row in manifest["files"]],
+        "removed_at_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+    }
+    pending = os.path.join(STATE_DIR, "last-remove.json.new")
+    final = os.path.join(STATE_DIR, "last-remove.json")
+    with open(pending, "w", encoding="utf-8") as fh:
+        json.dump(receipt, fh, sort_keys=True)
+        fh.write("\n")
+        fh.flush()
+        os.fsync(fh.fileno())
+    os.chmod(pending, 0o600)
+    os.replace(pending, final)
+    print("REMOVED %d exact reviewed helpers; no deploy or restart performed" % EXPECTED_COUNT)
+
+
+def usage():
+    raise Refusal("usage: dt-db-helper-retire [--verify | --remove --by <actor> | --status]")
+
+
+def main(argv):
+    if argv in ([], ["--verify"]):
+        manifest = load_manifest()
+        verified = verify_all(manifest)
+        close_all(verified)
+        print("VERIFIED %d exact reviewed helpers; no changes made" % EXPECTED_COUNT)
+        return
+    if argv == ["--status"]:
+        path = os.path.join(STATE_DIR, "last-remove.json")
+        if not os.path.isfile(path):
+            print("NOT REMOVED")
+            return
+        with open(path, encoding="utf-8") as fh:
+            print(fh.read().strip())
+        return
+    if len(argv) == 3 and argv[0] == "--remove" and argv[1] == "--by":
+        remove_all(load_manifest(), argv[2])
+        return
+    usage()
+
+
+if __name__ == "__main__":
+    try:
+        main(sys.argv[1:])
+    except (Refusal, OSError, KeyError, TypeError, ValueError) as exc:
+        print("REFUSED: %s" % exc, file=sys.stderr)
+        sys.exit(2)

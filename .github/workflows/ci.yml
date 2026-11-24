@@ -118,6 +118,9 @@ jobs:
           python3 scripts/db-map/tests/drift-enrollment.test.py
           node scripts/db-map/tests/connection-control.mjs
           node scripts/db-map/tests/snapshot-control.mjs
+          node scripts/db-helper-retire/tests/validator.test.mjs
+          node scripts/db-helper-retire/validate.mjs
+          python3 comms-infra/staging/tests/db_helper_retire_tests.py
           artifact_ref="$(git log -1 --format=%H HEAD -- docs/database-map/manifest.json)"
           test "${#artifact_ref}" = 40
           node scripts/db-map/verify.mjs --repo . --root docs/database-map --artifact-ref "$artifact_ref"
@@ -130,6 +133,7 @@ jobs:
           bash -n comms-infra/staging/install-dt-db-map
           bash -n comms-infra/staging/dt-db-map-weekly
           bash -n comms-infra/staging/dt-db-map-stale
+          bash -n comms-infra/staging/install-dt-db-helper-retire
         env:
           DATABASE_URL: postgresql://test:test@localhost:5432/test
 

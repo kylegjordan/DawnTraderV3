@@ -1,0 +1,3 @@
+cd /home/deploy/dawntrader
+export $(grep -E '^DATABASE_URL=' .env | head -1)
+psql "$DATABASE_URL" -A -F'|' -c "select status, started_at, stopped_at, starting_balance from active_engine_sessions where mode='paper' order by started_at desc limit 4;"

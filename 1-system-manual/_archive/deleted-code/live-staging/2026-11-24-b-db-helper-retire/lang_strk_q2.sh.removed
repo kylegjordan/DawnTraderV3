@@ -1,0 +1,15 @@
+cd /home/deploy/dawntrader
+export $(grep -E '^DATABASE_URL=' .env | head -1)
+psql "$DATABASE_URL" -A -F'|' <<'SQL'
+\echo == STRK vts trades ==
+select id, symbol, closed, opened_at, closed_at, stop_loss, take_profit, entry_price
+from vts_open_trades where symbol='STRK/USD' order by opened_at desc limit 6;
+\echo == STRK snap gap distribution 16:50Z-> now (age-arm blindness) ==
+with s as (select captured_at, lag(captured_at) over (order by captured_at) prev
+           from xstock_spot_ticker_snap where symbol='STRK/USD' and captured_at >= '2026-11-06 16:50:00Z')
+select count(*) gaps,
+       round(max(extract(epoch from captured_at-prev))::numeric,1) max_gap_s,
+       round(sum(greatest(extract(epoch from captured_at-prev)-15,0))::numeric,1) blind_s_over_15,
+       round(sum(extract(epoch from captured_at-prev))::numeric,1) span_s
+from s where prev is not null;
+SQL

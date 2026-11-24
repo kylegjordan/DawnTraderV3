@@ -1,0 +1,33 @@
+cd /home/deploy/dawntrader
+export $(grep -E '^DATABASE_URL=' .env | head -1)
+psql "$DATABASE_URL" -A -F'|' <<'SQL'
+\echo == per strategy: fill side vs plan ==
+select strategy_name, count(*) n,
+  count(*) filter (where entry_price < entry_decision_price) below,
+  count(*) filter (where entry_price = entry_decision_price) at_plan,
+  count(*) filter (where entry_price > entry_decision_price) above
+from closed_trades
+where mode='paper' and closed_at is not null and opened_at >= '2026-10-20'
+  and entry_price_producer='xstock_ticker_snap_walk' and entry_decision_price > stop_loss
+group by 1 order by 2 desc;
+\echo == A11 rows: close reason + pnl ==
+select close_reason, count(*) n, round(sum(coalesce(reconstructed_net_pnl,net_pnl,pnl))::numeric,4) sum_pnl,
+       round(min(abs(entry_price-stop_loss)/entry_price)::numeric,6) min_frac,
+       round(max(abs(entry_price-stop_loss)/entry_price)::numeric,6) max_frac
+from closed_trades
+where mode='paper' and closed_at is not null and opened_at >= '2026-10-20'
+  and entry_price_producer='xstock_ticker_snap_walk' and entry_decision_price > stop_loss
+  and abs(entry_price-stop_loss)/entry_price < 0.003
+group by 1 order by 2 desc;
+\echo == A11 rows by strategy ==
+select strategy_name, count(*) n, count(*) filter (where entry_price < entry_decision_price) below
+from closed_trades
+where mode='paper' and closed_at is not null and opened_at >= '2026-10-20'
+  and entry_price_producer='xstock_ticker_snap_walk' and entry_decision_price > stop_loss
+  and abs(entry_price-stop_loss)/entry_price < 0.003
+group by 1 order by 2 desc;
+\echo == A7 246 probe: same window, all xstock paper closes regardless of producer ==
+select entry_price_producer, count(*) n from closed_trades
+where mode='paper' and closed_at is not null and opened_at >= '2026-10-20' and asset_class='xstock_spot'
+group by 1 order by 2 desc;
+SQL

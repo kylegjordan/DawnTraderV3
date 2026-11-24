@@ -1,0 +1,21 @@
+#!/bin/bash
+# 08-27 rerun of the POST-HOC hollow-book count, restricted to the windows the count is FOR (the three handoffs ±15 min) plus one body hour per session as the control — the whole-day form died on the statement timeout.
+cd /home/deploy/dawntrader && set -a && . ./.env && set +a
+OUT=/home/deploy/obj0_hollow_0901.csv; echo "day,utc_bucket,snaps,symbols,hollow,symbols_hollow,registered_drops" > $OUT
+for win in "00:00 00:45" "07:45 08:45" "19:45 20:45" "10:00 11:00" "21:30 22:30" "03:00 04:00"; do set -- $win
+psql "$DATABASE_URL" -X -A -t -F, -q -c "set statement_timeout='600s';" -c "
+with s as (
+  select symbol, captured_at, bid, ask, last, lag(bid) over w as pbid, lag(ask) over w as pask, lag(last) over w as plast, lag(captured_at) over w as pts
+  from xstock_spot_ticker_snap_2026_09_01 where bid > 0 and ask > 0 and captured_at >= '2026-09-01 $1' and captured_at < '2026-09-01 $2'
+  window w as (partition by symbol order by captured_at)
+), ev as (
+  select symbol, captured_at,
+         (pbid > 0 and pask > 0 and captured_at - pts <= interval '5 minutes' and (ask-bid)/((ask+bid)/2) > 0.20 and bid <= 0.90*((pbid+pask)/2) and last = plast) as hollow,
+         (pbid > 0 and pask > 0 and captured_at - pts <= interval '5 minutes' and bid <= pbid*0.90 and abs(ask-pask)/pask < 0.02) as registered
+  from s
+)
+select '2026-09-01', to_char(date_trunc('hour', captured_at) + (floor(extract(minute from captured_at)/15)*15) * interval '1 minute', 'HH24:MI'),
+       count(*), count(distinct symbol), count(*) filter (where hollow), count(distinct symbol) filter (where hollow), count(*) filter (where registered)
+from ev group by 1,2 order by 2;" >> $OUT 2>>/home/deploy/obj0_hollow_0901.err
+done
+echo "$(date -u +%FT%TZ) HOLLOW-0901 DONE" >> /home/deploy/obj0_hollow.log

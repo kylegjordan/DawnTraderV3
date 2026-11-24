@@ -1,0 +1,1527 @@
+{
+  "schema_version": 1,
+  "batch": "B-DB-HELPER-RETIRE",
+  "audit_path": "Claude Comms and Packages/Scope Files/B_DB_HELPER_RETIRE_PRE_AUDIT.md",
+  "audit_sha256": "ea1fd3f2ae4de4b35af2a41efd4fb340cfb37c8220ba3460ad6aa97f436fbb39",
+  "reviewed_ref": "231a8c1948e1774817e93adde8204783f36a5139",
+  "checked_in": [
+    {
+      "number": 1,
+      "path": ".github/workflows/ci.yml",
+      "line": 207,
+      "kind": "psql process",
+      "disposition": "RETAIN_TEST_LOCAL",
+      "reason": "T: isolated CI Postgres",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 2,
+      "path": ".github/workflows/ci.yml",
+      "line": 206,
+      "kind": "dt-sql login",
+      "disposition": "RETAIN_TEST_LOCAL",
+      "reason": "T: wrapper tests against isolated CI service",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 3,
+      "path": "comms-infra/security/reviewer-staging-access/reviewer_staging_access.py",
+      "line": 352,
+      "kind": "psql process",
+      "disposition": "RETAIN_GOVERNED_DIRECT",
+      "reason": "G: current source calls governed dt-sql; B-CREW verifier remains owned",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 4,
+      "path": "comms-infra/staging/dt-api-set-crew-password",
+      "line": 32,
+      "kind": "psql process",
+      "disposition": "RETAIN_GOVERNED_DIRECT",
+      "reason": "G: named credential writer",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 5,
+      "path": "comms-infra/staging/dt-install-drift",
+      "line": 118,
+      "kind": "dt-sql login",
+      "disposition": "RETAIN_GOVERNED_DIRECT",
+      "reason": "G: installed-state verifier already uses boundary",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 6,
+      "path": "comms-infra/staging/dt-sql",
+      "line": 38,
+      "kind": "psql process",
+      "disposition": "RETAIN_GOVERNED_DIRECT",
+      "reason": "G: boundary implementation",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 7,
+      "path": "comms-infra/staging/dt-sql",
+      "line": 6,
+      "kind": "dt-sql login",
+      "disposition": "RETAIN_GOVERNED_DIRECT",
+      "reason": "G: boundary implementation",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 8,
+      "path": "comms-infra/staging/dt-sql-login",
+      "line": 23,
+      "kind": "psql process",
+      "disposition": "RETAIN_GOVERNED_DIRECT",
+      "reason": "G: dedicated dt_reader login",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 9,
+      "path": "comms-infra/staging/dt-sql-login",
+      "line": 2,
+      "kind": "dt-sql login",
+      "disposition": "RETAIN_GOVERNED_DIRECT",
+      "reason": "G: dedicated dt_reader login",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 10,
+      "path": "comms-infra/staging/dt-sql-role-setup",
+      "line": 30,
+      "kind": "dt-sql login",
+      "disposition": "RETAIN_GOVERNED_DIRECT",
+      "reason": "G: privileged role bootstrap/verifier",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 11,
+      "path": "comms-infra/staging/psql-wrapper",
+      "line": 9,
+      "kind": "psql process",
+      "disposition": "RETAIN_GOVERNED_DIRECT",
+      "reason": "G: installed one-attempt safety wrapper",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 12,
+      "path": "comms-infra/staging/tests/dt_sql_login_tests.py",
+      "line": 6,
+      "kind": "psql process",
+      "disposition": "RETAIN_TEST_LOCAL",
+      "reason": "T: isolated fixture",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 13,
+      "path": "comms-infra/staging/tests/dt_sql_login_tests.py",
+      "line": 2,
+      "kind": "dt-sql login",
+      "disposition": "RETAIN_TEST_LOCAL",
+      "reason": "T: isolated fixture",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 14,
+      "path": "comms-infra/staging/tests/dt_sql_mutations.py",
+      "line": 3,
+      "kind": "dt-sql login",
+      "disposition": "RETAIN_TEST_LOCAL",
+      "reason": "T: mutation fixture",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 15,
+      "path": "comms-infra/staging/tests/dt_sql_role_setup_tests.py",
+      "line": 332,
+      "kind": "psql process",
+      "disposition": "RETAIN_TEST_LOCAL",
+      "reason": "T: isolated fixture",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 16,
+      "path": "comms-infra/staging/tests/dt_sql_role_setup_tests.py",
+      "line": 5,
+      "kind": "dt-sql login",
+      "disposition": "RETAIN_TEST_LOCAL",
+      "reason": "T: isolated fixture",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 17,
+      "path": "comms-infra/staging/tests/dt_sql_tests.py",
+      "line": 228,
+      "kind": "psql process",
+      "disposition": "RETAIN_TEST_LOCAL",
+      "reason": "T: isolated fixture",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 18,
+      "path": "comms-infra/staging/tests/dt_sql_tests.py",
+      "line": 2,
+      "kind": "dt-sql login",
+      "disposition": "RETAIN_TEST_LOCAL",
+      "reason": "T: isolated fixture",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 19,
+      "path": "comms-infra/staging/tests/setter_tests.py",
+      "line": 351,
+      "kind": "psql process",
+      "disposition": "RETAIN_TEST_LOCAL",
+      "reason": "T: isolated credential-writer fixture",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 20,
+      "path": "drizzle/migrations/2026-05-19-b-new-35-phase1-dedup-xstock-spot.sql",
+      "line": 31,
+      "kind": "psql process",
+      "disposition": "RETAIN_GOVERNED_DIRECT",
+      "reason": "G: immutable migration text",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 21,
+      "path": "drizzle/migrations/2026-11-05-b-close-writer-costs-open-positions-mode.sql",
+      "line": 67,
+      "kind": "psql process",
+      "disposition": "RETAIN_GOVERNED_DIRECT",
+      "reason": "G: immutable migration text",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 22,
+      "path": "migrate-19g.js",
+      "line": 4,
+      "kind": "node-postgres Pool",
+      "disposition": "RETIRE",
+      "reason": "R: March one-off; no caller or current governance home",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 23,
+      "path": "scripts/analysis/b_db_pool_guard_weekday_qd_read.py",
+      "line": 38,
+      "kind": "psql process",
+      "disposition": "RETIRE",
+      "reason": "O: B-DB-POOL-GUARD closed; no surviving duty",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 24,
+      "path": "scripts/analysis/b_disk_headroom_eligibility.ts",
+      "line": 57,
+      "kind": "node-postgres Client",
+      "disposition": "RETIRE",
+      "reason": "O: P2-P4 proof-night helper; Dec-1 P11 is direct size evidence",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 25,
+      "path": "scripts/analysis/b_ohlc_frame_guard_futures_partial_bar_check.py",
+      "line": 33,
+      "kind": "psql process",
+      "disposition": "RETIRE",
+      "reason": "O: B-OHLC-FRAME-GUARD closed; no caller",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 26,
+      "path": "scripts/analysis/b_xstock_bar_availability_c6_timing_read.ts",
+      "line": 40,
+      "kind": "node-postgres Client",
+      "disposition": "RETIRE",
+      "reason": "O: C6 timing read completed and was ruled; R2-prime uses its separate runner",
+      "authority": "ANALYST Codex Discord 1574741149124530270"
+    },
+    {
+      "number": 27,
+      "path": "scripts/analysis/obj_pa_pb.cjs",
+      "line": 27,
+      "kind": "node-postgres Client",
+      "disposition": "RETIRE",
+      "reason": "R: closed B-XSTOCK-FEED-SANITY instrument",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 28,
+      "path": "scripts/analysis/xstock-refusal-holds.py",
+      "line": 69,
+      "kind": "psql process",
+      "disposition": "RETIRE",
+      "reason": "O: increment-A measurement is durable; no remaining registered read",
+      "authority": "ANALYST Codex Discord 1574741149124530270"
+    },
+    {
+      "number": 29,
+      "path": "scripts/analysis/xstock-wide-book-stop-vs-next-open.py",
+      "line": 8,
+      "kind": "psql process",
+      "disposition": "RETIRE",
+      "reason": "O: OBJ-6 evidence is durable and independently confirmed",
+      "authority": "ANALYST Codex Discord 1574741149124530270"
+    },
+    {
+      "number": 30,
+      "path": "scripts/b-1-5-universe-audit.ts",
+      "line": 49,
+      "kind": "node-postgres Pool",
+      "disposition": "RETIRE",
+      "reason": "R: completed audit, no caller",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 31,
+      "path": "scripts/b-crypto-feed-watchdog-witness-backfill.ts",
+      "line": 46,
+      "kind": "node-postgres Client",
+      "disposition": "RETIRE",
+      "reason": "O: B-CRYPTO-FEED-WATCHDOG closed; one-off writer completed",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 32,
+      "path": "scripts/b-new-34b-prewarm-snapshot.ts",
+      "line": 315,
+      "kind": "node-postgres Pool",
+      "disposition": "RETAIN_GOVERNED_DIRECT",
+      "reason": "L: live Fri/Sun lifecycle hook",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 33,
+      "path": "scripts/b-pattern-evidence-15m-study.ts",
+      "line": 309,
+      "kind": "node-postgres Client",
+      "disposition": "RETIRE",
+      "reason": "R: completed study, no caller",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 34,
+      "path": "scripts/b-pattern-winner-traits-study.ts",
+      "line": 188,
+      "kind": "node-postgres Client",
+      "disposition": "RETIRE",
+      "reason": "R: completed study, no caller",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 35,
+      "path": "scripts/b-phase-a2-backfill.ts",
+      "line": 183,
+      "kind": "node-postgres Pool",
+      "disposition": "RETIRE",
+      "reason": "R: completed backfill; remove stale package command",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 36,
+      "path": "scripts/b-xstock-calib-b1a-replay.ts",
+      "line": 306,
+      "kind": "node-postgres Client",
+      "disposition": "RETIRE",
+      "reason": "R: completed replay, no caller",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 37,
+      "path": "scripts/b-xstock-calib-b3-regime-audit.ts",
+      "line": 276,
+      "kind": "node-postgres Client",
+      "disposition": "RETIRE",
+      "reason": "R: completed audit, no caller",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 38,
+      "path": "scripts/b-xstock-calib-b31a-gate-audit-2.ts",
+      "line": 181,
+      "kind": "node-postgres Client",
+      "disposition": "RETIRE",
+      "reason": "R: completed audit, no caller",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 39,
+      "path": "scripts/b-xstock-calib-b31a-gate-audit.ts",
+      "line": 121,
+      "kind": "node-postgres Client",
+      "disposition": "RETIRE",
+      "reason": "R: completed audit, no caller",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 40,
+      "path": "scripts/b4-bar-frequency-study.ts",
+      "line": 132,
+      "kind": "node-postgres Client",
+      "disposition": "RETIRE",
+      "reason": "R: completed study, no caller",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 41,
+      "path": "scripts/b4-dbs-15m-recompute.ts",
+      "line": 413,
+      "kind": "node-postgres Pool",
+      "disposition": "RETIRE",
+      "reason": "R: completed recompute tool, persisted state remains",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 42,
+      "path": "scripts/b4-regime-parity.ts",
+      "line": 501,
+      "kind": "node-postgres Client",
+      "disposition": "RETIRE",
+      "reason": "R: completed parity study, no caller",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 43,
+      "path": "scripts/b4-regime-recalib-study.ts",
+      "line": 443,
+      "kind": "node-postgres Client",
+      "disposition": "RETIRE",
+      "reason": "R: completed recalibration, no caller",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 44,
+      "path": "scripts/b4-vndi-recalib-study.ts",
+      "line": 371,
+      "kind": "node-postgres Client",
+      "disposition": "RETIRE",
+      "reason": "R: completed recalibration, no caller",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 45,
+      "path": "scripts/b5-w20c-provenance-replay.ts",
+      "line": 121,
+      "kind": "node-postgres Client",
+      "disposition": "RETIRE",
+      "reason": "R: completed replay; retire sole-input tsconfig",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 46,
+      "path": "scripts/b5-w2a-geometry-sweep.ts",
+      "line": 292,
+      "kind": "node-postgres Client",
+      "disposition": "RETIRE",
+      "reason": "R: completed sweep; replace test positive control",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 47,
+      "path": "scripts/b5c-diag.cjs",
+      "line": 4,
+      "kind": "node-postgres Client",
+      "disposition": "RETIRE",
+      "reason": "R: completed one-off diagnostic",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 48,
+      "path": "scripts/b5c-poll.cjs",
+      "line": 4,
+      "kind": "node-postgres Client",
+      "disposition": "RETIRE",
+      "reason": "R: completed one-off poller",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 49,
+      "path": "scripts/b5c-verify.cjs",
+      "line": 4,
+      "kind": "node-postgres Client",
+      "disposition": "RETIRE",
+      "reason": "R: completed one-off verifier",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 50,
+      "path": "scripts/db-map/tests/core.test.mjs",
+      "line": 103,
+      "kind": "node-postgres Pool",
+      "disposition": "RETAIN_TEST_LOCAL",
+      "reason": "T: database-map fixture",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 51,
+      "path": "scripts/db-map/tests/snapshot-control.mjs",
+      "line": 6,
+      "kind": "node-postgres Client",
+      "disposition": "RETAIN_TEST_LOCAL",
+      "reason": "T: database-map fixture",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 52,
+      "path": "scripts/db-migrate.ts",
+      "line": 216,
+      "kind": "node-postgres Client",
+      "disposition": "RETAIN_GOVERNED_DIRECT",
+      "reason": "G: named migration writer",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 53,
+      "path": "scripts/hce/hce_ohlc_sim.py",
+      "line": 57,
+      "kind": "psql process",
+      "disposition": "RETIRE",
+      "reason": "R: completed simulation, no caller",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 54,
+      "path": "scripts/hce/hce_rawfeat.py",
+      "line": 26,
+      "kind": "psql process",
+      "disposition": "RETIRE",
+      "reason": "R: completed study, no caller",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 55,
+      "path": "scripts/measure-gate/test-guard-result-shape.mjs",
+      "line": 42,
+      "kind": "psql process",
+      "disposition": "RETAIN_TEST_LOCAL",
+      "reason": "T: isolated result-shape fixture",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 56,
+      "path": "scripts/xstock-hollow-recut.ts",
+      "line": 76,
+      "kind": "node-postgres Client",
+      "disposition": "OWNER_HOLD",
+      "reason": "O: P6 historical recut unfinished; preserve writer, command and tests until reviewed completion/withdrawal",
+      "authority": "ANALYST Codex Discord 1574741149124530270 OWNER_HOLD"
+    },
+    {
+      "number": 57,
+      "path": "server/db-pool-alerts.ts",
+      "line": 495,
+      "kind": "node-postgres Client",
+      "disposition": "RETAIN_GOVERNED_DIRECT",
+      "reason": "G: application runtime",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 58,
+      "path": "server/db.ts",
+      "line": 106,
+      "kind": "node-postgres Pool",
+      "disposition": "RETAIN_GOVERNED_DIRECT",
+      "reason": "G: application pools",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 59,
+      "path": "server/scripts/b-disk-file-tiering.ts",
+      "line": 305,
+      "kind": "node-postgres Client",
+      "disposition": "RETAIN_GOVERNED_DIRECT",
+      "reason": "G: governed operational writer",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 60,
+      "path": "server/scripts/b-storage-archival-health.ts",
+      "line": 455,
+      "kind": "node-postgres Client",
+      "disposition": "RETAIN_GOVERNED_DIRECT",
+      "reason": "G: governed operational check",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 61,
+      "path": "server/scripts/b-xstock-bar-availability-capacity-gate.ts",
+      "line": 417,
+      "kind": "node-postgres Client",
+      "disposition": "RETAIN_GOVERNED_DIRECT",
+      "reason": "G: governed scheduled gate",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 62,
+      "path": "server/scripts/b-xstock-bar-availability-verdict-runner.ts",
+      "line": 508,
+      "kind": "node-postgres Client",
+      "disposition": "RETAIN_GOVERNED_DIRECT",
+      "reason": "G: governed scheduled runner",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 63,
+      "path": "server/scripts/b-xstock-freshness-monitor.ts",
+      "line": 224,
+      "kind": "node-postgres Client",
+      "disposition": "RETAIN_GOVERNED_DIRECT",
+      "reason": "G: governed monitor",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 64,
+      "path": "server/scripts/b70-b62-relabel-runner.ts",
+      "line": 249,
+      "kind": "node-postgres Client",
+      "disposition": "RETAIN_GOVERNED_DIRECT",
+      "reason": "G: governed operational writer",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 65,
+      "path": "server/scripts/b70-create-monthly-partitions.ts",
+      "line": 80,
+      "kind": "node-postgres Client",
+      "disposition": "RETAIN_GOVERNED_DIRECT",
+      "reason": "G: partition DDL writer",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 66,
+      "path": "server/scripts/b70-table-export.ts",
+      "line": 146,
+      "kind": "node-postgres Client",
+      "disposition": "RETAIN_GOVERNED_DIRECT",
+      "reason": "G: governed export",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 67,
+      "path": "server/scripts/b75-cold-audit.ts",
+      "line": 546,
+      "kind": "node-postgres Client",
+      "disposition": "RETAIN_GOVERNED_DIRECT",
+      "reason": "G: governed archive audit",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 68,
+      "path": "server/scripts/b75-cold-bind.ts",
+      "line": 243,
+      "kind": "node-postgres Client",
+      "disposition": "RETAIN_GOVERNED_DIRECT",
+      "reason": "G: governed archive writer",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 69,
+      "path": "server/scripts/b75-cold-liveness.ts",
+      "line": 41,
+      "kind": "node-postgres Client",
+      "disposition": "RETAIN_GOVERNED_DIRECT",
+      "reason": "G: governed archive liveness",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 70,
+      "path": "server/scripts/b75-cold-proof.ts",
+      "line": 130,
+      "kind": "node-postgres Client",
+      "disposition": "RETAIN_GOVERNED_DIRECT",
+      "reason": "G: governed archive proof",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 71,
+      "path": "server/scripts/b75-cold-rotator.ts",
+      "line": 516,
+      "kind": "node-postgres Client",
+      "disposition": "RETAIN_GOVERNED_DIRECT",
+      "reason": "G: governed archive writer",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 72,
+      "path": "server/scripts/b75-rehydrate.ts",
+      "line": 622,
+      "kind": "node-postgres Client",
+      "disposition": "RETAIN_GOVERNED_DIRECT",
+      "reason": "G: governed rehydration writer",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 73,
+      "path": "server/scripts/b75-retention-sweep.ts",
+      "line": 162,
+      "kind": "node-postgres Client",
+      "disposition": "RETAIN_GOVERNED_DIRECT",
+      "reason": "G: governed retention writer",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 74,
+      "path": "server/scripts/context-bridge-log-ttl.ts",
+      "line": 661,
+      "kind": "node-postgres Client",
+      "disposition": "RETAIN_GOVERNED_DIRECT",
+      "reason": "G: governed retention writer",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 75,
+      "path": "server/scripts/perpfeed-daily-probe.ts",
+      "line": 46,
+      "kind": "node-postgres Client",
+      "disposition": "RETAIN_GOVERNED_DIRECT",
+      "reason": "G: governed scheduled probe",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 76,
+      "path": "server/scripts/perpfeed-gate-test.ts",
+      "line": 64,
+      "kind": "node-postgres Client",
+      "disposition": "RETAIN_GOVERNED_DIRECT",
+      "reason": "G: governed operational gate",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 77,
+      "path": "server/services/crew-coordination.ts",
+      "line": 92,
+      "kind": "node-postgres Pool",
+      "disposition": "RETAIN_GOVERNED_DIRECT",
+      "reason": "G: application service runtime",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 78,
+      "path": "server/services/passive-archive/xstock-db-snapshot.ts",
+      "line": 34,
+      "kind": "node-postgres Client",
+      "disposition": "RETAIN_GOVERNED_DIRECT",
+      "reason": "G: application archive runtime",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 79,
+      "path": "server/tests/enum-parity/enum-parity.parity.ts",
+      "line": 28,
+      "kind": "node-postgres Client",
+      "disposition": "RETAIN_TEST_LOCAL",
+      "reason": "T: isolated test fixture",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 80,
+      "path": "server/tests/integration/b-cron-fire-evidence-legacy-clock.test.ts",
+      "line": 17,
+      "kind": "node-postgres Client",
+      "disposition": "RETAIN_TEST_LOCAL",
+      "reason": "T: isolated test fixture",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 81,
+      "path": "server/tests/integration/b-db-size-relief-cutover.test.ts",
+      "line": 33,
+      "kind": "node-postgres Client",
+      "disposition": "RETAIN_TEST_LOCAL",
+      "reason": "T: isolated test fixture",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 82,
+      "path": "server/tests/integration/b-xstock-bar-availability-gate-read.test.ts",
+      "line": 45,
+      "kind": "node-postgres Client",
+      "disposition": "RETAIN_TEST_LOCAL",
+      "reason": "T: isolated test fixture",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 83,
+      "path": "server/tests/integration/b-xstock-bar-availability-revision.test.ts",
+      "line": 111,
+      "kind": "node-postgres Client",
+      "disposition": "RETAIN_TEST_LOCAL",
+      "reason": "T: isolated test fixture",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 84,
+      "path": "server/tests/integration/b-xstock-snapshot-retention-db.test.ts",
+      "line": 24,
+      "kind": "node-postgres Client",
+      "disposition": "RETAIN_TEST_LOCAL",
+      "reason": "T: isolated test fixture",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 85,
+      "path": "server/tests/unit/b-db-pool-guard.test.ts",
+      "line": 12,
+      "kind": "node-postgres Pool",
+      "disposition": "RETAIN_TEST_LOCAL",
+      "reason": "T: isolated test fixture",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 86,
+      "path": "package.json",
+      "line": 13,
+      "kind": "direct psql package command",
+      "disposition": "RETAIN_GOVERNED_DIRECT",
+      "reason": "named B69 migration writer; the catalog records ticker-snap retag work as deferred, so removal would erase a still-valid migration mechanism",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 87,
+      "path": "scripts/analysis/b_disk_headroom_lock_sampler.sh",
+      "line": 45,
+      "kind": "bare psql shell",
+      "disposition": "RETIRE",
+      "reason": "P4 proof-night sampler; no Dec-1 P11 duty",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 88,
+      "path": "scripts/analysis/b_disk_headroom_set_retention.sh",
+      "line": 50,
+      "kind": "bare psql shell writer",
+      "disposition": "RETIRE",
+      "reason": "P3/P5/P8 guarded setter; proof stages complete",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 89,
+      "path": "scripts/analysis/b_price_side_alias_census.sh",
+      "line": 5,
+      "kind": "bare psql shell",
+      "disposition": "ROUTE_DT_SQL",
+      "reason": "O: issue 1024 still owes a current collision census; preserve runner + processor but replace the direct application-credential read with dt_reader",
+      "authority": "ANALYST Codex Discord 1574747055417593927"
+    },
+    {
+      "number": 90,
+      "path": "scripts/analysis/b_price_side_p7h_limiter_class_census.sh",
+      "line": 6,
+      "kind": "bare psql shell",
+      "disposition": "RETIRE",
+      "reason": "O: bounded September overlap is durable; no later read/caller; retire paired processor atomically",
+      "authority": "ANALYST Codex Discord 1574747055417593927"
+    },
+    {
+      "number": 91,
+      "path": "scripts/b5-amr-correctness-audit.ts",
+      "line": 270,
+      "kind": "new pg.default.Client",
+      "disposition": "ROUTE_DT_SQL",
+      "reason": "permanent AMR audit surface; its one direct DB leg is a read and must use dt_reader",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "number": 92,
+      "path": "audit/run-phase31h-audit.sh",
+      "line": 60,
+      "kind": "bare psql shell",
+      "disposition": "RETIRE",
+      "reason": "Step-3 default-deny finding: legacy 2025 Phase-31H audit; no caller, schedule, process or current registered duty; direct application login must not remain",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    }
+  ],
+  "live": [
+    {
+      "path": "/home/deploy/.langston-rerun.py",
+      "markers": [
+        "psql",
+        "DATABASE_URL"
+      ],
+      "bytes": 3544,
+      "mode": "0644",
+      "sha256": "423bc8262177092dad920181784ced9de8369ef32ed9e1067a22a77cd4c2a7f6",
+      "disposition": "RETIRE",
+      "reason": "reviewed top-level one-off with no current process, service, schedule, caller or continuing duty",
+      "authority": "ANALYST Codex Discord 1574741149124530270"
+    },
+    {
+      "path": "/home/deploy/_cols.sh",
+      "markers": [
+        "psql",
+        "DATABASE_URL"
+      ],
+      "bytes": 312,
+      "mode": "0644",
+      "sha256": "45aa3e11770c68f7ce336ce7ea3435e281634b29fef85c237d515ae347f55ca9",
+      "disposition": "RETIRE",
+      "reason": "reviewed top-level one-off with no current process, service, schedule, caller or continuing duty",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "path": "/home/deploy/_pos.sh",
+      "markers": [
+        "psql",
+        "DATABASE_URL"
+      ],
+      "bytes": 858,
+      "mode": "0644",
+      "sha256": "037662281ccb372fd8851d31ed7ca1cf0f6c36b5d00f01e803675b47316006fb",
+      "disposition": "RETIRE",
+      "reason": "reviewed top-level one-off with no current process, service, schedule, caller or continuing duty",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "path": "/home/deploy/_pos2.sh",
+      "markers": [
+        "psql",
+        "DATABASE_URL"
+      ],
+      "bytes": 1457,
+      "mode": "0644",
+      "sha256": "184d7150dbe5a65cbbf92dd1380f59c05ff347586bc172eff6fcd664f4eac63d",
+      "disposition": "RETIRE",
+      "reason": "reviewed top-level one-off with no current process, service, schedule, caller or continuing duty",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "path": "/home/deploy/b_disk_headroom_eligibility.ts",
+      "markers": [
+        "DATABASE_URL"
+      ],
+      "bytes": 5355,
+      "mode": "0644",
+      "sha256": "cda8a1e13192a28aae4aa203f3097291e938c848b0340a3c7418f844b98128f7",
+      "disposition": "RETIRE",
+      "reason": "reviewed top-level one-off with no current process, service, schedule, caller or continuing duty",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "path": "/home/deploy/b_disk_headroom_lock_sampler.sh",
+      "markers": [
+        "psql",
+        "DATABASE_URL"
+      ],
+      "bytes": 3935,
+      "mode": "0750",
+      "sha256": "2e801a79fc095953695f58e33f3f2ea96aebad8c9edcc427a10f68947a6a83ca",
+      "disposition": "RETIRE",
+      "reason": "reviewed top-level one-off with no current process, service, schedule, caller or continuing duty",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "path": "/home/deploy/b_disk_headroom_set_retention.sh",
+      "markers": [
+        "psql",
+        "DATABASE_URL"
+      ],
+      "bytes": 5724,
+      "mode": "0750",
+      "sha256": "d0e1cbb662da2c346084e8863bd3dd05df1aa3298009d2866793981be5e28211",
+      "disposition": "RETIRE",
+      "reason": "reviewed top-level one-off with no current process, service, schedule, caller or continuing duty",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "path": "/home/deploy/ccc_ring.sh",
+      "markers": [
+        "psql",
+        "DATABASE_URL"
+      ],
+      "bytes": 780,
+      "mode": "0755",
+      "sha256": "92f8c1adc13d329e0ca3b1a98235b7426085759520b2eb7a18b26f2bb51fc902",
+      "disposition": "RETIRE",
+      "reason": "reviewed top-level one-off with no current process, service, schedule, caller or continuing duty",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "path": "/home/deploy/fg1check.sh",
+      "markers": [
+        "psql",
+        "DATABASE_URL"
+      ],
+      "bytes": 238,
+      "mode": "0755",
+      "sha256": "c9fa4c683e878c5ea5eb560fc9233b3df05910eae92d0dbdbd8d7987cef3f314",
+      "disposition": "RETIRE",
+      "reason": "reviewed top-level one-off with no current process, service, schedule, caller or continuing duty",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "path": "/home/deploy/lang_1250_q1.sh",
+      "markers": [
+        "psql",
+        "DATABASE_URL"
+      ],
+      "bytes": 574,
+      "mode": "0644",
+      "sha256": "8a203081b410097d233bb174eae52f97c824a4e68e600e8a41955b980224a0f8",
+      "disposition": "RETIRE",
+      "reason": "reviewed top-level one-off with no current process, service, schedule, caller or continuing duty",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "path": "/home/deploy/lang_1250_q2.sh",
+      "markers": [
+        "psql",
+        "DATABASE_URL"
+      ],
+      "bytes": 2608,
+      "mode": "0644",
+      "sha256": "3fb381720ecc7d14f1919cc66180cd01af50eb5aa09275859df5a5c5c4e0a805",
+      "disposition": "RETIRE",
+      "reason": "reviewed top-level one-off with no current process, service, schedule, caller or continuing duty",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "path": "/home/deploy/lang_1250_q3.sh",
+      "markers": [
+        "psql",
+        "DATABASE_URL"
+      ],
+      "bytes": 223,
+      "mode": "0644",
+      "sha256": "0bd79c7f7ddccfce20de88f412c7c423f5ad91ceedc1854b35f0f08f13cce245",
+      "disposition": "RETIRE",
+      "reason": "reviewed top-level one-off with no current process, service, schedule, caller or continuing duty",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "path": "/home/deploy/lang_1250_q4.sh",
+      "markers": [
+        "psql",
+        "DATABASE_URL"
+      ],
+      "bytes": 1861,
+      "mode": "0644",
+      "sha256": "0ac039471bf32736e6bf2a24c0a55dd2358374a37d3b5f5af5395af8f651de24",
+      "disposition": "RETIRE",
+      "reason": "reviewed top-level one-off with no current process, service, schedule, caller or continuing duty",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "path": "/home/deploy/lang_1250_q5.sh",
+      "markers": [
+        "psql",
+        "DATABASE_URL"
+      ],
+      "bytes": 488,
+      "mode": "0644",
+      "sha256": "b0478859d250bcfbe0ad633f67fb41faa1c5fa87eed59d2802a48c47d1c56369",
+      "disposition": "RETIRE",
+      "reason": "reviewed top-level one-off with no current process, service, schedule, caller or continuing duty",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "path": "/home/deploy/lang_1250_q6.sh",
+      "markers": [
+        "psql",
+        "DATABASE_URL"
+      ],
+      "bytes": 699,
+      "mode": "0644",
+      "sha256": "e03a06faed8d93a1ec2f46e3934b95dce8cf62f1f359905175a770e44d781db9",
+      "disposition": "RETIRE",
+      "reason": "reviewed top-level one-off with no current process, service, schedule, caller or continuing duty",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "path": "/home/deploy/lang_8c_mig.sh",
+      "markers": [
+        "psql",
+        "DATABASE_URL"
+      ],
+      "bytes": 715,
+      "mode": "0644",
+      "sha256": "d19238cc7717b92e6242048ca3f9d6f768a21d9d843cd9c1c753b13ffa9e1c08",
+      "disposition": "RETIRE",
+      "reason": "reviewed top-level one-off with no current process, service, schedule, caller or continuing duty",
+      "authority": "ANALYST Codex Discord 1574741149124530270"
+    },
+    {
+      "path": "/home/deploy/lang_8c_rtb.sh",
+      "markers": [
+        "psql",
+        "DATABASE_URL"
+      ],
+      "bytes": 523,
+      "mode": "0644",
+      "sha256": "2293f04277ca2aba52448d5c655ee4ecb50766a3f3c2d335aafb8f59d859c549",
+      "disposition": "RETIRE",
+      "reason": "reviewed top-level one-off with no current process, service, schedule, caller or continuing duty",
+      "authority": "ANALYST Codex Discord 1574741149124530270"
+    },
+    {
+      "path": "/home/deploy/lang_8c_tec.sh",
+      "markers": [
+        "psql",
+        "DATABASE_URL"
+      ],
+      "bytes": 334,
+      "mode": "0644",
+      "sha256": "86545f604bfe9c3ae17e742cfebe1f9b1d6d13d05c93f56721c3749c347ea308",
+      "disposition": "RETIRE",
+      "reason": "reviewed top-level one-off with no current process, service, schedule, caller or continuing duty",
+      "authority": "ANALYST Codex Discord 1574741149124530270"
+    },
+    {
+      "path": "/home/deploy/lang_c5cf_q1.sh",
+      "markers": [
+        "psql",
+        "DATABASE_URL"
+      ],
+      "bytes": 1200,
+      "mode": "0644",
+      "sha256": "4cf38d78b999cc369b6a9edcdf77b216e9b73c26413d6f08e83bda4bc9397f52",
+      "disposition": "RETIRE",
+      "reason": "reviewed top-level one-off with no current process, service, schedule, caller or continuing duty",
+      "authority": "OLD Codex Discord 1574746839448559617"
+    },
+    {
+      "path": "/home/deploy/lang_c5cf_q2.sh",
+      "markers": [
+        "psql",
+        "DATABASE_URL"
+      ],
+      "bytes": 340,
+      "mode": "0644",
+      "sha256": "faeac90ca40269e54ebc0470058c9d219ac84519ae1daba13ba5c0bc493ddd3e",
+      "disposition": "RETIRE",
+      "reason": "reviewed top-level one-off with no current process, service, schedule, caller or continuing duty",
+      "authority": "OLD Codex Discord 1574746839448559617"
+    },
+    {
+      "path": "/home/deploy/lang_c5cf_q3.sh",
+      "markers": [
+        "psql",
+        "DATABASE_URL"
+      ],
+      "bytes": 555,
+      "mode": "0644",
+      "sha256": "4137c77522c5c1e9e6414b4854985e05732ad9ac38123b7508ec8036f02749f4",
+      "disposition": "RETIRE",
+      "reason": "reviewed top-level one-off with no current process, service, schedule, caller or continuing duty",
+      "authority": "OLD Codex Discord 1574746839448559617"
+    },
+    {
+      "path": "/home/deploy/lang_c5cf_q4.sh",
+      "markers": [
+        "psql",
+        "DATABASE_URL"
+      ],
+      "bytes": 248,
+      "mode": "0644",
+      "sha256": "f3e08e27311b5abb7d541c83dc195b1f8a96cd947f048aff0d20829d21ce34c4",
+      "disposition": "RETIRE",
+      "reason": "reviewed top-level one-off with no current process, service, schedule, caller or continuing duty",
+      "authority": "OLD Codex Discord 1574746839448559617"
+    },
+    {
+      "path": "/home/deploy/lang_c5cf_q5.sh",
+      "markers": [
+        "psql",
+        "DATABASE_URL"
+      ],
+      "bytes": 882,
+      "mode": "0644",
+      "sha256": "8259836b69b39f38392818f62e7dd7bbe5b17dca7152efbcfc33b0eb01cd4d75",
+      "disposition": "RETIRE",
+      "reason": "reviewed top-level one-off with no current process, service, schedule, caller or continuing duty",
+      "authority": "OLD Codex Discord 1574746839448559617"
+    },
+    {
+      "path": "/home/deploy/lang_c5cf_q6.sh",
+      "markers": [
+        "psql",
+        "DATABASE_URL"
+      ],
+      "bytes": 590,
+      "mode": "0644",
+      "sha256": "c0f05bdfb2fecd075763eea14f4402a27c20c497c614405ea4c7a3dd29908b3f",
+      "disposition": "RETIRE",
+      "reason": "reviewed top-level one-off with no current process, service, schedule, caller or continuing duty",
+      "authority": "OLD Codex Discord 1574746839448559617"
+    },
+    {
+      "path": "/home/deploy/lang_c5cf_q7.sh",
+      "markers": [
+        "psql",
+        "DATABASE_URL"
+      ],
+      "bytes": 928,
+      "mode": "0644",
+      "sha256": "c75cb0a8e9ca74d9a731181002a85314c95d71ef63175fd7c7532072ec433b44",
+      "disposition": "RETIRE",
+      "reason": "reviewed top-level one-off with no current process, service, schedule, caller or continuing duty",
+      "authority": "OLD Codex Discord 1574746839448559617"
+    },
+    {
+      "path": "/home/deploy/lang_eg_q1.sh",
+      "markers": [
+        "psql",
+        "DATABASE_URL"
+      ],
+      "bytes": 572,
+      "mode": "0644",
+      "sha256": "e521450e97923f476d39f815ea9f586a3aee98c2a41df94e710a42b8519a8245",
+      "disposition": "RETIRE",
+      "reason": "reviewed top-level one-off with no current process, service, schedule, caller or continuing duty",
+      "authority": "NEW Codex Discord 1574740272527577089"
+    },
+    {
+      "path": "/home/deploy/lang_eg_q2.sh",
+      "markers": [
+        "psql",
+        "DATABASE_URL"
+      ],
+      "bytes": 844,
+      "mode": "0644",
+      "sha256": "692606917c00cdd7f69f937779021e0d2aa022fd6e6f671454eaa4f62e2c8ea0",
+      "disposition": "RETIRE",
+      "reason": "reviewed top-level one-off with no current process, service, schedule, caller or continuing duty",
+      "authority": "NEW Codex Discord 1574740272527577089"
+    },
+    {
+      "path": "/home/deploy/lang_eg_q3.sh",
+      "markers": [
+        "psql",
+        "DATABASE_URL"
+      ],
+      "bytes": 1862,
+      "mode": "0644",
+      "sha256": "f25dbe6d9f80328abef53bd06d954bb07270342de3b054db0e287e4b0427063d",
+      "disposition": "RETIRE",
+      "reason": "reviewed top-level one-off with no current process, service, schedule, caller or continuing duty",
+      "authority": "NEW Codex Discord 1574740272527577089"
+    },
+    {
+      "path": "/home/deploy/lang_eg_q4.sh",
+      "markers": [
+        "psql",
+        "DATABASE_URL"
+      ],
+      "bytes": 1211,
+      "mode": "0644",
+      "sha256": "70e75357d19bbac31d434899e364127df0defee011ad0e45a6627ef6079023bd",
+      "disposition": "RETIRE",
+      "reason": "reviewed top-level one-off with no current process, service, schedule, caller or continuing duty",
+      "authority": "NEW Codex Discord 1574740272527577089"
+    },
+    {
+      "path": "/home/deploy/lang_eg_q5.sh",
+      "markers": [
+        "psql",
+        "DATABASE_URL"
+      ],
+      "bytes": 1116,
+      "mode": "0644",
+      "sha256": "71ada3ed67ad7b0c334e5249da49238b7753f1e2c94c3e8b6a858979ff0979bd",
+      "disposition": "RETIRE",
+      "reason": "reviewed top-level one-off with no current process, service, schedule, caller or continuing duty",
+      "authority": "NEW Codex Discord 1574740272527577089"
+    },
+    {
+      "path": "/home/deploy/lang_eg_q6.sh",
+      "markers": [
+        "psql",
+        "DATABASE_URL"
+      ],
+      "bytes": 462,
+      "mode": "0644",
+      "sha256": "1eb1387d309ef3f23b0fd3e78649cb9f93b00dfbf85a05fc73178d3d0959e91e",
+      "disposition": "RETIRE",
+      "reason": "reviewed top-level one-off with no current process, service, schedule, caller or continuing duty",
+      "authority": "NEW Codex Discord 1574740272527577089"
+    },
+    {
+      "path": "/home/deploy/lang_eg_q7.sh",
+      "markers": [
+        "psql",
+        "DATABASE_URL"
+      ],
+      "bytes": 1049,
+      "mode": "0644",
+      "sha256": "b6ccbe95ff3f242cfdcc7c84c42f79f52e1f811a47896d59d72a788ae3dd41b3",
+      "disposition": "RETIRE",
+      "reason": "reviewed top-level one-off with no current process, service, schedule, caller or continuing duty",
+      "authority": "NEW Codex Discord 1574740272527577089"
+    },
+    {
+      "path": "/home/deploy/lang_eg_q8.sh",
+      "markers": [
+        "psql",
+        "DATABASE_URL"
+      ],
+      "bytes": 342,
+      "mode": "0644",
+      "sha256": "94be4e236e1900d7b31d2ddcbb635437216257cfbba1339adc14ba184d003506",
+      "disposition": "RETIRE",
+      "reason": "reviewed top-level one-off with no current process, service, schedule, caller or continuing duty",
+      "authority": "NEW Codex Discord 1574740272527577089"
+    },
+    {
+      "path": "/home/deploy/lang_kd19_q1.sh",
+      "markers": [
+        "psql",
+        "DATABASE_URL"
+      ],
+      "bytes": 543,
+      "mode": "0644",
+      "sha256": "a6b93986cb5e0cd24f539e020097d1fd55f7760de97f563b8f531156049f7678",
+      "disposition": "RETIRE",
+      "reason": "reviewed top-level one-off with no current process, service, schedule, caller or continuing duty",
+      "authority": "ANALYST Codex Discord 1574741149124530270"
+    },
+    {
+      "path": "/home/deploy/lang_q0.sh",
+      "markers": [
+        "psql",
+        "DATABASE_URL"
+      ],
+      "bytes": 301,
+      "mode": "0644",
+      "sha256": "ee874d9ea4d38b1bfc19a7ceaf9bf3b1666ea1642dbd03eb72ca68bc7521cc2f",
+      "disposition": "RETIRE",
+      "reason": "reviewed top-level one-off with no current process, service, schedule, caller or continuing duty",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "path": "/home/deploy/lang_q1.sh",
+      "markers": [
+        "psql",
+        "DATABASE_URL"
+      ],
+      "bytes": 2251,
+      "mode": "0644",
+      "sha256": "c4dee70a370fa0a3ee9908d8209f2fda61e74aa9bc075faecbc41b7015bfdff2",
+      "disposition": "RETIRE",
+      "reason": "reviewed top-level one-off with no current process, service, schedule, caller or continuing duty",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "path": "/home/deploy/lang_q2.sh",
+      "markers": [
+        "psql",
+        "DATABASE_URL"
+      ],
+      "bytes": 2981,
+      "mode": "0644",
+      "sha256": "022287071db8f12327aa9f95bf693ac1b9cc575643f06ffcc8835cd6c439eee2",
+      "disposition": "RETIRE",
+      "reason": "reviewed top-level one-off with no current process, service, schedule, caller or continuing duty",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "path": "/home/deploy/lang_q3.sh",
+      "markers": [
+        "psql",
+        "DATABASE_URL"
+      ],
+      "bytes": 1360,
+      "mode": "0644",
+      "sha256": "039de6c1a9194a620561bd0fb69add374b64b11cb86ecfa0c6d445be1a7416cd",
+      "disposition": "RETIRE",
+      "reason": "reviewed top-level one-off with no current process, service, schedule, caller or continuing duty",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "path": "/home/deploy/lang_q4.sh",
+      "markers": [
+        "psql",
+        "DATABASE_URL"
+      ],
+      "bytes": 244,
+      "mode": "0644",
+      "sha256": "e2c35437304aac3b6c7ba0cd212934d8a92a61c0ff5629bb2cb46d0083c7eaad",
+      "disposition": "RETIRE",
+      "reason": "reviewed top-level one-off with no current process, service, schedule, caller or continuing duty",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "path": "/home/deploy/lang_q5.sh",
+      "markers": [
+        "psql",
+        "DATABASE_URL"
+      ],
+      "bytes": 249,
+      "mode": "0644",
+      "sha256": "3e058c7b8f90ecac91ba9b0e026b9dad69acd19409b5ba31c5410b9e54762ed1",
+      "disposition": "RETIRE",
+      "reason": "reviewed top-level one-off with no current process, service, schedule, caller or continuing duty",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "path": "/home/deploy/lang_q6.sh",
+      "markers": [
+        "psql",
+        "DATABASE_URL"
+      ],
+      "bytes": 249,
+      "mode": "0644",
+      "sha256": "e3e02b05d7d174017c3ce470957f247f31357ca256ad9e20e24e28c97b807bdc",
+      "disposition": "RETIRE",
+      "reason": "reviewed top-level one-off with no current process, service, schedule, caller or continuing duty",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "path": "/home/deploy/lang_strk_q.sh",
+      "markers": [
+        "psql",
+        "DATABASE_URL"
+      ],
+      "bytes": 1348,
+      "mode": "0644",
+      "sha256": "fe2c45db41c3ddec79ecf79a011bd1b71bcd71f748a8fb05c934d9b4151b5049",
+      "disposition": "RETIRE",
+      "reason": "reviewed top-level one-off with no current process, service, schedule, caller or continuing duty",
+      "authority": "ANALYST Codex Discord 1574741149124530270"
+    },
+    {
+      "path": "/home/deploy/lang_strk_q2.sh",
+      "markers": [
+        "psql",
+        "DATABASE_URL"
+      ],
+      "bytes": 874,
+      "mode": "0644",
+      "sha256": "32cdd9d510bb9fc85c695344d2f1b2103e1b9966623cbc645d8ecdbe84ed5d05",
+      "disposition": "RETIRE",
+      "reason": "reviewed top-level one-off with no current process, service, schedule, caller or continuing duty",
+      "authority": "ANALYST Codex Discord 1574741149124530270"
+    },
+    {
+      "path": "/home/deploy/lang_strk_q3.sh",
+      "markers": [
+        "psql",
+        "DATABASE_URL"
+      ],
+      "bytes": 1990,
+      "mode": "0644",
+      "sha256": "f6e5fac408cf8022371977b4ccb3791efed326cfaf8c894a9687c2825d7e16c5",
+      "disposition": "RETIRE",
+      "reason": "reviewed top-level one-off with no current process, service, schedule, caller or continuing duty",
+      "authority": "ANALYST Codex Discord 1574741149124530270"
+    },
+    {
+      "path": "/home/deploy/obj0_hollow.sh",
+      "markers": [
+        "psql",
+        "DATABASE_URL"
+      ],
+      "bytes": 1801,
+      "mode": "0755",
+      "sha256": "cbb8ca4cfb154dfd9cff82af2837e0fe6717376b59b8b9d33a4a4f40f82e160d",
+      "disposition": "RETIRE",
+      "reason": "reviewed top-level one-off with no current process, service, schedule, caller or continuing duty",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "path": "/home/deploy/obj0_hollow_0827.sh",
+      "markers": [
+        "psql",
+        "DATABASE_URL"
+      ],
+      "bytes": 1791,
+      "mode": "0755",
+      "sha256": "3cf6b2f66a1e28f9206132504f76846c98b6e2478c98a614348328803ccca9a8",
+      "disposition": "RETIRE",
+      "reason": "reviewed top-level one-off with no current process, service, schedule, caller or continuing duty",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "path": "/home/deploy/obj0_hollow_0901.sh",
+      "markers": [
+        "psql",
+        "DATABASE_URL"
+      ],
+      "bytes": 1791,
+      "mode": "0755",
+      "sha256": "39c0e5a83f5c09c1a1f49e4051e6f0da1b62f586060081e23309ff0d953d6570",
+      "disposition": "RETIRE",
+      "reason": "reviewed top-level one-off with no current process, service, schedule, caller or continuing duty",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "path": "/home/deploy/obj0_run.sh",
+      "markers": [
+        "psql",
+        "DATABASE_URL"
+      ],
+      "bytes": 1666,
+      "mode": "0755",
+      "sha256": "20a07bbb1adba5997df8531388e883b39567daa2c487a990263b0f6c9ec6089c",
+      "disposition": "RETIRE",
+      "reason": "reviewed top-level one-off with no current process, service, schedule, caller or continuing duty",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "path": "/home/deploy/obj0_sig.sh",
+      "markers": [
+        "psql",
+        "DATABASE_URL"
+      ],
+      "bytes": 1214,
+      "mode": "0755",
+      "sha256": "450d8e224b14827b829d28dd323c0d770774bf20b5c08c456874ee8287eea01c",
+      "disposition": "RETIRE",
+      "reason": "reviewed top-level one-off with no current process, service, schedule, caller or continuing duty",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "path": "/home/deploy/obj_pa_pb.cjs",
+      "markers": [
+        "DATABASE_URL",
+        "new Client"
+      ],
+      "bytes": 8215,
+      "mode": "0755",
+      "sha256": "547a1b6344e63b4873216ad591360d0282f426178cbf9060e57b0d7de3ba12e0",
+      "disposition": "RETIRE",
+      "reason": "reviewed top-level one-off with no current process, service, schedule, caller or continuing duty",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "path": "/home/deploy/verify_cols.cjs",
+      "markers": [
+        "DATABASE_URL",
+        "new Pool"
+      ],
+      "bytes": 496,
+      "mode": "0644",
+      "sha256": "0b672eb1cf151a16a6f61988a36b6378d8f48fcf0b75f8ca9f4ea4f8a4811276",
+      "disposition": "RETIRE",
+      "reason": "reviewed top-level one-off with no current process, service, schedule, caller or continuing duty",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "path": "/home/deploy/vts_trend.cjs",
+      "markers": [
+        "DATABASE_URL",
+        "new Pool"
+      ],
+      "bytes": 1227,
+      "mode": "0644",
+      "sha256": "88abba31649a5ffbbc6e7f998c1acef5e89fa7b2ed1781028ea94afe0d439473",
+      "disposition": "RETIRE",
+      "reason": "reviewed top-level one-off with no current process, service, schedule, caller or continuing duty",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    },
+    {
+      "path": "/home/deploy/watch_xstock.sh",
+      "markers": [
+        "psql",
+        "DATABASE_URL"
+      ],
+      "bytes": 1157,
+      "mode": "0755",
+      "sha256": "a4853b9adbd01dc668096b186915cbd521dc48888f1ca919348a5cacdb5a8737",
+      "disposition": "RETIRE",
+      "reason": "reviewed top-level one-off with no current process, service, schedule, caller or continuing duty",
+      "authority": "B-DB-HELPER-RETIRE Step 2 PROCEED 3261801a157a66e1fdf36eae69b66b86893786a8 plus correction PROCEED 231a8c1948e1774817e93adde8204783f36a5139"
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+#!/bin/bash
+# reconnect-snapshot SIGNATURE minutes (rows == distinct symbols >= 470 in one minute AND median spread > 20%), all partitions, off-hours + run-in
+cd /home/deploy/dawntrader && set -a && . ./.env && set +a
+OUT=/home/deploy/obj0_reconnect_sig.csv; echo "day,utc_minute,rows,symbols,median_spread_pct" > $OUT
+for d in $(seq 0 30); do
+  day=$(date -u -d "2026-08-03 +$d days" +%F); tbl="xstock_spot_ticker_snap_$(echo $day | tr - _)"
+  psql "$DATABASE_URL" -X -A -t -F, -q -c "set statement_timeout='600s';" -c "
+select '$day', to_char(date_trunc('minute', captured_at),'HH24:MI'), count(*), count(distinct symbol), round((percentile_cont(0.5) within group (order by (ask-bid)/nullif((ask+bid)/2,0))*100)::numeric,1)
+from $tbl where bid > 0 and ask > 0 and (captured_at::time < '13:45' or captured_at::time >= '19:30')
+group by 1,2 having count(*) = count(distinct symbol) and count(*) >= 470 and percentile_cont(0.5) within group (order by (ask-bid)/nullif((ask+bid)/2,0)) > 0.20 order by 2;" >> $OUT 2>>/home/deploy/obj0_reconnect_sig.err
+  echo "$(date -u +%FT%TZ) sig done $day" >> /home/deploy/obj0_reconnect_sig.log
+done
+echo "$(date -u +%FT%TZ) SIG ALL DONE" >> /home/deploy/obj0_reconnect_sig.log

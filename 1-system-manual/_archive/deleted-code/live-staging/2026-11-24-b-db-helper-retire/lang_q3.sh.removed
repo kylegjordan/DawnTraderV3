@@ -1,0 +1,18 @@
+cd /home/deploy/dawntrader
+export $(grep -E '^DATABASE_URL=' .env | head -1)
+psql "$DATABASE_URL" -A -F'|' <<'SQL'
+\echo == all rows in active_open_positions, by trade_mode+state ==
+select trade_mode, state, count(*), round(sum(quantity*avg_price)::numeric,2) committed, min(opened_at), max(opened_at) from active_open_positions group by 1,2 order by 1,2;
+\echo == total rows ==
+select count(*) from active_open_positions;
+\echo == paper closes in the last 6 hours ==
+select count(*) n, min(closed_at), max(closed_at), round(sum(coalesce(reconstructed_net_pnl,pnl))::numeric,2) honest from closed_trades where mode='paper' and closed_at > now() - interval '6 hours';
+\echo == v5 override note ==
+select anchor_version, reason, note from portfolio_anchor_events where mode='paper' and anchor_version in (3,4,5);
+\echo == the 5 v4-straddle trades ==
+select symbol, asset_class, opened_at, closed_at, close_reason, round(coalesce(reconstructed_net_pnl,pnl)::numeric,2) honest, round((quantity*entry_price)::numeric,2) notional
+from closed_trades
+where mode='paper' and closed_at is not null and close_reason is distinct from 'never_filled'
+  and closed_at >= (select occurred_at from portfolio_anchor_events where mode='paper' and anchor_version=4)
+  and opened_at <  (select occurred_at from portfolio_anchor_events where mode='paper' and anchor_version=4);
+SQL

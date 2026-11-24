@@ -120,13 +120,7 @@ describe('increment 4 — the ENFORCER and the READERS share one scope filter an
     expect(HOT_HORIZON_SQL).toContain(DATA_LIFECYCLE_SCOPE_SQL);
   });
 
-  it('the three enforcing readers use the shared value test, and wildcard readers use the shared scope predicate', () => {
-    const eligibility = fs.readFileSync(path.join(ROOT, 'scripts/analysis/b_disk_headroom_eligibility.ts'), 'utf8');
-    expect(eligibility).toContain('DATA_LIFECYCLE_SCOPE_SQL');
-    expect(eligibility).toContain('parseLifecycleNumber');
-    expect(eligibility).toMatch(/FROM module_constants WHERE \$\{DATA_LIFECYCLE_SCOPE_SQL\}/);
-    expect(eligibility).toMatch(/parseLifecycleNumber\(consts\.get\(`\$\{parent\}\.hot_retention_days`\)\)/);
-
+  it('the two surviving enforcing readers use the shared value test, and wildcard readers use the shared scope predicate', () => {
     const guardrail = fs.readFileSync(path.join(ROOT, 'server/services/guardrail-settings.ts'), 'utf8');
     expect(guardrail).toContain("import { parseLifecycleNumber } from './data-archive/hot-horizon.js';");
     expect(guardrail).toMatch(/const days = parseLifecycleNumber\(row\?\.value\);[\s\S]{0,80}days === null/);
@@ -158,53 +152,6 @@ describe('increment 4 — the ENFORCER and the READERS share one scope filter an
 describe('wiring', () => {
   const ROOT = path.join(__dirname, '../../..');
 
-  it('every configurable xStock snapshot reader checks its full requested window plus warmup before reading snapshots', () => {
-    const cases = [
-      ['scripts/b-xstock-calib-b31a-gate-audit-2.ts', '3 * 86_400_000', 'xstock_spot_ohlc_60m_snapshot'],
-      ['scripts/b5-w2a-geometry-sweep.ts', '2 * 86_400_000', 'xstock_spot_ohlc_15m_snapshot'],
-      ['scripts/b-xstock-calib-b3-regime-audit.ts', 'WINDOW_BARS * 60 * 60_000', 'xstock_spot_ohlc_60m_snapshot'],
-    ] as const;
-    for (const [relative, warmup, table] of cases) {
-      const src = fs.readFileSync(path.join(ROOT, relative), 'utf8');
-      const check = src.indexOf('decideEraWithWarmup(');
-      const read = src.indexOf(`FROM ${table}`, check);
-      expect(check, relative).toBeGreaterThan(-1);
-      expect(src, relative).toContain(warmup);
-      expect(check, relative).toBeLessThan(read);
-    }
-  });
-
-  it('the fixed May replay refuses the hot table and accepts only proven rehydrated snapshot input', () => {
-    const src = fs.readFileSync(path.join(ROOT, 'scripts/b-xstock-calib-b1a-replay.ts'), 'utf8');
-    expect(src).toContain('B1A_REHYDRATED_SNAPSHOT_PATH');
-    expect(src).toMatch(/loadProvenRehydratedSnapshot\(B1A_REHYDRATED_INPUT, SNAPSHOT_TABLE, \{/);
-    expect(src).toContain('fixed historical replay may not read the mutable hot snapshot table');
-    expect(src.indexOf('loadProvenRehydratedSnapshot(')).toBeLessThan(src.indexOf('fetchAllSymbols(client, rehydrated)'));
-  });
-
-  it('the replay script reads the horizons for BOTH joined tables and exits non-zero on a refusal', () => {
-    const src = fs.readFileSync(path.join(ROOT, 'scripts/b5-w20c-provenance-replay.ts'), 'utf8');
-    expect(src).toContain("const HOT_TABLES = ['signal_eval_archive', 'signal_eval_provenance', SNAPSHOT_TABLE]");
-    expect(src).toMatch(/decideEraWithWarmup\(ERA_START, SNAPSHOT_WARMUP_MS, HOT_TABLES/);
-    expect(src).toMatch(/if \(!era\.ok\) \{[\s\S]{0,120}process\.exit\(2\)/);
-    // the check runs BEFORE the first archive query
-    expect(src.indexOf('decideEraWithWarmup(ERA_START')).toBeLessThan(src.indexOf('FROM signal_eval_archive b'));
-  });
-
-  it('the replay script RE-CHECKS the era at the END of the run and exits 3 if a sweep may have truncated it', () => {
-    const src = fs.readFileSync(path.join(ROOT, 'scripts/b5-w20c-provenance-replay.ts'), 'utf8');
-    const iEnd = src.indexOf('const endEra = decideEraWithWarmup(ERA_START');
-    expect(iEnd).toBeGreaterThan(-1);
-    // after the LAST archive read: the sampling joins (gate 3 F2 — 'FROM signal_eval_archive' is the FIRST read only)
-    expect(src.lastIndexOf('signal_eval_archive b ON')).toBeGreaterThan(src.indexOf('FROM signal_eval_archive'));
-    expect(iEnd).toBeGreaterThan(src.lastIndexOf('signal_eval_archive b ON'));
-    expect(src.slice(iEnd)).toMatch(/if \(!endEra\.ok\) \{[\s\S]{0,900}process\.exit\(3\)/);
-    // gate 4 fold (Langston): spelling-independent — NO archive read of any alias after the end check
-    expect(src.slice(iEnd)).not.toMatch(/FROM signal_eval/);
-    // gate 3 F1: the refusal is on STDOUT as well as stderr, before the exit
-    expect(src.slice(iEnd)).toMatch(/if \(!endEra\.ok\) \{[\s\S]{0,900}console\.log\(banner\);[\s\S]{0,60}console\.error\(banner\);[\s\S]{0,80}process\.exit\(3\)/);
-  });
-
   it('the fee-contract SQL prints the hot horizons of both tables it reads, before section (1)', () => {
     const sql = fs.readFileSync(path.join(ROOT, 'scripts/analysis/b_xstock_fee_contract_deploy_baselines.sql'), 'utf8');
     const i0 = sql.indexOf('=== (0) B-DB-SIZE-RELIEF OBJ-3');
@@ -230,13 +177,11 @@ describe('wiring', () => {
     for (const l of echoes) expect(l, l).not.toContain("'");
   });
 
-  it('the three gate-4 SQL copies of the data_lifecycle wildcard predicate carry all five terms (gate 4 C-2)', () => {
+  it('the two surviving gate-4 SQL copies of the data_lifecycle wildcard predicate carry all five terms (gate 4 C-2)', () => {
     const sql = fs.readFileSync(path.join(ROOT, 'scripts/analysis/b_xstock_fee_contract_deploy_baselines.sql'), 'utf8');
-    const setter = fs.readFileSync(path.join(ROOT, 'scripts/analysis/b_disk_headroom_set_retention.sh'), 'utf8');
     const sqlSelect = sql.slice(sql.indexOf('SELECT t.table_name'), sql.indexOf('DO $$'));
     const sqlGuard = sql.slice(sql.indexOf('DO $$'), sql.indexOf('=== (1) P8 p0'));
-    const setterUpdate = setter.slice(setter.indexOf('UPDATE module_constants'), setter.indexOf('GET DIAGNOSTICS'));
-    const copies = [sqlSelect, sqlGuard, setterUpdate];
+    const copies = [sqlSelect, sqlGuard];
     const terms = [
       "module_name = 'data_lifecycle'",
       "exchange = '*'",

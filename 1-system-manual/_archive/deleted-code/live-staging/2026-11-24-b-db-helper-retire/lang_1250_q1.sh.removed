@@ -1,0 +1,8 @@
+cd /home/deploy/dawntrader
+export $(grep -E '^DATABASE_URL=' .env | head -1)
+psql "$DATABASE_URL" -A -F'|' <<'SQL'
+\echo == cols ==
+select column_name, data_type, numeric_precision, numeric_scale from information_schema.columns
+where table_name='closed_trades' and (column_name ilike '%entry%' or column_name ilike '%stop%' or column_name ilike '%target%' or column_name ilike '%take_profit%' or column_name ilike '%producer%' or column_name in ('strategy','asset_class','mode','opened_at','closed_at','exit_reason','pnl','reconstructed_net_pnl'))
+order by column_name;
+SQL

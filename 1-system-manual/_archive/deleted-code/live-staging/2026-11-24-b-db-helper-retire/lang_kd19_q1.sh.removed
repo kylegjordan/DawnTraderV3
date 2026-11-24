@@ -1,0 +1,4 @@
+cd /home/deploy/dawntrader
+export $(grep -E '^DATABASE_URL=' .env | head -1)
+psql "$DATABASE_URL" -A -F'|' -c "select count(*) total, count(bid) has_bid, count(bid_qty) has_bid_qty, count(*) filter (where bid_qty is not null and bid_qty::numeric > 0) qty_pos, min(captured_at) mn, max(captured_at) mx from crypto_spot_ticker_snap where captured_at > now() - interval '24 hours';"
+psql "$DATABASE_URL" -A -F'|' -c "select count(*) total, count(bid_qty) has_bid_qty from xstock_spot_ticker_snap where captured_at > now() - interval '72 hours';"

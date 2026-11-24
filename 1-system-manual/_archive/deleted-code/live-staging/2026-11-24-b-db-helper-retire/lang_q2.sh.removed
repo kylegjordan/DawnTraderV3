@@ -1,0 +1,37 @@
+cd /home/deploy/dawntrader
+export $(grep -E '^DATABASE_URL=' .env | head -1)
+psql "$DATABASE_URL" -A -F'|' <<'SQL'
+\echo == A: all paper closes since v5 anchor (getRealizedPnlSince predicates exactly) ==
+select count(*) n, round(sum(coalesce(reconstructed_net_pnl,pnl))::numeric,2) honest, round(sum(pnl)::numeric,2) raw_pnl
+from closed_trades
+where mode='paper' and closed_at is not null and close_reason is distinct from 'never_filled'
+  and closed_at >= (select occurred_at from portfolio_anchor_events where mode='paper' and anchor_version=5);
+\echo == B: same, split by anchor_version_at_open ==
+select coalesce(anchor_version_at_open::text,'NULL') av, count(*) n, round(sum(coalesce(reconstructed_net_pnl,pnl))::numeric,2) honest
+from closed_trades
+where mode='paper' and closed_at is not null and close_reason is distinct from 'never_filled'
+  and closed_at >= (select occurred_at from portfolio_anchor_events where mode='paper' and anchor_version=5)
+group by 1 order by 1;
+\echo == C: STRADDLE opened-before/closed-after the v5 anchor ==
+select count(*) n, round(sum(coalesce(reconstructed_net_pnl,pnl))::numeric,2) honest, min(opened_at) oldest_open, max(closed_at) last_close
+from closed_trades
+where mode='paper' and closed_at is not null and close_reason is distinct from 'never_filled'
+  and closed_at >= (select occurred_at from portfolio_anchor_events where mode='paper' and anchor_version=5)
+  and opened_at <  (select occurred_at from portfolio_anchor_events where mode='paper' and anchor_version=5);
+\echo == D: STRADDLE across v4 auto_divergence (the scopes own example) ==
+select count(*) n, round(sum(coalesce(reconstructed_net_pnl,pnl))::numeric,2) honest
+from closed_trades
+where mode='paper' and closed_at is not null and close_reason is distinct from 'never_filled'
+  and closed_at >= (select occurred_at from portfolio_anchor_events where mode='paper' and anchor_version=4)
+  and opened_at <  (select occurred_at from portfolio_anchor_events where mode='paper' and anchor_version=4);
+\echo == E: open positions now, by class ==
+select asset_class, count(*) n, round(sum(quantity*avg_price)::numeric,2) committed, min(opened_at) oldest, max(opened_at) newest
+from active_open_positions where trade_mode='paper' group by 1 order by 1;
+\echo == F: open positions predating the v5 anchor ==
+select count(*) n, round(sum(quantity*avg_price)::numeric,2) committed from active_open_positions
+where trade_mode='paper' and opened_at < (select occurred_at from portfolio_anchor_events where mode='paper' and anchor_version=5);
+\echo == G: anchor_version_at_open distribution on OPEN positions ==
+select coalesce(anchor_version_at_open::text,'NULL') av, count(*) from active_open_positions where trade_mode='paper' group by 1 order by 1;
+\echo == H: positive control - lifetime paper closes ==
+select count(*) n, round(sum(coalesce(reconstructed_net_pnl,pnl))::numeric,2) honest, count(reconstructed_net_pnl) recon_nonnull from closed_trades where mode='paper';
+SQL
