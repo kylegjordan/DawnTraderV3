@@ -500,3 +500,9 @@ The real `dt-db-map-weekly.service` started from inactive at 2026-11-24T09:02:26
 The final exact artifact measurement found 85 helper rows across 79 files, zero empty operation-plus-unresolved dispositions, exactly two `helper_usage` fallbacks, and both exact fallback objects mirrored in the top-level unresolved evidence. The two rows are the timing-read `node-postgres Client` and `server/db.ts` `node-postgres Pool`, and each reason's `helper_kind` matches its owning row.
 
 After the run, all three governance timers were enabled and active; `dt-sql --status` was `OK — not locked`; install drift remained PASS; eight receipts were retained; and the live `run-*` count was zero against a two-directory positive control at the searched root. The Dawn Trader app remained online and untouched at ref `e3a96a8126f0280a9568bb1823b9210783f0afe0`, clean tracked worktree, PID 2822823, restart count 715 and zero unstable restarts. OBJ-8 is now green and Step 9 is complete; batch close remains for Steps 10 and 11.
+
+---
+
+## 12. Step-11 completion confirmation
+
+At 2026-11-24T09:47:48Z Coltrane **CONFIRMED** B-DB-MAP Step 11 at exact ref `77516b4a5b3b9ca8fb69445d34b25e50b54523b2`. He confirmed all eight scope objectives close, the manifest and real weekly receipt carry the reviewed R/structural identity, helper retirement remains separately placed at order 5a3, and the completion report correctly states the runner's retained network and writable-`.git` capability rather than claiming an absolute inability to mutate. The delivery card then moved to Complete with no blocker.

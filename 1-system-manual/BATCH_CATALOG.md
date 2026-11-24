@@ -1710,7 +1710,7 @@ Kyle decided the retention windows: **2026-09-23** none change, because August's
 
 **VERIFIED.** Tests and mutants passed; CI was 4/4 at the reviewed ref. On staging, all eight objects in the pre-registered crew-read census were readable; insert, update, delete, truncate, schema create, sequence advance and a writing function call each returned `42501` with the session setting removed; production `dt-sql` still returned the second-layer `25006` refusal. Coltrane independently re-derived the role, membership, grants, live read and both refusal layers. **RESIDUALS:** TEMP tables and advisory locks remain possible; RLS makes 26 `auth`/`storage` tables read as empty; B-DB-MAP and B-DB-HELPER-RETIRE remain before live.
 
-## B-DB-MAP (Infra Codex, Kyle KD-101 2026-11-16; pre-sprint table Infra order 5a2) — change-class `non_architecture` — 🟦 **STEP 10 (governance) 2026-11-24; closes at Step 11** (reviewed source `13154e33e`, artifact `6d1b73329`; Coltrane Step 9 PROCEED at `7ce511651`; record: scope, pre-audit, `Change Lists/B_DB_MAP_CHANGE_LIST.md`)
+## B-DB-MAP (Infra Codex, Kyle KD-101 2026-11-16; pre-sprint table Infra order 5a2) — change-class `non_architecture` — ✅ **CLOSED 2026-11-24** (Coltrane Step 11 CONFIRMED at exact ref `77516b4a5b3b9ca8fb69445d34b25e50b54523b2`; reviewed source `13154e33e`, artifact `6d1b73329`; report `Batch Completion/B_DB_MAP_COMPLETION_REPORT.md`; record: scope, pre-audit, `Change Lists/B_DB_MAP_CHANGE_LIST.md`)
 
 **WHY.** DawnTrader had no complete, current map of the live database and no exact-ref inventory tying database objects to their code and script readers, writers and direct-login helpers. That made schema drift hard to see and left B-DB-HELPER-RETIRE without a dependable population to decide.
 
