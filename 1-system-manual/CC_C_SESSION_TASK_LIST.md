@@ -1,4 +1,4 @@
-# CC-C (ANALYST Claude) — SESSION TASK LIST — as of 2026-11-20
+# CC-C (ANALYST Claude) — SESSION TASK LIST — as of 2026-11-24
 
 > ⛔ **KYLE'S STANDING RULE, 2026-09-05:** every session keeps its own task list.
 > - **It holds:** the batches assigned to this session, the sub-batches already identified, the hotfixes, and the findings still to investigate — in working order.
@@ -18,6 +18,7 @@
 | 13 | `B-OHLC-FRAME-GUARD` (`#1028`) | ✅ CLOSED 2026-11-06 — Step 11 CONFIRMED by Langston (`Batch Completion/B_OHLC_FRAME_GUARD_COMPLETION_REPORT.md`) |
 | 16 | `F-G-1` reopened (`#1031`) = `B-OHLC-WRITE-ORDER` | ✅ CLOSED 2026-11-06 — `Batch Completion/F_G_1_COMPLETION_REPORT.md` |
 | 17 · 3 · 2 | `B-PRICE-SIDE-BY-JOB` | `8a-P4c` incs 2-3 (row 3) CLOSED 2026-11-06 (Step 11 confirmed by Langston); `8c` SWITCHED ON 2026-11-16 09:45:01Z (KD-91), first sided open LIGHTER/USD UI-checked; Step 7 first-week read 2026-11-23 (alert `c15fb88d`, terms in the 8c plan section 13-SWITCHED-ON); `8d` CLOSED 2026-11-07 (absorbed by `8a-P3`, Langston); KD-19 (b)/(c) exit leg **DONE — Step 11 confirmed by Langston 2026-11-13** (Step 9 event met: first live unpriced close carries no `exitWalk`; record progress report §9.11); the KD-19 (c) entry leg follows as its own increment; the xStock half is row 2 |
+| Stage 00 order 2 | `B-XSTOCK-BAR-AVAILABILITY` (`#707`) | 🟨 IN OBSERVATION — Step 10 complete 2026-11-24; exact aggregate `e3a96a8126f0` live, R2prime starts 2026-11-30T01:00Z and first due grade is 2026-12-10T00:15Z; progress report `Batch Completion/B_XSTOCK_BAR_AVAILABILITY_PROGRESS_REPORT.md`; nonblocking, return for evidence decision + Step 11 |
 | 14 · 15 | `B-REST-SIDES-TO-CACHE`, `B-BOOK-STATE-RESTART-DURABLE` | Row 14: ✅ CLOSED 2026-11-06 — Step 11 CONFIRMED by Langston (`Batch Completion/B_REST_SIDES_TO_CACHE_COMPLETION_REPORT.md`). Row 15: ✅ CLOSED 2026-11-06 (Step 11 confirmed by Langston) |
 | 9 | `B-SIZING-DEC-RESTORE` | ✅ CLOSED 2026-10-09 (Step 11 CONFIRMED by Langston 2026-10-09 07:42Z) |
 | 40 | `B-XSTOCK-SESSION-FRESHNESS` | ➕ KD-48 (2026-11-06): the weekly xStock opportunity-loss watch is an item of this batch, CC-A building it (spec §20 of the registration). P1b `B-ENTRY-CONSUMPTION-FRESHNESS` ✅ CLOSED 2026-10-15: deployed `3a2cd4ee5`, Coltrane Step 11 confirmed at `c3c8d7ce1`. Umbrella residual alert/exit/dedupe work remains separately placed. |

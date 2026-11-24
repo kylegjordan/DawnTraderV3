@@ -4513,3 +4513,11 @@ Deploys `b8ab812de` (chunk A) + `2c986c231` (chunk B); CI green; Step-8 CONFIRME
 **Fix:** per-class reference (`resolveCorrelationInputs`: crypto `XBT/USD` positional, xStock `SPY/USD` timestamp-paired at the pair's interval); compute separated from apply (`b68_3_apply_factor`, xStock false; xStock compute on — migration `2026-11-05-b-xstock-correlation-collect.sql`); the crypto fallback removed; one record-only ablation row per real xStock VTS trade (`eval-cycle.ts`); the rank loop advances `j = i + 1` (fix-on-find, rule 23).
 
 **Verified:** deploy `0f4835b5a` 2026-11-05; 417/417 window trades recorded, 3,177/3,182 after; confidence untouched on 417/417; crypto control unchanged; Langston Step 8 PROCEED 2026-11-22 (Discord `1574059564003754106`). **Not covered:** the nightly replay mislabels records whose trades are still open and never re-checks them (`#1265`); correlation skips have no counter (`#1266`) — both with Kyle.
+
+## FIX-2026-11-24-A — `B-XSTOCK-BAR-AVAILABILITY` (`#707`, CC-C / ANALYST Codex): xStock decisions and replay treated the vendor label as local availability
+
+**Symptom:** Kraken's xStock OHLC `interval_begin` reached DawnTrader roughly 15–16 minutes later, while aggregation, scanner/regime consumers, replay/calibration and the archive-health display used the label without a common reader-visible availability contract. A final retained row could therefore be treated as though its exact values were usable at an earlier decision.
+
+**Fix:** preserve the vendor label, local receipt and reader-visible revision availability as separate facts; carry exact revision evidence through 15/60-minute aggregates, snapshots and caches; apply one decision-time eligibility rule to scanner, regime refresh and post-cutover exact replay; record the evidence window in provenance; mark legacy/overwritten history unknown; separate the dashboard's clock measures. A durable unattended verdict plus a sweep hold protects the registered grade.
+
+**Verified so far:** exact implementation/reliability refs passed review and CI; the four heavy capacity legs completed over 8.3 days in 471,843/1,200,000 ms; R2prime is live in aggregate `e3a96a8126f0`. **Still open:** R2prime starts 2026-11-30T01:00Z and is first due 2026-12-10T00:15Z; PASS/FAIL and the resulting action remain Observation work.

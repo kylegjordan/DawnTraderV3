@@ -207,6 +207,8 @@ This is the single most reused discipline in the whole onboarding. The detailed 
 
 **Step 7.10 — Don't build gates/code that can't FIRE (NO PATCHES).** A depth-cap that can't bind (per-trade <1% of median depth) or a filter with no caller is dead code — build the mechanism, gate it at its real future consumer, and declare the inert state in BOLD (CLAUDE.md §9.1). [B.1.5, F-NOW]
 
+**Step 7.11 — A venue bar's identity clock and its decision-availability clock are separate contracts.** Preserve the vendor label unchanged for identity and bucketing, but separately retain local receipt and trustworthy reader-visible availability for every revision. Aggregates and caches carry the latest availability among their exact contributing revisions; cache-write time is not a substitute. Exact replay is allowed only where the revision that was visible by the decision can be reconstructed; older final-row history is unknown rather than repaired with a fixed offset. Before grading a new asset class, census every live, replay, calibration, monitoring and dormant reader, and keep the observation window's evidence from being swept before its stored verdict. [B-XSTOCK-BAR-AVAILABILITY]
+
 ### Phase 8 — Verification + forward-watch
 
 **Step 8.1 — Run the no-touch fence on the incumbent class on EVERY sub-batch — the universal safety gate.** Verify the incumbent's `regime_factor_alternates` emission/factor stays within ±10% (≥80% floor) of the pre-deploy baseline. Pattern:

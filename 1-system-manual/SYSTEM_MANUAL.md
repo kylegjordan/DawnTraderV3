@@ -13799,4 +13799,24 @@ Tracked at RUNNING_ISSUES #129.
 ⛔⛔ **THE METHOD THAT PRODUCED THESE, AND IT IS THE PART WORTH REUSING: THE VTS LANE KEEPS A REALISED OUTCOME FOR SIGNALS THE GATES REFUSED.** It TAGS `rr_below_min` / `unreachable` and simulates to close, so `vts_open_trades ⋈ exit_decision_archive` on `trade_id` answers *"would lowering this gate have made money"* with data. ⚠️ **Three properties bind any reading of it, all learned the hard way here:** the control is **what the gates ADMIT** and **per-cell, never pooled** (a pooled control reversed one verdict); `calibration_state` is a column DEFAULT and is **not** an epoch stamp (the real one moved three times inside the window); and **duration is uncontrolled — the cohorts differ ~3.5× on median hold.**
 ⛔ **`target_floor_pct` IS DELETED.** The floor-LIFT it fed was removed at reorg-B2.1; it changed no price for three months. **It was NOT inert as a THROW** — read first and unconditionally, it was what made an unresolved asset class fail hard — so **the assertion moved to the per-class `min_rr` row**, which has the same shape (per-class rows, no global `'*'`). ⚠️ **That rests on a property of the DATA: one wildcard-`asset_class` `min_rr` row would match any key and silently defeat it.** A migration invariant refuses to apply while such a row exists, a unit test PINS the gap, and the durable resolver-side fix is `B-GATE-WILDCARD-REFUSE` (row `3n.v3`).
 ⛔ **REVERT ORDER: SQL FIRST, THEN THE SHA.** Previous-sha code reads `target_floor_pct` unconditionally, so deploying the old code before running the rollback SQL throws on **every** gate call, both classes, both lanes.
+
+## xStock bar availability contract — B-XSTOCK-BAR-AVAILABILITY (`#707`, live 2026-11-24)
+
+### The clocks are different facts
+
+- **Vendor label:** Kraken's unchanged `interval_begin`; it identifies and buckets the bar but does not prove when DawnTrader could read it.
+- **Local receipt:** when this process accepted/enqueued a revision; it orders competing writes but is not publication or commit visibility.
+- **Reader-visible availability:** when the exact persisted revision is eligible to be read; this is the forward no-look-ahead boundary.
+- **Aggregate/cache availability:** the latest trustworthy reader-visible availability among the exact source revisions contributing to the returned value; cache or snapshot write time never substitutes for it.
+- **Decision time:** the evaluation boundary recorded with the exact revision window in provenance.
+
+### Live and replay rule
+
+The 15-minute scanner and independent 60-minute regime refresh consume the same availability-aware bar shape. A revision contributes only when its reader-visible availability is no later than the decision boundary; aggregate, snapshot and live-overlay collisions retain the winning value's exact revision evidence. Post-cutover replay may reconstruct the exact eligible revision set. Pre-cutover or overwritten-revision history is explicitly unknown and cannot support an exact no-look-ahead claim from `arrived_at`, `captured_at` or a constant label shift.
+
+The forming-bar policy remains intentional: a forming bar may be consumed when its exact contributing revisions satisfy the availability rule. This contract does not relabel `interval_begin`, invent a Kraken publication clock, or convert a final retained row into evidence that its values existed at an earlier decision.
+
+### Operational grade
+
+The unattended capacity gate stores one durable verdict per governed window, with per-leg and total runtime. The retention sweep holds overlapping revision partitions until that verdict exists, under its hard cap. R2prime begins 2026-11-30T01:00:00Z; Sunday counting begins at the venue-live 20:15 ET minute; the final gate is 2026-12-09T01:10:00Z and the first due runner fire is 2026-12-10T00:15:00Z. The observation is a proof/decision gate, not a deployment freeze.
 
