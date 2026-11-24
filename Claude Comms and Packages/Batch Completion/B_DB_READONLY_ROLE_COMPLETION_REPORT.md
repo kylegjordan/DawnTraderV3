@@ -58,19 +58,19 @@ CHANGE-CLASS: `non_architecture`
 
 | tier | document | verdict |
 |---|---|---|
-| T1 | `BATCH_CATALOG.md` | ✅ content updated |
-| T1 | `PHASE_HISTORY.md` | ✅ content updated |
+| T1 | `BATCH_CATALOG.md` | ✅ records the dedicated-role boundary, non-root credential access, live verification and named residuals |
+| T1 | `PHASE_HISTORY.md` | ✅ records the installed and independently verified Step-10 outcome and the remaining placed database batches |
 | T1 | `SPRINT_TO_LIVE_PLAN.md` | ✅ row 5a1 updated |
 | T1 | `PHASE_19_PLAN.md` | N/A — no row and not a P19 batch |
-| T1 | shared `MEMORY.md` + `MEMORY_CC_INFRA.md` | ✅ content updated |
+| T1 | shared `MEMORY.md` + `MEMORY_CC_INFRA.md` | ✅ record the live `dt_reader` boundary, RLS empty-read hazard and Step-11 hand-off |
 | T1 | scope | ✅ `B_DB_READONLY_ROLE_SCOPE.md` |
 | T1 | pre-audit | ✅ `B_DB_READONLY_ROLE_PRE_AUDIT.md` |
 | T1 | completion report | ✅ this file |
-| T1 | observation record | N/A — no observation window |
+| T1 | Observation | N/A — scope and pre-audit define no observation window; every close criterion is an immediate live check |
 | T1 | session task lists | ✅ INFRA; N/A for OLD, NEW and ANALYST — not their batch |
-| T1 | Langston memory | ✅ existing database-read entry replaced through the governed writer |
-| T2 | System Manual | ✅ content updated |
-| T2 | System Impact Map | ✅ content updated |
+| T1 | Langston memory | ✅ existing database-read mechanics line replaced through the governed writer; loaded set moved 139,333 → 139,321 bytes against ceiling 143,856, with ledger and retraction counts unchanged |
+| T2 | System Manual | ✅ documents the role privileges, credential path, verified-TLS login, write refusals and RLS empty-read hazard |
+| T2 | System Impact Map | ✅ maps the crew-read dependency, ordinary and root access boundary, blast radius and drift coverage |
 | T2 | RUNNING_ISSUES | ✅ `#1259` updated |
 | T2 | CHANGES_AND_FIXES | ✅ new settled-fix entry |
 | T2 | POST_AUDIT_ROADMAP | N/A — no roadmap item |
@@ -81,8 +81,7 @@ CHANGE-CLASS: `non_architecture`
 | T2 | ASSET_CLASS_ONBOARDING_WORKFLOW | N/A — no onboarding learning |
 | T2 | BUILD_METHOD_PLAYBOOK | N/A — build method unchanged |
 | T2 | Langston Architecture | ✅ current reviewer/read boundary updated outside the immutable history block |
-| T2 | CLAUDE | ✅ content updated |
-| T2 | CONDUCT | N/A — unchanged |
+| T2 | CLAUDE / CONDUCT | ✅ CLAUDE database-read rule now requires `dt_reader`, verified TLS and non-absence treatment for RLS-shaped zeroes; N/A CONDUCT because no conduct rule changed |
 | T2 | CLAUDE Rule History | ✅ current rule change recorded |
 | T2 | DELETED_COMPONENTS_LOG | N/A — nothing deleted |
 | T2 | MISTAKE_PATTERNS | N/A — no new pattern threshold reached |
