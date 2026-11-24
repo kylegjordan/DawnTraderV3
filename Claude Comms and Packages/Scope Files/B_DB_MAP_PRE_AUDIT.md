@@ -5,6 +5,8 @@
 **Audit ref:** `8130531b5089edbf080cb1de028b82dce77bec73`
 **Decision:** KD-101 · sprint row 5a2 · after `B-DB-READONLY-ROLE`, before `B-DB-HELPER-RETIRE`
 
+> **Step-2 ruling — PROCEED.** Coltrane approved the corrected merged audit/plan at exact OFF-BRANCH ref `93248a802efb6bda0b6559867d73c2c04446d934`, Discord 2026-11-24T03:19:13Z. He independently reproduced 38 shebang programs plus the root Dockerfile, the 2,466 code-bearing / 2,363 included / 103 excluded populations, the one-statement snapshot correction, and the complete default/identity/generated/constraint proof plan. Implementation is authorized against this document.
+
 ---
 
 ## 0. Previously stated versus now
