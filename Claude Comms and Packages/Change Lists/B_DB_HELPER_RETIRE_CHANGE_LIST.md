@@ -1,7 +1,7 @@
 # B-DB-HELPER-RETIRE — Step-4 change list (Coltrane code review)
 
-**GRADED CODE REF:** `3dff20401ef8d6d2a52ec74ef26d9623cd6f2234` on `migration/b-db-helper-retire-step4` and `review/b-db-helper-retire-step4`.
-**Range:** `1e42fccd0de007ee0477b12daf118996995aea33..3dff20401ef8d6d2a52ec74ef26d9623cd6f2234` — 3 commits, 110 files, +4,238 / -117.
+**GRADED CODE REF:** `b8cfab3e76de8d80d219fd26d3c426966929367d` on `migration/b-db-helper-retire-step4` and `review/b-db-helper-retire-step4`.
+**Range:** `1e42fccd0de007ee0477b12daf118996995aea33..b8cfab3e76de8d80d219fd26d3c426966929367d` — 5 commits, 108 files, +4,357 / -108.
 **Owner:** INFRA Codex for CC-INFRA · **Date:** 2026-11-24 · **Live state:** no install, removal, deploy, restart or database write has occurred.
 
 ## Dispatch header — the three required workflow-04 fields
@@ -110,13 +110,14 @@ os.fsync(parent_fd)
 |---|---|
 | disposition/archive/default-deny validator | PASS: 92 checked-in dispositions, 53 live archives, 96 classified current marker paths |
 | validator mutation suite | 24/24 PASS, including missing row, wrong count, hidden absolute-path marker, aliased node-postgres constructors, stale exclusion and archive mismatch arms |
-| DB-map core suite | 48/48 PASS |
+| DB-map core suite | 45/45 PASS; the closed map's scanner version and checked-in artifact remain aligned |
 | focused retained/retired consumer suites | 85/85 PASS |
 | Linux remover suite | 10/10 PASS |
 | Linux live-path connection control | one-call control PASS; two-call mutant RED |
 | TypeScript baseline | 314 current = 314 baseline |
 | production build | PASS; only the two pre-existing warnings |
 | shell syntax | both changed shell entry points PASS |
+| shared CI at graded ref | run `45398992536`: TypeScript Check, Test Suite, Build and Docker Build all green |
 
 The database-map snapshot control was not locally runnable because this laptop has no database credential. It remains a CI-controlled check and is not claimed as a local pass.
 
