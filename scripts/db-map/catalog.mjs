@@ -24,11 +24,17 @@ export function parseCatalogCsv(text) {
     assert(before.sectionOrder < after.sectionOrder || (before.sectionOrder === after.sectionOrder && before.rowOrder < after.rowOrder), 'catalog stream is not strictly ordered');
   }
   const sections = Object.fromEntries(CONFIG.requiredCatalogSections.map((name) => [name, []]));
+  const seenSections = new Set();
   for (const row of rows) {
     assert(Object.hasOwn(sections, row.section), `unknown catalog section: ${row.section}`);
+    seenSections.add(row.section);
+    if (row.payload?._section_marker === true) {
+      assert(row.section !== 'meta' && row.rowOrder === 0 && Object.keys(row.payload).length === 1, `invalid section marker: ${row.section}`);
+      continue;
+    }
     sections[row.section].push(row.payload);
   }
-  for (const name of CONFIG.requiredCatalogSections) assert(sections[name].length > 0, `missing catalog section: ${name}`);
+  for (const name of CONFIG.requiredCatalogSections) assert(seenSections.has(name), `missing catalog section: ${name}`);
   assert(sections.meta.length === 1, 'catalog must have exactly one meta row');
   assert(sections.meta[0].current_user === 'dt_reader', `catalog was read as ${sections.meta[0].current_user}, not dt_reader`);
   return normalizeCatalog(sections);

@@ -22,6 +22,8 @@ check(catalog.relations.find((row) => row.key === 'public.parents').estimated_ro
 check(catalog.relations.find((row) => row.key === 'public.user_view').size_applicable === false, 'views have no table size');
 check(catalog.logical_rollups[0].unknown_row_child_count === 1, 'partition rollup preserves unknown child count');
 check(catalog.physical_totals.known_total_bytes === 52, 'physical totals exclude partition parent and view');
+const emptyPolicies = parseCatalogCsv(fixtureCsv({ policies: [] }));
+check(emptyPolicies.policies.length === 0, 'an explicitly present empty section is accepted');
 
 const tbls = toTblsSchema(catalog);
 check(assertAdapterFidelity(catalog, tbls), 'tbls adapter fidelity');

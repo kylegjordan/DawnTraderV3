@@ -38,8 +38,11 @@ export function fixtureCsv(overrides = {}) {
   };
   const order = ['meta', 'schemas', 'relations', 'columns', 'constraints', 'indexes', 'partition_edges', 'policies', 'enums'];
   const lines = ['section,section_order,row_order,payload_json'];
-  order.forEach((section, sectionIndex) => sections[section].forEach((payload, rowIndex) => {
+  order.forEach((section, sectionIndex) => {
+    if (section !== 'meta') lines.push([section, sectionIndex + 1, 0, JSON.stringify({ _section_marker: true })].map(csvEscape).join(','));
+    sections[section].forEach((payload, rowIndex) => {
     lines.push([section, sectionIndex + 1, rowIndex + 1, JSON.stringify(payload)].map(csvEscape).join(','));
-  }));
+    });
+  });
   return `${lines.join('\n')}\n`;
 }

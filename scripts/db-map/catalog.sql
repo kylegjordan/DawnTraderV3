@@ -148,8 +148,20 @@ enum_rows AS (
   JOIN mapped_namespaces AS n ON n.oid = t.typnamespace
   JOIN pg_catalog.pg_enum AS e ON e.enumtypid = t.oid
 ),
+presence_rows(section, section_order, row_order, payload) AS (
+  VALUES
+    ('schemas'::text, 2::integer, 0::bigint, '{"_section_marker":true}'::jsonb),
+    ('relations', 3, 0, '{"_section_marker":true}'::jsonb),
+    ('columns', 4, 0, '{"_section_marker":true}'::jsonb),
+    ('constraints', 5, 0, '{"_section_marker":true}'::jsonb),
+    ('indexes', 6, 0, '{"_section_marker":true}'::jsonb),
+    ('partition_edges', 7, 0, '{"_section_marker":true}'::jsonb),
+    ('policies', 8, 0, '{"_section_marker":true}'::jsonb),
+    ('enums', 9, 0, '{"_section_marker":true}'::jsonb)
+),
 stream AS (
   SELECT 'meta'::text AS section, 1::integer AS section_order, row_order, payload FROM meta_rows
+  UNION ALL SELECT section, section_order, row_order, payload FROM presence_rows
   UNION ALL SELECT 'schemas', 2, row_order, payload FROM schema_rows
   UNION ALL SELECT 'relations', 3, row_order, payload FROM relation_rows
   UNION ALL SELECT 'columns', 4, row_order, payload FROM column_rows
