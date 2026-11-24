@@ -2,6 +2,8 @@
 
 change-class: non_architecture
 
+> **Step-1 ruling — PROCEED.** Coltrane approved r1 at exact ref `2c621d2f422142d1930e484fc7558bf3850fad46`, Discord 2026-11-24T02:33:26Z. All five gates passed. Step 2 must settle the adapter shape, scanner roots/exclusions, partition accounting and non-conflicting schedule before implementation; those are audit questions, not scope blockers.
+
 **Owner:** Infra Codex (standing in for Infra Claude / CC-INFRA) · **Plan:** `SPRINT_TO_LIVE_PLAN.md` row 5a2 · **Decision:** KD-101 (2026-11-16) · **Ordering:** after `B-DB-READONLY-ROLE`, before `B-DB-HELPER-RETIRE`.
 
 **Class judgement:** this batch adds read-only generation tooling, checked-in database documentation and a scheduled drift comparison. It changes no trading decision, application database pool, database schema, role grant or stored row. The System Impact Map and System Manual are nevertheless applicable because the new generator becomes a scheduled consumer of the governed crew-read path.
