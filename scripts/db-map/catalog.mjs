@@ -1,5 +1,5 @@
 import { CONFIG } from './config.mjs';
-import { assert, parseCsv, relationKey } from './util.mjs';
+import { assert, compareBytes, parseCsv, relationKey } from './util.mjs';
 
 function jsonPayload(row) {
   assert(/^\d+$/.test(row.section_order), `invalid section_order for ${row.section}`);
@@ -91,7 +91,7 @@ export function normalizeCatalog(sections) {
       size_applicable: !['v'].includes(row.relkind),
     };
   });
-  const logicalRollups = [...childrenByParent.entries()].sort().map(([parent, edges]) => {
+  const logicalRollups = [...childrenByParent.entries()].sort(([left], [right]) => compareBytes(left, right)).map(([parent, edges]) => {
     let estimatedRows = 0;
     let unknownRows = 0;
     let totalBytes = 0;

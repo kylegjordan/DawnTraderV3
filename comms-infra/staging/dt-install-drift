@@ -73,6 +73,8 @@ NOTICE_RAISED = "/var/lib/dt-install-drift/notice-only-raised"
 MARKER_MAX_AGE_S = 2 * 3600
 GIT_TIMEOUT_S = 30
 DB_MAP_TBLS_SHA256 = "44bf748bf0b8f4ed66c21173d19792714a61953b5dff21da8805cb7caa1f6258"
+DB_MAP_NODE_VERSION = "v20.20.0"
+DB_MAP_NODE_SHA256 = "d01614ef369e36eee9ab8d86fbfa93ddf44931010add45e5262a63e3ddda784e"
 DB_MAP_TYPESCRIPT_PACKAGE_SHA256 = "16af7ea27880259b39ff8f123566aaec815cdca1c3ab8d28330c8b652055ccf0"
 DB_MAP_TYPESCRIPT_LIB_SHA256 = "f316520790d4db220a10d890c5f85310e26a1bd3c104b8d3b5eb62ba0491651b"
 
@@ -676,6 +678,7 @@ def check_extra(name, box):
             out("STATE", "cannot verify %s: %s" % (p, e), "DB-MAP", p)
     elif name == "db_map_runtime":
         pins = [
+            ("/usr/bin/node", DB_MAP_NODE_SHA256),
             ("/usr/local/lib/dt-db-map/node_modules/typescript/package.json", DB_MAP_TYPESCRIPT_PACKAGE_SHA256),
             ("/usr/local/lib/dt-db-map/node_modules/typescript/lib/typescript.js", DB_MAP_TYPESCRIPT_LIB_SHA256),
         ]
@@ -700,6 +703,24 @@ def check_extra(name, box):
                 out("MISSING", p, "DB-MAP", p)
             except OSError as e:
                 out("STATE", "cannot verify %s: %s" % (p, e), "DB-MAP", p)
+        node = P("/usr/bin/node")
+        try:
+            st = os.lstat(node)
+            ok, why = owner_ok(st, 0o755, "root", "root") if stat.S_ISREG(st.st_mode) else (False, "not a regular file")
+            if not ok:
+                out("PERM", "%s %s" % (node, why), "DB-MAP", node)
+            result = subprocess.run([node, "--version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                    text=True, timeout=10, check=False)
+            version = result.stdout.strip()
+            if result.returncode != 0 or version != DB_MAP_NODE_VERSION:
+                out("DRIFT", "%s reports Node %s, wanted %s" %
+                    (node, version or "UNREADABLE", DB_MAP_NODE_VERSION), "DB-MAP", node)
+            else:
+                out("OK", "%s reports pinned Node %s" % (node, version))
+        except FileNotFoundError:
+            out("MISSING", node, "DB-MAP", node)
+        except (OSError, subprocess.SubprocessError) as e:
+            out("STATE", "cannot verify %s version: %s" % (node, e), "DB-MAP", node)
     elif name == "setter_marker":
         p = P("/var/lib/dt-api-setter/marker.json")
         if os.path.lexists(p):

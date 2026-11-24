@@ -60,4 +60,42 @@ with tempfile.TemporaryDirectory(prefix="db-map-drift-") as root:
     finally:
         module.ROOT, module.DB_MAP_TBLS_SHA256, module.owner_ok = old_root, old_sha, old_owner
 
-print("db-map drift enrollment: PASS; binary mutation RED")
+with tempfile.TemporaryDirectory(prefix="db-map-runtime-drift-") as root:
+    node = os.path.join(root, "usr", "bin", "node")
+    package = os.path.join(root, "usr", "local", "lib", "dt-db-map", "node_modules", "typescript", "package.json")
+    library = os.path.join(root, "usr", "local", "lib", "dt-db-map", "node_modules", "typescript", "lib", "typescript.js")
+    for path in (node, package, library):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+    open(node, "wb").write(b"pinned node fixture")
+    open(package, "wb").write(b"pinned package fixture")
+    open(library, "wb").write(b"pinned library fixture")
+    os.chmod(node, 0o755)
+    old_runtime = (module.ROOT, module.DB_MAP_NODE_SHA256, module.DB_MAP_TYPESCRIPT_PACKAGE_SHA256,
+                   module.DB_MAP_TYPESCRIPT_LIB_SHA256, module.owner_ok, module.subprocess.run)
+    module.ROOT = root
+    module.DB_MAP_NODE_SHA256 = hashlib.sha256(b"pinned node fixture").hexdigest()
+    module.DB_MAP_TYPESCRIPT_PACKAGE_SHA256 = hashlib.sha256(b"pinned package fixture").hexdigest()
+    module.DB_MAP_TYPESCRIPT_LIB_SHA256 = hashlib.sha256(b"pinned library fixture").hexdigest()
+    module.owner_ok = lambda *args: (True, "")
+    module.subprocess.run = lambda *args, **kwargs: types.SimpleNamespace(returncode=0, stdout="v20.20.0\n", stderr="")
+    try:
+        module.PROBLEMS.clear(); module.CLASSES.clear()
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            module.check_extra("db_map_runtime", box)
+        assert not module.PROBLEMS and "reports pinned Node v20.20.0" in output.getvalue()
+        open(node, "ab").write(b"mutant")
+        module.PROBLEMS.clear(); module.CLASSES.clear()
+        with contextlib.redirect_stdout(io.StringIO()):
+            module.check_extra("db_map_runtime", box)
+        assert len(module.PROBLEMS) == 1 and module.PROBLEMS[0].startswith("DRIFT")
+        open(node, "wb").write(b"pinned node fixture")
+        module.subprocess.run = lambda *args, **kwargs: types.SimpleNamespace(returncode=0, stdout="v20.20.1\n", stderr="")
+        module.PROBLEMS.clear(); module.CLASSES.clear()
+        with contextlib.redirect_stdout(io.StringIO()):
+            module.check_extra("db_map_runtime", box)
+        assert len(module.PROBLEMS) == 1 and "wanted v20.20.0" in module.PROBLEMS[0]
+    finally:
+        (module.ROOT, module.DB_MAP_NODE_SHA256, module.DB_MAP_TYPESCRIPT_PACKAGE_SHA256,
+         module.DB_MAP_TYPESCRIPT_LIB_SHA256, module.owner_ok, module.subprocess.run) = old_runtime
+
+print("db-map drift enrollment: PASS; binary and Node runtime mutations RED")

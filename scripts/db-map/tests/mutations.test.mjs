@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { parseCatalogCsv } from '../catalog.mjs';
 import { assertAdapterFidelity, toTblsSchema } from '../adapter.mjs';
 import { verifyArtifactSet, verifyFence } from '../verify.mjs';
-import { relationKey, sha256 } from '../util.mjs';
+import { compareBytes, relationKey, sha256, stableJson } from '../util.mjs';
 import { fixtureCsv } from './fixture.mjs';
 
 let killed = 0;
@@ -38,7 +38,16 @@ for (const type of ['PRIMARY KEY', 'UNIQUE', 'CHECK', 'FOREIGN KEY']) mutate(`${
   table.constraints = table.constraints.filter((row) => row.type !== type);
 });
 mutate('index removed', (x) => { x.tables.find((t) => t.name === 'public.users').indexes = []; });
+mutate('index name same-cardinality replacement', (x) => { x.tables.find((t) => t.name === 'public.users').indexes[0].name = 'replacement_idx'; });
+mutate('index definition same-cardinality replacement', (x) => { x.tables.find((t) => t.name === 'public.users').indexes[0].def = 'CREATE INDEX replacement_idx ON public.users (email)'; });
+mutate('index table same-cardinality replacement', (x) => { x.tables.find((t) => t.name === 'public.users').indexes[0].table = 'public.parents'; });
+mutate('index columns same-cardinality replacement', (x) => { x.tables.find((t) => t.name === 'public.users').indexes[0].columns = ['email']; });
+mutate('index comment same-cardinality replacement', (x) => { x.tables.find((t) => t.name === 'public.users').indexes[0].comment = 'replacement comment'; });
 mutate('FK relation removed', (x) => { x.relations = []; });
+
+const nonAsciiKeys = ['\u{10000}', '\uE000'];
+mustFail(() => assert.deepEqual([...nonAsciiKeys].sort(), [...nonAsciiKeys].sort(compareBytes)), 'native UTF-16 sort substituted for UTF-8 byte ordering');
+assert.ok(stableJson({ [nonAsciiKeys[0]]: 1, [nonAsciiKeys[1]]: 2 }).indexOf('\uE000') < stableJson({ [nonAsciiKeys[0]]: 1, [nonAsciiKeys[1]]: 2 }).indexOf('\u{10000}')); killed += 1;
 
 const missingSection = fixtureCsv().split('\n').filter((line) => !line.startsWith('indexes,')).join('\n');
 mustFail(() => parseCatalogCsv(missingSection), 'catalog section removed');

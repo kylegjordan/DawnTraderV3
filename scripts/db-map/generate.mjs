@@ -9,7 +9,7 @@ import { parseCatalogCsv } from './catalog.mjs';
 import { enumeratePopulation, peelCommit } from './population.mjs';
 import { scannerRuntime, scanRepository } from './scanner.mjs';
 import { assertAdapterFidelity, toTblsSchema, validateAgainstOfficialSchema, validateTblsSchema, verifyVendoredSchema } from './adapter.mjs';
-import { artifactHashes, assert, resetPrivateDir, sha256, sha256File, stableJson, writeAtomic } from './util.mjs';
+import { artifactHashes, assert, compareBytes, resetPrivateDir, sha256, sha256File, stableJson, writeAtomic } from './util.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, '../..');
@@ -36,7 +36,7 @@ async function listFiles(root, prefix = '') {
     if (entry.isDirectory()) out.push(...await listFiles(root, path));
     else if (entry.isFile()) out.push(path);
   }
-  return out.sort();
+  return out.sort(compareBytes);
 }
 
 function structuralProjection(catalog, scan) {

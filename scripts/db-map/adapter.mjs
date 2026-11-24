@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { CONFIG } from './config.mjs';
-import { assert, relationKey, sha256 } from './util.mjs';
+import { assert, compareBytes, relationKey, sha256, stableJson } from './util.mjs';
 
 const RELATION_TYPES = { r: 'TABLE', p: 'PARTITIONED TABLE', v: 'VIEW', m: 'MATERIALIZED VIEW', f: 'FOREIGN TABLE' };
 const CONSTRAINT_TYPES = { p: 'PRIMARY KEY', u: 'UNIQUE', c: 'CHECK', f: 'FOREIGN KEY' };
@@ -66,8 +66,8 @@ export function toTblsSchema(catalog) {
     if (!enumGroups.has(key)) enumGroups.set(key, []);
     enumGroups.get(key).push([Number(row.sort_order), row.label]);
   }
-  const enums = [...enumGroups].sort().map(([name, values]) => ({ name, values: values.sort((a, b) => a[0] - b[0]).map((item) => item[1]) }));
-  const schemaNames = [...new Set(catalog.relations.map((row) => row.schema))].sort();
+  const enums = [...enumGroups].sort(([left], [right]) => compareBytes(left, right)).map(([name, values]) => ({ name, values: values.sort((a, b) => a[0] - b[0]).map((item) => item[1]) }));
+  const schemaNames = [...new Set(catalog.relations.map((row) => row.schema))].sort(compareBytes);
   const viewpoints = schemaNames.map((schema) => ({
     id: `schema-${schema.replace(/[^A-Za-z0-9_-]/g, '-')}`,
     name: `${schema} schema`,
@@ -82,7 +82,7 @@ export function toTblsSchema(catalog) {
     id: 'cross-schema-relations',
     name: 'Cross-schema relations',
     desc: 'Relations participating in a foreign key across schema boundaries.',
-    tables: [...new Set(crossSchema.flatMap((row) => [row.table, row.parent_table]))].sort(),
+    tables: [...new Set(crossSchema.flatMap((row) => [row.table, row.parent_table]))].sort(compareBytes),
   });
   return {
     name: catalog.meta.database,
@@ -182,6 +182,17 @@ export function assertAdapterFidelity(catalog, schema) {
     }
     const expectedIndexes = catalog.indexes.filter((row) => row.schema === relation.schema && row.relation === relation.name);
     assert((table.indexes ?? []).length === expectedIndexes.length, `tbls index set size differs for ${relation.key}`);
+    for (const source of expectedIndexes) {
+      const target = table.indexes.find((row) => row.name === source.name);
+      const expected = {
+        name: source.name,
+        def: source.definition,
+        table: relation.key,
+        columns: source.columns,
+        ...(source.comment ? { comment: source.comment } : {}),
+      };
+      assert(target && stableJson(target) === stableJson(expected), `tbls index tuple differs: ${relation.key}.${source.name}`);
+    }
   }
   const foreignKeys = catalog.constraints.filter((row) => row.type === 'f');
   assert((schema.relations ?? []).length === foreignKeys.length, 'tbls FK relation set size differs');

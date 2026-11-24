@@ -9,7 +9,7 @@ import { CONFIG } from '../config.mjs';
 import { assertAdapterFidelity, toTblsSchema, validateAgainstOfficialSchema, verifyVendoredSchema } from '../adapter.mjs';
 import { enumeratePopulation } from '../population.mjs';
 import { scannerRuntime, scanRepository } from '../scanner.mjs';
-import { relationKey } from '../util.mjs';
+import { compareBytes, relationKey, stableJson } from '../util.mjs';
 import { fixtureCsv } from './fixture.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -26,6 +26,10 @@ check(relationKey('a.b', 'c') === 'a%2Eb.c', 'dotted schema identifier is escape
 check(relationKey('a', 'b.c') === 'a.b%2Ec', 'dotted relation identifier is escaped canonically');
 check(relationKey('a.b', 'c') !== relationKey('a', 'b.c'), 'dotted identifier tuples do not collide');
 check(relationKey('a%2Eb', 'c') !== relationKey('a.b', 'c'), 'literal escape sequences do not collide');
+const nonAsciiKeys = ['\u{10000}', '\uE000'];
+check([...nonAsciiKeys].sort(compareBytes).join('|') === '\uE000|\u{10000}', 'UTF-8 byte ordering is explicit for non-ASCII strings');
+const nonAsciiJson = stableJson({ [nonAsciiKeys[0]]: 1, [nonAsciiKeys[1]]: 2 });
+check(nonAsciiJson.indexOf('\uE000') < nonAsciiJson.indexOf('\u{10000}'), 'canonical JSON keys use UTF-8 byte ordering');
 check(catalog.relations.find((row) => row.key === 'public.parents').estimated_rows.state === 'unknown', 'negative estimates are unknown');
 check(catalog.relations.find((row) => row.key === 'public.user_view').size_applicable === false, 'views have no table size');
 check(catalog.logical_rollups[0].unknown_row_child_count === 1, 'partition rollup preserves unknown child count');
