@@ -147,3 +147,18 @@ The Step-4 claim-only reader identified two limits: the exact-ref objects cannot
 Coltrane then SEND BACK at Discord `1574776559171141733` on exact graded ref `b8cfab3e76de8d80d219fd26d3c426966929367d`. He reproduced three blockers: path-only rather than occurrence-exact enforcement, quote-blind block-comment stripping, and a non-journaled sequential live removal. Exact reproductions were added end to end. The corrected implementation at `c6acd0d374b7b3b830eef5c5ead90bf570c30242` makes the surface gate class/count exact, uses syntax-aware/fail-closed comment handling, and makes every live transition durably journaled, replacement-fenced and resumable.
 
 Coltrane’s second SEND BACK at 14:08:36Z accepted those corrections and found one remaining static alias gap plus the stale judgement-call ref: ES namespace imports and whole-module CommonJS aliases could construct `pg` clients without a marker. Both exact forms are now filesystem-enrolled full-validator mutations and turn red when introduced; the record now names the actual graded implementation ref.
+
+## Step 6 — reviewed staging-helper install and retirement (2026-11-24)
+
+This batch has no DawnTrader application deploy. The staging deploy record named `e3a96a8126f0280a9568bb1823b9210783f0afe0`; the range to the shared branch included other owners' runtime work, so `dt-deploy` was deliberately not run. Instead, the separately reviewed installer, remover and manifest were exported from the exact graded implementation ref `5e223c8a1e19db10cdea3c55479b4ff4656a45bf` into a private temporary directory and installed without editing the application checkout or restarting a process.
+
+Installed objects:
+
+| object | installed SHA-256 | owner:group / mode |
+|---|---|---|
+| `/usr/local/sbin/dt-db-helper-retire` | `ec917e4956a27ee156199be86777dcab3ca895994dc42cffc4defd18685383f1` | `root:root` / `0755` |
+| `/usr/local/share/dawntrader/b-db-helper-retire-manifest.json` | `7b508786e26ca78f5925543e1101f0e014705ee6affcc8a7afa647bdec4cf702` | `root:root` / `0644` |
+
+The installed remover first verified all 53 exact live files against the reviewed bytes and metadata and reported no change. It then ran once as `codex-infra`, completed at `2026-11-24T15:03:49.569859+00:00`, and recorded 53 removed paths. Durable state hashes are `8689a639baa161ac7b647f199075ba276dc54e9beef564b2c70c25a397f724f6` for `remove-journal.json` and `881edd1b5438d34a712698d998a138cefbe8f48991f813d6392b7337df165a8b` for `last-remove.json`; both are `root:root` mode `0600`.
+
+The immediate boundary check found the application ref still `e3a96a8126f0280a9568bb1823b9210783f0afe0`, DawnTrader PID still `2822823`, restart count still `715`, and unchanged SHA-256 values for the application environment, application pool source, built application and deploy record. Step 7 owns the independent full live census, governed-read/write-refusal checks and installed-drift proof; those results are not claimed by this Step-6 record.
