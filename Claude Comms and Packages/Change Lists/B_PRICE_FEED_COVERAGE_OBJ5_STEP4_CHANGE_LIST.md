@@ -189,3 +189,19 @@ Two later reconnect markers extend the interim carrier to four, each with exactl
 Across the complete overlapping population the cumulative counts are four reconnect markers, four reconnect-trigger terminal restore lines, zero `RESUB_ABORTED`, zero `RESUB_DEFERRED`, zero `skipped=restore_in_progress`, and zero `WS_UNSUB_KEPT`. The app remained online on exact deployed Git HEAD and `dist/BUILD_SHA` `e3a96a8126f0280a9568bb1823b9210783f0afe0`, restart count 715, unstable restarts 0. This proves dispatch intent at the four observed reconnects; it does not prove exchange acceptance or later tick delivery, cannot distinguish a naturally caused reconnect from a manually induced socket reconnect, and still does not complete the first-full-session drop-rate or close-path-carrier gates.
 
 `REVIEWER: claim-only · independently select objects and identify compatible alternate states · counts supported; natural cause and downstream acceptance remain unproven · re-derived y`
+
+### Step 7 interim natural-reconnect extension — 2026-11-24T13:20Z
+
+The complete overlapping post-deploy population was extended across `out__2026-11-24_05-00-05.log.gz` (`00:01:32–05:00:17Z`), `out__2026-11-24_10-00-49.log` (`05:00:18–10:01:06Z`), current `out.log` (`10:01:06–13:20:40Z`), and current `error.log` (`00:01:16–13:20:39Z`). The stdout and stderr predecessor archives end at `00:01:32Z` and `00:01:15Z`, respectively, before the `00:03:08Z` deploy boundary. The same search that found all eight OBJ-5 positive-control lines found one new outage sequence:
+
+| time | record |
+|---|---|
+| `13:10:34Z` | `[OBJ-5][RESUB_DEFERRED] reason=not_connected intent=9 trigger=audit` |
+| `13:10:35Z` | `[I8C-WS-RECONNECT] reconnect_detected` |
+| `13:10:35Z` | `[OBJ-5][RESUB] sent=4 candidates=4 reasons=rtb trigger=reconnect` |
+
+This is admissible under Langston's three-outcome rule: the disconnected audit held intent and emitted one deferred record for the outage, then the connected reconnect emitted its own terminal restore record. The deferred `intent=9` and reconnect `candidates=4` are different snapshots around the reconnect and are not a ratio or a five-member loss claim; the terminal line proves dispatch intent for the four candidates eligible when that restore run began, not exchange acceptance or later tick delivery.
+
+Across the complete overlapping population through `13:20Z`, the cumulative counts are five reconnect markers, five reconnect-trigger terminal restore lines, zero `RESUB_ABORTED`, one `RESUB_DEFERRED`, zero `skipped=restore_in_progress`, zero `WS_UNSUB_KEPT`, and zero `RTB_INTENT_SYNC_FAILED`. The app remained online with repository HEAD and `dist/BUILD_SHA` exact `e3a96a8126f0280a9568bb1823b9210783f0afe0`, restart count 715, and unstable restarts 0. The first-full-session drop-rate gate remains immature until after `21:00Z`, and no close-path carrier has appeared.
+
+`REVIEWER: staging rotating stdout/error population through 2026-11-24T13:20:40Z · independently select objects and test the deferred-plus-reconnect interpretation · counts, object reach, process controls and admissible interpretation reproduced; unlogged/manual reconnect, downstream acceptance and later ticks remain compatible · re-derived y`
