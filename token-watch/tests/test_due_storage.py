@@ -527,6 +527,13 @@ check("★ the installer compiles EVERY list, PINNED included (C-1)",
       'for f in $ALL; do python3 -m py_compile' in inst and "for f in $OPS $CORE $TOOLS; do python3" not in inst)
 check("★ the record names the actor as declared AND as observed (C-2)",
       "actor_declared" in inst and "actor_transport" in inst and '\\"actor\\":' not in inst)
+_reviewer_dirs = (_re2.search(r'^REVIEWER_DIRS="([^"]*)"', inst, _re2.M) or [None, ""])[1].split()
+check("★ reviewer ACL names exactly the five pre-registered C-2 stores",
+      set(_reviewer_dirs) == {"provenance", "births", "state", "observations", "study"}, _reviewer_dirs)
+check("★ reviewer ACL recursively grants deploy read/traverse and verifies the resulting objects as deploy",
+      'setfacl -R -m u:deploy:rX,m::rX "$STORE/$d"' in inst
+      and 'runuser -u deploy -- find "$STORE/$d" -xdev' in inst
+      and "-type d ! -executable -o -type f ! -readable" in inst)
 import re as _re  # noqa: E402
 _tools = (_re.search(r'^TOOLS="([^"]*)"', inst, _re.M) or [None, ""])[1].split()
 _core = (_re.search(r'^CORE="([^"]*)"', inst, _re.M) or [None, ""])[1].split()
