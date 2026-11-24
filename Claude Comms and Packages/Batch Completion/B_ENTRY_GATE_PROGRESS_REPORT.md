@@ -101,6 +101,32 @@ The complete recorded backend population ran on one build, `c21c1502a`, with no 
 
 The detailed evidence, controls, rotation census, Chrome-only UI smoke-check and Step-8 recipe are in `Change Lists/B_ENTRY_GATE_INC_C_STEP7_2026-11-23.md`. Coltrane independently reproduced the single-build/no-restart boundary, settings consumption, 0/21 birth result with empty/N/A cost cohort, 40-event promotion result, and the narrowed UI rendering claim. He sent back only the mutable deploy-record provenance, then PROCEEDED corrected exact ref `65c5926e81f2fa10f89afbc368caba0d40bce4a3` at 2026-11-24T15:15:47Z after that file was explicitly excluded from the reproduction recipe. Exact-ref CI `45419902706` was 4/4 green. Step 8 is complete; Step 9 is next.
 
+## 6b. Parent Step 9 — all-objectives audit (2026-11-24)
+
+**Verdict: every parent objective is green against the reviewed increment-A/B/C plan; no fix/review/deploy loop is required.** This verdict preserves three explicit non-results rather than promoting them to passes: crypto birth EntryWindow remains `shadow_off` because its taker-judged arm is unexercised; the stale-plan value remains deliberately unseeded/off because age did not separate outcomes; and the exact live `ev_reject` drift-alarm carrier remains unobserved. Those states are the reviewer-approved safe dispositions, not silently completed empirical legs.
+
+The implementation-commit census from all three Step-4 records produced **47 unique `server/` or `drizzle/` paths**. Against deployed ref `e3a96a8126f0280a9568bb1823b9210783f0afe0`, **46/47 were byte-identical at this audit head**; the positive control was the one changed path, `drizzle/migrations/MANIFEST.txt`, whose only delta was two unrelated later migration names. All five B-ENTRY-GATE forward migrations remain in the manifest. The complete affected-test population was **18 files / 263 tests**: the 12 core B-ENTRY-GATE and wiring files passed **166/166**, and the six dependency/interaction files passed **97/97**.
+
+The live `dt-sql --csv` setting read ran as `dt_reader` and returned exactly **10 `entry_gate` wildcard-key rows**: two each for worse-side `0.25`, cheaper-side `0.40`, friction coverage `1.0`, birth-live (`crypto=false`, `xstock=true`), and promotion age `300000`. The same readable population is the positive control for the deliberate absence of `rtb_plan_max_age_ms`; its reviewed limit remains off. A source census found `ENTRY_PREMIUM_BPS` absent from `server/` after an `InvalidTarget` control hit, while the complete `1.02` census still found the two unrelated route stop mocks plus test/analysis fixtures. The governed ranker/shadow/open target-fallback fence passed.
+
+| reviewed objective | object re-checked | Step-9 result |
+|---|---|---|
+| 1 / 1b — worse-side window and cheaper-side shadow | boundary/kernel/engine tests, live class settings, increment-A session | exact edge and one-tick-over behavior pass; cheaper-side stays watch-only |
+| 2 — SQE plan gates at birth/refresh | SQE and orchestrator tests, increment-B and increment-C live carriers | refresh enforcement remains live; xStock birth is live and non-vacuously judged; crypto remains safely shadowed pending its own reachable arm |
+| 3 — fill and resting/VTS boundary | engine, lifecycle and VTS tests plus increment-A carriers | taker and VTS checks remain deciding; resting maker remains the reviewer-approved watch-only record from pre-audit A-5 |
+| 4 — actual-price economics and friction coverage | pure kernel, both engine arms, exploration exception, durable carrier join | actual arm/paid price remains the one deciding number; 11/11 terminal rows retained complete preceding carriers; coverage remains watch-only |
+| 5 — valid targets / no fabricated 2% targets | source fence, `InvalidTarget` tests, complete `1.02` census | three governed fallbacks remain absent; invalid targets refuse or stay out of the queue as designed |
+| 6 — fixed plan, re-priced refresh | refresh/reprice tests and increment-B 24 h read | priced passes recompute at the ask; unpriced passes make no decision and change only their counters |
+| 7 — priced-pass record and promotion age | priced-pass tests, live rows, increment-C 40-event carrier | new/re-issued rows cannot inherit a stamp; both classes use 300000 ms; unpriced rows remain queued rather than deleted |
+| 8 — RR/target gate before queue write | orchestrator wiring tests | below-floor/invalid plans are refused before the queue writer is called |
+| 9 — refresh diagnostics write under ESM | writer tests and the already-observed dated staging trace files | transition trace and SQE rejection writers remain connected; failures remain visible |
+| 10 — checkpoint-specific freshness | source/wiring tests and diagnostics carriers | each affected checkpoint retains its own age and source; promotion alone uses the new ceiling |
+| 11 — stale-plan reader | reader tests, live ten-row setting population | reader and named refusal path are present; no value is seeded, so the reviewed age-since-restatement limit remains explicitly off |
+| 12 — exploration-lane contract | async/sync SQE and lane tests | existing `NetEV ` prefixes remain pinned; `NetEVMissing`, `EntryWindow` and `InvalidTarget` cannot become exploration bypasses |
+| 13 — registered magnitudes | increment-A session, increment-B 24 h/week reads, increment-C full session and Step-8 re-derivation | every available magnitude is reported over its named population; empty/unreachable cells remain N/A, shadowed or unverified rather than zero |
+
+The board object was re-read after the reviewer ruling: `Status=Verification`, `Owner=Claude New`, `Review=Approved`, `Blocked on=Nothing`. It stays in Verification through Step 9, as required.
+
 ## 7. Pre-registered parent close criterion
 
 The parent may convert this file to `B_ENTRY_GATE_COMPLETION_REPORT.md` only after all of these are true:
@@ -113,7 +139,7 @@ The parent may convert this file to `B_ENTRY_GATE_COMPLETION_REPORT.md` only aft
 6. Coltrane independently confirms the evidence at an exact pushed ref;
 7. Step 9 rechecks the whole parent objective set, Step 10 reconciles governance again, and Step 11 records both the increment-B data and the action/decision taken on it.
 
-**Status against this criterion, 2026-11-24:** (1) ✅ increment B landed after re-review; (2) ✅ candidate and deployed CI were each 4/4, and the single build serving increment C's session has CI `44847250518` 4/4; (3) ✅ increment C deployed at `6a9b6802f`, with the full registered session served by `c21c1502a`, restart 714; (4) ✅ the xStock week read and increment-C backend first-session read are captured, including the class-separated birth denominator and promotion-freshness result, and the staging UI smoke-check passed; (5) ✅ no registered failure fired — xStock birth refusals were 0/21; (6) ✅ Coltrane independently reproduced the increment-C evidence and PROCEEDED corrected exact ref `65c5926e8`; (7) open for Steps 9–11.
+**Status against this criterion, 2026-11-24:** (1) ✅ increment B landed after re-review; (2) ✅ candidate and deployed CI were each 4/4, and the single build serving increment C's session has CI `44847250518` 4/4; (3) ✅ increment C deployed at `6a9b6802f`, with the full registered session served by `c21c1502a`, restart 714; (4) ✅ the xStock week read and increment-C backend first-session read are captured, including the class-separated birth denominator and promotion-freshness result, and the staging UI smoke-check passed; (5) ✅ no registered failure fired — xStock birth refusals were 0/21; (6) ✅ Coltrane independently reproduced the increment-C evidence and PROCEEDED corrected exact ref `65c5926e8`; (7) ◑ Step 9 objective audit complete, Steps 10–11 remain.
 
 ## 8. Governance files changed so far
 
