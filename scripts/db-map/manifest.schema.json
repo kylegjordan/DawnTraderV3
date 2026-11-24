@@ -5,7 +5,7 @@
   "required": [
     "schema_version", "source_ref", "extraction_utc", "database",
     "extraction_query_sha256", "scanner_config_sha256", "manifest_schema_sha256",
-    "generator_version", "scanner_version", "tbls", "population",
+    "generator_version", "scanner_version", "runtime", "tbls", "population",
     "rls_warning", "artifact_hashes", "structural_sha256", "manifest_self_hash"
   ],
   "properties": {
@@ -27,6 +27,18 @@
     "manifest_schema_sha256": { "type": "string" },
     "generator_version": { "type": "integer" },
     "scanner_version": { "type": "integer" },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["node_version", "node_sha256", "icu_version", "typescript_version", "typescript_sha256"],
+      "properties": {
+        "node_version": { "type": "string" },
+        "node_sha256": { "type": "string" },
+        "icu_version": { "type": "string" },
+        "typescript_version": { "type": "string" },
+        "typescript_sha256": { "type": "string" }
+      }
+    },
     "tbls": { "type": "object" },
     "population": { "type": "object" },
     "rls_warning": { "type": "string" },

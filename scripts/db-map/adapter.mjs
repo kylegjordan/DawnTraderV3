@@ -74,7 +74,10 @@ export function toTblsSchema(catalog) {
     desc: `All mapped relations in ${schema}.`,
     tables: catalog.relations.filter((row) => row.schema === schema).map((row) => row.key),
   }));
-  const crossSchema = relations.filter((row) => row.table.split('.')[0] !== row.parent_table.split('.')[0]);
+  const crossSchema = catalog.constraints.filter((row) => row.type === 'f' && row.schema !== row.referenced_schema).map((row) => ({
+    table: relationKey(row.schema, row.relation),
+    parent_table: relationKey(row.referenced_schema, row.referenced_relation),
+  }));
   viewpoints.push({
     id: 'cross-schema-relations',
     name: 'Cross-schema relations',

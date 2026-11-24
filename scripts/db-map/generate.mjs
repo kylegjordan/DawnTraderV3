@@ -7,9 +7,9 @@ import { fileURLToPath } from 'node:url';
 import { CONFIG } from './config.mjs';
 import { parseCatalogCsv } from './catalog.mjs';
 import { enumeratePopulation, peelCommit } from './population.mjs';
-import { scanRepository } from './scanner.mjs';
+import { scannerRuntime, scanRepository } from './scanner.mjs';
 import { assertAdapterFidelity, toTblsSchema, validateAgainstOfficialSchema, validateTblsSchema, verifyVendoredSchema } from './adapter.mjs';
-import { artifactHashes, assert, resetPrivateDir, sha256, stableJson, writeAtomic } from './util.mjs';
+import { artifactHashes, assert, resetPrivateDir, sha256, sha256File, stableJson, writeAtomic } from './util.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, '../..');
@@ -117,6 +117,20 @@ export async function generate(options) {
   const sourceRoot = join(work, 'source');
   await resetPrivateDir(sourceRoot);
   try {
+    const typescript = await scannerRuntime();
+    const runtime = {
+      node_version: process.version,
+      node_sha256: await sha256File(process.execPath),
+      icu_version: process.versions.icu,
+      typescript_version: typescript.version,
+      typescript_sha256: typescript.sha256,
+    };
+    assert(runtime.typescript_version === CONFIG.runtime.typescriptVersion, `TypeScript version differs from pin: ${runtime.typescript_version}`);
+    assert(runtime.typescript_sha256 === CONFIG.runtime.typescriptSha256, `TypeScript implementation differs from pin: ${runtime.typescript_sha256}`);
+    if (!options.allowUnpinnedRuntime) {
+      assert(runtime.node_version === CONFIG.runtime.nodeVersion, `Node version differs from pin: ${runtime.node_version}`);
+      assert(runtime.node_sha256 === CONFIG.runtime.nodeSha256, `Node executable differs from pin: ${runtime.node_sha256}`);
+    }
     materialize(repo, sourceRef, sourceRoot);
     const population = enumeratePopulation(repo, sourceRef);
     const catalogCsv = await readCatalogCsv(options.catalogCsv);
@@ -151,8 +165,9 @@ export async function generate(options) {
       extraction_query_sha256: sha256(await readFile(join(HERE, 'catalog.sql'))),
       scanner_config_sha256: sha256(await readFile(join(HERE, 'config.mjs'))),
       manifest_schema_sha256: sha256(await readFile(join(HERE, 'manifest.schema.json'))),
-      generator_version: 1,
+      generator_version: 2,
       scanner_version: CONFIG.scannerVersion,
+      runtime,
       tbls: { ...CONFIG.tbls, rendered: tblsResult.rendered },
       population: scan.population,
       rls_warning: CONFIG.rlsWarning,

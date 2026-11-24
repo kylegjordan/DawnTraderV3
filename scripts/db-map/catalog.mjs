@@ -50,6 +50,10 @@ function unique(rows, keyOf, label) {
   return seen;
 }
 
+function tupleKey(...values) {
+  return JSON.stringify(values);
+}
+
 function knownEstimate(value) {
   if (value === null || value === undefined || Number(value) < 0) return { state: 'unknown', value: null, reason: 'catalog estimate unavailable' };
   return { state: 'known', value: Number(value), reason: null };
@@ -57,9 +61,9 @@ function knownEstimate(value) {
 
 export function normalizeCatalog(sections) {
   const relationIds = unique(sections.relations, (row) => relationKey(row.schema, row.name), 'relation');
-  unique(sections.columns, (row) => `${relationKey(row.schema, row.relation)}:${row.ordinal}`, 'column ordinal');
-  unique(sections.constraints, (row) => `${relationKey(row.schema, row.relation)}:${row.name}`, 'constraint');
-  unique(sections.indexes, (row) => `${relationKey(row.schema, row.relation)}:${row.name}`, 'index');
+  unique(sections.columns, (row) => tupleKey(relationKey(row.schema, row.relation), row.ordinal), 'column ordinal');
+  unique(sections.constraints, (row) => tupleKey(relationKey(row.schema, row.relation), row.name), 'constraint');
+  unique(sections.indexes, (row) => tupleKey(relationKey(row.schema, row.relation), row.name), 'index');
   for (const row of [...sections.columns, ...sections.constraints, ...sections.indexes, ...sections.policies]) {
     assert(relationIds.has(relationKey(row.schema, row.relation)), `catalog ${row.name ?? 'row'} points to missing relation ${relationKey(row.schema, row.relation)}`);
   }

@@ -9,6 +9,13 @@ export function weeklyAlertActions({ success, structuralMatch }) {
   ];
 }
 
+export function completeSuccessfulRun(receipt, deliver) {
+  receipt.generation_success = true;
+  deliver();
+  receipt.alert_delivery_success = true;
+  receipt.success = true;
+}
+
 export function freshnessAlertActions({ runAgeMs, baselineAgeMs }) {
   return [
     { command: runAgeMs > 8 * DAY_MS ? 'add' : 'resolve-key', key: 'db-map:run-stale' },

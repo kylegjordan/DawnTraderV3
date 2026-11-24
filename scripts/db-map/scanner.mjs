@@ -2,10 +2,15 @@ import { createRequire } from 'node:module';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { CONFIG, classifyPath } from './config.mjs';
-import { relationKey } from './util.mjs';
+import { compareBytes, relationKey, sha256File } from './util.mjs';
 
 const require = createRequire(import.meta.url);
 const ts = require('typescript');
+const TYPESCRIPT_PATH = require.resolve('typescript');
+
+export async function scannerRuntime() {
+  return { version: ts.version, path: TYPESCRIPT_PATH, sha256: await sha256File(TYPESCRIPT_PATH) };
+}
 
 function lineAt(text, offset) {
   return text.slice(0, offset).split('\n').length;
@@ -190,9 +195,9 @@ export async function scanRepository(root, population, catalog) {
       scanSql(file.text, { text: withoutComments, offset: 0, dynamic: /\$\{|\+\s*[A-Za-z_]/.test(withoutComments) }, file, catalogIndex, usage, unresolved);
     }
   }
-  usage.sort((a, b) => a.relation.localeCompare(b.relation) || a.file.localeCompare(b.file) || a.line - b.line || a.operation.localeCompare(b.operation));
-  unresolved.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line || a.kind.localeCompare(b.kind));
-  const helpers = files.flatMap((file) => helperFacts(file, usage, unresolved)).sort((a, b) => a.file.localeCompare(b.file));
+  usage.sort((a, b) => compareBytes(a.relation, b.relation) || compareBytes(a.file, b.file) || a.line - b.line || compareBytes(a.operation, b.operation));
+  unresolved.sort((a, b) => compareBytes(a.file, b.file) || a.line - b.line || compareBytes(a.kind, b.kind));
+  const helpers = files.flatMap((file) => helperFacts(file, usage, unresolved)).sort((a, b) => compareBytes(a.file, b.file));
   return {
     schema_version: CONFIG.scannerVersion,
     source_ref: population.sourceRef,

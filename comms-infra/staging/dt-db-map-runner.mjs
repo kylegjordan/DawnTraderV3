@@ -2,7 +2,7 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { chmod, mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { freshnessAlertActions, weeklyAlertActions } from './dt-db-map-policy.mjs';
+import { completeSuccessfulRun, freshnessAlertActions, weeklyAlertActions } from './dt-db-map-policy.mjs';
 
 const STATE = process.env.DT_DB_MAP_STATE ?? '/var/lib/dt-db-map';
 const REPO = process.env.DT_DB_MAP_REPO ?? '/opt/governance-checker/DawnTraderV3';
@@ -61,7 +61,7 @@ async function skipped() {
 async function weekly() {
   await mkdir(RECEIPTS, { recursive: true, mode: 0o700 });
   await chmod(STATE, 0o750); await chmod(RECEIPTS, 0o700);
-  const receipt = { schema_version: 1, started_at: now(), success: false, result: 'failure' };
+  const receipt = { schema_version: 1, started_at: now(), generation_success: false, alert_delivery_success: false, success: false, result: 'failure' };
   let runRoot = null;
   try {
     run('/usr/bin/git', ['-C', REPO, 'fetch', '--no-tags', 'origin', 'migration/aws-supabase']);
@@ -75,14 +75,21 @@ async function weekly() {
     const source = join(runRoot, 'source'); await mkdir(source, { mode: 0o700 });
     run('/usr/bin/tar', ['-xf', archive, '-C', source]);
     const candidate = join(runRoot, 'candidate');
-    const env = { ...process.env, HOME: '/home/deploy', NODE_PATH: join(APP, 'node_modules'), DT_DB_MAP_DT_SQL: '/usr/local/bin/dt-sql' };
+    const env = { ...process.env, HOME: '/home/deploy', NODE_PATH: '/usr/local/lib/dt-db-map/node_modules', DT_DB_MAP_DT_SQL: '/usr/local/bin/dt-sql' };
     run(NODE, [join(source, 'scripts/db-map/generate.mjs'), '--repo', REPO, '--source-ref', sourceRef, '--output', candidate, '--tbls', TBLs], { env });
     run(NODE, [join(source, 'scripts/db-map/verify.mjs'), '--repo', REPO, '--root', candidate], { env });
     const candidateManifest = JSON.parse(await readFile(join(candidate, 'manifest.json'), 'utf8'));
     const catalog = JSON.parse(await readFile(join(candidate, 'catalog.json'), 'utf8'));
-    let baseline;
-    try { baseline = JSON.parse(git(['show', `${sourceRef}:docs/database-map/manifest.json`])); }
-    catch { throw new Error('checked-in database-map baseline is absent or unreadable at the fetched ref'); }
+    const artifactRef = git(['log', '-1', '--format=%H', sourceRef, '--', 'docs/database-map/manifest.json']).trim();
+    if (!/^[0-9a-f]{40}$/.test(artifactRef)) throw new Error('checked-in database-map artifact ref is absent or unreadable');
+    const baselineArchive = join(runRoot, 'baseline.tar');
+    const baselineRoot = join(runRoot, 'baseline'); await mkdir(baselineRoot, { mode: 0o700 });
+    run('/usr/bin/git', ['-C', REPO, 'archive', '--format=tar', `--output=${baselineArchive}`, sourceRef, 'docs/database-map']);
+    run('/usr/bin/tar', ['-xf', baselineArchive, '-C', baselineRoot]);
+    const baselineMap = join(baselineRoot, 'docs/database-map');
+    run(NODE, [join(source, 'scripts/db-map/verify.mjs'), '--repo', REPO, '--root', baselineMap, '--artifact-ref', artifactRef], { env });
+    const baseline = JSON.parse(await readFile(join(baselineMap, 'manifest.json'), 'utf8'));
+    receipt.baseline_artifact_ref = artifactRef;
     receipt.baseline_source_ref = baseline.source_ref;
     receipt.baseline_structural_sha256 = baseline.structural_sha256;
     receipt.candidate_structural_sha256 = candidateManifest.structural_sha256;
@@ -102,14 +109,18 @@ async function weekly() {
     } else {
       receipt.result = 'drift';
     }
-    receipt.success = true;
     receipt.completed_at = now();
-    applyWeeklyAlerts(true, receipt.result === 'match', receipt);
+    completeSuccessfulRun(receipt, () => applyWeeklyAlerts(true, receipt.result === 'match', receipt));
   } catch (error) {
+    receipt.success = false;
     receipt.error = `${error.stack ?? error}`.slice(0, 4000);
     receipt.completed_at = now();
-    try { applyWeeklyAlerts(false, false, receipt); }
-    catch (alertError) { receipt.alert_error = `${alertError}`.slice(0, 1000); }
+    if (!receipt.generation_success) {
+      try { applyWeeklyAlerts(false, false, receipt); }
+      catch (alertError) { receipt.alert_error = `${alertError}`.slice(0, 1000); }
+    } else {
+      receipt.alert_error = receipt.error;
+    }
   } finally {
     const stamp = receipt.started_at.replace(/[-:.]/g, '');
     await atomicJson(join(RECEIPTS, `${stamp}-${receipt.result}.json`), receipt);

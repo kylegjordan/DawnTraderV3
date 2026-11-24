@@ -6,8 +6,10 @@ export function csvEscape(value) {
 export function fixtureCsv(overrides = {}) {
   const sections = {
     meta: [{ catalog_version: 1, current_user: 'dt_reader', database: 'fixture', server_version_num: '180000', extracted_at_utc: '2026-11-24T00:00:00.000000Z' }],
-    schemas: [{ name: 'auth', comment: null }, { name: 'public', comment: null }],
+    schemas: [{ name: 'a', comment: null }, { name: 'a.b', comment: null }, { name: 'auth', comment: null }, { name: 'public', comment: null }],
     relations: [
+      { schema: 'a', name: 'b.c', relkind: 'v', persistence: 'p', estimated_rows: -1, rls_enabled: false, rls_forced: false, comment: 'dotted relation', table_bytes: null, index_bytes: null, total_bytes: null, last_analyze: null, last_autoanalyze: null },
+      { schema: 'a.b', name: 'c', relkind: 'v', persistence: 'p', estimated_rows: -1, rls_enabled: false, rls_forced: false, comment: 'dotted schema', table_bytes: null, index_bytes: null, total_bytes: null, last_analyze: null, last_autoanalyze: null },
       { schema: 'auth', name: 'users', relkind: 'r', persistence: 'p', estimated_rows: 2, rls_enabled: true, rls_forced: false, comment: null, table_bytes: 10, index_bytes: 4, total_bytes: 14, last_analyze: null, last_autoanalyze: null },
       { schema: 'public', name: 'parents', relkind: 'p', persistence: 'p', estimated_rows: -1, rls_enabled: false, rls_forced: false, comment: 'parent', table_bytes: 0, index_bytes: 0, total_bytes: 0, last_analyze: null, last_autoanalyze: null },
       { schema: 'public', name: 'users', relkind: 'r', persistence: 'p', estimated_rows: 3, rls_enabled: false, rls_forced: false, comment: null, table_bytes: 20, index_bytes: 8, total_bytes: 28, last_analyze: null, last_autoanalyze: null },
@@ -15,6 +17,8 @@ export function fixtureCsv(overrides = {}) {
       { schema: 'public', name: 'user_view', relkind: 'v', persistence: 'p', estimated_rows: -1, rls_enabled: false, rls_forced: false, comment: null, table_bytes: null, index_bytes: null, total_bytes: null, last_analyze: null, last_autoanalyze: null },
     ],
     columns: [
+      { schema: 'a', relation: 'b.c', ordinal: 1, name: 'quoted.id', type: 'text', nullable: true, default: null, identity: null, generated: null, collation: null, comment: null },
+      { schema: 'a.b', relation: 'c', ordinal: 1, name: 'quoted.id', type: 'text', nullable: true, default: null, identity: null, generated: null, collation: null, comment: null },
       { schema: 'auth', relation: 'users', ordinal: 1, name: 'id', type: 'uuid', nullable: false, default: 'gen_random_uuid()', identity: null, generated: null, collation: null, comment: null },
       { schema: 'public', relation: 'parents', ordinal: 1, name: 'id', type: 'bigint', nullable: false, default: null, identity: 'a', generated: null, collation: null, comment: null },
       { schema: 'public', relation: 'users', ordinal: 1, name: 'id', type: 'bigint', nullable: false, default: null, identity: 'd', generated: null, collation: null, comment: null },

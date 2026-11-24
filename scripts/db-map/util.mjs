@@ -1,9 +1,20 @@
 import { createHash } from 'node:crypto';
+import { createReadStream } from 'node:fs';
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
 export function sha256(value) {
   return createHash('sha256').update(value).digest('hex');
+}
+
+export async function sha256File(path) {
+  const hash = createHash('sha256');
+  for await (const chunk of createReadStream(path)) hash.update(chunk);
+  return hash.digest('hex');
+}
+
+export function compareBytes(left, right) {
+  return Buffer.compare(Buffer.from(left, 'utf8'), Buffer.from(right, 'utf8'));
 }
 
 function ordered(value) {
@@ -34,8 +45,13 @@ export async function resetPrivateDir(path) {
   await mkdir(path, { recursive: true, mode: 0o700 });
 }
 
+function quoteIdentifier(value) {
+  assert(typeof value === 'string' && value.length > 0 && !value.includes('\0'), 'database identifier is empty or contains NUL');
+  return /^[a-z_][a-z0-9_$]*$/.test(value) ? value : `"${value.replaceAll('"', '""')}"`;
+}
+
 export function relationKey(schema, name) {
-  return `${schema}.${name}`;
+  return `${quoteIdentifier(schema)}.${quoteIdentifier(name)}`;
 }
 
 export function posixJoin(...parts) {
@@ -85,6 +101,6 @@ export function parseCsv(text) {
 
 export async function artifactHashes(root, relativePaths) {
   const out = {};
-  for (const path of [...relativePaths].sort()) out[path] = sha256(await readFile(join(root, path)));
+  for (const path of [...relativePaths].sort(compareBytes)) out[path] = sha256(await readFile(join(root, path)));
   return out;
 }
