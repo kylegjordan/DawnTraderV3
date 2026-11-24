@@ -79,4 +79,21 @@ try {
   await unlink(trapPath).catch((error) => { if (error.code !== 'ENOENT') throw error; });
 }
 
+const namespaceMutants = [
+  ['esm-namespace', `import * as dbdriver from 'pg';\nnew dbdriver.Client();\n`],
+  ['commonjs-namespace', `const dbdriver = require('pg');\nnew dbdriver.Client();\n`],
+];
+for (const [name, source] of namespaceMutants) {
+  const relative = `scripts/db-helper-retire-${name}-${process.pid}.mjs`;
+  const path = resolve(REPO, relative);
+  try {
+    await writeFile(path, source);
+    execFileSync(process.execPath, ['--check', path], { stdio: 'pipe' });
+    const result = spawnSync(process.execPath, [VALIDATOR], { cwd: REPO, encoding: 'utf8' });
+    check(result.status !== 0 && `${result.stdout}\n${result.stderr}`.includes(relative), `${name} pg alias is enrolled through the filesystem and turns the full validator red`);
+  } finally {
+    await unlink(path).catch((error) => { if (error.code !== 'ENOENT') throw error; });
+  }
+}
+
 console.log(`B-DB-HELPER-RETIRE mutations: ${checks} checks passed`);
