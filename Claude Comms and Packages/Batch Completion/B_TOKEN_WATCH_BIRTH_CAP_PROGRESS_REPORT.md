@@ -1,6 +1,6 @@
 # B-TOKEN-WATCH-BIRTH-CAP — PROGRESS REPORT
 
-## OPEN — waiting on OBJ-2's 7-day hour band (capped days 11-17 → 11-23, readable after 2026-11-24 00:00Z) and OBJ-5's follow-up read (criterion registered as AMENDMENT 18 rider 3; window runs to 2026-11-27 00:00Z), then a decision on both
+## OPEN — OBJ-2/OBJ-8's fixed 7-day snapshot is ready for independent adjudication; OBJ-5's registered follow-up window runs to 2026-11-27 00:00Z, then a decision on both
 
 > Batch `B-TOKEN-WATCH-BIRTH-CAP` · issue `#1247` · owner Infra Claude · Kyle decision KD-90 · plan row `SPRINT_TO_LIVE_PLAN.md` 5a · change-class `non_architecture` (scope header).
 > Window shape: a **set period** — 7 complete capped days for OBJ-2; OBJ-5's window is registered in §5 (AMENDMENT 18 rider 3): from the rider's commit to 2026-11-27 00:00Z.
@@ -26,6 +26,7 @@ The batch built a controller, `token-watch/birthcap.py` (units `token-watch-birt
 | 9 Iterations | `896df3e30` (false replan + TasksMax; PROCEED `1571846571056701471`); `cde88cc02` free follow-up shed since 11-16 ~10:53Z, installed 11-20 00:03:59Z (PROCEED `1573123563844538452`, CI `44640384871`); the divergence check moved from the clock hour to the ON window, Part B PROCEED `1573388184308555899`, installed `f655fdd59` 11-20 18:11:36Z (change list §9b-§9e) |
 | 7 First closed window | ON 18:24:20Z (the `on` path), OFF 19:46:20Z, compared 19:49:20Z: census births 2,604 + switch credits 200 = 2,804 expected; vendor webhook delta 2,776; verdict **ok**, not paged; `unpaired_windows` 0 |
 | 8 Langston | **PROCEED**, Discord `1573430118146244780`: all three legs re-derived from raw objects; installed `birthcap.py` sha256 `48bc6072…` byte-identical to the repo at `f655fdd59` and at the graded ref `2b7396593` |
+| 10 C-2 reviewer snapshot | C-2 landed at `387b9fc3f`, CI `45306759665` 4/4. Coltrane authorized the exact three-file combined install at 02:02:22Z. Installed 02:04:08Z with previous `f655fdd59`; no restart. One fixed snapshot created 02:04:33Z; external manifest receipt `4ee27c10124a2cb8b95d382c55c74b5c6aad89a8a98684d1fce008de913a9ba9`; 8 files / 71,715 rows / 47,106,018 source bytes; `DEPLOY_BOUNDARY_PASS files=8` (change list §9f) |
 
 ### PREVIOUSLY STATED / NOW
 
@@ -38,13 +39,13 @@ The batch built a controller, `token-watch/birthcap.py` (units `token-watch-birt
 | # | objective (scope :37-:45) | status | evidence |
 |---|---|---|---|
 | OBJ-1 | the cap stops Helius sending: vendor counter flat across an OFF window, with an ON window the same day advancing | **MET** | 11-16: `webhooks` 837,420 and `rpc` 35,751 flat for 39 min (10:40:44Z → 11:19:21Z), file `Scope Files/B_TOKEN_WATCH_BIRTH_CAP_OBJ1_OFF_20261116.jsonl` (this commit). 11-20 same-day pair: hours 16Z and 17Z (inside the 14:58:20Z → 18:24:20Z OFF) vendor 0, births 0 for 120 min; the 82-min ON window 18:24-19:46Z advanced 2,776. The ON leg is shorter than the OFF leg, so the control holds a fortiori. The 11-20 pair uses the webhooks counter only |
-| OBJ-2 | scheduled by time; births per hour of day within the pre-registered band | **OPEN** | AMENDMENT 18 criterion, quoted in §4. Days 11-17 → 11-23; readable after 11-24 00:00Z |
+| OBJ-2 | scheduled by time; births per hour of day within the pre-registered band | **OPEN — fixed review object ready** | AMENDMENT 18 criterion, quoted in §4. The immutable 11-17 → 11-23 snapshot is ready for Coltrane's independent adjudication; receipt and population are in §4 and change list §9f |
 | OBJ-3 | the credit cap is a backstop | **MET live** | 11-16 truncated at the first enabled tick (12,095 recorded ≥ allowance 10,493.7) |
 | OBJ-4 | every switch state checked, both directions | **MET in tests; arm (i) live** | suite 142 passed, every mutant killed (change list §9e). The read-back (arm i) runs on every switch: all six 11-20 switches `ok:true` with the echo matching. Arms (ii)-(iv) and the window alarms have **never fired live**, so their silence is not evidence they work |
 | OBJ-5 | everything already tracked keeps being tracked | **OPEN — criterion registered (rider 3)** | §5; window to 11-27 00:00Z |
 | OBJ-6 | pre-registration amendment before the first capped birth | **MET** | `9fc98626e` (before the 10:37:20Z switch-on), rider `06df4bee5`, rider 2 |
 | OBJ-7 | Kyle's purpose in `B_TOKEN_WATCH_SCOPE.md` §1 | **MET** | `b86ea91fd` |
-| OBJ-8 | exact switch timestamps persisted; the log reproduces each day's on-time fraction | **OPEN — read with OBJ-2** | the log exists and every 11-20 row carries requested and responded times; the reproduction of a day's on-time fraction is computed at the OBJ-2 read |
+| OBJ-8 | exact switch timestamps persisted; the log reproduces each day's on-time fraction | **OPEN — fixed review object ready** | the complete 75-row switch prefix is bound by the OBJ-2 manifest; reproduction of each day's on-time fraction remains the independent adjudication |
 | OBJ-9 | live before the cycle ran dry | **MET** | switch-on 11-16 10:37Z, ahead of the projected ~11-19/20 exhaustion; the cycle has not run dry (11-20 status: 2,804 census vs 2,776 vendor in the first compared window, cumulative leg clean) |
 
 ## 4. The pre-registered close criterion — OBJ-2 (AMENDMENT 18, written before the data)
@@ -53,6 +54,8 @@ The batch built a controller, `token-watch/birthcap.py` (units `token-watch-birt
 > "PASS: every hour's capped share is within ±1.5 percentage points, or within 30 % relative, of its coverage-weighted expected share, whichever is wider. FAIL: any hour outside both."
 
 Reference: `Scope Files/B_TOKEN_WATCH_BIRTH_CAP_OBJ2_REFERENCE.json` (63 uncapped days, 2,423,615 rows, hour-share spread 0.49 pp). Days 11-17 → 11-23. OBJ-8 is read in the same pass: the switch log must reproduce each day's on-time fraction, and a missing entry fails the weight computation loudly.
+
+**Fixed adjudication object:** `/srv/token-watch-review/birthcap-obj2-2026-11-17_2026-11-23`, captured 2026-11-24T02:04:33.827226Z. External manifest SHA-256 receipt: `4ee27c10124a2cb8b95d382c55c74b5c6aad89a8a98684d1fce008de913a9ba9`. The manifest binds 8 files, 71,715 rows and 47,106,018 source bytes; its complete switch prefix is 75 rows / 20,238 bytes. The live exporter returned `DEPLOY_BOUNDARY_PASS files=8`. The object is root-owned, mode 0555, and retained unchanged until Coltrane rules; adjudication and deletion are not yet performed.
 
 ## 5. OBJ-5 — the follow-up read (criterion registered: AMENDMENT 18 rider 3)
 
@@ -73,12 +76,12 @@ My first proposal (observed ÷ due against the 8 runs of 11-15 16:59Z → 11-16 
 
 ## 6. What is unproven
 
-- **OBJ-2 and OBJ-8** — the 7-day read (§4).
+- **OBJ-2 and OBJ-8** — Coltrane's independent adjudication of the fixed 7-day snapshot (§4).
 - **OBJ-5** — the read (§5, rider 3), over the window to 11-27 00:00Z. The `abandoned` leg's zero has no positive control in the record.
 - **The window alarms in live use.** No `divergent`, `frozen`, `backwards`, `reset` or cumulative page has fired live. The first `reset` chance is the 11-27 cycle boundary.
 - **The `adopt` path** — not taken live (§2).
 - **Hour 15Z on 11-20:** 7 vendor events with 0 births just after the 14:58:20Z OFF, probably late-counted deliveries from the closing window. **NOT RE-READ.**
-- **C-2, the reviewer read boundary** is owed before the 11-24 read, so the reviewer can re-derive it without root. Coltrane rejected both live-store ACL forms and approved the separate-snapshot design. The reviewed implementation now copies only the seven closed birth files plus the complete switch-log prefix, pins its reference and analysis code, proves `deploy` can read but cannot change/delete it, and requires the externally retained manifest SHA for deletion. Exact-ref implementation review is pending; no install, snapshot creation or adjudication has occurred (change list §9f).
+- **C-2 adjudication and deletion only.** Coltrane rejected both live-store ACL forms and approved the separate snapshot. Exact-ref implementation review, 4/4 CI, the collision redispatch, the combined install and exactly one snapshot creation are complete. The fixed object and external manifest receipt are recorded in §4 and change list §9f. It remains unchanged; no adjudication or deletion has occurred.
 - **Alert `07eba4b2`** stays open until a measured clean run.
 
 ## 7. Governance files changed (this Step 10)
