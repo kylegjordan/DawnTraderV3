@@ -154,6 +154,8 @@ jobs:
         run: |
           python3 token-watch/tests/test_due_storage.py
           python3 token-watch/tests/mutate_due_storage.py
+          python3 token-watch/tests/test_birthcap_review_export.py
+          python3 token-watch/tests/mutate_birthcap_review_export.py
           python3 token-watch/tests/test_measure_followup_memory.py
           python3 token-watch/tests/test_p2b_memory_fixes.py
           # P2b-2 (B-TOKEN-WATCH-FOLLOWUP-MEMORY): the new walk, identity lookup, prev release and streamed promote read,

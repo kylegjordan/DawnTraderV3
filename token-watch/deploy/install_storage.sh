@@ -56,7 +56,7 @@ CORE="follow_up.py summary.py budget.py promote.py obs_fold.py providers.py birt
 # /opt/token-watch/tools)
 # (Langston, P11 Step 4 C-1: a documented tool the installer never placed cannot be run as documented)
 TOOLS="tools/backfill_consumed_from.py tools/due_census.py tools/census_cold_versions.py tools/drain_closed_journals.py
-tools/backlog_census.py tools/move_followup_cursor.py tools/derive_obs_window.py"
+tools/backlog_census.py tools/move_followup_cursor.py tools/derive_obs_window.py tools/export_birthcap_review.py"
 UNIT_FILES="token-watch-cold-offbox.service token-watch-cold-offbox.timer token-watch-store-watch.service
 token-watch-store-watch.timer token-watch-failed@.service token-watch-tier.service token-watch-receiver.service
 token-watch-followup.service token-watch-summary.service token-watch-feed-watch.service token-watch-feed-watch.timer
@@ -137,7 +137,6 @@ for f in $ALL; do python3 -m py_compile "$stage/$f" || fail "$f does not compile
 #    and the modules that check it at import, against the staged tree, under a throwaway root.
 ( cd "$stage" && TOKEN_WATCH_ROOT="$stage/importcheck" python3 -c "import config, budget, liveness, birthcap" ) \
   || fail "the staged tree does not import (a module-level assert in config/budget/liveness/birthcap failed)"
-
 # ── 3. install ──────────────────────────────────────────────────────────────
 install -d -o root -g root -m 0755 "$DEST/ops" "$DEST/tools"
 for f in $ALL; do install -o root -g root -m 0644 "$stage/$f" "$DEST/$f"; done
@@ -146,7 +145,6 @@ systemctl daemon-reload
 for u in token-watch-cold-offbox.service token-watch-store-watch.service token-watch-feed-watch.service token-watch-followup.service token-watch-summary.service token-watch-birthcap.service; do   # a template cannot be verified bare
   systemd-analyze verify "$UNITS/$u" || fail "systemd-analyze rejects $u — files are in place but NOT recorded: INSTALLED still names $PREV, so the next run's guard will report every changed file as edited on the box. Fix the unit and re-run this sha, or restore the files from $PREV"
 done
-
 # ── 4. the record, last ─────────────────────────────────────────────────────
 record="{\"sha\":\"$SHA\",\"previous_sha\":\"$PREV\",\"actor_declared\":\"$ACTOR_DECLARED\",\"actor_transport\":\"$ACTOR_TRANSPORT\",\"installed_at\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"files\":{"
 sep=""
