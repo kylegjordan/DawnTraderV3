@@ -74,8 +74,8 @@ by hand: its PASS is the install's verification** (before the setter the env fil
 
 ## Accounts
 - `dtapi` — system account, shell `/usr/sbin/nologin` (sudo runs dt-api directly, never a shell).
-- `dtsql` (B-DB-READONLY-ROLE) — system account, shell `/usr/sbin/nologin`, no usable password (`*` or locked `!`). It alone
-  reads `/etc/dt-sql/reader.env`, and is reached only through `sudoers-dtsql`'s two calls
+- `dtsql` (B-DB-READONLY-ROLE) — system account, shell `/usr/sbin/nologin`, no usable password (`*` or locked `!`). Among
+  non-root accounts it alone reads `/etc/dt-sql/reader.env`; `deploy` cannot, while root remains able. It is reached only through `sudoers-dtsql`'s two calls
   (`dt-sql-login` with no arguments, or with `--csv`); dt-sql makes that call. Recovery, re-keying and
   unlocking: `1-system-manual/DT_SQL_RUNBOOK.md`.
 - `dtmint` — shell **`/bin/sh`** (a `nologin` shell would break the forced command), password
