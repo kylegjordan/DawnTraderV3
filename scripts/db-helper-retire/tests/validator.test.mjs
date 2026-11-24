@@ -96,4 +96,20 @@ for (const [name, source] of namespaceMutants) {
   }
 }
 
+const amrPath = resolve(REPO, 'scripts/b5-amr-correctness-audit.ts');
+const amrOriginal = await readFile(amrPath, 'utf8');
+const amrMutants = [
+  ['approved API route removed', amrOriginal.replace("'/usr/local/bin/dt-api'", "'/usr/local/bin/not-dt-api'"), /approved dt-api account/],
+  ['caller-held login restored', `${amrOriginal}\n// /api/auth/login testuser123 SecurePass123! Authorization: Bearer \${token}\n`, /caller-held credential/],
+];
+for (const [name, source, expected] of amrMutants) {
+  try {
+    await writeFile(amrPath, source);
+    const result = spawnSync(process.execPath, [VALIDATOR], { cwd: REPO, encoding: 'utf8' });
+    check(result.status !== 0 && expected.test(`${result.stdout}\n${result.stderr}`), `${name} turns the full validator red`);
+  } finally {
+    await writeFile(amrPath, amrOriginal);
+  }
+}
+
 console.log(`B-DB-HELPER-RETIRE mutations: ${checks} checks passed`);

@@ -287,6 +287,9 @@ async function main() {
   const amr = await readFile(resolve(REPO, 'scripts/b5-amr-correctness-audit.ts'), 'utf8');
   assert(!/import\(['"]pg['"]\)|\bDATABASE_URL\b|new\s+pg(?:\.default)?\.Client/.test(failClosedSourceText('scripts/b5-amr-correctness-audit.ts', amr)), 'AMR audit still has a direct application login');
   assert(amr.includes('/usr/local/bin/dt-sql') && amr.includes('current_user') && amr.includes('dt_reader'), 'AMR audit does not prove dt_reader');
+  assert(!/\/api\/auth\/login|testuser123|SecurePass123!|Authorization\s*:|Bearer\s+\$\{/.test(amr), 'AMR audit still carries a direct API login or caller-held credential');
+  assert(amr.includes("execFileSync('/usr/bin/sudo'") && amr.includes("'-n', '-u', 'dtapi', '/usr/local/bin/dt-api', 'GET', p"), 'AMR audit does not route API reads through the approved dt-api account');
+  assert(amr.includes("dtApiGet('/api/diagnostics/amr/audit-dump')") && amr.includes("dtApiGet('/api/diagnostics/amr/current')"), 'AMR audit diagnostics do not use the approved dt-api route');
   const pkg = JSON.parse(await readFile(resolve(REPO, 'package.json'), 'utf8'));
   assert(!('b-phase-a2:backfill' in pkg.scripts), 'stale phase-A2 package command remains');
   assert.equal(pkg.scripts['b-xstock-feed-sanity:recut'], 'tsx scripts/xstock-hollow-recut.ts', 'owner-held recut command changed');

@@ -19,7 +19,8 @@
  * WITHOUT a floor constant (null → skip + note), so MIN_CLASS_VOTE_PAIRS
  * needs no copy here.
  *
- * Run on staging (has .env DATABASE_URL + localhost:5000):
+ * Run on staging as deploy (API reads route through dt-api; database reads
+ * route through dt-sql/dt_reader):
  *   ssh root@188.245.193.8 "su - deploy -c 'cd /home/deploy/dawntrader && npx tsx scripts/b5-amr-correctness-audit.ts'"
  *
  * DISPOSITION: offline diagnostic. Zero writes. Safe to re-invoke (rule-13
@@ -31,7 +32,6 @@ import { execFileSync } from 'node:child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
-const BASE = 'http://localhost:5000';
 const EPS = 1e-6;
 
 type Verdict = { leg: string; klass: string; bar: string; n: number; maxDev: number | string; pass: boolean | null; note?: string };
@@ -42,17 +42,15 @@ function record(v: Verdict) {
   console.log(`[${status}] ${v.leg} (${v.klass}) bar=${v.bar} n=${v.n} maxDev=${v.maxDev}${v.note ? ' — ' + v.note : ''}`);
 }
 
-async function login(): Promise<string> {
-  const r = await fetch(`${BASE}/api/auth/login`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username: 'testuser123', password: 'SecurePass123!' }),
+function dtApiGet(p: string): any {
+  const output = execFileSync('/usr/bin/sudo', [
+    '-n', '-u', 'dtapi', '/usr/local/bin/dt-api', 'GET', p,
+  ], {
+    encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024,
+    stdio: ['ignore', 'pipe', 'pipe'],
   });
-  return (await r.json() as any).accessToken;
-}
-
-async function authedGet(token: string, p: string): Promise<any> {
-  const r = await fetch(`${BASE}${p}`, { headers: { Authorization: `Bearer ${token}` } });
-  return r.json();
+  return JSON.parse(output);
 }
 
 // ── Independent recompute implementations (from documented formulas) ─────────
@@ -114,9 +112,8 @@ function dtSqlRows(sql: string): string[][] {
 
 async function main() {
   console.log(`\n=== B-5 Obj-15a correctness audit — ${new Date().toISOString()} ===\n`);
-  const token = await login();
-  const dump = await authedGet(token, '/api/diagnostics/amr/audit-dump');
-  const current = await authedGet(token, '/api/diagnostics/amr/current');
+  const dump = dtApiGet('/api/diagnostics/amr/audit-dump');
+  const current = dtApiGet('/api/diagnostics/amr/current');
   if (!dump.ok) throw new Error('audit-dump endpoint returned not-ok: ' + JSON.stringify(dump));
 
   for (const klass of ['crypto_spot', 'xstock_spot'] as const) {
@@ -250,7 +247,7 @@ async function main() {
         let sysZ = md[s.mdKey];
         if (typeof sysZ === 'number' && Math.abs(myZ - sysZ) > EPS) {
           // possible persist/cycle skew — re-pull once and retry
-          const fresh = await authedGet(token, '/api/diagnostics/amr/current');
+          const fresh = dtApiGet('/api/diagnostics/amr/current');
           md = fresh?.byClass?.xstock_spot?.report?.inputs?.macroDetail ?? md;
           sysZ = md[s.mdKey];
         }
