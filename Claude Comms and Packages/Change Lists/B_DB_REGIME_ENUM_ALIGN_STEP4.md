@@ -262,3 +262,13 @@ diff, not from the matrix verdict alone. The Delivery Board reads Governance, Re
 Langston's memory replaced a closed-batch mechanics line with the durable #1263 result through
 `langston-memory-write`; its loaded set decreased from 139,298 to 139,272 bytes against the 143,856-byte ceiling,
 with reviewer-ledger and retraction counts unchanged.
+
+## 13. STEP 11 KD-119 — NO-DELETE HOLD + PROVENANCE REVIEW (2026-11-24)
+
+Kyle's KD-119 supersedes the earlier delete-all placement proposal. All twelve dormant rows are under a
+no-delete hold; Kyle has approved neither deletion nor a pre-live rebuild. The required original-directive,
+commit, runtime, data-continuity, future-ML and plan census is in
+`B_DB_REGIME_ENUM_ALIGN_KD119_PROVENANCE.md`. It distinguishes the active module-level state rehydrator
+from the dead class SQL method, measures the durable corpus versus restart loss, and gives Coltrane a
+row-by-row RETAIN / ISOLATE / REPAIR / DELETE recommendation. Step 11 remains open until Coltrane returns
+the technical disposition; no cleanup or reconnect is authorized by this record.
