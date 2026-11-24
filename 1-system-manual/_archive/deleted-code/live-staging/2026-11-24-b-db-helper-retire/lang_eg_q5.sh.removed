@@ -1,0 +1,23 @@
+cd /home/deploy/dawntrader
+export $(grep -E '^DATABASE_URL=' .env | head -1)
+psql "$DATABASE_URL" -A -F'|' <<'SQL'
+set statement_timeout = '300s';
+\echo == xstock fill_policy rows in window: reasons + keys ==
+select gate_decision->>'reason' reason, count(*) n
+from signal_eval_archive
+where captured_at >= '2026-11-13T21:03:55Z' and captured_at < '2026-11-14T21:04:00Z'
+  and asset_class='xstock_spot' and gate_decision->>'gate'='fill_policy'
+group by 1 order by n desc limit 15;
+\echo == one sample row, full gate_decision ==
+select captured_at, symbol, source, gate_decision::text
+from signal_eval_archive
+where captured_at >= '2026-11-13T21:03:55Z' and captured_at < '2026-11-14T21:04:00Z'
+  and asset_class='xstock_spot' and gate_decision->>'gate'='fill_policy'
+order by captured_at desc limit 2;
+\echo == any row in window with chosenMode taker, any class ==
+select asset_class, gate_decision->>'gate' g, count(*) n
+from signal_eval_archive
+where captured_at >= '2026-11-13T21:03:55Z' and captured_at < '2026-11-14T21:04:00Z'
+  and gate_decision::text ilike '%taker%'
+group by 1,2 order by n desc limit 15;
+SQL

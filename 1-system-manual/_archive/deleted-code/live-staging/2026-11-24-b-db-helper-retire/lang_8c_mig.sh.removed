@@ -1,0 +1,11 @@
+cd /home/deploy/dawntrader
+export $(grep -E '^DATABASE_URL=' .env | head -1)
+psql "$DATABASE_URL" -A -F'|' <<'SQL'
+\echo == schema_migrations rows naming 8c / price-side ==
+select name, applied_at from schema_migrations where name like '%8c%' or name like '%price-side%' order by applied_at;
+\echo == module_constants level_basis rows (all asset classes) ==
+select module_name, constant_name, asset_class, exchange, strategy, regime, value, updated_at, updated_by
+from module_constants where module_name='level_basis' order by constant_name, asset_class;
+\echo == POSITIVE CONTROL: a module_constants module that definitely exists ==
+select count(*) from module_constants where module_name='expectancy_kernel';
+SQL

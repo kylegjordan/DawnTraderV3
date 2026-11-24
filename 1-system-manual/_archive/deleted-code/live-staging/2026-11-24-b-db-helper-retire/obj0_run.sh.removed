@@ -1,0 +1,26 @@
+#!/bin/bash
+# OBJ-0 bid-drop discriminator, full retention, off-hours (+ the 19:30-20:00 run-in so the close boundary keeps its previous snap).
+cd /home/deploy/dawntrader && set -a && . ./.env && set +a
+OUT=/home/deploy/obj0_bid_drop.csv
+echo "day,utc_bucket,snaps,symbols,bid_drops,symbols_with_drop,wide_snaps" > $OUT
+for d in $(seq 0 30); do
+  day=$(date -u -d "2026-08-03 +$d days" +%F); tbl="xstock_spot_ticker_snap_$(echo $day | tr - _)"
+  psql "$DATABASE_URL" -X -A -t -F, -c "set statement_timeout='900s';" -c "
+with s as (
+  select symbol, captured_at, bid, ask,
+         lag(bid) over (partition by symbol order by captured_at) as pbid,
+         lag(ask) over (partition by symbol order by captured_at) as pask,
+         lag(captured_at) over (partition by symbol order by captured_at) as pts
+  from $tbl where bid > 0 and ask > 0 and (captured_at::time < '13:45' or captured_at::time >= '19:30')
+), ev as (
+  select symbol, captured_at,
+         (pbid > 0 and pask > 0 and captured_at - pts <= interval '5 minutes' and bid <= pbid*0.90 and abs(ask-pask)/pask < 0.02) as bid_drop,
+         ((ask-bid)/((ask+bid)/2) > 0.20) as wide
+  from s
+)
+select '$day', to_char(date_trunc('hour', captured_at) + (floor(extract(minute from captured_at)/15)*15) * interval '1 minute', 'HH24:MI'),
+       count(*), count(distinct symbol), count(*) filter (where bid_drop), count(distinct symbol) filter (where bid_drop), count(*) filter (where wide)
+from ev group by 1,2 order by 2;" >> $OUT 2>>/home/deploy/obj0_bid_drop.err
+  echo "$(date -u +%FT%TZ) done $day" >> /home/deploy/obj0_bid_drop.log
+done
+echo "$(date -u +%FT%TZ) ALL DONE" >> /home/deploy/obj0_bid_drop.log

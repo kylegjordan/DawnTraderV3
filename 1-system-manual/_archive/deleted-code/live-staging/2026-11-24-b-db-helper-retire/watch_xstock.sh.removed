@@ -1,0 +1,18 @@
+#!/bin/bash
+# Post-reopen watch on the 4 xStock straddlers (TSM/MU/VZ/BMNR).
+# Exits (and thereby notifies CC-B) the moment the open count drops or a fresh
+# equities mark starts driving evaluation — whichever happens first.
+cd /home/deploy/dawntrader
+set -a && . ./.env && set +a
+BASE=$(psql "$DATABASE_URL" -t -A -c "SELECT count(*) FROM active_open_positions WHERE asset_class='xstock_spot';")
+echo "START xstock open count = $BASE"
+for i in $(seq 1 110); do
+  N=$(psql "$DATABASE_URL" -t -A -c "SELECT count(*) FROM active_open_positions WHERE asset_class='xstock_spot';")
+  if [ "$N" != "$BASE" ]; then
+    echo "CHANGE: xstock open count $BASE -> $N at $(date -u +%H:%M:%S)UTC"
+    psql "$DATABASE_URL" -c "SELECT symbol, close_reason, round(entry_price::numeric,4) AS entry, round(exit_price::numeric,4) AS exit, round(stop_loss::numeric,4) AS stop, round((intended_entry_price + gross_pnl/quantity)::numeric,4) AS monitor_saw, round(net_pnl::numeric,3) AS net FROM closed_trades WHERE asset_class='xstock_spot' ORDER BY closed_at DESC LIMIT 4;"
+    exit 0
+  fi
+  sleep 30
+done
+echo "NO CHANGE after 55 min - all $BASE xstock positions still open"

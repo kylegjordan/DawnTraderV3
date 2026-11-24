@@ -27,6 +27,7 @@
  */
 
 import { GLOBAL_DBS_MAX_PAIR_WEIGHT_PCT } from '../server/types/directional-bias.types.js';
+import { execFileSync } from 'node:child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -100,6 +101,15 @@ function frictionOfSample(spread: number, slippage: number, fee: number): number
 
 function stats(devs: number[]) {
   return devs.length ? Math.max(...devs) : 0;
+}
+
+function dtSqlRows(sql: string): string[][] {
+  const output = execFileSync('/usr/local/bin/dt-sql', ['-c', sql], {
+    encoding: 'utf8',
+    maxBuffer: 1024 * 1024,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  return output.trim() ? output.trim().split(/\r?\n/).map((line) => line.split('|')) : [];
 }
 
 async function main() {
@@ -262,23 +272,22 @@ async function main() {
 
   // ── Side-probe (b): governance_modes wildcard-aggressive row presence ────
   try {
-    const pg = await import('pg');
-    const dburl = process.env.DATABASE_URL ?? (fs.existsSync('.env') ? (fs.readFileSync('.env', 'utf-8').match(/^DATABASE_URL=(.+)$/m)?.[1] ?? '') : '');
-    if (!dburl) {
-      record({ leg: 'probe_wildcard_aggressive_rows', klass: 'db', bar: 'inventory', n: 0, maxDev: 'n/a', pass: null, note: 'no DATABASE_URL' });
-    } else {
-      const client = new pg.default.Client({ connectionString: dburl });
-      await client.connect();
-      const r = await client.query(
-        `SELECT asset_class, constant_name FROM module_constants
-         WHERE module_name = 'governance_modes' AND constant_name LIKE 'aggressive%' ORDER BY asset_class, constant_name`);
-      const wildcardRows = r.rows.filter((row: any) => row.asset_class === '*');
-      console.log(`   governance_modes aggressive rows: ${r.rows.map((x: any) => x.asset_class + '/' + x.constant_name).join(', ') || 'NONE'}`);
-      // B-5 contract: AGGRESSIVE exists per-class ONLY — a wildcard aggressive row would
-      // resurrect class-less access. Presence = probe FAIL (design violation), absence = PASS.
-      record({ leg: 'probe_wildcard_aggressive_rows', klass: 'db', bar: 'zero wildcard rows', n: r.rows.length, maxDev: wildcardRows.length, pass: wildcardRows.length === 0 });
-      await client.end();
-    }
+    const rows = dtSqlRows(`
+      SELECT current_user, ''::text AS asset_class, ''::text AS constant_name
+      UNION ALL
+      SELECT current_user, asset_class, constant_name
+      FROM module_constants
+      WHERE module_name = 'governance_modes' AND constant_name LIKE 'aggressive%'
+      ORDER BY 2, 3`);
+    const role = rows[0]?.[0];
+    if (role !== 'dt_reader') throw new Error(`dt-sql returned current_user=${role ?? 'missing'}, wanted dt_reader`);
+    const data = rows.slice(1).map((row) => ({ asset_class: row[1], constant_name: row[2] }));
+    const wildcardRows = data.filter((row) => row.asset_class === '*');
+    console.log(`   database role: ${role}`);
+    console.log(`   governance_modes aggressive rows: ${data.map((x) => x.asset_class + '/' + x.constant_name).join(', ') || 'NONE'}`);
+    // B-5 contract: AGGRESSIVE exists per-class ONLY — a wildcard aggressive row would
+    // resurrect class-less access. Presence = probe FAIL (design violation), absence = PASS.
+    record({ leg: 'probe_wildcard_aggressive_rows', klass: 'db', bar: 'zero wildcard rows', n: data.length, maxDev: wildcardRows.length, pass: wildcardRows.length === 0 });
   } catch (e: any) {
     record({ leg: 'probe_wildcard_aggressive_rows', klass: 'db', bar: 'inventory', n: 0, maxDev: 'n/a', pass: null, note: 'probe errored: ' + e.message });
   }

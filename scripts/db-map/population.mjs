@@ -45,6 +45,7 @@ export function enumeratePopulation(repo, ref) {
   for (const row of rows) {
     let classifier = namedCodePath(row.path) ? 'suffix' : null;
     if (row.path === 'Dockerfile') classifier = 'root_dockerfile';
+    if (row.path === 'package.json') classifier = 'root_package_json';
     if (!classifier && !extname(row.path)) {
       const head = git(repo, ['cat-file', 'blob', row.oid], { binary: true }).subarray(0, 2).toString();
       if (head === '#!') classifier = 'shebang';

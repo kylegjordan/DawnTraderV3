@@ -1,0 +1,45 @@
+cd /home/deploy/dawntrader
+export $(grep -E '^DATABASE_URL=' .env | head -1)
+psql "$DATABASE_URL" -A -F'|' <<'SQL'
+\echo == A3 population total, with/without plan-above-stop filter ==
+select count(*) all_rows,
+       count(*) filter (where entry_decision_price > stop_loss) plan_above_stop,
+       count(*) filter (where not (entry_decision_price > stop_loss)) plan_not_above_stop,
+       count(*) filter (where entry_decision_price is null) decision_null
+from closed_trades
+where mode='paper' and closed_at is not null and opened_at >= '2026-10-20'
+  and entry_price_producer='xstock_ticker_snap_walk';
+\echo == per strategy: side of fill vs plan ==
+select strategy, count(*) n,
+  count(*) filter (where entry_price < entry_decision_price) below,
+  count(*) filter (where entry_price = entry_decision_price) at_plan,
+  count(*) filter (where entry_price > entry_decision_price) above,
+  round(avg(case when entry_price < entry_decision_price then (entry_decision_price-stop_loss)/nullif(entry_decision_price-stop_loss,0) end),4) dummy
+from closed_trades
+where mode='paper' and closed_at is not null and opened_at >= '2026-10-20'
+  and entry_price_producer='xstock_ticker_snap_walk' and entry_decision_price > stop_loss
+group by 1 order by 2 desc;
+\echo == A11: fill-relative vs plan-relative stop under 0.3 pct ==
+select
+  count(*) n,
+  count(*) filter (where abs(entry_price-stop_loss)/entry_price < 0.003) fill_rel_under,
+  count(*) filter (where abs(entry_decision_price-stop_loss)/entry_decision_price < 0.003) plan_rel_under
+from closed_trades
+where mode='paper' and closed_at is not null and opened_at >= '2026-10-20'
+  and entry_price_producer='xstock_ticker_snap_walk' and entry_decision_price > stop_loss;
+\echo == A11 rows: exit reason + pnl ==
+select exit_reason, count(*) n, round(sum(coalesce(reconstructed_net_pnl,pnl))::numeric,4) sum_pnl,
+       round(min(abs(entry_price-stop_loss)/entry_price)::numeric,6) min_frac,
+       round(max(abs(entry_price-stop_loss)/entry_price)::numeric,6) max_frac
+from closed_trades
+where mode='paper' and closed_at is not null and opened_at >= '2026-10-20'
+  and entry_price_producer='xstock_ticker_snap_walk' and entry_decision_price > stop_loss
+  and abs(entry_price-stop_loss)/entry_price < 0.003
+group by 1 order by 2 desc;
+\echo == A11 rows by strategy ==
+select strategy, count(*) n from closed_trades
+where mode='paper' and closed_at is not null and opened_at >= '2026-10-20'
+  and entry_price_producer='xstock_ticker_snap_walk' and entry_decision_price > stop_loss
+  and abs(entry_price-stop_loss)/entry_price < 0.003
+group by 1 order by 2 desc;
+SQL

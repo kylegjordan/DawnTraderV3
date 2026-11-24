@@ -1,0 +1,20 @@
+const { Pool } = require('pg');
+const p = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
+(async () => {
+  try {
+    // tables that look like VTS / sim trades
+    const t = await p.query(`SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND (table_name LIKE '%vts%' OR table_name LIKE '%sim_trade%' OR table_name LIKE '%virtual%') ORDER BY table_name`);
+    console.log('TABLES:', t.rows.map(r=>r.table_name).join(', '));
+    // try vts_open_trades count + recent closes if it exists
+    for (const tbl of ['vts_open_trades','paper_sim_trades']) {
+      try {
+        const c = await p.query(`SELECT count(*) FROM ${tbl}`);
+        console.log(`${tbl} total rows: ${c.rows[0].count}`);
+        // recent by day if a created/opened timestamp exists
+        const cols = await p.query(`SELECT column_name FROM information_schema.columns WHERE table_name='${tbl}' AND data_type LIKE '%timestamp%'`);
+        console.log(`  ${tbl} ts cols: ${cols.rows.map(r=>r.column_name).join(', ')}`);
+      } catch(e){ console.log(`${tbl}: ${e.message.slice(0,60)}`); }
+    }
+    process.exit(0);
+  } catch(e){ console.error('ERR:'+e.message); process.exit(1); }
+})();

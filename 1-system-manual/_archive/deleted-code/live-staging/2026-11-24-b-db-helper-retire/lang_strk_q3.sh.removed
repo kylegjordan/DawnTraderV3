@@ -1,0 +1,32 @@
+cd /home/deploy/dawntrader
+export $(grep -E '^DATABASE_URL=' .env | head -1)
+psql "$DATABASE_URL" -A -F'|' <<'SQL'
+\echo == 1. the pair state (read, not carried) ==
+select id, closed, opened_at, closed_at, stop_loss, take_profit, entry_price
+from vts_open_trades where symbol='STRK/USD' and closed=false order by opened_at desc;
+\echo == 2. STRK snaps since mint 19:56:57Z ==
+select count(*) snaps,
+       min(bid) min_bid, max(bid) max_bid, min(ask) min_ask,
+       count(*) filter (where bid <= 68.44530375) bid_at_or_below_stop,
+       count(*) filter (where (ask-bid)/((ask+bid)/2.0) <= 0.0107) inside_spread_ceiling,
+       count(*) filter (where bid > ask) crossed,
+       count(*) filter (where bid = ask) bid_eq_ask,
+       min(captured_at) first_snap, max(captured_at) last_snap
+from xstock_spot_ticker_snap where symbol='STRK/USD' and captured_at >= '2026-11-06 19:56:57Z';
+\echo == 3. STRK blindness over the 15s floor, same window ==
+with s as (select captured_at, lag(captured_at) over (order by captured_at) prev
+           from xstock_spot_ticker_snap where symbol='STRK/USD' and captured_at >= '2026-11-06 19:56:57Z')
+select count(*) gaps,
+       round(max(extract(epoch from captured_at-prev))::numeric,1) max_gap_s,
+       round(sum(greatest(extract(epoch from captured_at-prev)-15,0))::numeric,1) blind_s_over_15,
+       round(sum(extract(epoch from captured_at-prev))::numeric,1) span_s
+from s where prev is not null;
+\echo == 4. POSITIVE CONTROL SPY/USD same window ==
+select count(*) snaps,
+       count(*) filter (where (ask-bid)/((ask+bid)/2.0) <= 0.0107) inside_spread_ceiling,
+       min(captured_at) first_snap, max(captured_at) last_snap
+from xstock_spot_ticker_snap where symbol='SPY/USD' and captured_at >= '2026-11-06 19:56:57Z';
+\echo == 5. latest 8 STRK snaps verbatim ==
+select captured_at, bid, ask, round((((ask-bid)/((ask+bid)/2.0))*100)::numeric,4) spread_pct
+from xstock_spot_ticker_snap where symbol='STRK/USD' order by captured_at desc limit 8;
+SQL

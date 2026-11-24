@@ -1,0 +1,9 @@
+cd /home/deploy/dawntrader
+export $(grep -E '^DATABASE_URL=' .env | head -1)
+psql "$DATABASE_URL" -A -F'|' <<'SQL'
+set statement_timeout = '280s';
+\echo == rtb_shadow_pairings by asset_class, all time ==
+select asset_class, count(*) n, min(created_at) first, max(created_at) last from rtb_shadow_pairings group by 1 order by n desc;
+\echo == rtb trace table? list rtb% tables ==
+select table_name from information_schema.tables where table_name like 'rtb%';
+SQL

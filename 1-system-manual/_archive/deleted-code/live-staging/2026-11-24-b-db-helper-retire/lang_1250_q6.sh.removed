@@ -1,0 +1,13 @@
+cd /home/deploy/dawntrader
+export $(grep -E '^DATABASE_URL=' .env | head -1)
+psql "$DATABASE_URL" -A -F'|' <<'SQL'
+select count(*) n,
+  count(*) filter (where avg_price < entry_decision_price) below,
+  count(*) filter (where abs(avg_price-stop_loss)/avg_price < 0.003) fill_rel_under_floor,
+  count(*) filter (where entry_decision_price is null) dec_null
+from active_open_positions
+where mode='paper' and asset_class='xstock_spot' and entry_price_producer='xstock_ticker_snap_walk';
+\echo == by strategy ==
+select strategy_name, count(*) n from active_open_positions
+where mode='paper' and asset_class='xstock_spot' and entry_price_producer='xstock_ticker_snap_walk' group by 1 order by 2 desc;
+SQL

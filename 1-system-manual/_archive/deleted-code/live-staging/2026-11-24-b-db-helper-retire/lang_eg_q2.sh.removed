@@ -1,0 +1,14 @@
+cd /home/deploy/dawntrader
+export $(grep -E '^DATABASE_URL=' .env | head -1)
+psql "$DATABASE_URL" -A -F'|' <<'SQL'
+\echo == EVERY row whose constant_name mentions fill policy or maker (no narrow filter) ==
+select module_name,exchange,asset_class,strategy,regime,constant_name,value::text,updated_at,updated_by
+from module_constants
+where constant_name ilike '%fill_policy%' or constant_name ilike '%maker%' or module_name ilike '%maker%'
+order by module_name,constant_name,asset_class,strategy,regime;
+\echo == positive control: count all module_constants rows ==
+select count(*) from module_constants;
+\echo == all entry_gate module rows ==
+select module_name,exchange,asset_class,strategy,regime,constant_name,value::text,updated_at
+from module_constants where module_name='entry_gate' order by constant_name,asset_class,strategy,regime;
+SQL

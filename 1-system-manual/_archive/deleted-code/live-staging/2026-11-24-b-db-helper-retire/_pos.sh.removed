@@ -1,0 +1,7 @@
+cd /home/deploy/dawntrader
+export $(grep -E '^DATABASE_URL=' .env | head -1)
+echo "=== NOW ==="; psql "$DATABASE_URL" -A -t -c "select now() at time zone 'utc';"
+echo "=== OPEN xStock positions (active path) ==="
+psql "$DATABASE_URL" -A -F'|' -c "select symbol, entry_price, stop_loss, take_profit, entry_time, round(extract(epoch from (now()-entry_time))/3600.0,1) as hrs_held from active_open_positions order by entry_time;" 2>&1 | head -30
+echo "=== latest equity ticks for the 4 alerting symbols ==="
+psql "$DATABASE_URL" -A -F'|' -c "select symbol, max(created_at) as last_tick, round(extract(epoch from (now()-max(created_at)))) as age_s, count(*) filter (where created_at > now() - interval '1 hour') as ticks_1h from xstock_spot_ticker_snap where symbol in ('TER/USD','JCI/USD','AZN/USD','CTVA/USD') group by symbol order by symbol;" 2>&1 | head -20

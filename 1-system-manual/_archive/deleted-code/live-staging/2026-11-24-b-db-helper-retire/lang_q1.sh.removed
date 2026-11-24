@@ -1,0 +1,30 @@
+cd /home/deploy/dawntrader
+export $(grep -E '^DATABASE_URL=' .env | head -1)
+psql "$DATABASE_URL" -A -F'|' <<'SQL'
+\echo == portfolio_state ==
+select mode, balance, anchor_version, last_update from portfolio_state order by mode;
+\echo == anchor events paper ==
+select anchor_version, reason, old_balance, new_balance, occurred_at from portfolio_anchor_events where mode='paper' order by anchor_version;
+\echo == closes since v5 anchor, split by anchor_version_at_open ==
+select coalesce(anchor_version_at_open::text,'NULL') av, count(*) n, round(sum(coalesce(reconstructed_net_pnl,pnl))::numeric,2) sum_pnl
+from closed_trades
+where mode='paper' and closed_at is not null and coalesce(exit_reason,'') <> 'never_filled'
+  and closed_at >= (select occurred_at from portfolio_anchor_events where mode='paper' and anchor_version=5)
+group by 1 order by 1;
+\echo == STRADDLE: opened before v5 anchor, closed after ==
+select count(*) n, round(sum(coalesce(reconstructed_net_pnl,pnl))::numeric,2) sum_pnl, min(opened_at) oldest_open, max(closed_at) last_close
+from closed_trades
+where mode='paper' and closed_at is not null and coalesce(exit_reason,'') <> 'never_filled'
+  and closed_at >= (select occurred_at from portfolio_anchor_events where mode='paper' and anchor_version=5)
+  and opened_at <  (select occurred_at from portfolio_anchor_events where mode='paper' and anchor_version=5);
+\echo == positions still open that predate the v5 anchor ==
+select count(*) n, round(sum(quantity*avg_price)::numeric,2) committed
+from active_open_positions
+where mode='paper' and opened_at < (select occurred_at from portfolio_anchor_events where mode='paper' and anchor_version=5);
+\echo == all open positions now ==
+select asset_class, count(*) n, round(sum(quantity*avg_price)::numeric,2) committed, min(opened_at) oldest from active_open_positions where mode='paper' group by 1;
+\echo == POSITIVE CONTROL: total paper closes since anchor, no av split ==
+select count(*) n, round(sum(coalesce(reconstructed_net_pnl,pnl))::numeric,2) sum_pnl from closed_trades
+where mode='paper' and closed_at is not null and coalesce(exit_reason,'') <> 'never_filled'
+  and closed_at >= (select occurred_at from portfolio_anchor_events where mode='paper' and anchor_version=5);
+SQL

@@ -1,0 +1,5 @@
+const { Pool } = require('pg');
+const p = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
+p.query("SELECT column_name, data_type, numeric_precision, numeric_scale, is_nullable FROM information_schema.columns WHERE table_name='rtb_signals' AND column_name LIKE '%_at_queue' ORDER BY column_name")
+  .then(r => { console.log('COLS:' + JSON.stringify(r.rows)); process.exit(0); })
+  .catch(e => { console.error('ERR:' + e.message); process.exit(1); });

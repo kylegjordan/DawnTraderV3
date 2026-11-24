@@ -24,10 +24,12 @@
  * Recalibrated from the B79 60-minute values to the 15-minute bar substrate.
  * Method: percentile-preserving (each 60m cutoff mapped to the 15m value at its
  * 60m percentile rank), Langston-approved over fixed-ratio scaling, with
- * CALIBRATION-LENS rounding. Study `scripts/b4-regime-recalib-study.ts` over 485
+ * CALIBRATION-LENS rounding. Archived study `1-system-manual/_archive/deleted-code/
+ * b-db-helper-retire/2026-11-24/scripts__b4-regime-recalib-study.ts.removed` over 485
  * symbols / 34 days / 101.8k clean-1m-rebuilt 60m bars + 300.9k 15m bars. At 15m
  * volatility ≈halves and ADX ≈halves (15m bars move less); momentum + |DBS| are
- * near scale-invariant. EXIT-GATE PARITY PASSED (`scripts/b4-regime-parity.ts`,
+ * near scale-invariant. EXIT-GATE PARITY PASSED (archived
+ * `scripts__b4-regime-parity.ts.removed` in the same reviewed archive,
  * `B_4_REGIME_PARITY_REPORT.md`): clean-60m→clean-15m regime mix shifts ≤1.3pp
  * (no STRUCTURAL_TRANSITION collapse — the old 60m cutoffs on 15m would have
  * ballooned ST to 51%; these restore it to 30.7%). Crypto path UNCHANGED

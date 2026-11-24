@@ -1,0 +1,9 @@
+cd /home/deploy/dawntrader
+export $(grep -E '^DATABASE_URL=' .env | head -1)
+echo "=== NOW (utc) ==="; psql "$DATABASE_URL" -A -t -c "select now() at time zone 'utc';"
+echo "=== OPEN positions ==="
+psql "$DATABASE_URL" -A -F'|' -c "select symbol, asset_class, side, avg_price, current_price, stop_loss, take_profit, round(unrealized_pnl_percent::numeric,2) as pnl_pct, round(extract(epoch from (now()-opened_at))/3600.0,1) as hrs, round(extract(epoch from (now()-last_updated))) as upd_age_s, round((abs(current_price-stop_loss)/nullif(current_price,0)*100)::numeric,2) as pct_to_stop from active_open_positions order by asset_class, symbol;"
+echo "=== tick freshness, alerting symbols ==="
+psql "$DATABASE_URL" -A -F'|' -c "select symbol, max(captured_at) as last_tick, round(extract(epoch from (now()-max(captured_at)))) as age_s, count(*) filter (where captured_at > now()-interval '1 hour') as t_1h, count(*) filter (where captured_at > now()-interval '4 hour' and captured_at < now()-interval '3 hour') as t_3to4h_ago from xstock_spot_ticker_snap where symbol in ('TER/USD','JCI/USD','AZN/USD','CTVA/USD','DD/USD','RIVN/USD') group by symbol order by symbol;"
+echo "=== xStock tick volume by hour, last 8h (whole class) ==="
+psql "$DATABASE_URL" -A -F'|' -c "select date_trunc('hour', captured_at) as hr, count(*) as ticks, count(distinct symbol) as syms from xstock_spot_ticker_snap where captured_at > now()-interval '8 hour' group by 1 order by 1;"

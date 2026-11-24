@@ -1,0 +1,10 @@
+cd /home/deploy/dawntrader
+export $(grep -E '^DATABASE_URL=' .env | head -1)
+psql "$DATABASE_URL" -A -F'|' <<'SQL'
+\echo == still-open xstock taker positions, plan vs fill ==
+select count(*) n,
+  count(*) filter (where entry_price < entry_decision_price) below,
+  count(*) filter (where abs(entry_price-stop_loss)/entry_price < 0.003) fill_rel_under_floor
+from active_open_positions
+where mode='paper' and asset_class='xstock_spot' and entry_price_producer='xstock_ticker_snap_walk';
+SQL

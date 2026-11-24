@@ -1,0 +1,23 @@
+cd /home/deploy/dawntrader
+export $(grep -E '^DATABASE_URL=' .env | head -1)
+psql "$DATABASE_URL" -A -F'|' <<'SQL'
+\echo == rtb_signals columns of interest ==
+select column_name from information_schema.columns where table_name='rtb_signals' and column_name in ('asset_class','mode','symbol','last_priced_at','created_at','status');
+\echo == rtb_signals live rows by mode (any class marker?) ==
+select mode, count(*) from rtb_signals group by 1;
+\echo == has an xStock symbol EVER been in rtb_signals? live table, symbol shape ==
+select mode, symbol, count(*) n from rtb_signals group by 1,2 order by n desc limit 20;
+\echo == rtb_shadow_pairings / trace: xstock in RTB history, 30d ==
+select count(*) from information_schema.tables where table_name='rtb_shadow_pairings';
+\echo == signal_eval_archive: window total + gate=sqe + InvalidTarget ==
+select count(*) total from signal_eval_archive where captured_at >= '2026-11-13T21:03:55Z' and captured_at < '2026-11-14T21:04:00Z';
+select count(*) gate_sqe from signal_eval_archive where captured_at >= '2026-11-13T21:03:55Z' and captured_at < '2026-11-14T21:04:00Z' and gate_decision->>'gate' = 'sqe';
+select count(*) invalidtarget_window from signal_eval_archive where captured_at >= '2026-11-13T21:03:55Z' and captured_at < '2026-11-14T21:04:00Z' and gate_decision::text ilike '%InvalidTarget%';
+\echo == POSITIVE CONTROL: gate=sqe in the 7 days BEFORE the window ==
+select to_char(captured_at,'YYYY-MM-DD HH24:MI') t, symbol, asset_class, source, stage, gate_decision->>'reason' reason
+from signal_eval_archive
+where captured_at >= '2026-11-06T21:03:55Z' and captured_at < '2026-11-13T21:03:55Z' and gate_decision->>'gate'='sqe'
+order by captured_at;
+\echo == InvalidTarget ANYWHERE in archive, all time, control ==
+select count(*) from signal_eval_archive where gate_decision::text ilike '%InvalidTarget%';
+SQL

@@ -1,0 +1,17 @@
+cd /home/deploy/dawntrader
+export $(grep -E '^DATABASE_URL=' .env | head -1)
+echo "=== leg2 field presence in state_snapshot, last 7 days, by source/mode ==="
+psql "$DATABASE_URL" -A -F'|' -c "
+select source, mode, count(*) rows,
+ count(*) filter (where state_snapshot ? 'chosen_entry_mode') has_mode,
+ count(*) filter (where state_snapshot ? 'entry_fee_rate') has_fee,
+ count(*) filter (where state_snapshot ? 'maker_limit_price') has_maker,
+ count(*) filter (where state_snapshot ? 'pool_tag') has_pool
+from exit_decision_archive
+where captured_at > now() - interval '7 days'
+group by 1,2 order by 3 desc;"
+echo "=== all-time by source ==="
+psql "$DATABASE_URL" -A -F'|' -c "
+select source, count(*) rows, min(captured_at) first, max(captured_at) last,
+ count(*) filter (where state_snapshot ? 'chosen_entry_mode') has_mode
+from exit_decision_archive group by 1 order by 2 desc;"

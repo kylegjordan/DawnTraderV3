@@ -1,0 +1,23 @@
+cd /home/deploy/dawntrader
+export $(grep -E '^DATABASE_URL=' .env | head -1)
+psql "$DATABASE_URL" -A -F'|' <<'SQL'
+set statement_timeout = '540s';
+\echo == signal_eval_archive columns ==
+select column_name from information_schema.columns where table_name='signal_eval_archive' order by ordinal_position;
+\echo == POSITIVE CONTROL gate=sqe, 7 days before window ==
+select to_char(captured_at,'MM-DD HH24:MI') t, symbol, asset_class, gate_decision->>'reason' reason
+from signal_eval_archive
+where captured_at >= '2026-11-06T21:03:55Z' and captured_at < '2026-11-13T21:03:55Z'
+  and gate_decision->>'gate'='sqe'
+order by captured_at;
+\echo == archive rows in window by asset_class and gate ==
+select asset_class, gate_decision->>'gate' gate, count(*) n
+from signal_eval_archive
+where captured_at >= '2026-11-13T21:03:55Z' and captured_at < '2026-11-14T21:04:00Z'
+group by 1,2 order by n desc limit 25;
+\echo == DOES xStock EVER reach the RTB refresh re-price? gate=rtb_price by class, 30 days ==
+select asset_class, count(*) n, min(captured_at) first, max(captured_at) last
+from signal_eval_archive
+where captured_at >= '2026-10-15T00:00:00Z' and gate_decision->>'gate'='rtb_price'
+group by 1 order by n desc;
+SQL

@@ -1,0 +1,8 @@
+#!/bin/bash
+cd /home/deploy/dawntrader && set -a && . ./.env && set +a
+OUT=/home/deploy/8ap4a_ring_blocks.csv; : > $OUT
+for d in 04 05 06 07 08 09 10 11 12 13 14 15 16 17; do
+psql "$DATABASE_URL" -X -q -c "SET statement_timeout='180s'" -c "COPY (WITH s AS (SELECT symbol, captured_at, bid, ask, (ask-bid)/((ask+bid)/2) sp, row_number() OVER (PARTITION BY symbol ORDER BY captured_at) rn FROM xstock_spot_ticker_snap_2026_09_$d WHERE bid>0 AND ask>0 AND ask>=bid) SELECT symbol, (rn-1)/20 blk, min(captured_at) t0, percentile_cont(0.5) WITHIN GROUP (ORDER BY sp) med, (max(bid)>min(bid) OR max(ask)>min(ask)) moved FROM s GROUP BY symbol, (rn-1)/20 HAVING count(*)=20) TO STDOUT WITH CSV" >> $OUT || echo "FAILED day $d"
+sleep 5
+done
+wc -l $OUT; touch /home/deploy/8ap4a_ring.done

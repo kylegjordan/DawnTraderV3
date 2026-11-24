@@ -1,0 +1,11 @@
+cd /home/deploy/dawntrader
+export $(grep -E '^DATABASE_URL=' .env | head -1)
+psql "$DATABASE_URL" -A -F'|' <<'SQL'
+\echo == crypto RTB rows: stamped vs unstamped (the open-refusal exposure) ==
+select coalesce(metadata->>'levelGeometry','(NO STAMP)') geom, status, count(*) n, min(created_at) oldest, max(created_at) newest
+from rtb_signals
+where asset_class='crypto_spot'
+group by 1,2 order by 1,2;
+\echo == POSITIVE CONTROL: total rtb_signals rows by class ==
+select asset_class, count(*) from rtb_signals group by 1;
+SQL

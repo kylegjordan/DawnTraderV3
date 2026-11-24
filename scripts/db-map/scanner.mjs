@@ -144,16 +144,22 @@ function scanDrizzle(source, file, symbols, catalog, usage, unresolved) {
 }
 
 function helperFacts(file, usage, unresolved) {
+  const executableText = file.text
+    .replace(/\/\*[\s\S]*?\*\//g, (match) => match.replace(/[^\n]/g, ' '))
+    .replace(/^\s*\/\/.*$/gm, '')
+    .replace(/^\s*--.*$/gm, '')
+    .replace(/^\s*#(?!\!).*$/gm, '');
   const patterns = [
-    ['node-postgres Pool', /new\s+(?:pg\.)?Pool\s*\(/],
-    ['node-postgres Client', /new\s+(?:pg\.)?Client\s*\(/],
-    ['psql process', /(?:spawn|execFile|exec|command|run)[^\n]{0,180}\bpsql\b/],
+    ['node-postgres Pool', /new\s+(?:pg(?:\.default)?\.)?Pool\s*\(/],
+    ['node-postgres Client', /new\s+(?:pg(?:\.default)?\.)?Client\s*\(/],
+    ['psql process', /(?:^|[\s"'`;&|({])(?:\/usr\/bin\/|\/usr\/local\/bin\/)?psql(?=$|[\s"'`;&|)])/m],
+    ['dt-sql read', /(?:\/usr\/local\/bin\/)?dt-sql(?!-(?:login|role-setup))\b/],
     ['dt-sql login', /\bdt-sql-login\b/],
     ['python postgres client', /\b(?:psycopg2?|asyncpg)\s*\.\s*connect\s*\(/],
   ];
   const helpers = [];
   for (const [kind, regex] of patterns) {
-    const match = regex.exec(file.text);
+    const match = regex.exec(executableText);
     if (!match) continue;
     const evidence = usage.filter((row) => row.file === file.path);
     const open = unresolved.filter((row) => row.file === file.path

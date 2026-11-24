@@ -1,0 +1,4 @@
+cd /home/deploy/dawntrader
+export $(grep -E '^DATABASE_URL=' .env | head -1)
+psql "$DATABASE_URL" -A -F'|' -c "select string_agg(column_name,', ' order by ordinal_position) from information_schema.columns where table_name='module_constants';"
+psql "$DATABASE_URL" -A -F'|' -c "select * from module_constants where module='data_lifecycle';"

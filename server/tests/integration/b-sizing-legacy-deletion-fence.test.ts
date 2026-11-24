@@ -480,8 +480,8 @@ describe('B-SIZING-DEC-RESTORE — deleted legacy mechanisms must not reappear',
       expect(openerReport().filter((o) => o.closes)).toEqual([]);
     });
 
-    it('POSITIVE CONTROL: the opener detector sees the known in-string "xstock_spot/*" in the geometry-sweep script', () => {
-      expect(openerReport().map((o) => o.file)).toContain('/scripts/b5-w2a-geometry-sweep.ts');
+    it('POSITIVE CONTROL: the opener detector sees an in-string "xstock_spot/*" synthetic control', () => {
+      expect(falseOpeners("const marker = 'xstock_spot/*';\n")).toHaveLength(1);
     });
 
     it('POSITIVE CONTROL: the same scan finds live siblings of what was deleted, so an empty result is not blindness', () => {

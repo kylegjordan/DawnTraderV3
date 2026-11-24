@@ -1,0 +1,17 @@
+cd /home/deploy/dawntrader
+export $(grep -E '^DATABASE_URL=' .env | head -1)
+psql "$DATABASE_URL" -A -F'|' <<'SQL'
+set statement_timeout = '280s';
+\echo == window xstock fill_policy by source ==
+select source, count(*) n from signal_eval_archive
+where captured_at >= '2026-11-13T21:03:55Z' and captured_at < '2026-11-14T21:04:00Z'
+ and asset_class='xstock_spot' and gate_decision->>'gate'='fill_policy' group by 1 order by n desc;
+\echo == 30d: xstock fill_policy, did a TAKER arm EVER win? accepted=true by chosenMode ==
+select gate_decision->>'policy' pol, gate_decision->>'accepted' acc, gate_decision->>'chosenMode' cm, count(*) n
+from signal_eval_archive
+where captured_at >= '2026-10-30T00:00:00Z' and asset_class='xstock_spot' and gate_decision->>'gate'='fill_policy'
+group by 1,2,3 order by n desc limit 15;
+\echo == 30d: rtb_price rows by class and source ==
+select asset_class, source, count(*) n from signal_eval_archive
+where captured_at >= '2026-10-30T00:00:00Z' and gate_decision->>'gate'='rtb_price' group by 1,2 order by n desc;
+SQL

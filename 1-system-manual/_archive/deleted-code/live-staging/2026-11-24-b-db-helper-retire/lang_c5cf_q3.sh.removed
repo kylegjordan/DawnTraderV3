@@ -1,0 +1,5 @@
+cd /home/deploy/dawntrader
+export $(grep -E '^DATABASE_URL=' .env | head -1)
+psql "$DATABASE_URL" -A -F'|' -c "select module_name, exchange, asset_class, strategy, regime, constant_name, value, updated_at, updated_by from module_constants where module_name='data_lifecycle' and (constant_name like '%vts_open_trades%' or constant_name like '%closed_trades%') order by constant_name;"
+echo "--- positive control: count of data_lifecycle rows ---"
+psql "$DATABASE_URL" -A -F'|' -c "select count(*) from module_constants where module_name='data_lifecycle';"

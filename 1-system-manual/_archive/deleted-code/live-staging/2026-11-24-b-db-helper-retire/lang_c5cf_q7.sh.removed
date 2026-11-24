@@ -1,0 +1,18 @@
+cd /home/deploy/dawntrader
+export $(grep -E '^DATABASE_URL=' .env | head -1)
+echo "=== camelCase leg2 keys, last 7d, by source ==="
+psql "$DATABASE_URL" -A -F'|' -c "
+select source, mode, count(*) rows,
+ count(*) filter (where state_snapshot ? 'chosenEntryMode') has_mode,
+ count(*) filter (where state_snapshot ? 'entryFeeRate') has_fee,
+ count(*) filter (where state_snapshot ? 'makerLimitPrice') has_maker,
+ count(*) filter (where state_snapshot ? 'sourcePool') has_pool
+from exit_decision_archive where captured_at > now() - interval '7 days'
+group by 1,2 order by 3 desc;"
+echo "=== all-time same ==="
+psql "$DATABASE_URL" -A -F'|' -c "
+select source, count(*) rows,
+ count(*) filter (where state_snapshot ? 'chosenEntryMode') has_mode,
+ count(*) filter (where state_snapshot ? 'entryFeeRate') has_fee,
+ count(*) filter (where state_snapshot ? 'sourcePool') has_pool
+from exit_decision_archive group by 1 order by 2 desc;"

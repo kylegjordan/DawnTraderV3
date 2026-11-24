@@ -1,0 +1,8 @@
+#!/bin/bash
+set -o pipefail
+cd /home/deploy/dawntrader || { echo "ERR: cd failed"; exit 3; }
+set -a; . ./.env; set +a
+psql "$DATABASE_URL" -t -A -F'|' -f /home/deploy/fg1check.sql
+rc=$?
+[ $rc -ne 0 ] && echo "ERR: psql exit $rc"
+exit $rc
