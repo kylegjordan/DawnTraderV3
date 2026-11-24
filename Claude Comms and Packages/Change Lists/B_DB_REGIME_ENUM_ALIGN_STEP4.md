@@ -152,3 +152,30 @@ The min-ROI table now shows the canonical names. I read `module_constants` (`roi
 ## 8. TESTS
 
 Unit: 9/9 pass locally (the two new files). CI to confirm 4/4 at this ref. tsc at 314 = baseline.
+
+## 9. STEP 9 ITERATION — THE REAL-WRITER PROOF EXPOSED THE SEVEN-COLUMN MIGRATION GAP
+
+The first deployed P11 run at `e3a96a8126f0280a9568bb1823b9210783f0afe0` reached both writer arms and
+normalized `HIGH_VOL_IMPULSE` to `IMPULSE_EXPANSION`, then PostgreSQL refused both inserts because
+`telemetry_history.source` did not exist. Live census: the table had 18 columns while `shared/schema.ts`
+declared 25; the exact missing population was `source`, `global_regime`, `pair_friction`,
+`global_friction`, `pair_directional_bias`, `global_directional_bias`, and `decay_penalty`.
+
+Provenance settles this as a pre-existing migration gap, not a #1263 enum failure. Commit `5bfa63bd18`
+added all seven writer fields on 2026-03-05 without a migration. The persistent-intelligence migration
+still creates 15 columns; the 2026-04-22 baseline adds `pool`, `position_size`, and `size_multiplier` but
+still omits the seven; repo-wide migration census finds no later addition. The canonical five enum values
+are present on staging and the table remains empty.
+
+Step-9 correction:
+
+1. `2026-11-24-b-db-regime-enum-align-telemetry-columns.sql` adds the complete seven-column population,
+   then refuses unless names, types, widths/precision, nullability, and the `source='unknown'` default are
+   exact. Adding only the first failing `source` column is deliberately rejected as a partial fix.
+2. The rollback is forward-only/ledger-only. Dropping the columns would recreate the writer failure on
+   `e3a96a812` and every pre-#1263 app ref since March; all additions are nullable and backward-compatible.
+3. P11 now preflights all seven live column shapes, types `id` as the UUID string it is, and grades
+   `source='vts'` on both real-writer rows in addition to symbol, canonical regime, paper mode and count.
+4. Fresh-reader result: CLEAN on cause and seven-column repair; HIT on any DROP rollback and on using the
+   two inserted rows alone as proof of the six optional columns. The schema preflight is the independent
+   evidence for that complete population.
