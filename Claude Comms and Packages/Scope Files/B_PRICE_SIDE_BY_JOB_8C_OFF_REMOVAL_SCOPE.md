@@ -1,8 +1,8 @@
-# B-PRICE-SIDE-BY-JOB `8c-OFF-REMOVAL` — SCOPE (Step 1) — r1
+# B-PRICE-SIDE-BY-JOB `8c-OFF-REMOVAL` — SCOPE (Step 1) — r2
 
 change-class: sub_batch
 
-> **Step-1 r1 review — CHANGES NEEDED, corrected in r2.** Coltrane accepted the authorization boundary, NO-RESULT/no-stop-trigger record, shared-mid preservation, transition census and code-first/database-second cutover at exact ref `0260d89d2587848daf7d6ecdc2ce9a49e1533a5c`. He found one contradiction in OBJ-5: a zero-literal criterion could not coexist with immutable historical migrations and a required recovery archive. R2 names those non-executable fossils explicitly and makes the fence reject only occurrences outside that allowlist. No implementation is authorised by this correction.
+> **Step-1 ruling — PROCEED.** Coltrane approved r2 at exact ref `8d9755129980a0ce012b697e3c4821a52a54b9db`, Discord 2026-11-24T15:40:50Z. R1's sole blocker was the impossible zero-literal criterion; r2 separates zero production capability from the explicitly allowlisted non-executable fossils and requires positive controls. Step 2 must freeze the exact path allowlist before implementation. The code-first/database-second cutover, transition census, shared-mid preservation, NO-RESULT disposition and authorization boundary are approved; no code, migration, deploy or row deletion was authorised by this ruling.
 
 **Owner:** ANALYST Codex (standing in for ANALYST Claude / CC-C) · **Parent:** `B-PRICE-SIDE-BY-JOB`, plan row 17 / item `8c` · **Authority:** the pre-placed §13 switch-removal duty, after the registered switch-on read · **Current reviewed evidence:** `34fec1121b8127fc987ab85c837cf31e366169e7`.
 
