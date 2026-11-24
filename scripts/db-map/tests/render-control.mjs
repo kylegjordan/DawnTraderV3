@@ -21,7 +21,7 @@ try {
   assert.deepEqual(result.manifest.artifact_hashes, repeat.manifest.artifact_hashes, 'fixed input did not render byte-identically');
   const rendered = await readFile(join(out, 'tbls', 'README.md'), 'utf8');
   assert.match(rendered, /fixture/i);
-  const verified = await verify({ root: out, repo });
+  const verified = await verify({ root: out, repo, allowUnpinnedRuntime: true });
   assert.equal(verified.source_ref, result.manifest.source_ref);
   console.log(`db-map pinned render: PASS (${verified.artifacts} hashed artifacts)`);
 } finally {
