@@ -2,7 +2,7 @@
 
 > Stable governance in `DawnTraderV3/CLAUDE.md`. Hard cap 200 lines / ~24KB.
 
-> **★ YOU ARE ONE OF THREE SESSIONS. READ AND LOAD YOUR OWN FILE.** Claude Old (CC-A) → `MEMORY_CC_A.md`; Claude New (CC-B) → `MEMORY_CC_B.md`; Claude Analyst (CC-C) → `MEMORY_CC_C.md`. **Your own file is AUTO-LOADED for you** on every startup / resume / compaction by the `load-own-memory.mjs` SessionStart hook (it identifies you by your clone folder and injects your file's contents). You still **WRITE working state ONLY to your own file** (both truth-file + `.claude/memory/` mirror). This shared `MEMORY.md` holds ONLY the operational session-start commands + the project-consensus truths both sessions must agree on — the RULES live in `CLAUDE.md`. Optionally read another session's file for cross-visibility.
+> **★ READ YOUR OWN FILE.** Your clone folder selects `MEMORY_CC_A`, `MEMORY_CC_B`, `MEMORY_CC_C`, `MEMORY_CC_INFRA` or `MEMORY_PM`. Write volatile state only there; this shared file holds cross-crew operational truths and `CLAUDE.md` holds the rules.
 
 > **What auto-loads every start/compaction:** (1) `CLAUDE.md` — shared rules; (2) this `MEMORY.md` — shared ops + truths; (3) your own `MEMORY_CC_<X>.md` — via the hook. The eight read-first non-negotiables moved to `CLAUDE.md` §5 (they were all already there — each cited its own rule); read them there.
 
@@ -58,7 +58,7 @@
 
 **★ OPERATOR ALERTS ARE REPEAT-SAFE (`#1255`):** `createAlert` upserts on `unique_global_alert`; an acked row re-opens only after a healthy cycle. The app's table, not the staging queue.
 
-**★ CREW DATABASE READS (`B-DB-READONLY-ROLE`, `#1259`):** only `dt-sql`; it uses database-enforced read-only role `dt_reader`, one verified-TLS attempt and the fail-closed lock. An empty `auth`/`storage` result is not absence: RLS makes 26 such tables read as empty.
+**★ CREW DATABASE READS + MAP (`B-DB-READONLY-ROLE`, `B-DB-MAP`, `#1259`):** only `dt-sql`, using database-enforced `dt_reader`, one verified-TLS attempt and the fail-closed lock. `docs/database-map` is the reviewed whole-database and exact-ref usage map; staging regenerates it weekly and routes drift/failure/staleness to CC-INFRA. RLS-shaped emptiness is not absence, and static-analysis misses stay unresolved rather than being called unused.
 
 **★ TRADE RECORDS (B-CLOSE-WRITER-COSTS, closed 2026-11-14):** a close books against exactly ONE record (symbol + asset class + mode) or refuses and keeps the position (critical `close-record-unresolved-*`); the trade tables carry NO default on cost, class or mode — every writer states them.
 

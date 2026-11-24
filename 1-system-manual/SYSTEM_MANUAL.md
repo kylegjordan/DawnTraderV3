@@ -8642,6 +8642,14 @@ Row-level security is the important read-side limit. On the verified staging pop
 
 `dt-install-drift` checks the installed binaries, accounts, permissions, sudo rules, key pairing and session-refresh installation. Failures page through the unit-failure handler; the failed operation leaves the previous stored sessions untouched. The 2026-10-12 and 2026-10-13 scheduled runs both minted fresh 7-day sessions, and a clean-environment run plus both stored-session checks passed on 2026-10-13.
 
+### Governed Database Map — `B-DB-MAP` (KD-101, 2026-11-24)
+
+The current staging database map lives under `docs/database-map`. One fixed catalog statement runs through `dt-sql` as `dt_reader`; every other step is offline. The generated artifact records every non-system relation and positive-ordinal column, constraints, indexes, partition edges, RLS state, catalog row estimates and physical sizes, plus exact-repository-ref reader, writer, DDL and direct-helper evidence. The map labels row figures as estimates, preserves unknowns rather than turning them into zero, and carries the standing warning that `dt_reader` does not bypass RLS. A static-analysis miss is `none found by scanner`, never `unused`; dynamic or delegated uses remain in the unresolved ledger.
+
+The generator pins Node v20.20.0, TypeScript 5.6.3 and `tbls` 1.97.0. Its manifest binds one immutable source ref to one artifact ref and hashes the complete file population. The structural projection includes catalog structure and repository-use evidence but excludes volatile row and size statistics, so a normal statistics change does not page as schema drift. The reviewed 2026-11-24 baseline contains 697 relations and 11,511 columns; the helper hand-off contains 85 rows across 79 files, each with operation evidence or an explicit unresolved reason.
+
+`dt-db-map-weekly.timer` runs Sunday at 06:30 UTC with up to 10 minutes of randomized delay. It fetches the migration branch, resolves it to a full commit, generates in a private temporary root, verifies both candidate and reviewed baseline, writes a JSON receipt and retains the newest eight. A non-blocking lock records a skip rather than overlapping work. `dt-db-map-stale.timer` runs daily at 07:15 UTC. The four independent alert keys are `db-map:failure`, `db-map:drift`, `db-map:run-stale` (no successful receipt newer than 8 days) and `db-map:baseline-stale` (reviewed extraction older than 35 days); each routes to CC-INFRA and resolves only on its named clean condition. Generation never auto-commits, pushes, deploys or restarts the application. The installation and pinned runtimes are watched by `dt-install-drift`.
+
 ---
 
 ## 4. Middleware Stack
