@@ -3847,7 +3847,7 @@ Every validation result is logged via `provenanceLogger.logLineage()` with full 
 **File**: `server/core/risk/dynamic-sizing-engine.ts` (Directive 11.3)
 **Export**: `computeDynamicSize(input)`, plus diagnostics getters
 
-> **Status (B-DB-REGIME-ENUM-ALIGN, #1263, read 2026-11-22):** `computeDynamicSize` has **zero production callers** — `routes/dse.ts` imports only the diagnostics getters, and `core/risk/index.ts` re-exports into a barrel nothing imports. The formula below describes code that does not size any trade today. It is also the only route to `loadAdaptiveWeights` (§11 Adaptive Learning Repository). #1263 changed it for types only; whether to delete or reconnect it is a proposal on Kyle's list, not decided here.
+> **Status (B-DB-REGIME-ENUM-ALIGN, #1263, KD-119 review 2026-11-24):** `computeDynamicSize` has **zero production callers** — `routes/dse.ts` imports only diagnostics getters, and `core/risk/index.ts` re-exports into a barrel nothing imports. The formula below describes a January prototype that does not size any trade today and is not the future M3 sizing system. Coltrane approved DELETE after hold/placement for the DSE engine, barrel, diagnostics routes/tests, multiplier and adaptive-weight feeder; nothing was deleted or reconnected in this batch.
 
 ### Core Formula
 
@@ -6838,7 +6838,7 @@ Backs the 48h verify-gate alert `1f34cf84-a37c-425c-a1c4-54924b053061` (triggers
 
 **File**: `server/services/adaptive-learning-repository.ts` (~170+ lines)
 **Directive**: 11.1B
-**Status**: Active as code; **no production caller writes or reads it** (B-DB-REGIME-ENUM-ALIGN, #1263, read 2026-11-22). `persistAdaptiveLearning`, `saveAdaptiveWeightsBatch` and `getAdaptiveLearningStats` have no callers; `loadAdaptiveWeights` is reached only through `computeDynamicSize`, which has none (§8 DSE). The `adaptive_learning` table therefore receives no rows. #1263 changed its regime type only; delete-or-reconnect is a proposal on Kyle's list.
+**Status**: Present as dormant code; **no production caller writes or reads it** (B-DB-REGIME-ENUM-ALIGN, #1263, KD-119 review 2026-11-24). `persistAdaptiveLearning`, `saveAdaptiveWeightsBatch` and `getAdaptiveLearningStats` have no callers; `loadAdaptiveWeights` is reached only through dormant `computeDynamicSize` (§8 DSE). The `adaptive_learning` table has zero rows. Coltrane approved DELETE after hold/placement for this old limb; the future Feature Store/model system is separate. Nothing was deleted or reconnected in this batch.
 
 ### Purpose
 

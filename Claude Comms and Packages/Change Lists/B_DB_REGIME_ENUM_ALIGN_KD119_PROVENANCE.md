@@ -200,9 +200,9 @@ All six were re-derived against the e3-identical source and staging runtime. The
 
 Coltrane's first review returned CHANGES NEEDED at 2026-11-24T14:15:55Z. Main-session re-derivation confirmed both corrections: the Batch-46 helper's live invocation is not evidence of a live payload contract, and a new event store was premature before a replay proof. The trailing-24-hour `vts_open_trades` control found 1,767/1,767 core score-context rows but 0/1,767 close-profit or net-PnL context rows, so the replay proof must demonstrate its durable outcome join rather than assume one table is sufficient.
 
-## 8. Questions for Coltrane's technical ruling
+## 8. Coltrane technical ruling
 
-Please re-review and return PROCEED or CHANGES NEEDED on:
+Coltrane ruled **PROCEED** at 2026-11-24T14:43:27Z on exact off-branch ref `0ee3b49f1e6c1049497b02d0f6a8950e561ff94d` after independently re-deriving:
 
 1. the corrected twelve-row end state in §4, including DELETE rather than ISOLATE for the old adaptive/DSE runtime;
 2. deletion of the invoked Batch-46 file helper together with its zero-caller cascade payload and timer;
@@ -211,4 +211,6 @@ Please re-review and return PROCEED or CHANGES NEEDED on:
 5. the typed cost-history replacement duty and delete-old-limb boundary;
 6. the complete adjacent deletion boundary for DSE routes/barrel/tests/multiplier and replacement-or-delete boundary for old cost readers/routes/tests.
 
-Until that ruling and Kyle's later placement, **KD-119 means no deletion and no reconnection**.
+He confirmed the exact twelve-row end state: rows 1, 3–8 and 10–12 DELETE after hold/placement; row 2 REPAIR the replay duty then DELETE the old body; row 9 REPAIR typed cost capture then DELETE the old limb. He also confirmed the complete adjacent DSE and cost boundaries. The 1,767/1,767 score-input population and 0/1,767 profit/net-PnL population remain a control, not replay proof; the replacement must demonstrate its durable outcome join.
+
+This ruling authorizes no deletion, reconnect, deploy, restart, mode change or batch close. **KD-119 remains fully binding until Kyle's later placement and hold release.**

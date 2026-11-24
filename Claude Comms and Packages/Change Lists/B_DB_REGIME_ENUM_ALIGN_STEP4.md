@@ -272,5 +272,8 @@ commit, runtime, data-continuity, future-ML and plan census is in
 2026-11-24T14:15:55Z: the invoked module-level helper has no live payload contract and belongs in later
 cleanup, while restart continuity must first prove bounded replay from existing durable VTS/outcome rows
 before any new store is proposed. The corrected pack maps all twelve rows plus the adjacent DSE/cascade/cost
-limbs to repair-the-duty/delete-the-old-body or delete-after-hold outcomes. Step 11 remains open for
-Coltrane's corrected-ref ruling; no cleanup, reconnect, deploy, restart or mode change is authorized.
+limbs to repair-the-duty/delete-the-old-body or delete-after-hold outcomes. Coltrane ruled PROCEED at
+2026-11-24T14:43:27Z on exact ref `0ee3b49f1e6c1049497b02d0f6a8950e561ff94d`: rows 1, 3–8 and 10–12
+DELETE after hold/placement; row 2 REPAIR replay duty then DELETE old body; row 9 REPAIR typed cost capture
+then DELETE old limb. The completion-report gate is next; no cleanup, reconnect, deploy, restart, mode change
+or batch close is authorized by the technical ruling.
