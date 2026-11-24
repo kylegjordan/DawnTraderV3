@@ -72,6 +72,7 @@ DEPLOY_NOTICE = "/home/deploy/dawntrader-deploy.notice"
 NOTICE_RAISED = "/var/lib/dt-install-drift/notice-only-raised"
 MARKER_MAX_AGE_S = 2 * 3600
 GIT_TIMEOUT_S = 30
+DB_MAP_TBLS_SHA256 = "44bf748bf0b8f4ed66c21173d19792714a61953b5dff21da8805cb7caa1f6258"
 
 SS = "/etc/systemd/system/"
 
@@ -114,6 +115,22 @@ BOXES = {
             ("comms-infra/staging/dt-sql-role-setup", "/usr/local/sbin/dt-sql-role-setup", 0o700, "root", "root"),
             ("comms-infra/staging/supabase-ca.crt", "/etc/dt-sql/supabase-ca.crt", 0o644, "root", "root"),
             ("comms-infra/staging/sudoers-dtsql", "/etc/sudoers.d/dtsql", 0o440, "root", "root"),
+            # B-DB-MAP (KD-101): exact reviewed generator boundary, runner, schedules and operator record.
+            ("scripts/db-map/catalog.sql", "/usr/local/lib/dt-db-map/scripts/db-map/catalog.sql", 0o644, "root", "root"),
+            ("scripts/db-map/config.mjs", "/usr/local/lib/dt-db-map/scripts/db-map/config.mjs", 0o644, "root", "root"),
+            ("scripts/db-map/OPERATIONS.md", "/usr/local/lib/dt-db-map/OPERATIONS.md", 0o644, "root", "root"),
+            ("comms-infra/staging/dt-db-map-runner.mjs", "/usr/local/lib/dt-db-map/dt-db-map-runner.mjs", 0o755, "root", "root"),
+            ("comms-infra/staging/dt-db-map-policy.mjs", "/usr/local/lib/dt-db-map/dt-db-map-policy.mjs", 0o644, "root", "root"),
+            ("comms-infra/staging/dt-db-map-weekly", "/usr/local/bin/dt-db-map-weekly", 0o755, "root", "root"),
+            ("comms-infra/staging/dt-db-map-stale", "/usr/local/bin/dt-db-map-stale", 0o755, "root", "root"),
+            ("comms-infra/staging/systemd/dt-db-map-weekly.service", "/etc/systemd/system/dt-db-map-weekly.service", 0o644, "root", "root"),
+            ("comms-infra/staging/systemd/dt-db-map-weekly.timer", "/etc/systemd/system/dt-db-map-weekly.timer", 0o644, "root", "root"),
+            ("comms-infra/staging/systemd/dt-db-map-stale.service", "/etc/systemd/system/dt-db-map-stale.service", 0o644, "root", "root"),
+            ("comms-infra/staging/systemd/dt-db-map-stale.timer", "/etc/systemd/system/dt-db-map-stale.timer", 0o644, "root", "root"),
+            ("comms-infra/staging/systemd/dt-db-map-weekly.service.d/onfailure.conf",
+             "/etc/systemd/system/dt-db-map-weekly.service.d/onfailure.conf", 0o644, "root", "root"),
+            ("comms-infra/staging/systemd/dt-db-map-stale.service.d/onfailure.conf",
+             "/etc/systemd/system/dt-db-map-stale.service.d/onfailure.conf", 0o644, "root", "root"),
             # B-DISK-FILE-TIERING P9: the app's own log rotation (replaces pm2-logrotate). Its own config path and
             # state file, so the distribution's daily logrotate never processes these files a second time.
             ("comms-infra/staging/logrotate-dawntrader-app.conf", "/etc/dawntrader/logrotate-app.conf", 0o644, "root", "root"),
@@ -126,6 +143,10 @@ BOXES = {
                          "comms-infra/staging/dt-sql": 1, "comms-infra/staging/psql-wrapper": 1,
                          "comms-infra/staging/dt-sql-login": 1, "comms-infra/staging/dt-sql-role-setup": 1,
                          "comms-infra/staging/supabase-ca.crt": 1, "comms-infra/staging/sudoers-dtsql": 1,
+                         "scripts/db-map/catalog.sql": 1, "scripts/db-map/config.mjs": 1,
+                         "comms-infra/staging/dt-db-map-runner.mjs": 1,
+                         "comms-infra/staging/dt-db-map-policy.mjs": 1,
+                         "comms-infra/staging/dt-db-map-weekly": 1, "comms-infra/staging/dt-db-map-stale": 1,
                          "comms-infra/staging/logrotate-dawntrader-app.conf": 1,
                          "comms-infra/staging/systemd/dawntrader-logrotate.service": 1,
                          "comms-infra/staging/systemd/dawntrader-logrotate.timer": 1,
@@ -140,11 +161,16 @@ BOXES = {
             # LOCKED file dt-sql-login checks; every file inside keeps its own mode.
             ("/var/lib/dt-sql", 0o755, "deploy", "deploy"),
             ("/etc/dt-sql", 0o750, "root", "dtsql"),          # B-DB-READONLY-ROLE: the reader login + the CA
+            ("/var/lib/dt-db-map", 0o750, "deploy", "deploy"),
+            ("/var/lib/dt-db-map/receipts", 0o700, "deploy", "deploy"),
+            ("/usr/local/lib/dt-db-map", 0o755, "root", "root"),
+            ("/usr/local/lib/dt-db-map/tbls-v1.97.0", 0o755, "root", "root"),
         ],
         "private": [("/etc/dt-api/staging-api.env", 0o600, "dtapi", "dtapi"),
                     ("/var/lib/dt-api/login-ledger.jsonl", 0o600, "dtapi", "dtapi"),
                     ("/var/lib/dt-api/lock", 0o600, "dtapi", "dtapi"),
                     ("/var/lib/dt-install-drift/installed.sha", 0o644, "root", "root"),
+                    ("/var/lib/dt-db-map/installed.sha", 0o644, "root", "root"),
                     ("/etc/dt-sql/reader.env", 0o600, "dtsql", "dtsql"),    # B-DB-READONLY-ROLE: the reader password
                     # B-DB-READONLY-ROLE (Langston Step-4 C4 fold): the dir is 0755, so the file's mode keeps others out
                     ("/var/lib/dt-sql/log.jsonl", 0o640, "deploy", "deploy")],
@@ -163,10 +189,16 @@ BOXES = {
                   "dawntrader-logrotate.service": (SS + "dawntrader-logrotate.service",
                                                    [SS + "dawntrader-logrotate.service.d/onfailure.conf"]),
                   "dawntrader-logrotate.timer": (SS + "dawntrader-logrotate.timer", []),
-                  "dt-unit-failure@dawntrader-logrotate.service": (SS + "dt-unit-failure@.service", [])},
-        "timers": ["dt-install-drift.timer", "dawntrader-logrotate.timer"],
+                  "dt-unit-failure@dawntrader-logrotate.service": (SS + "dt-unit-failure@.service", []),
+                  "dt-db-map-weekly.service": (SS + "dt-db-map-weekly.service", [SS + "dt-db-map-weekly.service.d/onfailure.conf"]),
+                  "dt-db-map-weekly.timer": (SS + "dt-db-map-weekly.timer", []),
+                  "dt-unit-failure@dt-db-map-weekly.service": (SS + "dt-unit-failure@.service", []),
+                  "dt-db-map-stale.service": (SS + "dt-db-map-stale.service", [SS + "dt-db-map-stale.service.d/onfailure.conf"]),
+                  "dt-db-map-stale.timer": (SS + "dt-db-map-stale.timer", []),
+                  "dt-unit-failure@dt-db-map-stale.service": (SS + "dt-unit-failure@.service", [])},
+        "timers": ["dt-install-drift.timer", "dawntrader-logrotate.timer", "dt-db-map-weekly.timer", "dt-db-map-stale.timer"],
         "checks": ["dt_api_page", "setter_marker", "accounts", "sudoers_others", "no_authorized_keys2",
-                   "deploy_windows", "deploy_notice_key"],
+                   "deploy_windows", "deploy_notice_key", "db_map_binary"],
     },
     "dawntrader-agent": {
         "git_as": "langston",
@@ -610,6 +642,31 @@ def check_extra(name, box):
             out("STATE", "dt-api raised a PAGE at %s: %s — %s (fix the cause, then remove %s; dt-api "
                 "makes no login while it stands)" % (pg.get("ts"), kind, pg.get("detail"), p),
                 "PAGE-" + "".join(c for c in kind if c.isalnum() or c == "-")[:40], "page")
+    elif name == "db_map_binary":
+        p = P("/usr/local/lib/dt-db-map/tbls-v1.97.0/tbls")
+        try:
+            st = os.lstat(p)
+            ok, why = owner_ok(st, 0o755, "root", "root") if stat.S_ISREG(st.st_mode) else (False, "not a regular file")
+            if not ok:
+                out("PERM", "%s %s" % (p, why), "DB-MAP", p)
+            h = hashlib.sha256()
+            fd = os.open(p, os.O_RDONLY | os.O_NOFOLLOW)
+            try:
+                while True:
+                    chunk = os.read(fd, 1 << 20)
+                    if not chunk:
+                        break
+                    h.update(chunk)
+            finally:
+                os.close(fd)
+            if h.hexdigest() != DB_MAP_TBLS_SHA256:
+                out("DRIFT", "%s differs from the pinned tbls v1.97.0 binary" % p, "DB-MAP", p)
+            else:
+                out("OK", "%s is the pinned tbls v1.97.0 binary" % p)
+        except FileNotFoundError:
+            out("MISSING", p, "DB-MAP", p)
+        except OSError as e:
+            out("STATE", "cannot verify %s: %s" % (p, e), "DB-MAP", p)
     elif name == "setter_marker":
         p = P("/var/lib/dt-api-setter/marker.json")
         if os.path.lexists(p):

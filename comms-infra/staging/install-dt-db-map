@@ -1,0 +1,104 @@
+#!/bin/sh
+set -eu
+
+VERSION=1.97.0
+ARCHIVE=tbls_v1.97.0_linux_amd64.tar.gz
+ARCHIVE_BYTES=31694635
+ARCHIVE_SHA=43c81f408495d9b626d0265a6ebb57c6d1c4a5e072d3eecc3e88825cc6c64e9a
+URL="https://github.com/k1LoW/tbls/releases/download/v${VERSION}/${ARCHIVE}"
+die() { echo "install-dt-db-map: $*" >&2; exit 1; }
+[ "$(id -u)" -eq 0 ] || die "run as root"
+
+if [ "${1:-}" = "--uninstall" ]; then
+  systemctl disable --now dt-db-map-weekly.timer dt-db-map-stale.timer 2>/dev/null || true
+  rm -f /etc/systemd/system/dt-db-map-weekly.service /etc/systemd/system/dt-db-map-weekly.timer
+  rm -f /etc/systemd/system/dt-db-map-stale.service /etc/systemd/system/dt-db-map-stale.timer
+  rm -rf /etc/systemd/system/dt-db-map-weekly.service.d /etc/systemd/system/dt-db-map-stale.service.d
+  rm -f /usr/local/bin/dt-db-map-weekly /usr/local/bin/dt-db-map-stale
+  rm -rf /usr/local/lib/dt-db-map
+  systemctl daemon-reload
+  echo "Database-map executables and schedules removed; /var/lib/dt-db-map receipts preserved."
+  exit 0
+fi
+
+REF=${1:-}
+SOURCE=${2:-$(pwd)}
+[ -n "$REF" ] || die "usage: install-dt-db-map <reviewed-40-hex-ref> [repo]"
+case "$REF" in *[!0-9a-f]*|'') die "ref must be lowercase 40-hex";; esac
+[ "${#REF}" -eq 40 ] || die "ref must be lowercase 40-hex"
+[ "$(git -C "$SOURCE" cat-file -t "$REF")" = commit ] || die "ref is not a commit"
+[ -f /var/lib/dt-install-drift/installed.sha ] || die "/var/lib/dt-install-drift/installed.sha is absent; refusing an install that drift monitoring cannot record"
+
+TMP=$(mktemp -d /tmp/dt-db-map-install.XXXXXX)
+chmod 700 "$TMP"
+trap 'rm -rf "$TMP"' EXIT HUP INT TERM
+mkdir -m 700 "$TMP/source" "$TMP/tbls"
+git -C "$SOURCE" archive --format=tar --output="$TMP/source.tar" "$REF"
+tar -xf "$TMP/source.tar" -C "$TMP/source"
+
+if [ -n "${DT_DB_MAP_TBLS_ARCHIVE:-}" ]; then
+  cp -- "$DT_DB_MAP_TBLS_ARCHIVE" "$TMP/$ARCHIVE"
+else
+  curl --fail --location --silent --show-error --output "$TMP/$ARCHIVE" "$URL"
+fi
+[ "$(wc -c < "$TMP/$ARCHIVE" | tr -d ' ')" = "$ARCHIVE_BYTES" ] || die "tbls archive byte size differs from pin"
+printf '%s  %s\n' "$ARCHIVE_SHA" "$TMP/$ARCHIVE" | sha256sum --check --status || die "tbls archive SHA-256 differs from pin"
+tar -xzf "$TMP/$ARCHIVE" -C "$TMP/tbls"
+[ -x "$TMP/tbls/tbls" ] || die "tbls archive does not contain executable tbls"
+"$TMP/tbls/tbls" version 2>&1 | grep -F "$VERSION" >/dev/null || die "tbls binary version differs from pin"
+[ "$(sha256sum "$TMP/tbls/tbls" | awk '{print $1}')" = "44bf748bf0b8f4ed66c21173d19792714a61953b5dff21da8805cb7caa1f6258" ] || die "tbls executable SHA-256 differs from pin"
+
+install -d -m 0755 -o root -g root /usr/local/lib/dt-db-map
+install -d -m 0755 -o root -g root "/usr/local/lib/dt-db-map/tbls-v${VERSION}"
+install -m 0755 -o root -g root "$TMP/tbls/tbls" "/usr/local/lib/dt-db-map/tbls-v${VERSION}/tbls"
+install -m 0644 -o root -g root "$TMP/source/scripts/db-map/vendor/tbls-v1.97.0.LICENSE" "/usr/local/lib/dt-db-map/tbls-v${VERSION}/LICENSE"
+rm -rf /usr/local/lib/dt-db-map/scripts
+install -d -m 0755 -o root -g root /usr/local/lib/dt-db-map/scripts/db-map
+cp -a "$TMP/source/scripts/db-map/." /usr/local/lib/dt-db-map/scripts/db-map/
+chown -R root:root /usr/local/lib/dt-db-map/scripts
+find /usr/local/lib/dt-db-map/scripts -type d -exec chmod 0755 {} +
+find /usr/local/lib/dt-db-map/scripts -type f -exec chmod 0644 {} +
+chmod 0755 /usr/local/lib/dt-db-map/scripts/db-map/generate.mjs /usr/local/lib/dt-db-map/scripts/db-map/verify.mjs
+install -m 0644 -o root -g root "$TMP/source/scripts/db-map/OPERATIONS.md" /usr/local/lib/dt-db-map/OPERATIONS.md
+install -m 0755 -o root -g root "$TMP/source/comms-infra/staging/dt-db-map-runner.mjs" /usr/local/lib/dt-db-map/dt-db-map-runner.mjs
+install -m 0644 -o root -g root "$TMP/source/comms-infra/staging/dt-db-map-policy.mjs" /usr/local/lib/dt-db-map/dt-db-map-policy.mjs
+install -m 0755 -o root -g root "$TMP/source/comms-infra/staging/dt-db-map-weekly" /usr/local/bin/dt-db-map-weekly
+install -m 0755 -o root -g root "$TMP/source/comms-infra/staging/dt-db-map-stale" /usr/local/bin/dt-db-map-stale
+install -m 0700 -o root -g root "$TMP/source/comms-infra/staging/dt-install-drift" /usr/local/sbin/dt-install-drift
+
+install -d -m 0750 -o deploy -g deploy /var/lib/dt-db-map
+install -d -m 0700 -o deploy -g deploy /var/lib/dt-db-map/receipts
+printf '%s\n' "$REF" > /var/lib/dt-db-map/installed.sha
+chown root:root /var/lib/dt-db-map/installed.sha
+chmod 0644 /var/lib/dt-db-map/installed.sha
+
+DRIFT_SHA=/var/lib/dt-install-drift/installed.sha
+[ -f "$DRIFT_SHA" ] || die "$DRIFT_SHA is absent; refusing an install that drift monitoring cannot record"
+cp -- "$DRIFT_SHA" "$TMP/drift-installed.sha"
+for PATH_AT_REF in \
+  comms-infra/staging/dt-install-drift \
+  scripts/db-map/catalog.sql scripts/db-map/config.mjs scripts/db-map/OPERATIONS.md \
+  comms-infra/staging/dt-db-map-runner.mjs comms-infra/staging/dt-db-map-policy.mjs \
+  comms-infra/staging/dt-db-map-weekly comms-infra/staging/dt-db-map-stale \
+  comms-infra/staging/systemd/dt-db-map-weekly.service \
+  comms-infra/staging/systemd/dt-db-map-weekly.timer \
+  comms-infra/staging/systemd/dt-db-map-stale.service \
+  comms-infra/staging/systemd/dt-db-map-stale.timer \
+  comms-infra/staging/systemd/dt-db-map-weekly.service.d/onfailure.conf \
+  comms-infra/staging/systemd/dt-db-map-stale.service.d/onfailure.conf
+do
+  grep -v " $PATH_AT_REF\$" "$TMP/drift-installed.sha" > "$TMP/drift-next.sha"
+  mv "$TMP/drift-next.sha" "$TMP/drift-installed.sha"
+  printf '%s %s\n' "$REF" "$PATH_AT_REF" >> "$TMP/drift-installed.sha"
+done
+install -m 0644 -o root -g root "$TMP/drift-installed.sha" "$DRIFT_SHA"
+
+for UNIT in dt-db-map-weekly.service dt-db-map-weekly.timer dt-db-map-stale.service dt-db-map-stale.timer; do
+  install -m 0644 -o root -g root "$TMP/source/comms-infra/staging/systemd/$UNIT" "/etc/systemd/system/$UNIT"
+done
+install -d -m 0755 -o root -g root /etc/systemd/system/dt-db-map-weekly.service.d /etc/systemd/system/dt-db-map-stale.service.d
+install -m 0644 -o root -g root "$TMP/source/comms-infra/staging/systemd/dt-db-map-weekly.service.d/onfailure.conf" /etc/systemd/system/dt-db-map-weekly.service.d/onfailure.conf
+install -m 0644 -o root -g root "$TMP/source/comms-infra/staging/systemd/dt-db-map-stale.service.d/onfailure.conf" /etc/systemd/system/dt-db-map-stale.service.d/onfailure.conf
+systemctl daemon-reload
+systemctl enable --now dt-db-map-weekly.timer dt-db-map-stale.timer
+echo "Installed B-DB-MAP at $REF with tbls v$VERSION; no generation was started."

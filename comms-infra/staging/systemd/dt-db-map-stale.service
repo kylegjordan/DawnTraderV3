@@ -1,0 +1,17 @@
+[Unit]
+Description=Check database-map run and reviewed-baseline freshness
+Documentation=file:///usr/local/lib/dt-db-map/OPERATIONS.md
+
+[Service]
+Type=oneshot
+User=deploy
+Group=deploy
+UMask=0077
+ExecStart=/usr/local/bin/dt-db-map-stale
+TimeoutStartSec=300
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/lib/dt-db-map /run/lock
+ReadWritePaths=/var/log/dawntrader

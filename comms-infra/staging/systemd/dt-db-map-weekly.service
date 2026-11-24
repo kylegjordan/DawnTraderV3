@@ -1,0 +1,15 @@
+[Unit]
+Description=Generate and compare the governed DawnTrader database map
+Documentation=file:///usr/local/lib/dt-db-map/OPERATIONS.md
+
+[Service]
+Type=oneshot
+User=deploy
+Group=deploy
+UMask=0077
+ExecStart=/usr/local/bin/dt-db-map-weekly
+TimeoutStartSec=1800
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/lib/dt-db-map /var/lib/dt-sql /var/log/dawntrader /run/lock /opt/governance-checker/DawnTraderV3/.git

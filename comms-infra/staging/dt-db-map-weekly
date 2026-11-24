@@ -1,0 +1,9 @@
+#!/bin/sh
+set -eu
+STATE=${DT_DB_MAP_STATE:-/var/lib/dt-db-map}
+mkdir -p "$STATE/receipts"
+exec 9>/run/lock/dt-db-map.lock
+if ! /usr/bin/flock -n 9; then
+  exec /usr/bin/node /usr/local/lib/dt-db-map/dt-db-map-runner.mjs lock-skipped
+fi
+exec /usr/bin/node /usr/local/lib/dt-db-map/dt-db-map-runner.mjs weekly

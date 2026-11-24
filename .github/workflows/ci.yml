@@ -103,6 +103,29 @@ jobs:
         env:
           DATABASE_URL: postgresql://test:test@localhost:5432/test
 
+      # B-DB-MAP (KD-101): pure catalog/adapter/scanner/provenance/schedule tests plus a disposable
+      # PostgreSQL control proving one statement holds one snapshot while a split-statement mutant does not.
+      # The generator uses fixtures here; CI never connects to staging and never claims live freshness.
+      - name: Database-map integrity and snapshot tests
+        run: |
+          node scripts/db-map/tests/core.test.mjs
+          node scripts/db-map/tests/mutations.test.mjs
+          node scripts/db-map/tests/schedule.test.mjs
+          python3 scripts/db-map/tests/drift-enrollment.test.py
+          node scripts/db-map/tests/connection-control.mjs
+          node scripts/db-map/tests/snapshot-control.mjs
+          curl --fail --location --silent --show-error --output /tmp/tbls.tar.gz https://github.com/k1LoW/tbls/releases/download/v1.97.0/tbls_v1.97.0_linux_amd64.tar.gz
+          test "$(wc -c < /tmp/tbls.tar.gz)" = 31694635
+          echo '43c81f408495d9b626d0265a6ebb57c6d1c4a5e072d3eecc3e88825cc6c64e9a  /tmp/tbls.tar.gz' | sha256sum --check --status
+          tar -xzf /tmp/tbls.tar.gz -C /tmp tbls
+          test "$(sha256sum /tmp/tbls | cut -d ' ' -f 1)" = 44bf748bf0b8f4ed66c21173d19792714a61953b5dff21da8805cb7caa1f6258
+          DT_DB_MAP_TBLS=/tmp/tbls node scripts/db-map/tests/render-control.mjs
+          bash -n comms-infra/staging/install-dt-db-map
+          bash -n comms-infra/staging/dt-db-map-weekly
+          bash -n comms-infra/staging/dt-db-map-stale
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/test
+
       - name: Run tests
         run: npx vitest run --reporter=verbose
         env:

@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "source_ref", "extraction_utc", "database",
+    "extraction_query_sha256", "scanner_config_sha256", "manifest_schema_sha256",
+    "generator_version", "scanner_version", "tbls", "population",
+    "rls_warning", "artifact_hashes", "structural_sha256", "manifest_self_hash"
+  ],
+  "properties": {
+    "schema_version": { "type": "integer" },
+    "source_ref": { "type": "string" },
+    "extraction_utc": { "type": "string" },
+    "database": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "server_version_num", "current_user"],
+      "properties": {
+        "name": { "type": "string" },
+        "server_version_num": { "type": "string" },
+        "current_user": { "type": "string" }
+      }
+    },
+    "extraction_query_sha256": { "type": "string" },
+    "scanner_config_sha256": { "type": "string" },
+    "manifest_schema_sha256": { "type": "string" },
+    "generator_version": { "type": "integer" },
+    "scanner_version": { "type": "integer" },
+    "tbls": { "type": "object" },
+    "population": { "type": "object" },
+    "rls_warning": { "type": "string" },
+    "artifact_hashes": { "type": "object" },
+    "structural_sha256": { "type": "string" },
+    "manifest_self_hash": { "type": "null" }
+  }
+}

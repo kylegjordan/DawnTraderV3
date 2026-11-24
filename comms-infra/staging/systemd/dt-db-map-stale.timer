@@ -1,0 +1,9 @@
+[Unit]
+Description=Daily database-map freshness check
+
+[Timer]
+OnCalendar=*-*-* 07:15:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target
