@@ -14,7 +14,7 @@ The twelve list rows are not the future ML/AI system. They are a January 2026 pr
 
 The active system is not losing its main learning corpus on restart. At 2026-11-24 13:42–13:43Z it retained 277,671 VTS trade rows, 242,109 RTB shadow pairings, 2,136 paper/live closed-trade rows, and tens of millions of archive rows. What does reset is the in-memory 24-hour `pairTelemetry` view used by adaptive scanner ordering: the live API held 134 symbols / 246 samples, while the 57-byte restart file held only `cascadeHistory`. Cost-history is also absent: the 168-hour endpoint returned zero snapshots because its loop has no starter, and its writer would currently attempt invalid `mode='system'` data.
 
-Technical recommendation for Coltrane to attack: retain the active file rehydrator; repair the *restart-continuity contract* and the *cost-history contract* only as separately scoped designs; isolate the disconnected adaptive-weight/DSE prototype from runtime and future-ML claims; eventually delete only the globally unsafe or redundant helpers after Kyle separately places that cleanup. No old adaptive or sizing path should be reconnected before live.
+Corrected technical recommendation after Coltrane's first review: the invoked Batch-46 file helper is not a retained data contract because its only payload and callers are dead. Repair the *restart-continuity duty* through a bounded replay proof over existing durable VTS/outcome rows before proposing new storage; repair the *cost-history duty* only as a separately typed capture design; delete the old SQL/file state bodies and the disconnected adaptive-weight/DSE runtime after KD-119 and later placement. No old adaptive or sizing path should be reconnected before live.
 
 ---
 
@@ -26,10 +26,10 @@ Technical recommendation for Coltrane to attack: retain the active file rehydrat
 | 2026-01-08 · `99f75413b7fac6b4c04cfbc510f62034d04bb7f9` | `attached_assets/Pasted--Directive-11-1B-Updated-Revision-Adaptive-Learning-Wei_1767877855949.txt` | Persist per-strategy, per-regime adaptive weights with timestamps; apply exponential age decay on restart through `AdaptiveManager`. | The aggregator persistence and rehydration methods have no production callers. `AdaptiveManager` has no separate production producer. The table has never received a row. |
 | 2026-01-08 · `9aa2d2a0b82228efcf1d4fe923ea38a5a8e12f8e` and `3825119fad195f92ab4f15798018fd5cd53de5a4` | `attached_assets/Pasted--Directive-11-3-Predictive-Risk-Cost-Modeling-Dynamic-S_1767882515730.txt` | Replace static TEC sizing with a 0.3–1.2 multiplier driven by expected edge, volatility, costs, confidence, and adaptive weights, bounded by a hard risk cap. | `computeDynamicSize` has no non-test caller. The adjacent `applyDSEMultiplier` helper also has no non-test caller. DSE diagnostics imports remain, but the route is mounted after an API-router catch-all and staging returns HTTP 404. |
 | 2026-01-09 · `840c5226c97a857e9499c03c3f758cd150c815a2` | `attached_assets/Pasted--Directive-11-3C-Persistent-Cost-Telemetry-Drift-Monito_1767948051606.txt` | Persist a market-cost snapshot every five minutes for 72 hours, detect >50% drift, feed cost pressure to DSE, and expose diagnostics. | `startCostTelemetryLoop` and `startDriftMonitor` have no callers. The live reader endpoint is reachable but empty. `persistCostSnapshot` casts `system` into a paper/live enum, so starting it unchanged would fail its data contract. |
-| 2026-04-01 · `b518ef43a4ed5de477cbe489617db68024231e3a` | Batch 46 state persistence | Preserve telemetry aggregate state through a local restart file. | This is the **active similarly named rehydrator** at module scope. It restores only `cascadeHistory`, writes every 60 seconds, and sets `instance.rehydrated=true`. It is not the class SQL method and must be preserved. |
+| 2026-04-01 · `b518ef43a4ed5de477cbe489617db68024231e3a` | Batch 46 state persistence | Preserve telemetry aggregate state through a local restart file. | This is the **invoked similarly named rehydrator** at module scope, but its only payload is `cascadeHistory`; both its recorder and reader have zero production callers. It writes an empty file every 60 seconds and sets `instance.rehydrated=true`, suppressing the class SQL method. It must be deleted with those cascade helpers after the hold. |
 | 2026-08-07 to 2026-09-30 · `213e162dca4d693def843a0bb44b1f7c4c9ad66c`, `7219de4c7287ff849cc707a13806935d361e2270`, `06fa8ba0457104375ac1d411d549cc242de6cc11` | B-SIZING-DEC-RESTORE | Replace inverse-stop-distance sizing with one fixed-notional formula for the active signal path. | The paper signal is born at `balance × exposure% × position% × 0.97 / entryPrice`; there is one non-test caller. The paper execution engine can then multiply that already-sized quantity by the AMR posture overlay. |
 
-The January implementation therefore contains two unfinished contracts, not one coherent active learning system: (a) rolling scanner telemetry persistence/rehydration and (b) a speculative adaptive-weight-to-sizing chain. They must not be revived as a unit.
+The January implementation therefore contains two unfinished duties, not one coherent active learning system: (a) restart continuity for the active scanner's rolling ranking input and (b) a speculative adaptive-weight-to-sizing chain. The restart duty needs a replacement replay proof; the old SQL/file bodies and the adaptive/DSE chain must not be revived as a unit.
 
 ## 2. Why this is not the intended future ML/AI system
 
@@ -95,6 +95,7 @@ Consequences:
 1. A restart loses the exact 24-hour derived ordering state used by `AdaptiveScanManager.getTopPairs`; it repopulates as VTS events arrive.
 2. This is an operational continuity seam, not months of erased training data: the map itself has a 24-hour horizon and most inputs plus the underlying market/outcome corpus remain durable.
 3. Directly enabling the January SQL path is unsafe. Staging has no `MODE`, `FORCE_PERSIST`, or `PERSIST_TELEMETRY` environment key (positive control: exactly one `DATABASE_URL` key), so the current writer is intentionally off in paper mode. The SQL rehydrator reads only `mode='live'`, only one global current regime, at most 100 rows, and does not restore the required asset-class stamp. The active file helper also sets the same `rehydrated` flag first, making the SQL method skip.
+4. A replay from existing durable VTS/outcome rows is plausible but **not yet proved**. A 2026-11-24 re-read of the complete trailing-24-hour closed `vts_open_trades` population returned 1,767 rows: all 1,767 held `hybridScore`, `regimeWeight`, and `predictiveConfidence`, while zero held `finalScore`, `profit`, `netPnl`, `volZ`, or `trendZ`. The retired `finalScore` is already coalesced to known zero at both telemetry sites. Close success and any genuinely needed missing fields therefore require a proven join to the durable outcome substrate rather than an assumption that one row is sufficient.
 
 ### 3.3 Cost capture
 
@@ -109,21 +110,21 @@ Disposition terms in this pack mean: **RETAIN** = active and correct; **ISOLATE*
 | # | dormant row | unique intended duty | active replacement / retained contract | proposed technical disposition |
 |---:|---|---|---|---|
 | 1 | `telemetry-aggregator.ts:updateMarketRegime` | Set one global telemetry regime. | Runtime writers carry the canonical pair regime; MCE/telemetry expose per-class regime. A global setter would reintroduce mixed-class state. | **DELETE** after hold/placement. No reconnect. |
-| 2 | class method `rehydrateTelemetryState` | Restore rolling pair telemetry after restart. | No safe replacement currently restores `pairTelemetry`; the module-level helper restores `cascadeHistory` only and stays active. | **REPAIR** the contract, not this body: separate flags, class stamp, mode/population semantics, bounded replay. Existing method remains isolated until reviewed. |
-| 3 | `rehydrateAdaptiveLearning` | Load timestamped strategy weights into `AdaptiveManager`. | Future Feature Store/model registry; current active B67.4 outcome feedback is a different live system. No weight rows exist. | **ISOLATE** as historical prototype; do not reconnect to future ML by name alone. |
-| 4 | `persistAdaptiveLearning` | Persist all in-memory adaptive weights. | No production producer updates this `AdaptiveManager`; future models require versioned features/labels/models. | **ISOLATE**. Reconnecting would persist arbitrary maps without a validated learner. |
+| 2 | class method `rehydrateTelemetryState` | Restore rolling pair telemetry after restart. | The active scanner really consumes the rolling ranking, but neither old rehydrator restores it safely. Existing durable VTS/outcome rows are the first replay candidate. | **REPAIR the restart duty in a replacement replay design; DELETE this body after replacement.** First prove bounded 24-hour replay reproduces pre-restart ordering. |
+| 3 | `rehydrateAdaptiveLearning` | Load timestamped strategy weights into `AdaptiveManager`. | Future Feature Store/model registry; current active B67.4 outcome feedback is a different live system. No weight rows exist. | **DELETE** after hold/placement. Git/archive history preserves the prototype; executable residue creates reconnection risk. |
+| 4 | `persistAdaptiveLearning` | Persist all in-memory adaptive weights. | No production producer updates this `AdaptiveManager`; future models require versioned features/labels/models. | **DELETE** after hold/placement. Do not reconnect arbitrary maps without a validated learner. |
 | 5 | `saveAdaptiveWeightsBatch` | Batch wrapper over single-row weight upserts. | No caller and no unique data contract beyond item 4. | **DELETE** eventually with the old persistence limb, after hold/placement. |
 | 6 | `getAdaptiveLearningStats` | Count old adaptive rows by strategy. | Zero-row table; future model observability must report model version, cohort, calibration, and drift, not generic row counts. | **DELETE** eventually after hold/placement. |
-| 7 | `computeDynamicSize` | January edge/volatility/cost/confidence multiplier. | Active paper fixed-notional sizing + AMR shadow overlay; future sprint 148c fractional Kelly and post-live M3. | **ISOLATE**. Never reconnect pre-live; future design may reuse concepts, not this authority path. |
-| 8 | private `getAdaptiveWeights` + repository `loadAdaptiveWeights` | Feed old weights to DSE. | Only production path is inside dormant `computeDynamicSize`; future M3 reads validated feature/model outputs. | **ISOLATE** with DSE; eventual deletion only after Phase 17/18 confirms no historical adapter need. |
-| 9 | `startCostTelemetryLoop` + `persistCostSnapshot` | Durable cost-environment history. | Per-decision cost fields exist, but no aggregate time series. Reader endpoint is live and empty; DSE cost-pressure consumer is dormant. | **REPAIR** as capture-only, typed cost telemetry with provenance/retention; keep disconnected from sizing. Do not start old writer. |
+| 7 | `computeDynamicSize` | January edge/volatility/cost/confidence multiplier. | Active paper fixed-notional sizing + AMR shadow overlay; future sprint 148c fractional Kelly and post-live M3. | **DELETE** after hold/placement. Future design may reuse concepts from history, not this executable authority path. |
+| 8 | private `getAdaptiveWeights` + repository `loadAdaptiveWeights` | Feed old weights to DSE. | Only production path is inside dormant `computeDynamicSize`; future M3 reads validated feature/model outputs. | **DELETE** with DSE after hold/placement. |
+| 9 | `startCostTelemetryLoop` + `persistCostSnapshot` | Durable cost-environment history. | Per-decision cost fields are selection-biased; a broad market-friction series has distinct value, but the old writer violates the mode/schema contract. | **REPAIR the duty** in typed class/scope/unit/provenance-aware capture; **DELETE the old writer/starter** after replacement. Keep capture disconnected from sizing. |
 | 10 | `saveTelemetryBatch` | Batch insert identical telemetry records. | Active writer uses `saveTelemetryRecord`; no caller needs batch semantics. | **DELETE** eventually after hold/placement. |
 | 11 | `getTelemetryStatsByRegime` | Generic 24-hour average score by regime. | Active in-memory telemetry endpoints and future Feature Store queries; no caller. `finalScore` is being retired. | **DELETE** eventually after hold/placement. |
 | 12 | `loadTelemetryBySymbol` | Generic symbol/time-window query. | No caller; future point-in-time features require class/source/build/epoch semantics beyond this query. | **DELETE** eventually after hold/placement. |
 
-**Mandatory preservation outside the twelve:** module function `rehydrateTelemetryState(instance)` at the bottom of `telemetry-aggregator.ts` is **RETAIN**. It is invoked by `getTelemetryAggregator`, restores `cascadeHistory`, arms the 60-second state timer, and is not the dead class method. Its use of the class `rehydrated` flag is a defect to split if row 2 is repaired, not a reason to delete it.
+**Invoked similarly named helper outside the twelve:** module function `rehydrateTelemetryState(instance)` at the bottom of `telemetry-aggregator.ts` is **DELETE after the hold**, together with `recordCascadeEfficiency`, `getCascadeHistory`, the empty-state writer/timer and their tests. The helper is called, but both cascade methods have zero production callers; the measured state file is 57 bytes with an empty array. Its only effects are an empty 60-second write and setting the shared flag that suppresses the dead SQL method.
 
-**Adjacent boundary:** `applyDSEMultiplier` is dormant with non-test references only in the DSE integration test; DSE diagnostics source is mounted after the API catch-all and staging returns 404. Cost readers are reachable and currently empty. A later cleanup must treat these as explicit siblings rather than claiming the twelve rows remove the whole limb.
+**Adjacent boundary:** **DELETE after the hold** the DSE engine, barrel, diagnostics exports/routes/tests and `applyDSEMultiplier`. The compute path has zero production callers, the diagnostics route sits behind the API catch-all, and the multiplier is test-only. For the cost limb, replace or delete its current readers/routes/tests with the old writer: the drift monitor has no starter and its reachable reader can expose only an empty buffer. Any repaired cost monitor/endpoint must be rebuilt around the typed capture and must not inherit the DSE consumer.
 
 ## 5. Existing sprint and after-live coverage
 
@@ -153,24 +154,24 @@ Supporting current design/audit homes: `ML_DESIGN_PRELIMINARY_2026-05-21.md`, `L
 
 ## 6. Separate immediate safeguard proposal
 
-### Proposal: `B-PAIR-TELEMETRY-RESTART-CAPTURE` — capture-only, no consumer switch
+### Corrected proposal: replay proof first — no new event store yet
 
-**Problem it would solve:** preserve the exact rolling VTS telemetry events that currently disappear at restart, so scanner-order continuity and later provenance can be replayed rather than rebuilt opportunistically.
+**Problem it would solve:** restore the active scanner's 24-hour `pairTelemetry` ordering after restart without inventing a second corpus or reviving the unsafe January SQL path.
 
 **Narrow design boundary:**
 
-1. append accepted VTS telemetry events to a typed, versioned, class/source/build/session-stamped store;
-2. retain raw event fields, including explicit missing/defaulted flags; do not reuse score columns for unrelated values;
-3. no DSE, AMR, confidence, rank, or scanner consumer change in the capture increment;
-4. a separate reviewed increment may add bounded 24-hour replay after it proves class/mode/epoch semantics and does not double-count;
-5. preserve the active `cascadeHistory` file helper; do not flip `FORCE_PERSIST`; do not start the old SQL rehydrator;
-6. slot-check against sprint rows 103, 106–108, 114, 123, and 148 so it folds into an existing canonical event/corpus contract if one already owns the fields.
+1. build a bounded 24-hour replay reader over the existing durable VTS/open-close/outcome substrate;
+2. reproduce a pre-restart `getTopPairs` ordering exactly from that replay, including latest-value ordering, the known-zero retired `finalScore`, event time and close success;
+3. mutate asset class, session/epoch identity and open-versus-close event identity and require the proof to fail;
+4. name any field the existing corpus genuinely cannot reconstruct instead of pre-supposing a new store;
+5. only those proven-missing fields may fold into sprint row 103 or 123 as typed, class/source/build/session-stamped capture;
+6. no DSE, AMR, confidence, rank or scanner-authority change; do not flip `FORCE_PERSIST`, start either old rehydrator, or retain the unused cascade file helper.
 
-**Recommendation:** **do not insert this ahead of go-live merely because the old method exists.** The measured loss horizon is 24 hours and the main training corpus is durable; this is a small continuity improvement, not an emergency months-of-data rescue. PM/owners should first slot-check whether row 103 or 123 already captures the missing event identity. If it can be folded into one of those rows without moving the live sequence, do so; otherwise place it separately without blocking go-live.
+**Recommendation:** **do not create or place a new event store yet.** First run the replay proof against existing durable rows. The measured loss horizon is 24 hours and the main training corpus is durable, so the proof and any later missing-field capture remain nonblocking for go-live. If the proof exposes a real missing identity/field, fold only that gap into row 103 or 123 after its slot check.
 
 ### Cost-history sibling
 
-If cost-environment history is judged more valuable than pair-ranking replay, scope a separate capture-only cost table with a real mode/scope enum and explicit fee/slippage/spread units. It must not start the old `mode='system'` writer or feed DSE. This is also non-blocking because per-decision cost evidence already exists and dedicated fee/provenance rows are in the sprint.
+Cost-environment history has distinct value because it can observe broad market friction even when no trade is selected; per-decision fields are selection-biased. Scope a separate capture-only cost table with real class/scope and mode contracts, explicit fee/slippage/spread units, provenance and retention. It must not start the old `mode='system'` writer or feed DSE. This remains nonblocking and slot-checks against the existing fee/provenance rows.
 
 ## 7. Static reachability and fresh-reader record
 
@@ -179,7 +180,8 @@ Main-session re-derivation across `server`, `client`, `shared`, and `scripts` Ty
 - zero production callers: items 1, class method 2, 3–7, 9 starter, 10–12, and adjacent `applyDSEMultiplier`;
 - item 8 is reached only inside dormant item 7;
 - `persistCostSnapshot` is reached by its dormant starter and tests only;
-- positive controls: the same search finds the active module rehydrator invocation, `loadRecentTelemetry` use, the active fixed-notional sizing call, and active cost-reader route uses.
+- the invoked module rehydrator has one singleton call, but its `recordCascadeEfficiency` and `getCascadeHistory` payload methods have zero production callers; their only references beyond declarations are unit tests;
+- positive controls: the same search finds the module rehydrator invocation, both active `recordPairTelemetry` writers, the scanner's two `getTopPairs` calls, the active fixed-notional sizing call, and active cost-reader route uses.
 
 Fresh-reader pass:
 
@@ -196,15 +198,17 @@ Hits folded into this pack:
 
 All six were re-derived against the e3-identical source and staging runtime. The diagnostics sibling is weaker than its source suggests: DSE routes are presently unreachable because the API catch-all precedes their mount.
 
+Coltrane's first review returned CHANGES NEEDED at 2026-11-24T14:15:55Z. Main-session re-derivation confirmed both corrections: the Batch-46 helper's live invocation is not evidence of a live payload contract, and a new event store was premature before a replay proof. The trailing-24-hour `vts_open_trades` control found 1,767/1,767 core score-context rows but 0/1,767 close-profit or net-PnL context rows, so the replay proof must demonstrate its durable outcome join rather than assume one table is sufficient.
+
 ## 8. Questions for Coltrane's technical ruling
 
-Please independently attack and return an exact disposition for:
+Please re-review and return PROCEED or CHANGES NEEDED on:
 
-1. the row-by-row RETAIN / ISOLATE / REPAIR / DELETE classifications in §4;
-2. whether row 2's restart duty is real enough to repair, or whether the 24-hour repopulation plus durable source corpus makes it unnecessary;
-3. whether cost-environment history has a unique future-learning value not already covered by per-decision cost fields and sprint rows;
-4. whether any item proposed DELETE carries an undocumented external/dynamic consumer or a data contract not named here;
-5. whether `B-PAIR-TELEMETRY-RESTART-CAPTURE` should fold into an existing sprint row, be separately placed without blocking go-live, or be rejected;
-6. the exact boundary around adjacent DSE/cost routes, tests, drift monitor, and `applyDSEMultiplier`.
+1. the corrected twelve-row end state in §4, including DELETE rather than ISOLATE for the old adaptive/DSE runtime;
+2. deletion of the invoked Batch-46 file helper together with its zero-caller cascade payload and timer;
+3. the replay-first boundary in §6: exact pre/post `getTopPairs` ordering plus class/session/open-close mutations before any new capture store;
+4. the explicit fact that the current 24-hour open-trade rows lack close profit/net-PnL context, so the proof must demonstrate its durable outcome join;
+5. the typed cost-history replacement duty and delete-old-limb boundary;
+6. the complete adjacent deletion boundary for DSE routes/barrel/tests/multiplier and replacement-or-delete boundary for old cost readers/routes/tests.
 
 Until that ruling and Kyle's later placement, **KD-119 means no deletion and no reconnection**.

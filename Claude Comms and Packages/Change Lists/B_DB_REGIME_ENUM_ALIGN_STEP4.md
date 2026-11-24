@@ -268,7 +268,9 @@ with reviewer-ledger and retraction counts unchanged.
 Kyle's KD-119 supersedes the earlier delete-all placement proposal. All twelve dormant rows are under a
 no-delete hold; Kyle has approved neither deletion nor a pre-live rebuild. The required original-directive,
 commit, runtime, data-continuity, future-ML and plan census is in
-`B_DB_REGIME_ENUM_ALIGN_KD119_PROVENANCE.md`. It distinguishes the active module-level state rehydrator
-from the dead class SQL method, measures the durable corpus versus restart loss, and gives Coltrane a
-row-by-row RETAIN / ISOLATE / REPAIR / DELETE recommendation. Step 11 remains open until Coltrane returns
-the technical disposition; no cleanup or reconnect is authorized by this record.
+`B_DB_REGIME_ENUM_ALIGN_KD119_PROVENANCE.md`. Coltrane returned CHANGES NEEDED on the first pack at
+2026-11-24T14:15:55Z: the invoked module-level helper has no live payload contract and belongs in later
+cleanup, while restart continuity must first prove bounded replay from existing durable VTS/outcome rows
+before any new store is proposed. The corrected pack maps all twelve rows plus the adjacent DSE/cascade/cost
+limbs to repair-the-duty/delete-the-old-body or delete-after-hold outcomes. Step 11 remains open for
+Coltrane's corrected-ref ruling; no cleanup, reconnect, deploy, restart or mode change is authorized.
