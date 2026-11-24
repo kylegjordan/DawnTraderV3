@@ -155,7 +155,7 @@ The registered window is exactly `[2026-11-21T00:13:33Z, 2026-11-24T00:13:33Z)`.
 
 - **q5:** no day had more than three failure outcomes and more than 5% failures. The only failure was the 2026-11-22 timeout. That day had at least 20 overlapped invokes, but their 413.283 s mean was below 600 s. The overlap reader's positive-control pair remained messages `1573508431829016618` and `1573508961045577891`, overlapping for 412.747 s.
 - **q6:** there were zero `post_failed` outcomes; all 87 replies were at least 2,202 characters, so the gate-reply-under-40 subset is necessarily empty; and there were zero self-advance invokes in the window. The kind reader still found its historical positive control: 15 self-advance rows, most recently `adv-1573462006424670410`. Before reading the live file, its discriminator classified a synthetic post failure, 12-character reply and missing-marker self-advance.
-- **Day-3 decision:** neither absolute stop fired. The one-worker flag remains off; no switch is made while Langston is off. Correct reader alert `94c24825-f527-4aff-ae39-623ada338b19` will be resolved with this pushed record as evidence, never acknowledged. The observation continues to the day-7 reader.
+- **Day-3 decision:** neither absolute stop fired. The one-worker flag remains off; no switch is made while Langston is off. Correct reader alert `94c24825-f527-4aff-ae39-623ada338b19` was resolved at `2026-11-24T00:16:08Z` by `codex-infra`, with pushed evidence ref `aa5d83fb7eb550eb087a41d45a5f04d9e676876e`; the resolve command was used, never the ack command. The observation continues to the day-7 reader.
 
 ## 7. The pre-registered close criterion (quoted from `B_LANGSTON_TWO_WORKERS_PRE_REGISTRATION.md` §4, unchanged)
 
