@@ -143,6 +143,20 @@ The graded window starts at the fold install, `T' = 2026-11-21T00:13:33Z`, so it
 - **Decision at the early read:** neither pre-registered q5 stop nor q6 stop had fired, and the one-worker flag remained off. This is not the day-3 completion because the replacement window had not elapsed.
 - **Corrected readers:** `94c24825-f527-4aff-ae39-623ada338b19` is scheduled for exactly `T' + 3 d`; `1bb7196a-1042-44d7-89d3-966414bfc61a` for `T' + 7 d`; and `12875bf3-97b5-435c-9809-c55a00b7e002` for `T' + 21 d`. Each body names the observation restart. The three obsolete pre-fold alerts `5437766c-fc28-4bf2-a409-2b0d73c6d9c6`, `ad4a3ea7-141a-4da1-9040-06bd87921f21` and `d78d017b-5724-472b-a4aa-375d90f3dd14` are resolved with their replacement ids as evidence; none was manually acknowledged.
 
+## 6d. True day-3 q5/q6 reader — 2026-11-24
+
+The registered window is exactly `[2026-11-21T00:13:33Z, 2026-11-24T00:13:33Z)`. The official read ran at `2026-11-24T00:14:27Z`, after the bound. The task log held 925 rows with a numeric `started` value as the file-read positive control; 88 rows started inside the window, zero were `dropped_not_ready`, and the graded invoke population was therefore 88.
+
+| UTC day | invokes | q5 failure outcomes | q5 failure share | overlapped invokes | mean duration of overlapped invokes | q5 stop? | q6 degraded invokes | q6 stop? |
+|---|---:|---:|---:|---:|---:|---|---:|---|
+| 2026-11-21 | 26 | 0 | 0.000% | 12 | 329.315 s | **NO** | 0 | **NO** |
+| 2026-11-22 | 62 | 1 timeout | 1.613% | 34 | 413.283 s | **NO** | 0 | **NO** |
+| 2026-11-23 | 0 | 0 | N/A | 0 | N/A | **NO** | 0 | **NO** |
+
+- **q5:** no day had more than three failure outcomes and more than 5% failures. The only failure was the 2026-11-22 timeout. That day had at least 20 overlapped invokes, but their 413.283 s mean was below 600 s. The overlap reader's positive-control pair remained messages `1573508431829016618` and `1573508961045577891`, overlapping for 412.747 s.
+- **q6:** there were zero `post_failed` outcomes; all 87 replies were at least 2,202 characters, so the gate-reply-under-40 subset is necessarily empty; and there were zero self-advance invokes in the window. The kind reader still found its historical positive control: 15 self-advance rows, most recently `adv-1573462006424670410`. Before reading the live file, its discriminator classified a synthetic post failure, 12-character reply and missing-marker self-advance.
+- **Day-3 decision:** neither absolute stop fired. The one-worker flag remains off; no switch is made while Langston is off. Correct reader alert `94c24825-f527-4aff-ae39-623ada338b19` will be resolved with this pushed record as evidence, never acknowledged. The observation continues to the day-7 reader.
+
 ## 7. The pre-registered close criterion (quoted from `B_LANGSTON_TWO_WORKERS_PRE_REGISTRATION.md` §4, unchanged)
 
 - **W:** "PASS: under 20 min on the first qualifying day after switch-on"; the 7-day median is reported beside it. Per A-1, a miss is read beside the after-window's shared-lane share.
