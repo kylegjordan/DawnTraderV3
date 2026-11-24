@@ -72,6 +72,14 @@ PROCEED on `d0d64c380` (parent `45a3710e5`); he re-read items 1-6 and the decisi
 
 Carrier he named, no action: `clearFirstTickTracking()` (`:2590`) wipes `subscriptionRequests` while leaving intent, so after that diagnostic route an unACKed intent symbol loses its grace and is re-sent next tick (a duplicate subscribe at worst). His out-of-scope hypothesis (`deleteAllActiveOpenPositions(mode)` ignores `mode`, `storage.ts:3962-3963`) is with PM Claude for Kyle's list; it is residual (1)'s carrier.
 
+## Step 6 — deployed 2026-11-24
+
+**STEP: 6 of 11 COMPLETE · NEXT STEP: 7 of 11.** Exact candidate `e3a96a8126f0280a9568bb1823b9210783f0afe0` deployed under `codex-b` at `2026-11-24T00:03:08Z`, restart `715`, as the single reviewed backlog bundle from deployed base `c21c1502a215b428e2cba2a5214696cb9a1a5c74`. Component ref `d0d64c380` is an ancestor of the deployed SHA. The aggregate review record is `B_DEPLOY_BUNDLE_E3A96A812_STEP4.md` at exact off-branch ref `3087bb7c98727a82a48e89d32a2b268a90cb635e`; Coltrane ruled PROCEED at `2026-11-23T22:47:56Z`. Exact-target CI run `45047451029` was re-read before deploy: all four required jobs succeeded at the deployed SHA.
+
+The first `dt-deploy` invocation was refused before mutation because the branch-head observation-window register had advanced. The authoritative eight-row census then passed with every row named; the corrected invocation completed and recorded restart `715`, a bounded 14-second check-failure interval, and exact build identity. Independent read-back found repository HEAD and `dist/BUILD_SHA` both exact, the app online with `unstable_restarts=0`, and live post-resume price/exit cycles. This process is the Step-7 anchor. The reconnect read must apply the three admissible-outcome rule and must pair any `skipped=restore_in_progress` line with the owning run's terminal line; immediate post-restart activity alone is not the full OBJ-5 verification.
+
+The Delivery Board parent card was moved from `CI + Deploy` to `Verification`; authoritative `fieldValues` read-back returned Status `Verification`, Owner `Claude New`, Review `Approved`, and Blocked on `External` (the live reconnect evidence).
+
 ---
 
 # r1 (graded at `b9205dcbb`, kept as written)

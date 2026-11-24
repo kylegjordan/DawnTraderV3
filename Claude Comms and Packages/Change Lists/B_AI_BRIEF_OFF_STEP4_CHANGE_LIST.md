@@ -96,3 +96,27 @@ Not before the B-ENTRY-GATE increment-C read is TAKEN (after 2026-11-23 21:00Z, 
 | `PHASE_19_PLAN.md` | judged | N/A expected — not a Phase-19 row |
 | `PRE_LIVE_SPRINT.md` #1264 line | REQUIRED by P6 + his condition 2 | Step 10 |
 | `RUNNING_ISSUES.md` #1264 | REQUIRED by P6 | Step 10 |
+
+## Step 6 — deployed 2026-11-24
+
+**STEP: 6 of 11 COMPLETE · NEXT STEP: 7 of 11.** Exact candidate `e3a96a8126f0280a9568bb1823b9210783f0afe0` deployed under `codex-b` at `2026-11-24T00:03:08Z`, restart `715`, as the single reviewed backlog bundle from deployed base `c21c1502a215b428e2cba2a5214696cb9a1a5c74`. Component ref `473a7eb72` is an ancestor of the deployed SHA. The aggregate review record is `B_DEPLOY_BUNDLE_E3A96A812_STEP4.md` at exact off-branch ref `3087bb7c98727a82a48e89d32a2b268a90cb635e`; Coltrane ruled PROCEED at `2026-11-23T22:47:56Z`, authorizing only this exact deployment cutoff after the separate time, NEW, INFRA and window-census gates. Exact-target CI run `45047451029` was re-read before deploy: Build, Test Suite, TypeScript Check and Docker Build all succeeded at the deployed SHA.
+
+The first `dt-deploy` invocation was refused before mutation because the branch-head observation-window register had advanced from the reviewed target's nine-row census. The authoritative branch-head census was then re-derived as exactly eight rows and passed with all eight named: `B-AI-BRIEF-OFF`, `B-PRICE-SIDE-BY-JOB`, `B-RTB-PROMOTION-RETRY-STORM`, `B-TOKEN-WATCH-BIRTH-CAP`, `B-TOKEN-WATCH-FOLLOWUP-MEMORY`, `B-UNIVERSE-REFRESH-ACTS`, `B-XSTOCK-BAR-AVAILABILITY`, `B-XSTOCK-BID-TRIGGER-RELAND`. `B-UNIVERSE-REFRESH-ACTS` explicitly permits a pre-Step-6 deploy and was therefore a named no-harm window. The corrected invocation completed with a bounded 14-second check-failure interval and recorded `register_sha=85b101adecb65ec24dfdd2f493785bfe58fc4e59` / `register_blob=9f78481c90feb16b0030bef527015516887ecf34`.
+
+Independent post-deploy read-back found repository HEAD and `dist/BUILD_SHA` both exact, the app online with `restart_time=715` and `unstable_restarts=0`, and live post-resume price/exit cycles. The 25-hour verification clock is anchored to this process at `2026-11-24T00:03:08Z`; its full-span read is due at or after `2026-11-25T01:03:08Z`. The window register's `expected_by` is amended to that exact anchor + 25 hours in the same ledger commit.
+
+The Delivery Board card was moved from `CI + Deploy` to `Verification`; authoritative `fieldValues` read-back returned Status `Verification`, Owner `Claude New`, Review `Approved`, and Blocked on `External` (the registered 25-hour clock).
+
+### Step 7 immediate read-back — 2026-11-24T00:07Z
+
+The authenticated staging scheduler-status call returned HTTP 200 and `ok=true`. Its complete task population was **37**: exact name `AI Summary` occurred **0/37**, while exact name `Market Scan` occurred **1/37** and was the known-present positive control. This is the pre-registered 1(b) shape (38 → 37, AI task absent, neighboring control present).
+
+The database baseline used the same two exact task names. It found **179** lifetime `AI Summary` rows, with latest `2026-11-23T05:08:41.828899Z`, and **48,611** lifetime `Market Scan` rows, with latest `2026-11-23T23:58:47.138191Z`; both known-present populations prove the read can see the rows. At the immediate read neither had a post-deploy row, so no absence claim was taken from that zero.
+
+At `2026-11-24T00:13:05Z`, the first post-deploy Market Scan ran. The database then held **2** post-deploy Market Scan rows (first timestamps `00:13:05.709623Z` and `00:13:05.709980Z`) and **0** post-deploy AI Summary rows over the same exact task-name population. The two current process logs, read from deployed-at onward, held **28** `[MarketScan]` lines and **0** `[AISummary]` lines. Market Scan is therefore the post-deploy positive control in both instruments; this is an early PASS on the two absence legs, not the registered 25-hour confirmation.
+
+This does not complete Step 7: the confirmatory 25-hour log and database read remains due at or after `2026-11-25T01:03:08Z`, and the staging UI still needs the applicable scheduler/briefing surface judgement at that close. Event-wait alert `5a955fd6-71b6-4918-ae5e-7d7af1c6fc92` was read back `scheduled` for `2026-11-25T01:08:08Z`; never ack it, and resolve only with the completed evidence commit.
+
+Deploy-drift alert `d92423ce-ff41-4542-8c0e-15f20a2580f5` did not self-clear on the first post-deploy hourly run. At `2026-11-24T00:17:01Z` the checker returned RUNG 3 for deployed `e3a96a8126f0280a9568bb1823b9210783f0afe0` versus shared head `7f0e0ad0031887dcd71cc37731e94d57bdae7348`: 88 commits and 18 runtime files, governed age 31 h. It remains active and unacknowledged; this is a terminal non-clear result, so no manual resolve is permitted.
+
+`REVIEWER: claim-only · B-AI-BRIEF-OFF immediate Step-7 scheduler, database and log snapshots · three narrow counts re-derived with positive controls; no discrepancy; compatible alternatives remain (direct caller, later fire, hidden transparency-write failure, log-line count is not execution count); 25 h confirmation and UI still owed · re-derived y`
