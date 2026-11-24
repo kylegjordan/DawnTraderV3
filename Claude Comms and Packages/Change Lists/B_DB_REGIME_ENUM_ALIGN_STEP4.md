@@ -217,3 +217,29 @@ verification of this exact pushed evidence; no Step 10 or completion claim is ma
 **REVIEWER: CLEAN — fresh read after P11.** Exact e3 HEAD/build and zero-byte worktree status; unchanged
 process identity; 1 target ledger row among 227 applied rows; 7/7 exact column shapes; 2 total and 2 distinct
 proof rows, both canonical/paper/`source=vts`; rebased proof blob exactly `c8de6c62dd8f2d3f0c69c149c15f91bbe8225ee0`.
+
+## 11. STEP 8 COMPLETION — INDEPENDENT STAGING VERIFICATION (2026-11-24)
+
+Coltrane independently re-derived the deployed outcome and ruled PROCEED at
+2026-11-24T02:05:49Z against evidence ref `8a914667f41e1473cc1a434df3217335ceeffaf8`.
+The verification did not rely on the Step 9 report:
+
+1. Staging HEAD and `dist/BUILD_SHA` were both exact `e3a96a8126f0280a9568bb1823b9210783f0afe0`,
+   the worktree was empty, and a temporary-repository positive control proved the status instrument could
+   report an untracked file.
+2. The application process remained online with the same identity: `pid=2822823`, `restart_time=715`,
+   `pm_uptime=1795478578039`.
+3. `information_schema` returned the complete 7/7 telemetry-column population with the exact required
+   widths, precision/scale, nullability and `source='unknown'` default.
+4. `_migrations` contained exactly one row for
+   `2026-11-24-b-db-regime-enum-align-telemetry-columns.sql`.
+5. `telemetry_history` contained exactly two rows and two distinct proof symbols. Both were
+   `IMPULSE_EXPANSION`, `paper`, `source=vts`.
+6. Challenge leg: Coltrane directly cast `IMPULSE_EXPANSION` to `market_regime` successfully and proved
+   the legacy ghost `HIGH_VOL_IMPULSE` was rejected as an invalid enum value. This discriminates database-
+   enforced canonicality from a report that merely labels the rows canonical.
+7. No UI leg applies: this is a database-schema and background-writer contract with no panel or route.
+
+Evidence-ref CI run `45309277720` passed TypeScript Check, Test Suite, Build and Docker Build. Delivery
+card #1263 remains in Verification with Review=Approved and Blocked on=Nothing. Step 8 is complete; the
+next workflow action is Step 10 governance.
