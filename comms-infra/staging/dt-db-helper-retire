@@ -112,28 +112,132 @@ def close_all(verified):
         os.close(fd)
 
 
+def state_path(name):
+    return os.path.join(STATE_DIR, name)
+
+
+def atomic_json(path, value):
+    os.makedirs(STATE_DIR, mode=0o700, exist_ok=True)
+    os.chmod(STATE_DIR, 0o700)
+    pending = path + ".new"
+    with open(pending, "w", encoding="utf-8") as fh:
+        json.dump(value, fh, sort_keys=True)
+        fh.write("\n")
+        fh.flush()
+        os.fsync(fh.fileno())
+    os.chmod(pending, 0o600)
+    os.replace(pending, path)
+    directory_fd = os.open(STATE_DIR, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    try:
+        os.fsync(directory_fd)
+    finally:
+        os.close(directory_fd)
+
+
+def load_journal(manifest, actor):
+    path = state_path("remove-journal.json")
+    expected_paths = [row["path"] for row in manifest["files"]]
+    if not os.path.exists(path):
+        journal = {
+            "schema_version": 1,
+            "batch": "B-DB-HELPER-RETIRE",
+            "reviewed_ref": REVIEWED_REF,
+            "actor": actor,
+            "status": "prepared",
+            "prepared_at_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "entries": [{"path": item, "state": "pending"} for item in expected_paths],
+        }
+        atomic_json(path, journal)
+        return journal
+    with open(path, encoding="utf-8") as fh:
+        journal = json.load(fh)
+    if journal.get("schema_version") != 1 or journal.get("batch") != "B-DB-HELPER-RETIRE" or journal.get("reviewed_ref") != REVIEWED_REF:
+        raise Refusal("existing removal journal identity/version differs")
+    if journal.get("actor") != actor:
+        journal.setdefault("resume_actors", []).append({
+            "actor": actor,
+            "at_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        })
+    entries = journal.get("entries")
+    if not isinstance(entries, list) or [entry.get("path") for entry in entries] != expected_paths:
+        raise Refusal("existing removal journal path population/order differs")
+    if any(entry.get("state") not in ("pending", "removing", "removed") for entry in entries):
+        raise Refusal("existing removal journal contains an invalid state")
+    return journal
+
+
+def persist_journal(journal):
+    atomic_json(state_path("remove-journal.json"), journal)
+
+
+def reconcile_journal(manifest, journal):
+    changed = False
+    for row, entry in zip(manifest["files"], journal["entries"]):
+        exists = os.path.lexists(row["path"])
+        if entry["state"] == "removed":
+            if exists:
+                raise Refusal("%s reappeared after a journaled removal" % row["path"])
+            continue
+        if entry["state"] == "removing" and not exists:
+            entry["state"] = "removed"
+            entry["reconciled_at_utc"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            changed = True
+            continue
+        fd, _ = verify_row(row)
+        os.close(fd)
+        if entry["state"] == "removing":
+            entry["state"] = "pending"
+            entry["reconciled_at_utc"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            changed = True
+    if changed:
+        persist_journal(journal)
+
+
 def remove_all(manifest, actor):
     if REQUIRE_ROOT and os.geteuid() != 0:
         raise Refusal("--remove requires root")
     if actor not in ALLOWED_ACTORS:
         raise Refusal("--by must be an allowed actor")
-    verified = verify_all(manifest)
+    if os.path.exists(state_path("last-remove.json")):
+        raise Refusal("removal already completed; use --status")
+    if not os.path.exists(state_path("remove-journal.json")):
+        verified = verify_all(manifest)
+        close_all(verified)
+    journal = load_journal(manifest, actor)
+    reconcile_journal(manifest, journal)
+    journal["status"] = "in_progress"
+    persist_journal(journal)
     parent_fd = os.open(TARGET_DIR, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
     try:
-        # A second inode check closes the gap between the byte read and removal.
-        for row, _, before in verified:
+        for index, (row, entry) in enumerate(zip(manifest["files"], journal["entries"])):
+            if entry["state"] == "removed":
+                continue
+            fd, before = verify_row(row)
             name = os.path.basename(row["path"])
-            current = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
-            if (current.st_dev, current.st_ino) != (before.st_dev, before.st_ino):
-                raise Refusal("%s changed identity after verification" % row["path"])
-        for row, _, _ in verified:
-            os.unlink(os.path.basename(row["path"]), dir_fd=parent_fd)
-        os.fsync(parent_fd)
+            try:
+                current = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+                if (current.st_dev, current.st_ino) != (before.st_dev, before.st_ino):
+                    raise Refusal("%s changed identity before its removal transition" % row["path"])
+                entry["state"] = "removing"
+                entry["intent_at_utc"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+                persist_journal(journal)
+                # TEST_SEAM: before adjacent identity check and unlink
+                current = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+                if (current.st_dev, current.st_ino) != (before.st_dev, before.st_ino):
+                    raise Refusal("%s changed identity at its removal transition" % row["path"])
+                # TEST_SEAM: before unlink
+                os.unlink(name, dir_fd=parent_fd)
+                os.fsync(parent_fd)
+            finally:
+                os.close(fd)
+            entry["state"] = "removed"
+            entry["removed_at_utc"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            persist_journal(journal)
     finally:
         os.close(parent_fd)
-        close_all(verified)
-
-    os.makedirs(STATE_DIR, mode=0o700, exist_ok=True)
+    journal["status"] = "complete"
+    journal["completed_at_utc"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    persist_journal(journal)
     receipt = {
         "schema_version": 1,
         "batch": "B-DB-HELPER-RETIRE",
@@ -143,15 +247,7 @@ def remove_all(manifest, actor):
         "removed_paths": [row["path"] for row in manifest["files"]],
         "removed_at_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
     }
-    pending = os.path.join(STATE_DIR, "last-remove.json.new")
-    final = os.path.join(STATE_DIR, "last-remove.json")
-    with open(pending, "w", encoding="utf-8") as fh:
-        json.dump(receipt, fh, sort_keys=True)
-        fh.write("\n")
-        fh.flush()
-        os.fsync(fh.fileno())
-    os.chmod(pending, 0o600)
-    os.replace(pending, final)
+    atomic_json(state_path("last-remove.json"), receipt)
     print("REMOVED %d exact reviewed helpers; no deploy or restart performed" % EXPECTED_COUNT)
 
 
@@ -167,7 +263,9 @@ def main(argv):
         print("VERIFIED %d exact reviewed helpers; no changes made" % EXPECTED_COUNT)
         return
     if argv == ["--status"]:
-        path = os.path.join(STATE_DIR, "last-remove.json")
+        path = state_path("last-remove.json")
+        if not os.path.isfile(path):
+            path = state_path("remove-journal.json")
         if not os.path.isfile(path):
             print("NOT REMOVED")
             return

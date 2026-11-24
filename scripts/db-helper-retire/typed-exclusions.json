@@ -20,6 +20,7 @@
     { "path": "comms-infra/laptop/transcript-archive/dt_transcript.py", "type": "marker_processor", "reason": "redacts transcript markers; opens no login" },
     { "path": "scripts/analysis/b_price_side_8c_rescore.py", "type": "marker_processor", "reason": "processes exported query output; opens no login" },
     { "path": "scripts/analysis/xs_frame_false_hollow.py", "type": "marker_processor", "reason": "processes exported query output; opens no login" },
+    { "path": "token-watch/config.py", "type": "documentation_marker", "reason": "a whole-line safety comment names DATABASE_URL while explaining why token-watch storage is local; opens no login" },
     { "path": "scripts/db-map/scanner.mjs", "type": "marker_scanner", "reason": "recognizes connection syntax; regex literals are not execution" },
     { "path": "scripts/db-helper-retire/validate.mjs", "type": "marker_scanner", "reason": "recognizes forbidden connection syntax; opens no login" },
     { "path": "scripts/db-helper-retire/tests/validator.test.mjs", "type": "test_fixture", "reason": "mutation fixtures contain forbidden syntax by design" },

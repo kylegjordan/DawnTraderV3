@@ -33,7 +33,7 @@ def sha256(path):
     return value.hexdigest()
 
 
-def fixture():
+def fixture(replacements=None):
     work = tempfile.mkdtemp(prefix="dt-db-helper-retire-test-")
     target = os.path.join(work, "target")
     state = os.path.join(work, "state")
@@ -78,8 +78,13 @@ def fixture():
         END,
     ])
     tool = os.path.join(work, "dt-db-helper-retire")
+    rendered = before + constants + after
+    for old, new in replacements or []:
+        if old not in rendered:
+            raise AssertionError("test seam missing: %s" % old)
+        rendered = rendered.replace(old, new, 1)
     with open(tool, "w", encoding="utf-8") as fh:
-        fh.write(before + constants + after)
+        fh.write(rendered)
     os.chmod(tool, 0o755)
     return work, tool, manifest_path, manifest
 
@@ -145,6 +150,51 @@ try:
     status = run(tool, "--status")
     receipt = json.loads(status.stdout)
     check(status.returncode == 0 and receipt["removed_count"] == 3 and receipt["actor"] == "codex-infra", status.stdout)
+finally:
+    shutil.rmtree(work)
+
+replacement_injection = """# TEST_SEAM: before adjacent identity check and unlink
+                if index == 0:
+                    replacement = row[\"path\"] + \".replacement\"
+                    with open(replacement, \"wb\") as replacement_fh:
+                        replacement_fh.write(b\"replacement\\n\")
+                    os.chmod(replacement, 0o640)
+                    os.replace(replacement, row[\"path\"])"""
+work, tool, _, manifest = fixture([(
+    "# TEST_SEAM: before adjacent identity check and unlink",
+    replacement_injection,
+)])
+try:
+    result = run(tool, "--remove", "--by", "codex-infra")
+    check(result.returncode == 2 and "changed identity at its removal transition" in result.stderr, result.stderr)
+    status = run(tool, "--status")
+    journal = json.loads(status.stdout)
+    check(journal["status"] == "in_progress" and journal["entries"][0]["state"] == "removing", status.stdout)
+    check(all(os.path.lexists(row["path"]) for row in manifest["files"]), "replacement mutation caused an unlink")
+finally:
+    shutil.rmtree(work)
+
+failure_injection = """# TEST_SEAM: before unlink
+                fault = os.path.join(STATE_DIR, \"injected-fault-once\")
+                if index == 1 and not os.path.exists(fault):
+                    with open(fault, \"w\", encoding=\"utf-8\") as fault_fh:
+                        fault_fh.write(\"faulted\\n\")
+                    raise OSError(\"injected mid-sequence failure\")"""
+work, tool, _, manifest = fixture([(
+    "# TEST_SEAM: before unlink",
+    failure_injection,
+)])
+try:
+    first = run(tool, "--remove", "--by", "codex-infra")
+    check(first.returncode == 2 and "injected mid-sequence failure" in first.stderr, first.stderr)
+    status = run(tool, "--status")
+    journal = json.loads(status.stdout)
+    check([entry["state"] for entry in journal["entries"]] == ["removed", "removing", "pending"], status.stdout)
+    check(not os.path.exists(manifest["files"][0]["path"]) and all(os.path.exists(row["path"]) for row in manifest["files"][1:]), "mid-sequence state does not match journal")
+    resumed = run(tool, "--remove", "--by", "codex-infra")
+    check(resumed.returncode == 0 and "REMOVED 3" in resumed.stdout, (resumed.stdout, resumed.stderr))
+    receipt = json.loads(run(tool, "--status").stdout)
+    check(receipt["removed_count"] == 3 and not any(os.path.exists(row["path"]) for row in manifest["files"]), "resumed removal did not complete exactly")
 finally:
     shutil.rmtree(work)
 

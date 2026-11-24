@@ -1,10 +1,13 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { readFile, unlink, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { assertExactMarkerSet, detectConnectionMarkers, validateLedgerObject } from '../validate.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO = resolve(HERE, '../../..');
+const VALIDATOR = resolve(HERE, '../validate.mjs');
 const ledger = JSON.parse(await readFile(resolve(HERE, '../disposition-ledger.json'), 'utf8'));
 let checks = 0;
 function check(condition, message) { checks += 1; assert.ok(condition, message); }
@@ -48,10 +51,32 @@ for (const [path, text] of fixtures) {
   if (path.endsWith('.sh') || path === 'package.json') check(markers.includes('direct_psql'), `${path} psql execution is detected`);
 }
 
-const controlled = new Map([['known.ts', ['node_postgres_constructor']]]);
-assertExactMarkerSet(controlled, new Set(['known.ts']));
+const controlled = new Map([['known.ts', { node_postgres_constructor: 1 }]]);
+assertExactMarkerSet(controlled, new Map([['known.ts', { node_postgres_constructor: 1 }]]));
 checks += 1;
-controlled.set('mutant.ts', ['node_postgres_constructor']);
-rejects(() => assertExactMarkerSet(controlled, new Set(['known.ts'])), /mutant\.ts/, 'new unclassified marker path turns red');
+controlled.set('mutant.ts', { node_postgres_constructor: 1 });
+rejects(() => assertExactMarkerSet(controlled, new Map([['known.ts', { node_postgres_constructor: 1 }]])), /path set differs/, 'new unclassified marker path turns red');
+
+const wrapperPath = resolve(REPO, 'comms-infra/staging/psql-wrapper');
+const wrapperOriginal = await readFile(wrapperPath);
+try {
+  await writeFile(wrapperPath, Buffer.concat([wrapperOriginal, Buffer.from('\n/usr/bin/psql "$@"\n')]));
+  const result = spawnSync(process.execPath, [VALIDATOR], { cwd: REPO, encoding: 'utf8' });
+  check(result.status !== 0 && result.stderr.includes('connection-marker surface counts differ: comms-infra/staging/psql-wrapper'), 'second psql invocation in an allowed file turns the full validator red');
+} finally {
+  await writeFile(wrapperPath, wrapperOriginal);
+}
+
+const trapRelative = `scripts/db-helper-retire-comment-trap-${process.pid}.mjs`;
+const trapPath = resolve(REPO, trapRelative);
+const trapSource = `import { execFileSync } from 'node:child_process';\nconst bait = "/*";\nexecFileSync('/usr/bin/psql', [process.env.DATABASE_URL, '-c', 'select 1']);\n/* genuine comment close */\n`;
+try {
+  await writeFile(trapPath, trapSource);
+  execFileSync(process.execPath, ['--check', trapPath], { stdio: 'pipe' });
+  const result = spawnSync(process.execPath, [VALIDATOR], { cwd: REPO, encoding: 'utf8' });
+  check(result.status !== 0 && `${result.stdout}\n${result.stderr}`.includes(trapRelative), 'string-contained block-comment opener cannot hide a filesystem-enrolled psql source');
+} finally {
+  await unlink(trapPath).catch((error) => { if (error.code !== 'ENOENT') throw error; });
+}
 
 console.log(`B-DB-HELPER-RETIRE mutations: ${checks} checks passed`);
