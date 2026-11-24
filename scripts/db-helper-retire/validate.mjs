@@ -86,7 +86,9 @@ function stripTypeScriptComments(path, source) {
       : ts.ScriptKind.JS;
   const parsed = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, scriptKind);
   if (parsed.parseDiagnostics.length) return source;
-  const output = [...source];
+  // TypeScript scanner offsets are UTF-16 code units; split('') preserves that
+  // indexing even when earlier source contains emoji or other astral symbols.
+  const output = source.split('');
   const scanner = ts.createScanner(ts.ScriptTarget.Latest, false, ts.LanguageVariant.Standard, source);
   for (let token = scanner.scan(); token !== ts.SyntaxKind.EndOfFileToken; token = scanner.scan()) {
     if (token !== ts.SyntaxKind.SingleLineCommentTrivia && token !== ts.SyntaxKind.MultiLineCommentTrivia) continue;
@@ -192,11 +194,19 @@ export function detectConnectionSurfaceCounts(path, text) {
   for (const declaration of source.matchAll(/\b(?:const|let|var)\s*{([^}]*)}\s*=\s*require\s*\(\s*['"]pg['"]\s*\)/g)) {
     for (const match of declaration[1].matchAll(/\b(?:Client|Pool)\s*:\s*([A-Za-z_$][\w$]*)/g)) pgAliases.add(match[1]);
   }
+  const pgNamespaces = new Set();
+  for (const match of source.matchAll(/\bimport\s*\*\s*as\s*([A-Za-z_$][\w$]*)\s*from\s*['"]pg['"]/g)) pgNamespaces.add(match[1]);
+  for (const match of source.matchAll(/\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*['"]pg['"]\s*\)/g)) pgNamespaces.add(match[1]);
   let aliasConstructorCount = 0;
   for (const alias of pgAliases) {
     aliasConstructorCount += countMatches(source, new RegExp(`\\bnew\\s+${alias}\\s*\\(`, 'g'));
   }
   counts.node_postgres_alias_constructor = aliasConstructorCount;
+  let namespaceConstructorCount = 0;
+  for (const namespace of pgNamespaces) {
+    namespaceConstructorCount += countMatches(source, new RegExp(`\\bnew\\s+${namespace}(?:\\.default)?\\.(?:Client|Pool)\\s*\\(`, 'g'));
+  }
+  counts.node_postgres_namespace_constructor = namespaceConstructorCount;
   return Object.fromEntries(Object.entries(counts).filter(([, count]) => count > 0).sort(([left], [right]) => left.localeCompare(right)));
 }
 
