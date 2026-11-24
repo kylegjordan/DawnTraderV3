@@ -22,7 +22,7 @@ The staging reflog enumerates three deployments after increment C first landed a
 | 2026-11-21 00:07:40Z | `2a501de33c23ff95e18d421272d60093e4773f14` | before window |
 | 2026-11-21 05:08:19Z | `c21c1502a215b428e2cba2a5214696cb9a1a5c74` | before window; served the full session |
 
-There is no staging reset on 2026-11-22 or during 2026-11-23 01:00Z–21:00Z. `/home/deploy/dawntrader-deploy.record` and the staging checkout both name exact ref `c21c1502a215b428e2cba2a5214696cb9a1a5c74`, restart 714, deployed 2026-11-21T05:08:44Z. The inherited “many builds in one population” concern therefore collapses to one build for the complete registered window; no file-delta substitution is needed.
+There is no staging reset on 2026-11-22 or during 2026-11-23 01:00Z–21:00Z. **At the Step-7 read**, `/home/deploy/dawntrader-deploy.record` and the staging checkout both named exact ref `c21c1502a215b428e2cba2a5214696cb9a1a5c74`, restart 714, deployed 2026-11-21T05:08:44Z. That mutable deploy record has since advanced to `e3a96a8126f0280a9568bb1823b9210783f0afe0`, restart 715, deployed 2026-11-24T00:03:08Z, so it is not a reproducible settling object for this read; its current state proves only that the next deployment occurred after the registered window. The immutable reflog boundary and complete restart-log controls below establish that the inherited “many builds in one population” concern collapses to one build for the complete registered window; no file-delta substitution is needed.
 
 The process log is the app-process restart control. It finds complete stop/exit/start/online sequences at 2026-11-20 23:25:52Z–23:25:55Z, 2026-11-21 00:07:52Z–00:07:55Z, and 2026-11-21 05:08:31Z–05:08:34Z, then none on 2026-11-22 or 2026-11-23. A separate engine-start census finds the paper-engine start-time marker at 2026-11-21 05:08:39Z and 05:08:40Z, then no engine-start route or start-time marker inside 01:00Z–21:00Z. Thus there was **no app-process or paper-engine restart in the registered session**, with both instruments finding their immediately preceding positive controls.
 
@@ -38,10 +38,10 @@ The registered session intersects these stdout objects, selected from their obse
 | `out__2026-11-23_11-00-57.log.gz` | 06:01:00Z–11:01:13Z | 12,179,596 |
 | `out__2026-11-23_15-01-54.log.gz` | 11:01:13Z–15:02:11Z | 15,157,843 |
 | `out__2026-11-23_17-00-23.log.gz` | 15:02:11Z–17:00:40Z | 12,734,795 |
-| `out__2026-11-23_20-01-21.log` | 17:00:41Z–20:01:38Z | 15,413,971 |
-| `out.log` | 20:01:39Z–22:34:35Z at the read | 6,103,005 |
+| `out__2026-11-23_20-01-21.log` at the read; now `out__2026-11-23_20-01-21.log.gz` | 17:00:41Z–20:01:38Z | 15,413,971 |
+| `out.log` at the read; registered-window bytes now in `out__2026-11-24_00-01-14.log.gz` | 20:01:39Z–22:34:35Z at the read | 6,103,005 at the read |
 
-`error.log` was also read over its complete current object (00:00:13Z–22:34:35Z, 698,840 lines at the read) for `BIRTH_LIVE_UNRESOLVED` and error-path controls. The deployed refusal carrier itself is `console.log` at `c21c1502a:server/core/filters/signal_quality_evaluator.ts:385`, so its settling stream is stdout; the hourly tally writer is `:292`, while the unresolved line is stderr at `:325`.
+`error.log` was also read over its complete current object (00:00:13Z–22:34:35Z, 698,840 lines at the read) for `BIRTH_LIVE_UNRESOLVED` and error-path controls; those registered-window bytes are now preserved in `error__2026-11-24_00-01-14.log`. The two former current objects continued after the Step-7 read before rotating, so their present whole-object line totals are larger; timestamp-filtering the durable objects to the registered window reproduces the same population. The deployed refusal carrier itself is `console.log` at `c21c1502a:server/core/filters/signal_quality_evaluator.ts:385`, so its settling stream is stdout; the hourly tally writer is `:292`, while the unresolved line is stderr at `:325`.
 
 All outcome extraction was timestamp-filtered after reading those complete objects. No selected object overlaps another; the boundary records are also the positive control that every chosen rotation was readable. “Complete population” below means all application outcomes recorded in those complete objects; it does not claim that every hypothetical market opportunity existed or that the venue feed never had a quiet interval.
 
@@ -96,7 +96,7 @@ The night-id and regular-session-id sets have an empty intersection, so the peri
 
 ## 5. Migration and settings controls
 
-The current deploy record states that the migration runner completed before restart 714. The deploy tool did not retain the increment-C DO-block's stdout as a separate artifact, so this report does not claim a preserved DO-block line. Its settling object is the live six-column-key readback:
+At the Step-7 read, the then-current deploy record stated that the migration runner completed before restart 714. The mutable file has since advanced with restart 715 and is not a preserved migration artifact. The deploy tool did not retain the increment-C DO-block's stdout as a separate artifact, so this report does not claim a preserved DO-block line. The reproducible settling object is the live six-column-key readback:
 
 | constant | class | value | updated by | updated at |
 |---|---|---:|---|---|
@@ -138,4 +138,4 @@ The settings read uses `dt-sql --csv` over the exact three six-column-key rows. 
 - `[BIRTH_LIVE_UNRESOLVED] class=xstock_spot` from stderr; and
 - the prior-process crypto `[BIRTH_LIVE_OFF]` control plus the three registered pre-window shadow rows.
 
-Deployment and restart controls are `git -C /home/deploy/dawntrader reflog --date=iso`, `/home/deploy/dawntrader-deploy.record`, and `/home/deploy/.pm2/pm2.log`. CI is `gh run view 44847250518 --json jobs`, inspected per named job.
+Deployment and restart controls are the immutable transition history from `git -C /home/deploy/dawntrader reflog --date=iso`, `/home/deploy/.pm2/pm2.log`, and the complete application-log engine-start census. The live `/home/deploy/dawntrader-deploy.record` is intentionally excluded from the reproduction recipe because it advanced after this registered window. CI is `gh run view 44847250518 --json jobs`, inspected per named job.
