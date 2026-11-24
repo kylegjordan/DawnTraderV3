@@ -27,6 +27,8 @@ const read = (p: string) => readFileSync(join(root, p), 'utf8');
 const MIGRATIONS = 'drizzle/migrations';
 const FORWARD = '2026-11-22-b-db-regime-enum-align.sql';
 const ROLLBACK = '2026-11-22-b-db-regime-enum-align-rollback.sql';
+const COLUMN_FORWARD = '2026-11-24-b-db-regime-enum-align-telemetry-columns.sql';
+const COLUMN_ROLLBACK = '2026-11-24-b-db-regime-enum-align-telemetry-columns-rollback.sql';
 const ORIGINAL_SIX = ['EXTREME_NOISE', 'BULL_STABLE', 'BULL_VOLATILE', 'BEAR_STABLE', 'BEAR_VOLATILE', 'LOW_VOL_CHOP'];
 
 const schemaSrc = read('shared/schema.ts');
@@ -96,5 +98,25 @@ describe('B-DB-REGIME-ENUM-ALIGN — declared market_regime equals the storable 
   it('the forward migration is registered and its rollback is not', () => {
     expect(manifestLines.has(FORWARD)).toBe(true);
     expect(manifestLines.has(ROLLBACK)).toBe(false);
+  });
+
+  it('the Step-9 migration restores all seven writer columns with exact shapes', () => {
+    const forward = read(`${MIGRATIONS}/${COLUMN_FORWARD}`);
+    const expected = [
+      ['source', "VARCHAR\\(20\\) DEFAULT 'unknown'"],
+      ['global_regime', 'VARCHAR\\(40\\)'],
+      ['pair_friction', 'NUMERIC\\(5,2\\)'],
+      ['global_friction', 'NUMERIC\\(5,2\\)'],
+      ['pair_directional_bias', 'VARCHAR\\(20\\)'],
+      ['global_directional_bias', 'VARCHAR\\(20\\)'],
+      ['decay_penalty', 'NUMERIC\\(5,4\\)'],
+    ] as const;
+    for (const [column, shape] of expected) {
+      expect(forward).toMatch(new RegExp(`ADD COLUMN IF NOT EXISTS ${column} ${shape}`, 'i'));
+    }
+    expect(forward).toContain('postcondition failed');
+    expect(manifestLines.has(COLUMN_FORWARD)).toBe(true);
+    expect(manifestLines.has(COLUMN_ROLLBACK)).toBe(false);
+    expect(read(`${MIGRATIONS}/${COLUMN_ROLLBACK}`)).not.toMatch(/DROP\\s+COLUMN/i);
   });
 });
