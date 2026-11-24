@@ -4,13 +4,13 @@
 
 **Step-2 reference:** `Claude Comms and Packages/Scope Files/B_DB_MAP_PRE_AUDIT.md` at approved exact ref `93248a802efb6bda0b6559867d73c2c04446d934`.
 
-**Implementation source ref R:** `c4b0eec545f6f7e89515bb6dc9f9e57fe604a288`
+**Corrected implementation source ref R:** `0a2f7e654ce282fc44f9f842c9883efc4341bf21`
 
-**Immutable artifact commit C:** `75f9dd06bda3755335712136ae1bd6358340bc80`
+**Corrected immutable artifact commit C:** `593f82758dd070b546bd217b1ffe572a6c8c960c`
 
 **Implementation compare base:** `2e9ee4b0584d4701d101d8f595a27bd6fa6acce4` (the Step-2 boundary record immediately before implementation)
 
-**READY-AT:** supplied in the Discord dispatch after this file is committed and pushed; the implementation and baseline being graded remain the immutable R/C pair above.
+**READY-AT:** supplied in the Discord redispatch after this file is committed and pushed; the corrected implementation and baseline being graded remain the immutable R/C pair above.
 
 **ONE GATE:** code-level review of the implementation plus the generated baseline. Rule `PROCEED` or `SEND BACK`; no install, staging write, deploy, or batch-close authority is requested here.
 
@@ -92,7 +92,7 @@ This is not a Step-10 ledger. It makes the required Step-4 presence/absence stat
 - `scripts/db-map/tests/schedule.test.mjs`
 - `scripts/db-map/tests/snapshot-control.mjs`
 
-The headings above group the 35-file Git diff; `catalog.sql` is counted once as a source path even though it was first added and then corrected in the next source commit.
+The headings above group the 35-file batch source set; `catalog.sql` is counted once. The Step-4 correction modifies 19 paths already in that set, so it does not expand the declared source-path population.
 
 ### 2.2 Generated artifact — 2,119 files
 
@@ -100,7 +100,7 @@ The headings above group the 35-file Git diff; `catalog.sql` is counted once as 
 - 697 DawnTrader enrichment pages under `docs/database-map/tables/`, one per live relation.
 - 1,413 pinned `tbls` Markdown/SVG/schema/viewpoint artifacts under `docs/database-map/tbls/`.
 
-The manifest records 2,118 artifact hashes and explicitly excludes only `manifest.json` from self-hashing. The R..C positive control found `docs/database-map/catalog.json`; the full range contains 2,119 changed paths and 0 paths outside `docs/database-map/`.
+The corrected artifact contains 2,119 files and 48,388,013 bytes. The manifest records 2,118 artifact hashes and explicitly excludes only `manifest.json` from self-hashing. The corrected R..C positive control found `docs/database-map/catalog.json`; the Git range contains 465 changed paths, all under `docs/database-map/`, because 1,654 generated paths are byte-identical to the first baseline. The exact-set verifier independently enumerates all 2,119 files and rejects undeclared additions and missing declared files.
 
 ---
 
@@ -112,10 +112,10 @@ The manifest records 2,118 artifact hashes and explicitly excludes only `manifes
 4. Re-enumerates the exact candidate population during verification and compares ordered `(path, mode, blob-id)` population hashes, inclusion/exclusion hashes, and counts.
 5. Maps the captured catalog into the vendored official `tbls` v1.97.0 JSON schema, validates against that official schema, and invokes `tbls` only against `json://` offline input.
 6. Keeps volatile row/byte/analyze timestamps in the fresh artifact but excludes them from the structural drift projection. Structure, code usage, unresolved evidence, and helper evidence remain in the drift projection.
-7. Hashes every non-manifest artifact, schema-validates the manifest, revalidates the official `tbls` schema, rejects likely credentials/DSNs, and applies the source-ref R / artifact-ref C allowlist fence.
+7. Recursively enumerates the artifact root, requires exact set equality with the manifest, canonicalizes every declared path, hashes every non-manifest artifact, schema-validates the manifest, revalidates the official `tbls` schema, rejects likely credentials/DSNs, and applies the source-ref R / artifact-ref C allowlist fence.
 8. Generates Sunday at 06:30 UTC with up to 10 minutes of random delay and a 30-minute service timeout. A separate daily 07:15 UTC check makes no database connection.
 9. Separates failure, structural drift, missing-run staleness (>8 days), and baseline staleness (>35 days) into four alert keys routed to CC-INFRA. Only each named clean condition resolves its key.
-10. Keeps eight bounded receipts, removes private candidate directories after each run, never commits/pushes/deploys/restarts the app, and enrolls installed files, modes, directories, units, timers, and installed SHA in install drift.
+10. Keeps eight bounded receipts, removes private candidate directories after each run, never commits/pushes/deploys/restarts the app, and enrolls installed files, modes, directories, units, timers, the pinned TypeScript runtime, and installed SHA in install drift. A weekly run is not marked successful until all required alert delivery completes.
 
 ---
 
@@ -237,10 +237,17 @@ const candidate = join(runRoot, 'candidate');
 run(NODE, [join(source, 'scripts/db-map/generate.mjs'), '--repo', REPO, '--source-ref', sourceRef, '--output', candidate, '--tbls', TBLs], { env });
 run(NODE, [join(source, 'scripts/db-map/verify.mjs'), '--repo', REPO, '--root', candidate], { env });
 const candidateManifest = JSON.parse(await readFile(join(candidate, 'manifest.json'), 'utf8'));
-let baseline;
-try { baseline = JSON.parse(git(['show', `${sourceRef}:docs/database-map/manifest.json`])); }
-catch { throw new Error('checked-in database-map baseline is absent or unreadable at the fetched ref'); }
+const artifactRef = git(['log', '-1', '--format=%H', sourceRef, '--', 'docs/database-map/manifest.json']).trim();
+if (!/^[0-9a-f]{40}$/.test(artifactRef)) throw new Error('checked-in database-map artifact ref is absent or unreadable');
+const baselineArchive = join(runRoot, 'baseline.tar');
+run('/usr/bin/git', ['-C', REPO, 'archive', '--format=tar', `--output=${baselineArchive}`, artifactRef, 'docs/database-map']);
+const baselineTree = join(runRoot, 'baseline'); await mkdir(baselineTree, { mode: 0o700 });
+run('/usr/bin/tar', ['-xf', baselineArchive, '-C', baselineTree]);
+const baselineMap = join(baselineTree, 'docs/database-map');
+run(NODE, [join(source, 'scripts/db-map/verify.mjs'), '--repo', REPO, '--root', baselineMap, '--artifact-ref', artifactRef], { env });
+const baseline = JSON.parse(await readFile(join(baselineMap, 'manifest.json'), 'utf8'));
 receipt.baseline_source_ref = baseline.source_ref;
+receipt.baseline_artifact_ref = artifactRef;
 receipt.baseline_structural_sha256 = baseline.structural_sha256;
 receipt.candidate_structural_sha256 = candidateManifest.structural_sha256;
 receipt.result = baseline.structural_sha256 === candidateManifest.structural_sha256 ? 'match' : 'drift';
@@ -274,6 +281,9 @@ Persistent=true
 ```yaml
 - name: Database-map integrity and snapshot tests
   run: |
+    artifact_ref="$(git log -1 --format=%H HEAD -- docs/database-map/manifest.json)"
+    test "${#artifact_ref}" = 40
+    node scripts/db-map/verify.mjs --repo . --root docs/database-map --artifact-ref "$artifact_ref"
     node scripts/db-map/tests/core.test.mjs
     node scripts/db-map/tests/mutations.test.mjs
     node scripts/db-map/tests/schedule.test.mjs
@@ -300,13 +310,14 @@ Persistent=true
 
 ### 5.1 Artifact and population
 
-- Artifact ref: `75f9dd06bda3755335712136ae1bd6358340bc80`.
-- Manifest source ref: `c4b0eec545f6f7e89515bb6dc9f9e57fe604a288`.
-- Generated files: 2,119; manifest artifact hashes: 2,118; manifest self-hash: explicit `null`.
+- Corrected artifact ref: `593f82758dd070b546bd217b1ffe572a6c8c960c`.
+- Corrected manifest source ref: `0a2f7e654ce282fc44f9f842c9883efc4341bf21`.
+- Generated files: 2,119 totaling 48,388,013 bytes; manifest artifact hashes: 2,118; manifest self-hash: explicit `null`.
 - Scanner population at R: 2,386 included and 103 excluded tracked code-bearing files.
-- Scanner evidence at R: 3,589 resolved usage rows; 6,086 unresolved rows; 85 direct-login/helper records.
-- Structural projection SHA-256: `12a96fc3424f5e82c339af476a93c3b0f2aa462dd4b39ef76a0ab6937289bd5a`.
-- R..C changed paths: 2,119/2,119 under `docs/database-map/`; positive control `docs/database-map/catalog.json`; outside paths: 0; R is an ancestor of C.
+- Scanner evidence at R: 3,589 resolved usage rows; 6,102 unresolved rows; 85 direct-login/helper records.
+- Structural projection SHA-256: `94b231f950ef4d129c992bb23cf1764eae2bdae752acc93ec950068de4c57b74`.
+- Runtime record: Node `v20.20.0` at SHA-256 `d01614ef369e36eee9ab8d86fbfa93ddf44931010add45e5262a63e3ddda784e`; ICU `77.1`; TypeScript `5.6.3` implementation SHA-256 `f316520790d4db220a10d890c5f85310e26a1bd3c104b8d3b5eb62ba0491651b`.
+- R..C changed Git paths: 465/465 under `docs/database-map/`; positive control `docs/database-map/catalog.json`; outside paths: 0; R is an ancestor of C. Independent artifact-root enumeration matched the exact declared set: 2,118 hashed files plus `manifest.json`.
 
 ### 5.2 Live captured catalog
 
@@ -328,10 +339,9 @@ Persistent=true
 
 ### 5.4 Tests and CI
 
-- Local at the unchanged implementation objects: 29 core checks passed; 16/16 mutants killed; 12 schedule checks passed; install-drift positive control passed and its binary mutation went red.
+- Local at corrected R: 34 core checks passed; 22/22 mutants killed; 19 schedule checks passed; install-drift positive control passed and its binary mutation went red.
 - Linux-only one-connection/two-call control, disposable-PostgreSQL one-statement/split-statement snapshot control, and real pinned `tbls` twice-byte-identical render all passed in CI.
-- Source ref CI run `45322612883`: TypeScript Check, Test Suite, Build, Docker Build all success.
-- Artifact ref CI run `45324795245`: TypeScript Check, Test Suite, Build, Docker Build all success; its database-map integrity and snapshot step passed against the checked-in 2,119-file artifact.
+- Corrected READY-AT CI is reported in the Discord redispatch after all four jobs finish. The Test Suite now materializes and verifies the real checked-in baseline and its actual R/C fence before the focused controls run.
 
 ---
 
@@ -345,16 +355,26 @@ Persistent=true
 6. Is the R/C allowlist narrow enough, including its deliberate permission for this batch's change list and owner memory while rejecting covered source/config/query changes?
 7. Do the four alert keys and their independent resolution conditions avoid conflating failed generation, real structural drift, stale runs, and stale reviewed baselines?
 8. Is the 2,119-file / approximately 48 MB checked-in baseline an acceptable review/storage trade-off for complete relation pages, official `tbls` pages/diagrams, and machine-readable authorities?
-9. Is it acceptable that the checked-in manifest proves internal consistency but is not a cryptographic attestation of the live `dt-sql` stdout? The generator's fixture path can replay CSV, while the present `dt-sql` audit records only an adjacent successful query and no SQL/output digest.
-10. Must the exact scanner runtime be tightened before Step 5? The source ref pins TypeScript 5.6.3 in `package-lock.json`, but the runner presently loads ambient TypeScript from the deployed app's `node_modules`; Node/TypeScript/ICU versions are not recorded, and ordering uses runtime `localeCompare`.
+9. Does the corrected exact-set verifier now close both artifact-set directions, including undeclared additions, missing declared files, non-canonical paths, and traversal/absolute-path forms?
+10. Do the Node/TypeScript implementation hashes, recorded ICU version, bytewise ordering, installed isolated TypeScript copy, and install-drift enrollment sufficiently close ambient-runtime and locale-dependent output?
+11. Does setting generation success before alert delivery, but total success only after delivery returns, preserve truthful phase diagnostics while guaranteeing a delivery exception exits red?
+12. Is canonical SQL-identifier quoting an unambiguous relation representation for dotted schema/table identifiers across catalog validation, adapters, scanner evidence, foreign keys, and partitions?
 
 ---
 
-## 7. Fresh-reader record
+## 7. Fresh-reader and first-ruling record
 
 `REVIEWER: claim-only · At C, does the implementation actually have one governed catalog session/statement, offline exact-ref generation, and an artifact-only R..C fence; what other states are consistent with the independently selected objects? · HIT: five caveats — replayed/edited CSV remains consistent with the manifest; the adjacent audit success has no SQL/output/artifact digest; ambient Node/TypeScript/ICU inputs are not fully pinned and localeCompare is runtime-sensitive; generated files plus a recomputed manifest are indistinguishable from generator output; and the governed session includes a TLS-check DO plus one catalog statement, not one SQL statement total · re-derived y`
 
-The owner re-derived each hit at the exact R/C objects. Positive controls found the fixture `--catalog-csv` path, ambient `require('typescript')`, `NODE_PATH=/home/deploy/dawntrader/node_modules`, `localeCompare` ordering, the manifest's per-artifact hashes, and the login wrapper's prepended TLS `DO`. The live `/var/lib/dt-sql/log.jsonl` then showed the successful 03:54:14Z query adjacent to the 03:54:13.210031Z extraction time but no SQL digest, output digest, process identifier, or artifact identifier. The review request therefore exposes these limits and asks Coltrane to adjudicate them; it does not restate internal consistency as cryptographic generation attestation.
+The owner re-derived each hit at the original R/C objects. Positive controls found the fixture `--catalog-csv` path, ambient `require('typescript')`, `NODE_PATH=/home/deploy/dawntrader/node_modules`, `localeCompare` ordering, the manifest's per-artifact hashes, and the login wrapper's prepended TLS `DO`. The live `/var/lib/dt-sql/log.jsonl` then showed the successful 03:54:14Z query adjacent to the 03:54:13.210031Z extraction time but no SQL digest, output digest, process identifier, or artifact identifier. Those limits were exposed in the first review request rather than restated as cryptographic attestation.
+
+Coltrane returned **SEND BACK** at 2026-11-24T05:02:46Z on the first READY-AT ref `0c4809fd5355ecaf6a7aa3754ef0a3284140c082`. The corrected R/C pair resolves all five required findings:
+
+1. **Actual baseline and R/C fence:** CI uses full Git history, finds the commit that last changed the manifest, and verifies the real checked-in tree with that artifact ref. The weekly runner materializes the same checked-in tree at that ref and applies the identical verifier before comparing structural hashes.
+2. **Two-way artifact-set proof:** the verifier recursively enumerates regular files and requires exact equality with the manifest plus `manifest.json`; add, remove, traversal, absolute, backslash, NUL, and non-canonical path mutants all fail.
+3. **Pinned deterministic runtime:** the generator enforces and records exact Node and TypeScript implementation hashes plus ICU; the installer isolates the pinned TypeScript files; install drift checks both; every generator/scanner sort uses byte comparison instead of `localeCompare`.
+4. **Alert-delivery failure remains red:** total success is marked only after alert application returns; a throwing delivery path is exercised and leaves the receipt unsuccessful.
+5. **Dotted identifiers cannot collide:** relation identities now use canonical quoted qualified identifiers; `schema='a.b', relation='c'` differs from `schema='a', relation='b.c'`; catalog uniqueness uses JSON tuples; fixtures and mutants cover both forms.
 
 ---
 
