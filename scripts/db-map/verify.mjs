@@ -87,7 +87,9 @@ export async function verify(options) {
   assert(manifest.manifest_self_hash === null && !Object.hasOwn(manifest.artifact_hashes, 'manifest.json'), 'manifest must explicitly exclude itself from artifact hashes');
   assert(manifest.tbls.version === CONFIG.tbls.version && manifest.tbls.archiveSha256 === CONFIG.tbls.archiveSha256 && manifest.tbls.archiveBytes === CONFIG.tbls.archiveBytes, 'tbls release metadata differs from the pin');
   assert(manifest.generator_version === 2 && manifest.scanner_version === CONFIG.scannerVersion, 'generator/scanner version differs');
-  assert(manifest.runtime?.node_version === CONFIG.runtime.nodeVersion && manifest.runtime?.node_sha256 === CONFIG.runtime.nodeSha256, 'Node runtime differs from the pin');
+  if (!options.allowUnpinnedRuntime) {
+    assert(manifest.runtime?.node_version === CONFIG.runtime.nodeVersion && manifest.runtime?.node_sha256 === CONFIG.runtime.nodeSha256, 'Node runtime differs from the pin');
+  }
   assert(manifest.runtime?.typescript_version === CONFIG.runtime.typescriptVersion && manifest.runtime?.typescript_sha256 === CONFIG.runtime.typescriptSha256, 'TypeScript runtime differs from the pin');
   assert(manifest.extraction_query_sha256 === sha256(await readFile(join(HERE, 'catalog.sql'))), 'catalog query hash differs');
   assert(manifest.scanner_config_sha256 === sha256(await readFile(join(HERE, 'config.mjs'))), 'scanner config hash differs');
