@@ -1,0 +1,42 @@
+# public.signal_eval_provenance_2026_12_08
+
+Type: `r`. Partition of `public.signal_eval_provenance`.
+
+RLS enabled: no; forced: no.
+
+## Columns
+
+| # | name | type | nullable | default | identity | generated |
+|---:|---|---|---|---|---|---|
+| 1 | `captured_at` | `timestamp with time zone` | no |  |  |  |
+| 2 | `archive_id` | `bigint` | no |  |  |  |
+| 3 | `symbol` | `text` | no |  |  |  |
+| 4 | `strategy` | `text` | no |  |  |  |
+| 5 | `asset_class` | `text` | no |  |  |  |
+| 6 | `forming_open` | `numeric(20,10)` | yes |  |  |  |
+| 7 | `forming_high` | `numeric(20,10)` | yes |  |  |  |
+| 8 | `forming_low` | `numeric(20,10)` | yes |  |  |  |
+| 9 | `forming_close` | `numeric(20,10)` | yes |  |  |  |
+| 10 | `forming_volume` | `numeric(24,8)` | yes |  |  |  |
+| 11 | `forming_bar_ts` | `bigint` | yes |  |  |  |
+| 12 | `settled_bucket_ts` | `timestamp with time zone` | yes |  |  |  |
+| 13 | `settled_bar_count` | `smallint` | yes |  |  |  |
+| 14 | `bar_interval_sec` | `integer` | yes |  |  |  |
+| 15 | `constants_hash` | `text` | yes |  |  |  |
+| 16 | `resolved_stop_price` | `numeric(20,10)` | yes |  |  |  |
+| 17 | `resolved_target_price` | `numeric(20,10)` | yes |  |  |  |
+| 18 | `ind_vwap` | `double precision` | yes |  |  |  |
+| 19 | `ind_atr` | `double precision` | yes |  |  |  |
+| 20 | `ind_sma` | `double precision` | yes |  |  |  |
+| 21 | `ind_high24h` | `double precision` | yes |  |  |  |
+| 22 | `ind_low24h` | `double precision` | yes |  |  |  |
+| 23 | `ind_current_volume` | `double precision` | yes |  |  |  |
+| 24 | `settled_window_hash` | `text` | yes |  |  |  |
+
+## Constraints
+
+- `signal_eval_provenance_2026_12_08_pkey`: PRIMARY KEY (captured_at, archive_id)
+
+## Code evidence
+
+- none found by scanner at c4b0eec545f6f7e89515bb6dc9f9e57fe604a288

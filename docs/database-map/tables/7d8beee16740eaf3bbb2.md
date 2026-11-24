@@ -1,0 +1,37 @@
+# public.xstock_spot_ohlc_1m_2027_08
+
+Type: `r`. Partition of `public.xstock_spot_ohlc_1m`.
+
+RLS enabled: no; forced: no.
+
+## Columns
+
+| # | name | type | nullable | default | identity | generated |
+|---:|---|---|---|---|---|---|
+| 1 | `id` | `bigint` | no | `nextval('equity_spot_ohlc_1m_id_seq'::regclass)` |  |  |
+| 2 | `symbol` | `text` | no |  |  |  |
+| 3 | `asset_class` | `text` | no | `'xstock_spot'::text` |  |  |
+| 4 | `interval_begin` | `timestamp with time zone` | no |  |  |  |
+| 5 | `open` | `numeric(20,8)` | no |  |  |  |
+| 6 | `high` | `numeric(20,8)` | no |  |  |  |
+| 7 | `low` | `numeric(20,8)` | no |  |  |  |
+| 8 | `close` | `numeric(20,8)` | no |  |  |  |
+| 9 | `volume` | `numeric(28,8)` | no |  |  |  |
+| 10 | `vwap` | `numeric(20,8)` | yes |  |  |  |
+| 11 | `trade_count` | `integer` | yes |  |  |  |
+| 12 | `metadata` | `jsonb` | no | `'{"schema_version": 1}'::jsonb` |  |  |
+| 13 | `captured_at` | `timestamp with time zone` | no | `now()` |  |  |
+| 14 | `exchange` | `text` | no | `'kraken-equities'::text` |  |  |
+| 15 | `arrived_at` | `timestamp with time zone` | yes |  |  |  |
+| 16 | `winning_revision_id` | `uuid` | yes |  |  |  |
+| 17 | `winning_payload_hash` | `text` | yes |  |  |  |
+| 18 | `projection_generation` | `bigint` | no | `0` |  |  |
+
+## Constraints
+
+- `xstock_spot_ohlc_1m_2027_08_pkey`: PRIMARY KEY (interval_begin, symbol, id)
+- `xstock_spot_ohlc_1m_2027_08_symbol_interval_begin_key`: UNIQUE (symbol, interval_begin)
+
+## Code evidence
+
+- none found by scanner at c4b0eec545f6f7e89515bb6dc9f9e57fe604a288
