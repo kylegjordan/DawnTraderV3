@@ -249,3 +249,28 @@ exit 0. Window `[2026-11-21T00:13:33, 2026-11-23T22:49:00)`.
 **Reading:** the complete day-2 population is **17 of 17 agreement, 0 OWNER DIFFERS, 0 fallback and 0 unjoined**.
 The partial 11-23 row is explicitly **EMPTY READ, not a pass**: Langston is off for the Codex shift and his bridge
 logged no lane batch that day. It is carried visibly and is not used to satisfy a daily criterion.
+
+## Daily read — day 3 catch-up (INFRA Codex, run 2026-11-24T11:14:57Z)
+
+**Box:** Helsinki, `Timezone=Etc/UTC` (`timedatectl`) — UTC, so the F-3 and pin legs stand. **Inputs:** tool + lane +
+route + table from the mirror at `239f9a2955da0c0dccdfa5cad45da2e1901bde8d` (table blob
+`ff139a8904479c26b1f1048a3bae64ef6a740600`); journal since T'; alerts = a WHOLE copy of staging's
+`system-alerts.jsonl`, **3,614 lines on both sides of the copy**. Self-test **27 checks, 0 failures, exit 0**; read
+exit 0. Window `[2026-11-21T00:13:33, 2026-11-24T11:14:57)`.
+
+| UTC day | lane markers | agree | OWNER DIFFERS | rule not stated | fallback-to-precedent | unjoined | no rule text |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| **2026-11-23 (the complete day-3 population)** | **0** | **0** | **0** | **0** | **0** | **0** | **0** |
+| 2026-11-24 (partial, to 11:14Z) | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+
+- **C-2 / F-3 / F-4:** both days are `EMPTY READ`; no lane marker, escalation or journal line exists to grade,
+  group or pin. Zero is not called agreement.
+- **(iii) fallback / (iv) escalation and churn:** no new day-3 marker exists. The whole-window churn remains the
+  day-1 `a3b1bc1e` CC-INFRA to CC-A event already recorded above.
+- **(v):** due now 19; installed `discord-langston-bridge.py`, `alert_lane.py`, and `alert_owner_route.py` all equal
+  the ref. The staging deploy record is `e3a96a8126f0280a9568bb1823b9210783f0afe0` at
+  2026-11-24T00:03:08Z, claimed `codex-b`; no lane file moved.
+
+**Reading:** day 3 is **NOT RUN**, not PASS or FAIL, because Langston and his bridge are off for the Codex shift and
+there is no population to grade. The empty row remains in the record so the seven-day criterion cannot silently turn
+an off-shift absence into agreement.
