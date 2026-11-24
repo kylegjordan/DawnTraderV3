@@ -1,6 +1,6 @@
 export const CONFIG = Object.freeze({
   schemaVersion: 1,
-  scannerVersion: 4,
+  scannerVersion: 3,
   catalogVersion: 1,
   runtime: Object.freeze({
     nodeVersion: 'v20.20.0',

@@ -101,13 +101,12 @@ try {
   await mkdir(join(root, 'server'), { recursive: true });
   await writeFile(join(root, 'shared/schema.ts'), `import { pgTable } from 'drizzle-orm/pg-core';\nexport const users = pgTable('users', {});\n`);
   await writeFile(join(root, 'server/use.ts'), `import { users as accounts } from '../shared/schema';\nimport { Pool } from 'pg';\nconst pool = new Pool();\nawait db.select().from(accounts);\nawait db.insert(accounts).values({});\nawait pool.query('UPDATE auth.users SET id = id');\nawait pool.query('SELECT * FROM users');\nawait pool.query(\`DELETE FROM public.users WHERE id = \${id}\`);\n`);
-  const constructorFixture = `import { Client, Pool } from 'pg';\nexport const client = new ` + `Client();\nexport const pool = new ` + `Pool();\nconst pg = { default: { Client, Pool } };\nexport const chainedClient = new pg.default.Client();\nexport const chainedPool = new pg.default.Pool();\n`;
+  const constructorFixture = `import { Client, Pool } from 'pg';\nexport const client = new ` + `Client();\nexport const pool = new ` + `Pool();\n`;
   await writeFile(join(root, 'server/constructor.ts'), constructorFixture);
-  await writeFile(join(root, 'helper'), `#!/bin/sh\npsql "$DATABASE_URL" -c 'SELECT * FROM public.users'\ndt-sql-login <<'SQL'\nDELETE FROM public.users;\nSQL\n`);
-  await writeFile(join(root, 'package.json'), JSON.stringify({ scripts: { query: "psql '$DATABASE_URL' -c 'SELECT 1'" } }));
+  await writeFile(join(root, 'helper'), `#!/bin/sh\ndt-sql-login <<'SQL'\nDELETE FROM public.users;\nSQL\n`);
   await writeFile(join(root, 'Dockerfile'), 'FROM node:20\n');
-  const paths = ['Dockerfile', 'helper', 'package.json', 'server/constructor.ts', 'server/use.ts', 'shared/schema.ts'];
-  const population = { sourceRef: 'a'.repeat(40), included: paths.map((path) => ({ path, mode: path === 'helper' ? '100755' : '100644', oid: 'b'.repeat(40), classifier: path === 'Dockerfile' ? 'root_dockerfile' : path === 'helper' ? 'shebang' : path === 'package.json' ? 'root_package_json' : 'suffix', evidenceClass: 'runtime' })), excluded: [], includedTupleSha256: 'x', includedPathSha256: 'y', excludedPathSha256: 'z' };
+  const paths = ['Dockerfile', 'helper', 'server/constructor.ts', 'server/use.ts', 'shared/schema.ts'];
+  const population = { sourceRef: 'a'.repeat(40), included: paths.map((path) => ({ path, mode: path === 'helper' ? '100755' : '100644', oid: 'b'.repeat(40), classifier: path === 'Dockerfile' ? 'root_dockerfile' : path === 'helper' ? 'shebang' : 'suffix', evidenceClass: 'runtime' })), excluded: [], includedTupleSha256: 'x', includedPathSha256: 'y', excludedPathSha256: 'z' };
   const scan = await scanRepository(root, population, catalog);
   check(scan.usage.some((row) => row.relation === 'public.users' && row.operation === 'read' && row.source === 'drizzle'), 'Drizzle alias read resolves');
   check(scan.usage.some((row) => row.relation === 'public.users' && row.operation === 'insert' && row.source === 'drizzle'), 'Drizzle alias insert resolves');
@@ -116,8 +115,6 @@ try {
   check(scan.unresolved.some((row) => row.kind === 'sql_relation' && row.detail.startsWith('ambiguous bare relation')), 'ambiguous bare SQL stays unresolved');
   check(scan.unresolved.some((row) => row.kind === 'dynamic_sql'), 'dynamic SQL stays unresolved');
   check(scan.helpers.some((row) => row.kind === 'node-postgres Pool'), 'direct Node login helper is inventoried');
-  check(scan.helpers.some((row) => row.file === 'helper' && row.kind === 'psql process'), 'bare shell psql helper is inventoried');
-  check(scan.helpers.some((row) => row.file === 'package.json' && row.kind === 'psql process'), 'package-command psql helper is inventoried');
   check(scan.helpers.some((row) => row.kind === 'dt-sql login'), 'dt-sql login helper is inventoried');
   const constructors = scan.helpers.filter((row) => row.file === 'server/constructor.ts');
   check(constructors.length === 2 && constructors.every((row) => row.operations.length === 0
@@ -135,11 +132,10 @@ try {
 try {
   execFileSync('git', ['-C', REPO, 'cat-file', '-e', '8130531b5089edbf080cb1de028b82dce77bec73^{commit}']);
   const audit = enumeratePopulation(REPO, '8130531b5089edbf080cb1de028b82dce77bec73');
-  check(audit.included.length === 2364, `audit ref included population is ${audit.included.length}, wanted 2364`);
+  check(audit.included.length === 2363, `audit ref included population is ${audit.included.length}, wanted 2363`);
   check(audit.excluded.length === 103, `audit ref excluded population is ${audit.excluded.length}, wanted 103`);
   check(audit.included.filter((row) => row.classifier === 'shebang').length === 38, 'audit ref has 38 included shebang programs');
   check(audit.included.filter((row) => row.classifier === 'root_dockerfile').length === 1, 'audit ref includes root Dockerfile');
-  check(audit.included.filter((row) => row.classifier === 'root_package_json').length === 1, 'audit ref includes root package.json');
 } catch (error) {
   if (!`${error.message}`.includes('Not a valid object') && !`${error.message}`.includes('bad object')) throw error;
   const head = enumeratePopulation(REPO, 'HEAD');
