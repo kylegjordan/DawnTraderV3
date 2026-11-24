@@ -4,9 +4,9 @@
 
 **Step-2 reference:** `Claude Comms and Packages/Scope Files/B_DB_MAP_PRE_AUDIT.md` at approved exact ref `93248a802efb6bda0b6559867d73c2c04446d934`.
 
-**Corrected implementation source ref R:** `0a2f7e654ce282fc44f9f842c9883efc4341bf21`
+**Corrected implementation source ref R:** `d5ce8d5b3f3ed3c84cf4eaaf7c505a3217d06d6f`
 
-**Corrected immutable artifact commit C:** `593f82758dd070b546bd217b1ffe572a6c8c960c`
+**Corrected immutable artifact commit C:** `255d6f9a25d0f1d8f59c0c7fd146ddc3f98ee4ff`
 
 **Implementation compare base:** `2e9ee4b0584d4701d101d8f595a27bd6fa6acce4` (the Step-2 boundary record immediately before implementation)
 
@@ -100,7 +100,7 @@ The headings above group the 35-file batch source set; `catalog.sql` is counted 
 - 697 DawnTrader enrichment pages under `docs/database-map/tables/`, one per live relation.
 - 1,413 pinned `tbls` Markdown/SVG/schema/viewpoint artifacts under `docs/database-map/tbls/`.
 
-The corrected artifact contains 2,119 files and 48,388,013 bytes. The manifest records 2,118 artifact hashes and explicitly excludes only `manifest.json` from self-hashing. The corrected R..C positive control found `docs/database-map/catalog.json`; the Git range contains 465 changed paths, all under `docs/database-map/`, because 1,654 generated paths are byte-identical to the first baseline. The exact-set verifier independently enumerates all 2,119 files and rejects undeclared additions and missing declared files.
+The corrected artifact contains 2,119 files and 48,388,015 bytes. The manifest records 2,118 artifact hashes and explicitly excludes only `manifest.json` from self-hashing. The corrected R..C positive control found `docs/database-map/catalog.json`; the Git range contains 454 changed paths, all under `docs/database-map/`, because 1,665 generated paths are byte-identical to the preceding baseline. The exact-set verifier independently enumerates all 2,119 files and rejects undeclared additions and missing declared files.
 
 ---
 
@@ -281,15 +281,15 @@ Persistent=true
 ```yaml
 - name: Database-map integrity and snapshot tests
   run: |
-    artifact_ref="$(git log -1 --format=%H HEAD -- docs/database-map/manifest.json)"
-    test "${#artifact_ref}" = 40
-    node scripts/db-map/verify.mjs --repo . --root docs/database-map --artifact-ref "$artifact_ref"
     node scripts/db-map/tests/core.test.mjs
     node scripts/db-map/tests/mutations.test.mjs
     node scripts/db-map/tests/schedule.test.mjs
     python3 scripts/db-map/tests/drift-enrollment.test.py
     node scripts/db-map/tests/connection-control.mjs
     node scripts/db-map/tests/snapshot-control.mjs
+    artifact_ref="$(git log -1 --format=%H HEAD -- docs/database-map/manifest.json)"
+    test "${#artifact_ref}" = 40
+    node scripts/db-map/verify.mjs --repo . --root docs/database-map --artifact-ref "$artifact_ref"
     curl --fail --location --silent --show-error --output /tmp/tbls.tar.gz https://github.com/k1LoW/tbls/releases/download/v1.97.0/tbls_v1.97.0_linux_amd64.tar.gz
 ```
 
@@ -310,14 +310,14 @@ Persistent=true
 
 ### 5.1 Artifact and population
 
-- Corrected artifact ref: `593f82758dd070b546bd217b1ffe572a6c8c960c`.
-- Corrected manifest source ref: `0a2f7e654ce282fc44f9f842c9883efc4341bf21`.
-- Generated files: 2,119 totaling 48,388,013 bytes; manifest artifact hashes: 2,118; manifest self-hash: explicit `null`.
+- Corrected artifact ref: `255d6f9a25d0f1d8f59c0c7fd146ddc3f98ee4ff`.
+- Corrected manifest source ref: `d5ce8d5b3f3ed3c84cf4eaaf7c505a3217d06d6f`.
+- Generated files: 2,119 totaling 48,388,015 bytes; manifest artifact hashes: 2,118; manifest self-hash: explicit `null`.
 - Scanner population at R: 2,386 included and 103 excluded tracked code-bearing files.
 - Scanner evidence at R: 3,589 resolved usage rows; 6,102 unresolved rows; 85 direct-login/helper records.
-- Structural projection SHA-256: `94b231f950ef4d129c992bb23cf1764eae2bdae752acc93ec950068de4c57b74`.
+- Structural projection SHA-256: `754b5f91c32b348f844724e7b2412ddc6d471d4a4b53891dff0f8dd67e53c894`.
 - Runtime record: Node `v20.20.0` at SHA-256 `d01614ef369e36eee9ab8d86fbfa93ddf44931010add45e5262a63e3ddda784e`; ICU `77.1`; TypeScript `5.6.3` implementation SHA-256 `f316520790d4db220a10d890c5f85310e26a1bd3c104b8d3b5eb62ba0491651b`.
-- R..C changed Git paths: 465/465 under `docs/database-map/`; positive control `docs/database-map/catalog.json`; outside paths: 0; R is an ancestor of C. Independent artifact-root enumeration matched the exact declared set: 2,118 hashed files plus `manifest.json`.
+- R..C changed Git paths: 454/454 under `docs/database-map/`; positive control `docs/database-map/catalog.json`; outside paths: 0; R is an ancestor of C. Independent artifact-root enumeration matched the exact declared set: 2,118 hashed files plus `manifest.json`.
 
 ### 5.2 Live captured catalog
 
@@ -339,9 +339,9 @@ Persistent=true
 
 ### 5.4 Tests and CI
 
-- Local at corrected R: 34 core checks passed; 22/22 mutants killed; 19 schedule checks passed; install-drift positive control passed and its binary mutation went red.
+- Local at corrected R: 35 core checks passed; 22/22 mutants killed; 19 schedule checks passed; install-drift positive control passed and its binary mutation went red.
 - Linux-only one-connection/two-call control, disposable-PostgreSQL one-statement/split-statement snapshot control, and real pinned `tbls` twice-byte-identical render all passed in CI.
-- Corrected READY-AT CI is reported in the Discord redispatch after all four jobs finish. The Test Suite now materializes and verifies the real checked-in baseline and its actual R/C fence before the focused controls run.
+- Corrected READY-AT CI is reported in the Discord redispatch after all four jobs finish. The Test Suite now materializes and verifies the real checked-in baseline and its actual R/C fence within the same blocking database-map step as the focused controls.
 
 ---
 
@@ -374,7 +374,9 @@ Coltrane returned **SEND BACK** at 2026-11-24T05:02:46Z on the first READY-AT re
 2. **Two-way artifact-set proof:** the verifier recursively enumerates regular files and requires exact equality with the manifest plus `manifest.json`; add, remove, traversal, absolute, backslash, NUL, and non-canonical path mutants all fail.
 3. **Pinned deterministic runtime:** the generator enforces and records exact Node and TypeScript implementation hashes plus ICU; the installer isolates the pinned TypeScript files; install drift checks both; every generator/scanner sort uses byte comparison instead of `localeCompare`.
 4. **Alert-delivery failure remains red:** total success is marked only after alert application returns; a throwing delivery path is exercised and leaves the receipt unsuccessful.
-5. **Dotted identifiers cannot collide:** relation identities now use canonical quoted qualified identifiers; `schema='a.b', relation='c'` differs from `schema='a', relation='b.c'`; catalog uniqueness uses JSON tuples; fixtures and mutants cover both forms.
+5. **Dotted identifiers cannot collide:** relation identities now use reversible `%25`/`%2E` component escaping; `schema='a.b', relation='c'` differs from `schema='a', relation='b.c'` and from a literal `%2E`; catalog uniqueness uses JSON tuples; fixtures and mutants cover these forms. This representation also remains valid input to the pinned `tbls`/Graphviz renderer.
+
+The first corrected CI attempt, run `45332251730`, was deliberately not dispatched because its Test Suite went red: SQL-style quoted dotted identifiers reached `tbls` but produced invalid Graphviz syntax. The renderer-safe escaping above was then proved with the exact pinned Linux `tbls` binary, the live baseline was regenerated from the new immutable R, and the failed run is retained here as defect evidence rather than presented as review authority.
 
 ---
 
