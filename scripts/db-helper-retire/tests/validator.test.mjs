@@ -36,11 +36,14 @@ const fixtures = new Map([
   ['.env', 'DATABASE_URL=postgresql://example.invalid/db\n'],
   ['ordinary.ts', "import { Client, Pool } from 'pg'; new Client(); new Pool();\n"],
   ['property.ts', "const pg = await import('pg'); new pg.default.Client(); new pg.default.Pool();\n"],
+  ['property-alias.ts', "const C = pg.Client; new C({ connectionString: cfg.url });\n"],
+  ['require-alias.ts', "const C = require('pg').Client; new C({ connectionString: cfg.url });\n"],
+  ['import-alias.ts', "import { Client as C } from 'pg'; new C({ connectionString: cfg.url });\n"],
 ]);
 for (const [path, text] of fixtures) {
   const markers = detectConnectionMarkers(path, text);
   check(markers.length > 0, `${path} is detected`);
-  if (path.endsWith('.ts')) check(markers.includes('node_postgres_constructor'), `${path} constructor is detected`);
+  if (path.endsWith('.ts')) check(markers.some((marker) => marker.startsWith('node_postgres_')), `${path} constructor is detected`);
   if (path === '.env') check(markers.includes('app_env') && markers.includes('database_url'), 'app .env is detected as both identity and credential marker');
   if (path.endsWith('.sh') || path === 'package.json') check(markers.includes('direct_psql'), `${path} psql execution is detected`);
 }

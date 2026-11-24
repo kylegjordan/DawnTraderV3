@@ -92,6 +92,18 @@ export function detectConnectionMarkers(path, text) {
   if (/\bDATABASE_URL\b/.test(source)) markers.push('database_url');
   if (/\bPGPASSWORD\b/.test(source)) markers.push('pgpassword');
   if (/new\s+(?:pg(?:\.default)?\.)?(?:Client|Pool)\s*\(/.test(source)) markers.push('node_postgres_constructor');
+  const pgAliases = new Set();
+  for (const match of source.matchAll(/\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*pg(?:\.default)?\.(?:Client|Pool)\b/g)) pgAliases.add(match[1]);
+  for (const match of source.matchAll(/\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*['"]pg['"]\s*\)\.(?:Client|Pool)\b/g)) pgAliases.add(match[1]);
+  for (const declaration of source.matchAll(/\bimport\s*{([^}]*)}\s*from\s*['"]pg['"]/g)) {
+    for (const match of declaration[1].matchAll(/\b(?:Client|Pool)\s+as\s+([A-Za-z_$][\w$]*)/g)) pgAliases.add(match[1]);
+  }
+  for (const declaration of source.matchAll(/\b(?:const|let|var)\s*{([^}]*)}\s*=\s*require\s*\(\s*['"]pg['"]\s*\)/g)) {
+    for (const match of declaration[1].matchAll(/\b(?:Client|Pool)\s*:\s*([A-Za-z_$][\w$]*)/g)) pgAliases.add(match[1]);
+  }
+  if ([...pgAliases].some((alias) => new RegExp(`\\bnew\\s+${alias}\\s*\\(`).test(source))) {
+    markers.push('node_postgres_alias_constructor');
+  }
   if (/(?:\/usr\/local\/bin\/)?dt-sql\b/.test(source)) markers.push('dt_sql');
   if (/\/usr\/local\/bin\/psql|\/usr\/bin\/psql/.test(source)) markers.push('installed_psql_path');
   if (path.endsWith('/.env') || path === '.env') markers.push('app_env');
