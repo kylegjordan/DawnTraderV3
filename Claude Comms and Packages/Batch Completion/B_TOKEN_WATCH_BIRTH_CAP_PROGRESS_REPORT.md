@@ -78,7 +78,7 @@ My first proposal (observed ÷ due against the 8 runs of 11-15 16:59Z → 11-16 
 - **The window alarms in live use.** No `divergent`, `frozen`, `backwards`, `reset` or cumulative page has fired live. The first `reset` chance is the 11-27 cycle boundary.
 - **The `adopt` path** — not taken live (§2).
 - **Hour 15Z on 11-20:** 7 vendor events with 0 births just after the 14:58:20Z OFF, probably late-counted deliveries from the closing window. **NOT RE-READ.**
-- **C-2, the reviewer ACL** is owed before the 11-24 read, so the reviewer can re-derive it without root. The directory-only mask instruction was disproved live on 11-24: three required objects remained unreadable while the public summary positive control was readable. The corrected installer recursively grants and verifies deploy read/traverse across `provenance`, `births`, `state`, `observations` and `study`; Coltrane review and live install are still required before adjudication (change list §9f).
+- **C-2, the reviewer read boundary** is owed before the 11-24 read, so the reviewer can re-derive it without root. The directory-only mask instruction was disproved live on 11-24. A recursive live-store grant was then rejected before review because the next production write collapses its ACL mask; Coltrane is ruling on a narrow, manifested, read-only snapshot of the exact OBJ-2/OBJ-8 inputs with deletion after review (change list §9f). No install or adjudication has occurred.
 - **Alert `07eba4b2`** stays open until a measured clean run.
 
 ## 7. Governance files changed (this Step 10)
