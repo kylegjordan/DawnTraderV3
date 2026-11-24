@@ -24715,7 +24715,7 @@
     {
       "evidence_class": "test_only",
       "file": "scripts/db-map/tests/core.test.mjs",
-      "line": 104,
+      "line": 106,
       "operation": "delete",
       "relation": "public.users",
       "source": "raw_sql"
@@ -28714,6 +28714,6 @@
     }
   ],
   "schema_version": 1,
-  "source_ref": "d57690b116b8fea701424ff80e9ebe09579f547d",
-  "zero_hit_wording": "none found by scanner at d57690b116b8fea701424ff80e9ebe09579f547d"
+  "source_ref": "13154e33eb6db72fdfd7100646e4a72b77a09152",
+  "zero_hit_wording": "none found by scanner at 13154e33eb6db72fdfd7100646e4a72b77a09152"
 }

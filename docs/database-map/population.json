@@ -8927,7 +8927,7 @@
       "classifier": "suffix",
       "evidenceClass": "operator",
       "mode": "100644",
-      "oid": "80ceb654cda002d6735704d183f52342b623f3d0",
+      "oid": "29be7b95748e4db680abae35cdce94f26f2144fe",
       "path": "scripts/db-map/config.mjs",
       "type": "blob"
     },
@@ -8959,7 +8959,7 @@
       "classifier": "suffix",
       "evidenceClass": "operator",
       "mode": "100644",
-      "oid": "f5999a84771fbf3d03a568d89494e800c31e7b0b",
+      "oid": "79fea311d866cbce0d1ee55a425ba3072edbd867",
       "path": "scripts/db-map/scanner.mjs",
       "type": "blob"
     },
@@ -8975,7 +8975,7 @@
       "classifier": "suffix",
       "evidenceClass": "test_only",
       "mode": "100644",
-      "oid": "6eb06ded72c8169b9b90025f43c330f5a21f407a",
+      "oid": "a77d63c680f5192fde3c933aad904d53d645b660",
       "path": "scripts/db-map/tests/core.test.mjs",
       "type": "blob"
     },
@@ -20022,5 +20022,5 @@
   ],
   "included_count": 2386,
   "included_path_sha256": "743a43c861e4157a0825225e10dc23438018b0ae57322f58e811db2dd1937cf2",
-  "included_tuple_sha256": "710ac3274978c23e72cd96ae94245d8eff93919ac0f94d16e99cf30d9e79f413"
+  "included_tuple_sha256": "ed869f3f62d7b9b6781f5d4d00a7baa65086b9bf76efb8c01b83e5a8e95e513d"
 }

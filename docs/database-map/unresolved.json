@@ -24083,6 +24083,14 @@
       "token": "from g"
     },
     {
+      "detail": "node-postgres Client has no file-local relation evidence; constructor-only or delegated use requires hand resolution",
+      "evidence_class": "operator",
+      "file": "scripts/analysis/b_xstock_bar_availability_c6_timing_read.ts",
+      "helper_kind": "node-postgres Client",
+      "kind": "helper_usage",
+      "line": 40
+    },
+    {
       "detail": "computed SQL requires hand resolution",
       "evidence_class": "operator",
       "file": "scripts/analysis/b_xstock_bar_availability_r2prime_session_read.sql",
@@ -30277,7 +30285,7 @@
       "evidence_class": "test_only",
       "file": "scripts/db-map/tests/core.test.mjs",
       "kind": "sql_relation",
-      "line": 105,
+      "line": 107,
       "operation": "read",
       "source": "raw_sql",
       "token": "FROM node"
@@ -33536,6 +33544,14 @@
       "operation": "delete",
       "source": "drizzle",
       "token": "fn"
+    },
+    {
+      "detail": "node-postgres Pool has no file-local relation evidence; constructor-only or delegated use requires hand resolution",
+      "evidence_class": "runtime",
+      "file": "server/db.ts",
+      "helper_kind": "node-postgres Pool",
+      "kind": "helper_usage",
+      "line": 106
     },
     {
       "detail": "computed SQL requires hand resolution",
@@ -57926,5 +57942,5 @@
     }
   ],
   "schema_version": 1,
-  "source_ref": "d57690b116b8fea701424ff80e9ebe09579f547d"
+  "source_ref": "13154e33eb6db72fdfd7100646e4a72b77a09152"
 }
