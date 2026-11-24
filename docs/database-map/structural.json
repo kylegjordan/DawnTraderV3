@@ -179600,12 +179600,12 @@
     {
       "file": "scripts/db-map/tests/core.test.mjs",
       "kind": "node-postgres Pool",
-      "line": 58,
+      "line": 59,
       "operations": [
         {
           "evidence_class": "test_only",
           "file": "scripts/db-map/tests/core.test.mjs",
-          "line": 58,
+          "line": 59,
           "operation": "update",
           "relation": "auth.users",
           "source": "raw_sql"
@@ -179613,7 +179613,7 @@
         {
           "evidence_class": "test_only",
           "file": "scripts/db-map/tests/core.test.mjs",
-          "line": 58,
+          "line": 59,
           "operation": "delete",
           "relation": "public.users",
           "source": "raw_sql"
@@ -179621,7 +179621,7 @@
         {
           "evidence_class": "test_only",
           "file": "scripts/db-map/tests/core.test.mjs",
-          "line": 59,
+          "line": 60,
           "operation": "delete",
           "relation": "public.users",
           "source": "raw_sql"
@@ -179633,7 +179633,7 @@
           "evidence_class": "test_only",
           "file": "scripts/db-map/tests/core.test.mjs",
           "kind": "sql_relation",
-          "line": 58,
+          "line": 59,
           "operation": "read",
           "source": "raw_sql",
           "token": "FROM users"
@@ -179643,7 +179643,7 @@
           "evidence_class": "test_only",
           "file": "scripts/db-map/tests/core.test.mjs",
           "kind": "sql_relation",
-          "line": 60,
+          "line": 61,
           "operation": "read",
           "source": "raw_sql",
           "token": "FROM node"
@@ -259599,7 +259599,7 @@
       "evidence_class": "test_only",
       "file": "scripts/db-map/tests/core.test.mjs",
       "kind": "sql_relation",
-      "line": 58,
+      "line": 59,
       "operation": "read",
       "source": "raw_sql",
       "token": "FROM users"
@@ -259609,7 +259609,7 @@
       "evidence_class": "test_only",
       "file": "scripts/db-map/tests/core.test.mjs",
       "kind": "sql_relation",
-      "line": 60,
+      "line": 61,
       "operation": "read",
       "source": "raw_sql",
       "token": "FROM node"
@@ -287261,7 +287261,7 @@
     {
       "evidence_class": "test_only",
       "file": "scripts/db-map/tests/core.test.mjs",
-      "line": 58,
+      "line": 59,
       "operation": "update",
       "relation": "auth.users",
       "source": "raw_sql"
@@ -311965,7 +311965,7 @@
     {
       "evidence_class": "test_only",
       "file": "scripts/db-map/tests/core.test.mjs",
-      "line": 58,
+      "line": 59,
       "operation": "delete",
       "relation": "public.users",
       "source": "raw_sql"
@@ -311973,7 +311973,7 @@
     {
       "evidence_class": "test_only",
       "file": "scripts/db-map/tests/core.test.mjs",
-      "line": 59,
+      "line": 60,
       "operation": "delete",
       "relation": "public.users",
       "source": "raw_sql"
