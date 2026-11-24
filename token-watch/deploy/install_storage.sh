@@ -35,7 +35,6 @@ ACTOR_DECLARED=cc-infra
 ACTOR_TRANSPORT=${SUDO_USER:-$(logname 2>/dev/null || echo unknown)}
 REPO=/home/deploy/dawntrader
 DEST=/opt/token-watch
-STORE=/var/lib/token-watch
 UNITS=/etc/systemd/system
 fail() { echo "FAIL $*" >&2; exit 1; }
 [ "$(id -u)" = 0 ] || fail "run as root"
@@ -57,13 +56,12 @@ CORE="follow_up.py summary.py budget.py promote.py obs_fold.py providers.py birt
 # /opt/token-watch/tools)
 # (Langston, P11 Step 4 C-1: a documented tool the installer never placed cannot be run as documented)
 TOOLS="tools/backfill_consumed_from.py tools/due_census.py tools/census_cold_versions.py tools/drain_closed_journals.py
-tools/backlog_census.py tools/move_followup_cursor.py tools/derive_obs_window.py"
+tools/backlog_census.py tools/move_followup_cursor.py tools/derive_obs_window.py tools/export_birthcap_review.py"
 UNIT_FILES="token-watch-cold-offbox.service token-watch-cold-offbox.timer token-watch-store-watch.service
 token-watch-store-watch.timer token-watch-failed@.service token-watch-tier.service token-watch-receiver.service
 token-watch-followup.service token-watch-summary.service token-watch-feed-watch.service token-watch-feed-watch.timer
 token-watch-followup.timer token-watch-summary.timer token-watch-tier.timer token-watch-birthcap.service
 token-watch-birthcap.timer"
-REVIEWER_DIRS="provenance births state observations study"
 ALL="$OPS $PINNED $CORE $TOOLS"
 # the four lists are disjoint: a file in two would be installed, guarded and recorded twice
 DUP=$(printf '%s\n' $ALL | sort | uniq -d)
@@ -139,11 +137,6 @@ for f in $ALL; do python3 -m py_compile "$stage/$f" || fail "$f does not compile
 #    and the modules that check it at import, against the staged tree, under a throwaway root.
 ( cd "$stage" && TOKEN_WATCH_ROOT="$stage/importcheck" python3 -c "import config, budget, liveness, birthcap" ) \
   || fail "the staged tree does not import (a module-level assert in config/budget/liveness/birthcap failed)"
-command -v setfacl >/dev/null || fail "setfacl is missing: cannot place the reviewed token-watch read boundary"
-for d in $REVIEWER_DIRS; do
-  [ -d "$STORE/$d" ] || fail "$STORE/$d is missing: cannot place the reviewed token-watch read boundary"
-done
-
 # ── 3. install ──────────────────────────────────────────────────────────────
 install -d -o root -g root -m 0755 "$DEST/ops" "$DEST/tools"
 for f in $ALL; do install -o root -g root -m 0644 "$stage/$f" "$DEST/$f"; done
@@ -152,16 +145,6 @@ systemctl daemon-reload
 for u in token-watch-cold-offbox.service token-watch-store-watch.service token-watch-feed-watch.service token-watch-followup.service token-watch-summary.service token-watch-birthcap.service; do   # a template cannot be verified bare
   systemd-analyze verify "$UNITS/$u" || fail "systemd-analyze rejects $u — files are in place but NOT recorded: INSTALLED still names $PREV, so the next run's guard will report every changed file as edited on the box. Fix the unit and re-run this sha, or restore the files from $PREV"
 done
-# B-TOKEN-WATCH-BIRTH-CAP Step 10 C-2: the reviewer must be able to re-derive OBJ-2/OBJ-8 from the stored objects.
-# Changing only the directory mask is insufficient: existing 0600 files retain mask::---, and switches.jsonl had no
-# deploy entry at all. Recursively grant read/traverse to deploy, then test the resulting boundary as that account.
-for d in $REVIEWER_DIRS; do
-  setfacl -R -m u:deploy:rX,m::rX "$STORE/$d"
-  bad=$(runuser -u deploy -- find "$STORE/$d" -xdev \( -type d ! -executable -o -type f ! -readable \) -print -quit) \
-    || fail "deploy could not traverse the reviewer read boundary at $STORE/$d"
-  [ -z "$bad" ] || fail "deploy cannot read reviewer object $bad"
-done
-
 # ── 4. the record, last ─────────────────────────────────────────────────────
 record="{\"sha\":\"$SHA\",\"previous_sha\":\"$PREV\",\"actor_declared\":\"$ACTOR_DECLARED\",\"actor_transport\":\"$ACTOR_TRANSPORT\",\"installed_at\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"files\":{"
 sep=""

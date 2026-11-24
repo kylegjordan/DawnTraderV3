@@ -527,13 +527,8 @@ check("★ the installer compiles EVERY list, PINNED included (C-1)",
       'for f in $ALL; do python3 -m py_compile' in inst and "for f in $OPS $CORE $TOOLS; do python3" not in inst)
 check("★ the record names the actor as declared AND as observed (C-2)",
       "actor_declared" in inst and "actor_transport" in inst and '\\"actor\\":' not in inst)
-_reviewer_dirs = (_re2.search(r'^REVIEWER_DIRS="([^"]*)"', inst, _re2.M) or [None, ""])[1].split()
-check("★ reviewer ACL names exactly the five pre-registered C-2 stores",
-      set(_reviewer_dirs) == {"provenance", "births", "state", "observations", "study"}, _reviewer_dirs)
-check("★ reviewer ACL recursively grants deploy read/traverse and verifies the resulting objects as deploy",
-      'setfacl -R -m u:deploy:rX,m::rX "$STORE/$d"' in inst
-      and 'runuser -u deploy -- find "$STORE/$d" -xdev' in inst
-      and "-type d ! -executable -o -type f ! -readable" in inst)
+check("★ C-2 installs the fixed snapshot producer and never widens the live store",
+      "tools/export_birthcap_review.py" in inst and "setfacl" not in inst and "REVIEWER_DIRS" not in inst)
 import re as _re  # noqa: E402
 _tools = (_re.search(r'^TOOLS="([^"]*)"', inst, _re.M) or [None, ""])[1].split()
 _core = (_re.search(r'^CORE="([^"]*)"', inst, _re.M) or [None, ""])[1].split()
@@ -541,11 +536,11 @@ check("P12 + B-TOKEN-WATCH-BIRTH-CAP: CORE = the five modules the follow-up and 
       "(the one egress, which the birth cap's vendor calls pass through) and birthcap.py",
       set(_core) == {"follow_up.py", "summary.py", "budget.py", "promote.py", "obs_fold.py", "providers.py",
                      "birthcap.py"}, _core)
-check("the installer carries TOOLS (the storage batch's two + B-TOKEN-WATCH-FOLLOWUP-MEMORY's five)",
+check("the installer carries TOOLS (the storage batch's two + follow-up's five + the birth-cap review exporter)",
       set(_tools) == {
           "tools/backfill_consumed_from.py", "tools/due_census.py", "tools/census_cold_versions.py",
           "tools/drain_closed_journals.py", "tools/backlog_census.py", "tools/move_followup_cursor.py",
-          "tools/derive_obs_window.py"}, _tools)
+          "tools/derive_obs_window.py", "tools/export_birthcap_review.py"}, _tools)
 
 shutil.rmtree(ROOT, ignore_errors=True)
 print("%d passed, %d failed" % (PASS, FAIL))
