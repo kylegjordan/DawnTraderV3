@@ -30,12 +30,12 @@ meta_rows AS (
          ) AS payload
 ),
 schema_rows AS (
-  SELECT row_number() OVER (ORDER BY nspname)::bigint AS row_order,
+  SELECT row_number() OVER (ORDER BY nspname COLLATE "C")::bigint AS row_order,
          pg_catalog.jsonb_build_object('name', nspname, 'comment', pg_catalog.obj_description(oid, 'pg_namespace')) AS payload
   FROM mapped_namespaces
 ),
 relation_rows AS (
-  SELECT row_number() OVER (ORDER BY schema_name, relname)::bigint AS row_order,
+  SELECT row_number() OVER (ORDER BY schema_name COLLATE "C", relname COLLATE "C")::bigint AS row_order,
          pg_catalog.jsonb_build_object(
            'schema', schema_name, 'name', relname, 'relkind', relkind,
            'persistence', relpersistence, 'estimated_rows', reltuples,
@@ -47,7 +47,7 @@ relation_rows AS (
   FROM mapped_relations
 ),
 column_rows AS (
-  SELECT row_number() OVER (ORDER BY r.schema_name, r.relname, a.attnum)::bigint AS row_order,
+  SELECT row_number() OVER (ORDER BY r.schema_name COLLATE "C", r.relname COLLATE "C", a.attnum)::bigint AS row_order,
          pg_catalog.jsonb_build_object(
            'schema', r.schema_name, 'relation', r.relname, 'ordinal', a.attnum,
            'name', a.attname, 'type', pg_catalog.format_type(a.atttypid, a.atttypmod),
@@ -85,7 +85,7 @@ constraint_parts AS (
   WHERE con.contype IN ('p','u','c','f')
 ),
 constraint_rows AS (
-  SELECT row_number() OVER (ORDER BY schema_name, relname, conname)::bigint AS row_order,
+  SELECT row_number() OVER (ORDER BY schema_name COLLATE "C", relname COLLATE "C", conname COLLATE "C")::bigint AS row_order,
          pg_catalog.jsonb_build_object(
            'schema', schema_name, 'relation', relname, 'name', conname,
            'type', contype, 'definition', definition, 'columns', columns,
@@ -95,7 +95,7 @@ constraint_rows AS (
   FROM constraint_parts
 ),
 index_rows AS (
-  SELECT row_number() OVER (ORDER BY r.schema_name, r.relname, ic.relname)::bigint AS row_order,
+  SELECT row_number() OVER (ORDER BY r.schema_name COLLATE "C", r.relname COLLATE "C", ic.relname COLLATE "C")::bigint AS row_order,
          pg_catalog.jsonb_build_object(
            'schema', r.schema_name, 'relation', r.relname, 'name', ic.relname,
            'unique', i.indisunique, 'primary', i.indisprimary, 'valid', i.indisvalid,
@@ -112,7 +112,7 @@ index_rows AS (
   JOIN pg_catalog.pg_class AS ic ON ic.oid = i.indexrelid
 ),
 partition_rows AS (
-  SELECT row_number() OVER (ORDER BY pn.nspname, p.relname, cn.nspname, c.relname)::bigint AS row_order,
+  SELECT row_number() OVER (ORDER BY pn.nspname COLLATE "C", p.relname COLLATE "C", cn.nspname COLLATE "C", c.relname COLLATE "C")::bigint AS row_order,
          pg_catalog.jsonb_build_object(
            'parent_schema', pn.nspname, 'parent_relation', p.relname,
            'child_schema', cn.nspname, 'child_relation', c.relname,
@@ -127,11 +127,11 @@ partition_rows AS (
   JOIN mapped_relations AS mapped_child ON mapped_child.oid = c.oid
 ),
 policy_rows AS (
-  SELECT row_number() OVER (ORDER BY r.schema_name, r.relname, p.polname)::bigint AS row_order,
+  SELECT row_number() OVER (ORDER BY r.schema_name COLLATE "C", r.relname COLLATE "C", p.polname COLLATE "C")::bigint AS row_order,
          pg_catalog.jsonb_build_object(
            'schema', r.schema_name, 'relation', r.relname, 'name', p.polname,
            'permissive', p.polpermissive, 'command', p.polcmd,
-           'roles', COALESCE((SELECT pg_catalog.jsonb_agg(pg_catalog.pg_get_userbyid(role_oid) ORDER BY pg_catalog.pg_get_userbyid(role_oid)) FROM unnest(p.polroles) AS role_oid), '[]'::jsonb),
+           'roles', COALESCE((SELECT pg_catalog.jsonb_agg(pg_catalog.pg_get_userbyid(role_oid) ORDER BY pg_catalog.pg_get_userbyid(role_oid) COLLATE "C") FROM unnest(p.polroles) AS role_oid), '[]'::jsonb),
            'using', pg_catalog.pg_get_expr(p.polqual, p.polrelid),
            'check', pg_catalog.pg_get_expr(p.polwithcheck, p.polrelid)
          ) AS payload
@@ -139,7 +139,7 @@ policy_rows AS (
   JOIN mapped_relations AS r ON r.oid = p.polrelid
 ),
 enum_rows AS (
-  SELECT row_number() OVER (ORDER BY n.nspname, t.typname, e.enumsortorder)::bigint AS row_order,
+  SELECT row_number() OVER (ORDER BY n.nspname COLLATE "C", t.typname COLLATE "C", e.enumsortorder)::bigint AS row_order,
          pg_catalog.jsonb_build_object(
            'schema', n.nspname, 'name', t.typname, 'label', e.enumlabel,
            'sort_order', e.enumsortorder

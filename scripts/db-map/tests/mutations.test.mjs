@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { chmod, mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { parseCatalogCsv } from '../catalog.mjs';
+import { assertCatalogSqlByteOrdering, CATALOG_BYTE_ORDER_CLAUSES, parseCatalogCsv } from '../catalog.mjs';
 import { assertAdapterFidelity, toTblsSchema } from '../adapter.mjs';
 import { verifyArtifactSet, verifyFence } from '../verify.mjs';
 import { compareBytes, relationKey, sha256, stableJson } from '../util.mjs';
@@ -48,6 +48,11 @@ mutate('FK relation removed', (x) => { x.relations = []; });
 const nonAsciiKeys = ['\u{10000}', '\uE000'];
 mustFail(() => assert.deepEqual([...nonAsciiKeys].sort(), [...nonAsciiKeys].sort(compareBytes)), 'native UTF-16 sort substituted for UTF-8 byte ordering');
 assert.ok(stableJson({ [nonAsciiKeys[0]]: 1, [nonAsciiKeys[1]]: 2 }).indexOf('\uE000') < stableJson({ [nonAsciiKeys[0]]: 1, [nonAsciiKeys[1]]: 2 }).indexOf('\u{10000}')); killed += 1;
+const catalogSql = await readFile(new URL('../catalog.sql', import.meta.url), 'utf8');
+for (const clause of CATALOG_BYTE_ORDER_CLAUSES) {
+  const mutant = catalogSql.replace(clause, clause.replace(' COLLATE "C"', ''));
+  mustFail(() => assertCatalogSqlByteOrdering(mutant), `catalog SQL native-collation substitution at ${clause}`);
+}
 
 const missingSection = fixtureCsv().split('\n').filter((line) => !line.startsWith('indexes,')).join('\n');
 mustFail(() => parseCatalogCsv(missingSection), 'catalog section removed');

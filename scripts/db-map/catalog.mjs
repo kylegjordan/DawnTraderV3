@@ -1,6 +1,24 @@
 import { CONFIG } from './config.mjs';
 import { assert, compareBytes, parseCsv, relationKey } from './util.mjs';
 
+export const CATALOG_BYTE_ORDER_CLAUSES = Object.freeze([
+  'row_number() OVER (ORDER BY nspname COLLATE "C")',
+  'row_number() OVER (ORDER BY schema_name COLLATE "C", relname COLLATE "C")',
+  'row_number() OVER (ORDER BY r.schema_name COLLATE "C", r.relname COLLATE "C", a.attnum)',
+  'row_number() OVER (ORDER BY schema_name COLLATE "C", relname COLLATE "C", conname COLLATE "C")',
+  'row_number() OVER (ORDER BY r.schema_name COLLATE "C", r.relname COLLATE "C", ic.relname COLLATE "C")',
+  'row_number() OVER (ORDER BY pn.nspname COLLATE "C", p.relname COLLATE "C", cn.nspname COLLATE "C", c.relname COLLATE "C")',
+  'row_number() OVER (ORDER BY r.schema_name COLLATE "C", r.relname COLLATE "C", p.polname COLLATE "C")',
+  'jsonb_agg(pg_catalog.pg_get_userbyid(role_oid) ORDER BY pg_catalog.pg_get_userbyid(role_oid) COLLATE "C")',
+  'row_number() OVER (ORDER BY n.nspname COLLATE "C", t.typname COLLATE "C", e.enumsortorder)',
+]);
+
+export function assertCatalogSqlByteOrdering(sql) {
+  assert((sql.match(/\bORDER BY\b/g) ?? []).length === 13, 'catalog SQL ORDER BY site set differs');
+  for (const clause of CATALOG_BYTE_ORDER_CLAUSES) assert(sql.includes(clause), `catalog SQL byte ordering differs: ${clause}`);
+  return true;
+}
+
 function jsonPayload(row) {
   assert(/^\d+$/.test(row.section_order), `invalid section_order for ${row.section}`);
   assert(/^\d+$/.test(row.row_order), `invalid row_order for ${row.section}`);

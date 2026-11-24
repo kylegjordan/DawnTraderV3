@@ -5,7 +5,7 @@ import { basename, dirname, join, relative, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { CONFIG } from './config.mjs';
-import { parseCatalogCsv } from './catalog.mjs';
+import { assertCatalogSqlByteOrdering, parseCatalogCsv } from './catalog.mjs';
 import { enumeratePopulation, peelCommit } from './population.mjs';
 import { scannerRuntime, scanRepository } from './scanner.mjs';
 import { assertAdapterFidelity, toTblsSchema, validateAgainstOfficialSchema, validateTblsSchema, verifyVendoredSchema } from './adapter.mjs';
@@ -29,7 +29,7 @@ function materialize(repo, ref, root) {
   execFileSync('tar', ['-xf', archive, '-C', root], { stdio: 'inherit' });
 }
 
-async function listFiles(root, prefix = '') {
+export async function listFiles(root, prefix = '') {
   const out = [];
   for (const entry of await readdir(join(root, prefix), { withFileTypes: true })) {
     const path = prefix ? `${prefix}/${entry.name}` : entry.name;
@@ -88,6 +88,7 @@ function tableMarkdown(row, catalog, scan) {
 export async function readCatalogCsv(path) {
   if (path) return readFile(path, 'utf8');
   const sql = await readFile(join(HERE, 'catalog.sql'), 'utf8');
+  assertCatalogSqlByteOrdering(sql);
   const tool = process.env.DT_DB_MAP_DT_SQL ?? '/usr/local/bin/dt-sql';
   const result = spawnSync(tool, ['--csv'], { input: sql, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
   if (result.error) throw result.error;

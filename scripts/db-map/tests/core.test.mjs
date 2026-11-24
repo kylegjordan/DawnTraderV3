@@ -4,11 +4,12 @@ import { chmod, mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseCatalogCsv } from '../catalog.mjs';
+import { assertCatalogSqlByteOrdering, normalizeCatalog, parseCatalogCsv } from '../catalog.mjs';
 import { CONFIG } from '../config.mjs';
 import { assertAdapterFidelity, toTblsSchema, validateAgainstOfficialSchema, verifyVendoredSchema } from '../adapter.mjs';
 import { enumeratePopulation } from '../population.mjs';
 import { scannerRuntime, scanRepository } from '../scanner.mjs';
+import { listFiles } from '../generate.mjs';
 import { compareBytes, relationKey, stableJson } from '../util.mjs';
 import { fixtureCsv } from './fixture.mjs';
 
@@ -30,6 +31,14 @@ const nonAsciiKeys = ['\u{10000}', '\uE000'];
 check([...nonAsciiKeys].sort(compareBytes).join('|') === '\uE000|\u{10000}', 'UTF-8 byte ordering is explicit for non-ASCII strings');
 const nonAsciiJson = stableJson({ [nonAsciiKeys[0]]: 1, [nonAsciiKeys[1]]: 2 });
 check(nonAsciiJson.indexOf('\uE000') < nonAsciiJson.indexOf('\u{10000}'), 'canonical JSON keys use UTF-8 byte ordering');
+const orderRoot = await mkdtemp(join(tmpdir(), 'db-map-order-'));
+try {
+  await writeFile(join(orderRoot, nonAsciiKeys[0]), 'supplementary');
+  await writeFile(join(orderRoot, nonAsciiKeys[1]), 'private-use');
+  check((await listFiles(orderRoot)).join('|') === '\uE000|\u{10000}', 'generated artifact paths use UTF-8 byte ordering');
+} finally {
+  await rm(orderRoot, { recursive: true, force: true });
+}
 check(catalog.relations.find((row) => row.key === 'public.parents').estimated_rows.state === 'unknown', 'negative estimates are unknown');
 check(catalog.relations.find((row) => row.key === 'public.user_view').size_applicable === false, 'views have no table size');
 check(catalog.logical_rollups[0].unknown_row_child_count === 1, 'partition rollup preserves unknown child count');
@@ -46,11 +55,42 @@ check(publicUsers.columns[2].extra_def === 'GENERATED ALWAYS AS STORED', 'genera
 check(publicUsers.constraints.map((row) => row.type).sort().join(',') === 'CHECK,FOREIGN KEY,PRIMARY KEY,UNIQUE', 'all constraint classes are mapped');
 check(tbls.relations.length === 1 && tbls.relations[0].parent_table === 'auth.users', 'FK relation is mapped');
 check(tbls.tables.some((row) => row.name === 'a%2Eb.c') && tbls.tables.some((row) => row.name === 'a.b%2Ec'), 'unsafe identifiers survive the tbls adapter distinctly');
+const orderingCatalog = structuredClone(catalog);
+const relationTemplate = orderingCatalog.relations.find((row) => row.key === 'public.users');
+for (const schema of nonAsciiKeys) orderingCatalog.relations.push({ ...structuredClone(relationTemplate), schema, name: 'ordered', key: relationKey(schema, 'ordered') });
+for (const name of nonAsciiKeys) orderingCatalog.enums.push({ schema: 'public', name, label: 'value', sort_order: 1 });
+const fkTemplate = orderingCatalog.constraints.find((row) => row.type === 'f');
+for (const schema of nonAsciiKeys) orderingCatalog.constraints.push({ ...structuredClone(fkTemplate), name: `ordered-${schema}`, referenced_schema: schema, referenced_relation: 'ordered' });
+const orderingTbls = toTblsSchema(orderingCatalog);
+check(orderingTbls.enums.findIndex((row) => row.name === 'public.\uE000') < orderingTbls.enums.findIndex((row) => row.name === 'public.\u{10000}'), 'adapter enum groups use UTF-8 byte ordering');
+check(orderingTbls.viewpoints.findIndex((row) => row.name === '\uE000 schema') < orderingTbls.viewpoints.findIndex((row) => row.name === '\u{10000} schema'), 'adapter schema viewpoints use UTF-8 byte ordering');
+const crossSchemaTables = orderingTbls.viewpoints.find((row) => row.id === 'cross-schema-relations').tables;
+check(crossSchemaTables.indexOf('\uE000.ordered') < crossSchemaTables.indexOf('\u{10000}.ordered'), 'adapter cross-schema tables use UTF-8 byte ordering');
+
+const rawRelations = catalog.relations.map(({ key, estimated_rows, is_partition_child, parent, size_applicable, ...row }) => ({
+  ...row,
+  estimated_rows: estimated_rows.state === 'known' ? estimated_rows.value : null,
+}));
+const partitionTemplate = rawRelations.find((row) => row.name === 'parents');
+const childTemplate = rawRelations.find((row) => row.name === 'users_2026');
+const orderingSections = {
+  meta: [catalog.meta], schemas: catalog.schemas, relations: [...rawRelations], columns: catalog.columns,
+  constraints: catalog.constraints, indexes: catalog.indexes, partition_edges: [...catalog.partition_edges],
+  policies: catalog.policies, enums: catalog.enums,
+};
+for (let i = 0; i < nonAsciiKeys.length; i += 1) {
+  orderingSections.relations.push({ ...structuredClone(partitionTemplate), name: nonAsciiKeys[i] });
+  orderingSections.relations.push({ ...structuredClone(childTemplate), name: `ordered_child_${i}` });
+  orderingSections.partition_edges.push({ parent_schema: 'public', parent_relation: nonAsciiKeys[i], child_schema: 'public', child_relation: `ordered_child_${i}`, bound: `FOR VALUES IN (${i})` });
+}
+const orderingRollups = normalizeCatalog(orderingSections).logical_rollups.map((row) => row.parent);
+check(orderingRollups.indexOf('public.\uE000') < orderingRollups.indexOf('public.\u{10000}'), 'logical partition rollups use UTF-8 byte ordering');
 const officialSchema = await verifyVendoredSchema(resolve(HERE, '../vendor/tbls-v1.97.0.schema.json'));
 validateAgainstOfficialSchema(tbls, officialSchema);
 checks += 1;
 
 const sql = await readFile(resolve(HERE, '../catalog.sql'), 'utf8');
+check(assertCatalogSqlByteOrdering(sql), 'catalog SQL string ordering is pinned to byte collation');
 check(!sql.includes('\\'), 'catalog SQL has no psql meta-command');
 check((sql.match(/;/g) ?? []).length === 1, 'catalog extraction is exactly one SQL statement');
 check(/SELECT section, section_order, row_order, payload::text AS payload_json/.test(sql), 'catalog stream has the versioned tagged shape');
