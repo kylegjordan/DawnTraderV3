@@ -101,9 +101,11 @@ try {
   await mkdir(join(root, 'server'), { recursive: true });
   await writeFile(join(root, 'shared/schema.ts'), `import { pgTable } from 'drizzle-orm/pg-core';\nexport const users = pgTable('users', {});\n`);
   await writeFile(join(root, 'server/use.ts'), `import { users as accounts } from '../shared/schema';\nimport { Pool } from 'pg';\nconst pool = new Pool();\nawait db.select().from(accounts);\nawait db.insert(accounts).values({});\nawait pool.query('UPDATE auth.users SET id = id');\nawait pool.query('SELECT * FROM users');\nawait pool.query(\`DELETE FROM public.users WHERE id = \${id}\`);\n`);
+  const constructorFixture = `import { Client, Pool } from 'pg';\nexport const client = new ` + `Client();\nexport const pool = new ` + `Pool();\n`;
+  await writeFile(join(root, 'server/constructor.ts'), constructorFixture);
   await writeFile(join(root, 'helper'), `#!/bin/sh\ndt-sql-login <<'SQL'\nDELETE FROM public.users;\nSQL\n`);
   await writeFile(join(root, 'Dockerfile'), 'FROM node:20\n');
-  const paths = ['Dockerfile', 'helper', 'server/use.ts', 'shared/schema.ts'];
+  const paths = ['Dockerfile', 'helper', 'server/constructor.ts', 'server/use.ts', 'shared/schema.ts'];
   const population = { sourceRef: 'a'.repeat(40), included: paths.map((path) => ({ path, mode: path === 'helper' ? '100755' : '100644', oid: 'b'.repeat(40), classifier: path === 'Dockerfile' ? 'root_dockerfile' : path === 'helper' ? 'shebang' : 'suffix', evidenceClass: 'runtime' })), excluded: [], includedTupleSha256: 'x', includedPathSha256: 'y', excludedPathSha256: 'z' };
   const scan = await scanRepository(root, population, catalog);
   check(scan.usage.some((row) => row.relation === 'public.users' && row.operation === 'read' && row.source === 'drizzle'), 'Drizzle alias read resolves');
@@ -114,6 +116,15 @@ try {
   check(scan.unresolved.some((row) => row.kind === 'dynamic_sql'), 'dynamic SQL stays unresolved');
   check(scan.helpers.some((row) => row.kind === 'node-postgres Pool'), 'direct Node login helper is inventoried');
   check(scan.helpers.some((row) => row.kind === 'dt-sql login'), 'dt-sql login helper is inventoried');
+  const constructors = scan.helpers.filter((row) => row.file === 'server/constructor.ts');
+  check(constructors.length === 2 && constructors.every((row) => row.operations.length === 0
+    && row.unresolved.length === 1
+    && row.unresolved[0].kind === 'helper_usage'
+    && row.unresolved[0].helper_kind === row.kind
+    && row.unresolved[0].detail.includes('requires hand resolution')),
+  'each constructor-only helper in a multi-helper file gets its own explicit reason');
+  check(scan.unresolved.filter((row) => row.file === 'server/constructor.ts' && row.kind === 'helper_usage').length === 2,
+    'each constructor-only helper reason is also present in unresolved inventory');
 } finally {
   await rm(root, { recursive: true, force: true });
 }

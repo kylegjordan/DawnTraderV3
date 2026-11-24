@@ -156,7 +156,20 @@ function helperFacts(file, usage, unresolved) {
     const match = regex.exec(file.text);
     if (!match) continue;
     const evidence = usage.filter((row) => row.file === file.path);
-    const open = unresolved.filter((row) => row.file === file.path);
+    const open = unresolved.filter((row) => row.file === file.path
+      && (row.kind !== 'helper_usage' || row.helper_kind === kind));
+    if (!evidence.length && !open.length) {
+      const disposition = {
+        file: file.path,
+        line: lineAt(file.text, match.index),
+        kind: 'helper_usage',
+        helper_kind: kind,
+        detail: `${kind} has no file-local relation evidence; constructor-only or delegated use requires hand resolution`,
+        evidence_class: classifyPath(file.path),
+      };
+      unresolved.push(disposition);
+      open.push(disposition);
+    }
     helpers.push({ file: file.path, line: lineAt(file.text, match.index), kind, operations: evidence, unresolved: open });
   }
   return helpers;
@@ -198,6 +211,7 @@ export async function scanRepository(root, population, catalog) {
   usage.sort((a, b) => compareBytes(a.relation, b.relation) || compareBytes(a.file, b.file) || a.line - b.line || compareBytes(a.operation, b.operation));
   unresolved.sort((a, b) => compareBytes(a.file, b.file) || a.line - b.line || compareBytes(a.kind, b.kind));
   const helpers = files.flatMap((file) => helperFacts(file, usage, unresolved)).sort((a, b) => compareBytes(a.file, b.file));
+  unresolved.sort((a, b) => compareBytes(a.file, b.file) || a.line - b.line || compareBytes(a.kind, b.kind));
   return {
     schema_version: CONFIG.scannerVersion,
     source_ref: population.sourceRef,
