@@ -399,3 +399,44 @@ The owner re-derived that hit from the catalog query and generator path. The cor
 ## 8. Requested ruling
 
 Coltrane: review the complete implementation diff and immutable generated baseline at the READY-AT ref named in the dispatch, using R/C above as the provenance pair. Rule **PROCEED** or **SEND BACK** on this one Step-4 code-review gate. A PROCEED authorizes only Step 5 test-environment preparation; it does not authorize installation, staging mutation, deployment, or close.
+
+---
+
+## 9. Step-7 first-pass staging verification
+
+### 9.1 Surface judgement and installed identity
+
+This batch has no UI surface: it installs server-side database-map generation, receipts, schedules and alerts only. It adds no route, page, dashboard field or browser-visible control, so Step 7 deliberately did not use the stale landing dashboard. `/usr/local/sbin/dt-install-drift` returned PASS for the complete installed database-map set, including the exact reviewed installer ref `4b7d06970c39a40d87710bdfc660e7d528dd72ba`, pinned `tbls` 1.97.0, Node v20.20.0, TypeScript 5.6.3, both entry points, runner, policy, six unit/timer/drop-in files, and installed-state marker. Both timers were enabled and active.
+
+### 9.2 Live catalog equality and one-session boundary
+
+An independent one-statement catalog query through `dt-sql` returned `current_user=dt_reader` and compared identities, not counts alone. Its live set equalled the checked-in catalog exactly: 697 live versus 697 baseline relations, with zero additions or omissions; 11,511 live versus 11,511 baseline `(schema, relation, ordinal, column)` identities, with zero additions or omissions. Both compared sets were non-empty positive controls.
+
+Four complete generation windows between 07:19:56Z and 07:26:00Z produced exactly four `dt-sql-login --csv` journal records, one per generation. A separately journal-stamped held-lock control at 07:32:20Z produced `20261124T073220332Z-skipped.json`, result `lock-held-skip`, success false, and zero catalog-login records in that exact window; the journal instrument's positive-control window at 07:30Z contained three independent catalog calls. Final `dt-sql --status` was `OK — not locked`.
+
+### 9.3 Real weekly success, statistics-only movement, failure and drift
+
+- Natural installed service success: `20261124T071956077Z-match.json`, source `660d37d1059374a54533f6e43faf9d458dbd8801`, baseline artifact `b5631e83473c4e91ed1cf4ca99f74d5833e8d47c`, baseline source `d57690b116b8fea701424ff80e9ebe09579f547d`, candidate/baseline structural SHA `482de5ed345df991a760426752928f0312bd34700f49393e1c28fc29d3fde0d0`, generation/alert/total success all true.
+- Statistics-only no-drift control: the first two clean receipts held the same structural SHA while known physical bytes moved from 113,454,219,264 to 113,460,936,704. The second receipt remained `match`; volatile catalog statistics did not occupy the drift key.
+- Generator-failure control: installed entry point with an intentionally absent immutable ref exited 1 before generation, wrote `20261124T072232618Z-failure.json`, and fired routed alert `bedd21fd-c137-4bac-ad4a-a9a9d2aafbe9`. The alert remained active until the next clean match resolved it at 07:23:18Z with `match:660d37d1059374a54533f6e43faf9d458dbd8801`.
+- Structural-drift control: a private exact-ref repository added one real scanner-visible usage edge at `47ea87ea6d22ca919ffde7d63b010200b4aef321`, leaving the reviewed baseline unchanged. Both candidate and baseline verified; candidate structural SHA `a86e4cdaaf3c1f3955d8504871f931c683e0d78d4e4a79189a5f3e1483295337` differed from baseline `482de5ed…`; `20261124T072423239Z-drift.json` recorded successful generation and alert delivery. Routed alert `bbc21bf6-2701-48e6-9121-a9dace8c4958` remained active until the next clean match resolved it at 07:25:59Z with `match:660d37d1059374a54533f6e43faf9d458dbd8801`.
+
+### 9.4 Staleness, alert routing and cleanup
+
+- The natural no-receipt daily run fired `a88136b8-a86d-413a-8354-663c3e19ac15` (`db-map:run-stale`); the first clean weekly receipt resolved it with `match:660d37d…`.
+- A private receipt population whose newest success was 10 days old fired `2576b573-fa62-4cf1-85af-c68d2bffec20` (`db-map:run-stale`); the live fresh receipt resolved it with `fresh-receipt:660d37d…`.
+- A private fetched ref `1a0d1afe0bc72ec7c8a0d766c0b6cdc26df533d9` carrying a 54-day-old baseline extraction fired `bc328478-3a4f-4ed2-b9e6-b59e2176df9f` (`db-map:baseline-stale`); the live reviewed baseline resolved it with `fresh-baseline:d57690b…`.
+- Each alert carried metadata `owner=CC-INFRA`, `source=dt-db-map`, was promoted to active, posted to Discord, and ended resolved rather than left acknowledged. The checked 8-day and 35-day exact-boundary/plus-one controls remain in the 19-check schedule suite.
+- The final live receipt population was seven JSON files, below the retained maximum of eight. A seeded live `run-step7-positive-control` directory proved the cleanup search could detect a `run-*` directory; after its removal the live count was zero. All three private control roots were removed by validated same-command traps.
+
+### 9.5 Trading-app isolation
+
+The app remained at deployed ref `e3a96a8126f0280a9568bb1823b9210783f0afe0`; its tracked worktree was clean, deploy record unchanged, process PID 2822823 retained start time 2026-11-24 00:02:57Z, status online, restarts 715 and unstable restarts 0. The effective weekly/stale units run as `deploy`, use private temporary namespaces and strict filesystem protection, and grant writes only to database-map state, the guarded database-read state, alert log, lock path and governance-repository Git metadata; neither unit has an application restart or signal path.
+
+`REVIEWER: claim-only · The installed Step-7 mechanisms distinguish match, statistics-only movement, held-lock skip, failure, structural drift and both staleness classes; alerts route/resolve correctly; no private runs remain; the app is untouched — name the settling objects and other states consistent with them · HIT: receipts alone could be copied or use alternate roots; final alert rows could hide manual resolution or failed routing; empty run listings could mean no run/manual cleanup/wrong root; unchanged restart counters alone could miss runtime disturbance · re-derived y`
+
+The owner re-derived those leads against the installed hashes and effective units, exact unit/journal windows, receipt objects, complete per-ID alert transitions plus Discord delivery, a seeded cleanup positive control, live app ref/worktree/process start and deploy record. The reviewer was not used as evidence.
+
+### 9.6 First-pass result
+
+OBJ-1 through OBJ-7 are green. OBJ-8 is red: `helpers.json` contains 85 helper rows across 79 files, but only 83 rows carry operation evidence and/or an unresolved reason. The `node-postgres Client` row for `scripts/analysis/b_xstock_bar_availability_c6_timing_read.ts` and the `node-postgres Pool` row for `server/db.ts` carry neither; this fails the registered requirement that every direct-login census member be mapped or explicitly unresolved with a reason. Step 8 must independently verify the live result and this known gap; Step 9 must make both dispositions explicit and regenerate the reviewed artifact.
