@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { extname } from 'node:path';
 import { CONFIG, classifyPath } from './config.mjs';
-import { assert, sha256 } from './util.mjs';
+import { assert, compareBytes, sha256 } from './util.mjs';
 
 function git(repo, args, options = {}) {
   return execFileSync('git', ['-C', repo, ...args], {
@@ -56,14 +56,14 @@ export function enumeratePopulation(repo, ref) {
     if (reason) excluded.push({ ...item, reason });
     else included.push(item);
   }
-  included.sort((a, b) => a.path.localeCompare(b.path));
-  excluded.sort((a, b) => a.path.localeCompare(b.path));
+  included.sort((a, b) => compareBytes(a.path, b.path));
+  excluded.sort((a, b) => compareBytes(a.path, b.path));
   const tupleBytes = included.map(({ path, mode, oid }) => `${path}\0${mode}\0${oid}\n`).join('');
   return {
     sourceRef,
     included,
     excluded,
-    nonCodeExtensionless: nonCodeExtensionless.sort(),
+    nonCodeExtensionless: nonCodeExtensionless.sort(compareBytes),
     includedTupleSha256: sha256(tupleBytes),
     includedPathSha256: sha256(included.map((row) => `${row.path}\n`).join('')),
     excludedPathSha256: sha256(excluded.map((row) => `${row.path}\0${row.reason}\n`).join('')),

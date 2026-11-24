@@ -1,7 +1,13 @@
 export const CONFIG = Object.freeze({
   schemaVersion: 1,
-  scannerVersion: 1,
+  scannerVersion: 2,
   catalogVersion: 1,
+  runtime: Object.freeze({
+    nodeVersion: 'v20.20.0',
+    nodeSha256: 'd01614ef369e36eee9ab8d86fbfa93ddf44931010add45e5262a63e3ddda784e',
+    typescriptVersion: '5.6.3',
+    typescriptSha256: 'f316520790d4db220a10d890c5f85310e26a1bd3c104b8d3b5eb62ba0491651b',
+  }),
   suffixes: Object.freeze([
     '.ts', '.tsx', '.js', '.mjs', '.cjs', '.mts',
     '.py', '.pyw', '.sh', '.sql', '.yml', '.yaml',

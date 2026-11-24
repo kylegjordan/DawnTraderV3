@@ -15,8 +15,8 @@ try {
   const out = join(root, 'out');
   const out2 = join(root, 'out-2');
   await writeFile(csv, fixtureCsv(), { mode: 0o600 });
-  const result = await generate({ repo, sourceRef: 'HEAD', catalogCsv: csv, output: out, tblsBinary: binary });
-  const repeat = await generate({ repo, sourceRef: 'HEAD', catalogCsv: csv, output: out2, tblsBinary: binary });
+  const result = await generate({ repo, sourceRef: 'HEAD', catalogCsv: csv, output: out, tblsBinary: binary, allowUnpinnedRuntime: true });
+  const repeat = await generate({ repo, sourceRef: 'HEAD', catalogCsv: csv, output: out2, tblsBinary: binary, allowUnpinnedRuntime: true });
   assert.equal(result.manifest.tbls.rendered, true);
   assert.deepEqual(result.manifest.artifact_hashes, repeat.manifest.artifact_hashes, 'fixed input did not render byte-identically');
   const rendered = await readFile(join(out, 'tbls', 'README.md'), 'utf8');

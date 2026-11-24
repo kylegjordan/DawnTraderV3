@@ -73,6 +73,8 @@ NOTICE_RAISED = "/var/lib/dt-install-drift/notice-only-raised"
 MARKER_MAX_AGE_S = 2 * 3600
 GIT_TIMEOUT_S = 30
 DB_MAP_TBLS_SHA256 = "44bf748bf0b8f4ed66c21173d19792714a61953b5dff21da8805cb7caa1f6258"
+DB_MAP_TYPESCRIPT_PACKAGE_SHA256 = "16af7ea27880259b39ff8f123566aaec815cdca1c3ab8d28330c8b652055ccf0"
+DB_MAP_TYPESCRIPT_LIB_SHA256 = "f316520790d4db220a10d890c5f85310e26a1bd3c104b8d3b5eb62ba0491651b"
 
 SS = "/etc/systemd/system/"
 
@@ -165,12 +167,17 @@ BOXES = {
             ("/var/lib/dt-db-map/receipts", 0o700, "deploy", "deploy"),
             ("/usr/local/lib/dt-db-map", 0o755, "root", "root"),
             ("/usr/local/lib/dt-db-map/tbls-v1.97.0", 0o755, "root", "root"),
+            ("/usr/local/lib/dt-db-map/node_modules", 0o755, "root", "root"),
+            ("/usr/local/lib/dt-db-map/node_modules/typescript", 0o755, "root", "root"),
+            ("/usr/local/lib/dt-db-map/node_modules/typescript/lib", 0o755, "root", "root"),
         ],
         "private": [("/etc/dt-api/staging-api.env", 0o600, "dtapi", "dtapi"),
                     ("/var/lib/dt-api/login-ledger.jsonl", 0o600, "dtapi", "dtapi"),
                     ("/var/lib/dt-api/lock", 0o600, "dtapi", "dtapi"),
                     ("/var/lib/dt-install-drift/installed.sha", 0o644, "root", "root"),
                     ("/var/lib/dt-db-map/installed.sha", 0o644, "root", "root"),
+                    ("/usr/local/lib/dt-db-map/node_modules/typescript/package.json", 0o644, "root", "root"),
+                    ("/usr/local/lib/dt-db-map/node_modules/typescript/lib/typescript.js", 0o644, "root", "root"),
                     ("/etc/dt-sql/reader.env", 0o600, "dtsql", "dtsql"),    # B-DB-READONLY-ROLE: the reader password
                     # B-DB-READONLY-ROLE (Langston Step-4 C4 fold): the dir is 0755, so the file's mode keeps others out
                     ("/var/lib/dt-sql/log.jsonl", 0o640, "deploy", "deploy")],
@@ -198,7 +205,7 @@ BOXES = {
                   "dt-unit-failure@dt-db-map-stale.service": (SS + "dt-unit-failure@.service", [])},
         "timers": ["dt-install-drift.timer", "dawntrader-logrotate.timer", "dt-db-map-weekly.timer", "dt-db-map-stale.timer"],
         "checks": ["dt_api_page", "setter_marker", "accounts", "sudoers_others", "no_authorized_keys2",
-                   "deploy_windows", "deploy_notice_key", "db_map_binary"],
+                   "deploy_windows", "deploy_notice_key", "db_map_binary", "db_map_runtime"],
     },
     "dawntrader-agent": {
         "git_as": "langston",
@@ -667,6 +674,32 @@ def check_extra(name, box):
             out("MISSING", p, "DB-MAP", p)
         except OSError as e:
             out("STATE", "cannot verify %s: %s" % (p, e), "DB-MAP", p)
+    elif name == "db_map_runtime":
+        pins = [
+            ("/usr/local/lib/dt-db-map/node_modules/typescript/package.json", DB_MAP_TYPESCRIPT_PACKAGE_SHA256),
+            ("/usr/local/lib/dt-db-map/node_modules/typescript/lib/typescript.js", DB_MAP_TYPESCRIPT_LIB_SHA256),
+        ]
+        for path, expected in pins:
+            p = P(path)
+            try:
+                h = hashlib.sha256()
+                fd = os.open(p, os.O_RDONLY | os.O_NOFOLLOW)
+                try:
+                    while True:
+                        chunk = os.read(fd, 1 << 20)
+                        if not chunk:
+                            break
+                        h.update(chunk)
+                finally:
+                    os.close(fd)
+                if h.hexdigest() != expected:
+                    out("DRIFT", "%s differs from the pinned scanner runtime" % p, "DB-MAP", p)
+                else:
+                    out("OK", "%s is the pinned scanner runtime" % p)
+            except FileNotFoundError:
+                out("MISSING", p, "DB-MAP", p)
+            except OSError as e:
+                out("STATE", "cannot verify %s: %s" % (p, e), "DB-MAP", p)
     elif name == "setter_marker":
         p = P("/var/lib/dt-api-setter/marker.json")
         if os.path.lexists(p):

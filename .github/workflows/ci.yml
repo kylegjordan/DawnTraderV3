@@ -88,6 +88,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # B-DB-MAP: the checked-in baseline's R/C fence needs the commit that last
+          # wrote manifest.json plus its source ancestor, not only the tip tree.
+          fetch-depth: 0
 
       - name: Setup Node.js 20
         uses: actions/setup-node@v4
@@ -114,6 +118,9 @@ jobs:
           python3 scripts/db-map/tests/drift-enrollment.test.py
           node scripts/db-map/tests/connection-control.mjs
           node scripts/db-map/tests/snapshot-control.mjs
+          artifact_ref="$(git log -1 --format=%H HEAD -- docs/database-map/manifest.json)"
+          test "${#artifact_ref}" = 40
+          node scripts/db-map/verify.mjs --repo . --root docs/database-map --artifact-ref "$artifact_ref"
           curl --fail --location --silent --show-error --output /tmp/tbls.tar.gz https://github.com/k1LoW/tbls/releases/download/v1.97.0/tbls_v1.97.0_linux_amd64.tar.gz
           test "$(wc -c < /tmp/tbls.tar.gz)" = 31694635
           echo '43c81f408495d9b626d0265a6ebb57c6d1c4a5e072d3eecc3e88825cc6c64e9a  /tmp/tbls.tar.gz' | sha256sum --check --status
