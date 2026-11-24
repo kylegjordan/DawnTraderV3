@@ -12,6 +12,7 @@
 1. **PREVIOUSLY STATED:** the scope repeated the System Manual warning as 26 RLS-enabled `auth`/`storage` relations. **NOW:** the complete mapped population has 27 RLS-enabled relations and 0 forced-RLS relations. **REASON:** the broader relation population also includes the RLS-enabled `realtime.messages` partitioned table; the warning remains the same—visible rows through `dt_reader` are not proof of absence.
 2. **PREVIOUSLY STATED:** `RUNNING_ISSUES #672` measured 390 physical base tables and 206/210 “logical tables” in August 2026, with the normalisation rule unresolved. **NOW:** the fixed audit population is 697 relations: 675 ordinary tables, 17 partitioned parents and 5 views; 419 ordinary tables are partition children, leaving 278 logical relations after each child is folded under its parent. **REASON:** the database grew, and this audit names the physical-versus-logical rule instead of comparing unlike counts.
 3. **PREVIOUSLY STATED:** the January schema references and canonical corpus describe roughly 14–160 tables, depending on the document. **NOW:** the catalog holds 697 relations and 11,511 columns. **REASON:** those documents are historical or hand-curated views, not a current catalog extraction; this batch keeps them but does not use them as the inventory.
+4. **PREVIOUSLY STATED (first Step-2 review ref `b2f20c997`):** the audit-ref repository population was 2,427 code-bearing files, with 2,324 included and 103 excluded. **NOW:** it is 2,466 code-bearing files, with 2,363 included and the same 103 excluded. **REASON:** the suffix-only census omitted 38 extensionless shebang programs plus the root `Dockerfile`; all 39 are real scanner inputs and are now included.
 
 No other Step-1 sizing number moved: the fixed scope read remains 697 relations, 11,511 columns, 688 primary keys, 60 foreign keys, 222 unique constraints, 2,199 indexes and approximately 105 GB summed catalog storage over base/materialized relations.
 
@@ -64,11 +65,13 @@ The mapped population has 27 RLS-enabled relations and 0 forced-RLS relations. `
 
 **Consequence:** the map records RLS enabled/forced state and displays a warning. It never labels a relation empty from the reader-visible row set. Row estimates come from permitted catalog statistics, not a table scan.
 
-### F6 — the database boundary already supplies the required one-session contract
+### F6 — one session must also bind one catalog snapshot
 
 `dt-sql` holds a non-blocking single caller lock, writes INTENT before the attempt, owns the LOCKED state, reads no credential and invokes only `dt-sql-login` (`comms-infra/staging/dt-sql`, lines 33–58 and 358–419). The login helper resolves one address, uses verified TLS, puts the password only in its child environment, sets read-only and statement timeout, and makes one `psql` attempt (`dt-sql-login`, lines 17–19 and 175–185). It refuses input containing a backslash before connecting.
 
-**Consequence:** the generator pipes one plain-SQL script to one `dt-sql --csv` call. The SQL contains no `psql` meta-command/backslash and emits all catalog sections inside that one session. A nonzero/ambiguous result publishes nothing and is never retried by the generator.
+The existing login boundary guarantees one governed connection, but its `PGOPTIONS` set only `default_transaction_read_only=on` and a statement timeout. PostgreSQL 18 §13.2.1 states that each `SELECT` at Read Committed sees a snapshot from that query's start and that successive `SELECT` commands can see different data, so several section queries in one connection could still mix catalog states.
+
+**Consequence:** the generator pipes one plain-SQL script to one `dt-sql --csv` call, and that script contains exactly one catalog `SELECT`. CTEs and one tagged `UNION ALL` stream every versioned section as `(section, section_order, row_order, payload_json)` from the statement's single snapshot. The SQL contains no `psql` meta-command/backslash. A nonzero/ambiguous result publishes nothing and is never retried by the generator. A disposable-PostgreSQL concurrency control changes catalog metadata after an early branch pauses; the one-statement extractor must remain internally consistent, while a split-two-statement mutant must expose the mixed state and fail.
 
 ### F7 — the `tbls` adapter is a stable offline boundary
 
@@ -84,11 +87,11 @@ A 697-relation all-column diagram is review-hostile even though the underlying r
 
 ### F9 — the existing census aid proves why a purpose-built scanner is needed
 
-At the audit ref the tracked repository contains 2,427 code-bearing files. The intended scanner population is 2,324 files across application, operator, migration, CI and crew-tooling roots; 103 code-bearing report/document/output files are excluded with named reasons. Included roots contain 1,146 `server`, 379 `drizzle`, 264 `scripts`, 185 `client`, 153 `comms-infra`, 112 `token-watch`, 26 root files, 23 `.claude`, 13 `shared`, and smaller named roots. The population includes 545 test/fixture files, labelled `test_only`, not silently dropped.
+At the audit ref the tracked repository contains 2,466 code-bearing files. The scanner population is 2,363 files across application, operator, migration, CI and crew-tooling roots; 103 code-bearing report/document/output files are excluded with named reasons. The population rule includes the named language suffixes, any tracked blob whose first bytes are `#!`, and the root `Dockerfile`. A positive-control census found 49 extensionless paths: 38 are shebang programs, one is the root `Dockerfile`, and 10 are non-code configuration/symlink objects. The 38 programs include `dt-api-set-crew-password`, `dt-sql-login`, `dt-sql-role-setup` and `psql-wrapper`; omitting them would make the helper-retirement handoff incomplete. Included roots contain 1,146 `server`, 379 `drizzle`, 264 `scripts`, 185 `client`, 191 `comms-infra`, 112 `token-watch`, 27 root files, 23 `.claude`, 13 `shared`, and smaller named roots. The population includes 545 test/fixture files, labelled `test_only`, not silently dropped.
 
 `census.mjs --table telemetry_history` found the real Drizzle declaration and 30 typed uses in 3 files, but its raw-SQL leg searched only 1,086 files. `--table users` returned 160 name lines while only 33 lines carried an SQL-shaped token and could not distinguish three schemas. `--table xstock_bar_revision_event` found 30 raw name lines but no Drizzle declaration. The aid itself says it cannot see computed imports, HTTP-string reach, live-host timers, several entry-point forms, string-keyed access, non-TypeScript importers or dynamic table names.
 
-**Consequence:** the production scanner is not a wrapper around `census.mjs`. Its versioned root/extension/exclusion rules enumerate the candidate tree anew; 2,324 included paths and 103 excluded paths are the audit-ref result, not a frozen allowlist. It labels test/migration/operator/runtime evidence, resolves Drizzle symbols with the TypeScript compiler, lexes conservative SQL across all named languages, and writes every dynamic/ambiguous case to an unresolved ledger.
+**Consequence:** the production scanner is not a wrapper around `census.mjs`. Its versioned root/suffix/shebang/Dockerfile/exclusion rules enumerate the candidate tree anew; 2,363 included paths and 103 excluded paths are the audit-ref result, not a frozen allowlist. It labels test/migration/operator/runtime evidence, resolves Drizzle symbols with the TypeScript compiler, lexes conservative SQL across all named languages, and writes every dynamic/ambiguous case to an unresolved ledger.
 
 ### F10 — reader/writer claims need operation semantics, not name matches
 
@@ -167,7 +170,7 @@ The weekly generator and daily stale checker are two entry points over the recei
 5. **What a site means:** touched. Parent zero, negative `reltuples`, RLS-visible emptiness, views and ambiguous bare names each have distinct rendered states and fixtures.
 6. **Error paths:** touched. Pre-connect refusal, SQL failure, ambiguous lock, checksum failure, parser failure, `tbls` failure, lock-held skip, compare drift and stale receipt are separate outcomes.
 7. **Library behavior:** touched. The official v1.97.0 JSON schema validates the adapter; the pinned binary is checksum-verified and smoke-tested offline against a fixture before publication.
-8. **Files outside the TypeScript programs (`scripts/`):** touched. At the audit ref, the rule-derived 2,324-file population includes 264 `scripts`, 379 `drizzle`, Python, shell, JavaScript/MJS, SQL, YAML, crew tooling and root entry files; 103 exclusions are named with reasons. Candidate-side re-enumeration prevents that audit-ref set from becoming a stale allowlist.
+8. **Files outside the TypeScript programs (`scripts/`):** touched. At the audit ref, the rule-derived 2,363-file population includes 264 `scripts`, 379 `drizzle`, Python, shell, JavaScript/MJS, SQL, YAML, 38 extensionless shebang programs, the root `Dockerfile`, crew tooling and root entry files; 103 exclusions are named with reasons. Candidate-side re-enumeration prevents that audit-ref set from becoming a stale allowlist.
 
 ---
 
@@ -177,7 +180,7 @@ Every item cites the findings that require it. There are no unaudited plan items
 
 ### P1 — fixed one-session catalog extraction (`F1–F6`)
 
-Add one plain-SQL catalog query under `scripts/db-map/` and a generator command that passes it once to `dt-sql --csv`. The session emits a versioned set of sections for database identity (non-secret), schemas, relations, columns, constraints and their ordered columns, indexes and ordered columns, partition edges, RLS policies/state, comments, enums and extraction metadata including `current_user` and UTC. The normaliser refuses anything other than `dt_reader`, duplicate identities, missing sections or cross-section references that do not resolve.
+Add one plain-SQL catalog query under `scripts/db-map/` and a generator command that passes it once to `dt-sql --csv`. The script has one catalog `SELECT`; CTEs and one tagged `UNION ALL` emit a versioned set of sections for database identity (non-secret), schemas, relations, columns, constraints and their ordered columns, indexes and ordered columns, partition edges, RLS policies/state, comments, enums and extraction metadata including `current_user` and UTC. Column rows carry ordinal, type, nullability, default, identity and generated state. Constraint rows carry primary, unique, check and foreign-key type, ordered local/referenced columns and the catalog definition. The normaliser refuses anything other than `dt_reader`, duplicate identities, missing sections or cross-section references that do not resolve.
 
 The query uses catalog estimates and size functions only; no user-table `COUNT(*)`. It contains no backslash/meta-command. The complete captured dataset is written only after the one call exits cleanly.
 
@@ -189,11 +192,11 @@ Represent relations by `(schema,name)`. Emit one physical row per relation plus 
 
 Pin `tbls` v1.97.0 and the Linux AMD64 SHA-256 above. The installer downloads only that named release, verifies size and checksum before an atomic root-owned install under `/usr/local/lib/dt-db-map/tbls-v1.97.0`, records the MIT license, and exposes no auto-update path.
 
-Convert captured catalog data to the official v1.97.0 JSON schema: qualified table names, ordered columns, indexes, constraints and FK relations. Validate against the checked-in upstream JSON schema copy/hash. Run `tbls doc` only with `json://...`, no network/DSN, into a private candidate directory. Generate complete GFM table pages, the complete relationship data, an overview ER showing related/key columns, and stable per-schema plus cross-schema viewpoints.
+Convert captured catalog data to the official v1.97.0 JSON schema: qualified table names, ordered columns, indexes, constraints and FK relations. Map column defaults to the official `default` field, identity/generated clauses to `extra_def`, and primary/unique/check/FK definitions to the official constraint objects; also retain default/identity/generated as separate typed fields in DawnTrader `catalog.json` so rendering is not dependent on presentation text. Validate against the checked-in upstream JSON schema copy/hash. Run `tbls doc` only with `json://...`, no network/DSN, into a private candidate directory. Generate complete GFM table pages, the complete relationship data, an overview ER showing related/key columns, and stable per-schema plus cross-schema viewpoints.
 
 ### P4 — exact-ref repository scanner (`F2`, `F9–F11`)
 
-Require a ref that peels to one immutable 40-hex commit and a clean source repository. Materialise an archive of exactly that commit into a private run directory; never use a worktree. Apply versioned root, extension and exclusion rules to the candidate tree itself, then record the complete included and excluded path sets with reason. The 2,324 included / 103 excluded counts describe audit ref `8130531b5089edbf080cb1de028b82dce77bec73`; future candidates are required to re-enumerate and may legitimately have different counts. Label runtime, operator, migration/DDL, test-only and legacy evidence.
+Require a ref that peels to one immutable 40-hex commit and a clean source repository. Materialise an archive of exactly that commit into a private run directory; never use a worktree. Apply versioned root, suffix, leading-shebang, root-Dockerfile and exclusion rules to the candidate tree itself, then record the complete included and excluded path sets with reason. The 2,363 included / 103 excluded counts describe audit ref `8130531b5089edbf080cb1de028b82dce77bec73`; future candidates are required to re-enumerate and may legitimately have different counts. Label runtime, operator, migration/DDL, test-only and legacy evidence.
 
 Use the TypeScript compiler API for Drizzle declaration/import/re-export/operation identity. Use a conservative SQL lexer for TypeScript/JavaScript/MJS/CJS, Python, shell, SQL and YAML. Classify read/insert/update/delete/DDL/unknown with exact ref, file and line. Resolve qualified names and typed Drizzle symbols; send ambiguous bare names, computed identifiers, unsupported statements and parser failures to `unresolved.json`. A scanner miss is rendered as `none found by scanner at <sha>`, never `unused`.
 
@@ -209,9 +212,9 @@ The verifier checks the recorded ref is a 40-hex commit object, the source tree 
 
 ### P7 — verification and mutation suite (`F2–F11`, `F13`)
 
-Add fixtures for all current relation kinds, duplicate schema names, partitions, stale/negative estimates, RLS, views, comments, ordered compound keys, FK relations, expression/partial indexes and unsafe future identifiers. Add Drizzle/read-write-delete and raw-SQL fixtures for every language/root class, aliases/re-exports, multi-line/quoted SQL, CTEs, migrations/rollbacks, comments, dynamic names and ambiguous search paths.
+Add fixtures for all current relation kinds, duplicate schema names, partitions, stale/negative estimates, RLS, views, comments, column defaults, identity columns, generated columns, ordered compound primary/unique keys, check constraints, FK relations, expression/partial indexes and unsafe future identifiers. Assert set equality not only for relation/column identity but for each column's ordinal/type/nullability/default/identity/generated tuple and every primary/unique/check/FK constraint definition plus ordered columns. Add Drizzle/read-write-delete and raw-SQL fixtures for every language/root class, aliases/re-exports, multi-line/quoted SQL, CTEs, migrations/rollbacks, comments, dynamic names and ambiguous search paths. Include extensionless shebang helpers and the root `Dockerfile` as positive controls.
 
-Required mutants remove a relation, column, constraint, index, partition edge, source root, Drizzle alias, raw-SQL operator, unresolved row, artifact hash, manifest ref, checksum or second-connection guard; each must fail. Provenance mutants add, change, delete and rename an included file; change its executable mode; alter the scanner/extraction config between `R` and `C`; and combine a covered-source change with an artifact change. Each must fail. An artifact-only documentation commit is the no-drift control. A connection-counting stand-in proves one complete generation invokes `dt-sql` once and kills a two-call mutant. Fixed-input runs must be byte-identical. The real pinned binary must render an offline fixture and pass schema validation.
+Required mutants remove a relation, column, column default, identity marker, generated expression, primary/unique/check/FK constraint, index, partition edge, source root, shebang/executable classification leg, Drizzle alias, raw-SQL operator, unresolved row, artifact hash, manifest ref, checksum or second-connection guard; each must fail. Provenance mutants add, change, delete and rename an included file; change its executable mode; alter the scanner/extraction config between `R` and `C`; and combine a covered-source change with an artifact change. Each must fail. An artifact-only documentation commit is the no-drift control. A connection-counting stand-in proves one complete generation invokes `dt-sql` once and kills a two-call mutant. A disposable-PostgreSQL control mutates catalog metadata while the one statement is paused and proves the output remains one snapshot; a split-two-statement mutant must fail by returning a mixed population. Fixed-input runs must be byte-identical. The real pinned binary must render an offline fixture and pass schema validation.
 
 ### P8 — CI integrity gate, without a live database (`F7`, `F11`)
 
@@ -241,11 +244,11 @@ At Step 10 add the database-map component and weekly/daily schedule to the Syste
 
 | claim | proof |
 |---|---|
-| complete catalog | independent fixed query versus manifest set equality for relations, columns, constraints, indexes and partition edges; removal mutants red |
+| complete catalog | independent fixed query versus manifest set equality for relations; full column ordinal/type/nullability/default/identity/generated tuples; primary/unique/check/FK definitions and ordered columns; indexes and partition edges; targeted removal mutants red |
 | honest row/size semantics | representative raw captured rows plus stale/negative/parent/view fixtures; database total excludes parent roll-ups |
-| one governed connection | current-user positive control, connection-counting stand-in, two-call mutant, clean `dt-sql --status` after the live run |
+| one governed connection and snapshot | current-user positive control, connection-counting stand-in, two-call mutant, one-statement catalog stream, concurrent catalog-change control versus split-statement mutant, clean `dt-sql --status` after the live run |
 | offline `tbls` | process environment/arguments contain only `json://` input; network-disabled fixture render; pinned SHA and version readback |
-| scanner coverage | candidate-side rules re-enumerate the full path set; the audit-ref 2,324 included / 103 excluded result reconciles exactly; added/deleted/renamed/mode/root/language mutants red; hand sample from each operation class |
+| scanner coverage | candidate-side rules re-enumerate the full path set; the audit-ref 2,363 included / 103 excluded result reconciles exactly; suffix, shebang and root-Dockerfile controls plus added/deleted/renamed/mode/root/language mutants red; hand sample from each operation class |
 | no unused overclaim | unresolved/ambiguous fixtures remain visible and a removal mutant fails; zero-hit wording includes scanner/ref limitation |
 | deterministic artifacts | identical catalog/ref fixture renders byte-identically; all non-manifest artifact hashes verify; `R..C` artifact-only fence and manifest self-hash exclusion hold |
 | schedule isolation | real unit entry point success, concurrent lock skip, structural drift, stats-only no-drift, failure, run-stale and baseline-stale positive controls; PM2 identity/restart counters unchanged |
@@ -273,23 +276,24 @@ No application route, client page, application pool, database schema, database r
 
 Coltrane is asked to rule **PROCEED** or **SEND BACK** on the merged audit and plan, with particular attention to:
 
-1. the v1.97.0 official JSON adapter and offline-only `tbls` boundary;
-2. schema-qualified scanner identity, candidate-side population re-enumeration, the audit-ref 2,324-file inclusion / 103-file exclusion result and unresolved ledger;
+1. the v1.97.0 official JSON adapter and offline-only `tbls` boundary, including default, identity/generated and primary/unique/check/FK mapping;
+2. schema-qualified scanner identity, candidate-side suffix/shebang/Dockerfile population re-enumeration, the audit-ref 2,363-file inclusion / 103-file exclusion result and unresolved ledger;
 3. physical partition rows plus separately labelled logical roll-ups, with no double counting;
 4. the Sunday 06:30 weekly generation plus independent daily 8-day run-stale and 35-day baseline-stale checks;
 5. the self-reference-safe `source_ref R` / artifact commit `C` model, including immutable refs, candidate path enumeration, canonical `(path, mode, blob-id)` hashing, the `R..C` artifact-only fence and explicit manifest self-hash exclusion; and
-6. the narrow `B-CATALOG-1` split in F14/P12.
+6. the one-statement, one-snapshot catalog stream and its concurrent-change control; and
+7. the narrow `B-CATALOG-1` split in F14/P12.
 
 `REVIEWER: claim-only · Does the R/C provenance model avoid self-reference and distinguish covered-source drift from artifact-only documentation commits? · HIT: six missing discriminators · re-derived y`
 
 The hit was re-derived on this draft with positive controls that found the existing `source_ref R`, artifact-hash and audit-population language, followed by absence checks for candidate-side enumeration, immutable 40-hex identity, an `R..C` fence, manifest self-hash treatment, canonical path/mode/blob hashing and the required mixed/no-drift mutants. F11 and P4/P6–P10 now contain those discriminators. Per the one-pass rule, this corrected object goes directly to Coltrane.
 
-**NOT RE-READ:** the live catalog population/statistics, audit-ref repository population counts, official `tbls` release/schema facts, live schedule-slot absence and `B-CATALOG-1` overlap were re-derived by the owner but were not routed to the fresh reader. Coltrane must independently verify any of them that controls his ruling.
+**NOT RE-READ:** the live catalog population/statistics, audit-ref repository population counts, official `tbls` release/schema facts, live schedule-slot absence and `B-CATALOG-1` overlap were re-derived by the owner but were not routed to the fresh reader. Coltrane independently reproduced those gates during his first Step-2 review. His SEND BACK then identified extensionless sources, snapshot consistency and missing explicit identity/generated/check tests; each finding was re-derived against the exact objects and corrected above without a second fresh-reader pass.
 
 ---
 
 ## 9. Plain-language summary
 
-The audit confirmed that the database itself must supply the structural truth: the old hand-written references and code declarations cover only parts of a 697-relation live system. The plan uses one protected read-only database session, turns that result into standard `tbls` documentation offline, adds a conservative exact-ref code-usage map, and checks it weekly without touching the trading app.
+The audit confirmed that the database itself must supply the structural truth: the old hand-written references and code declarations cover only parts of a 697-relation live system. The plan uses one protected read-only database session and one consistent catalog statement, turns that result into standard `tbls` documentation offline, adds a conservative exact-ref code-usage map including extensionless helpers, and checks it weekly without touching the trading app.
 
 The important correction is that an older unfinished catalogue already owns several broader governance tasks. `B-DB-MAP` will replace only its generated structure and code-reference work; the older batch keeps the lookalike register, semantics and other distinct items, so nothing is duplicated or silently dropped.
