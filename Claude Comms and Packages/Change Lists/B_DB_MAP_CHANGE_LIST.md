@@ -440,3 +440,22 @@ The owner re-derived those leads against the installed hashes and effective unit
 ### 9.6 First-pass result
 
 OBJ-1 through OBJ-7 are green. OBJ-8 is red: `helpers.json` contains 85 helper rows across 79 files, but only 83 rows carry operation evidence and/or an unresolved reason. The `node-postgres Client` row for `scripts/analysis/b_xstock_bar_availability_c6_timing_read.ts` and the `node-postgres Pool` row for `server/db.ts` carry neither; this fails the registered requirement that every direct-login census member be mapped or explicitly unresolved with a reason. Step 8 must independently verify the live result and this known gap; Step 9 must make both dispositions explicit and regenerate the reviewed artifact.
+
+---
+
+## 10. Step-8 independent verification
+
+Coltrane returned an initial **NOT VERIFIED** at 2026-11-24T08:01:51Z after trying the browser-session refresher and a bare SSH command that did not select his staging key. The documented dedicated-key route was then re-proved as the `coltrane` account with the complete `reviewer-staging-access` verifier: the expected raw key and source-restricted authorization were accepted, logs and the database read were available, `current_user` was `dt_reader`, a write was refused by the database read-only transaction, and a fresh wrong key was denied. The unchanged exact-ref gate was redispatched with that explicit route.
+
+At 2026-11-24T08:09:24Z Coltrane ruled **PROCEED** on Step 8 at exact ref `0d0e25c776b170523e6ea7295aca4aabbf73b508`, carrying the known OBJ-8 correction into Step 9 and authorizing no close. His independent re-derivation found:
+
+- exact live equality as `dt_reader`: 697/697 relation identities and 11,511/11,511 positive-ordinal column identities, zero additions or omissions;
+- all seven receipts and their journal correlations: three matches, two held-lock skips, one missing-ref failure and one structural drift; exactly one catalog login in each of four complete-generation windows, zero in the two skips and pre-generation failure, with a separate three-call positive-control window;
+- the same structural hash across the statistics-only byte movement, the distinct drift hash and subsequent restoration;
+- all five alerts routed to `CC-INFRA` from `dt-db-map`, fired and resolved on the named clean conditions;
+- complete install drift PASS, both timers enabled/active, clean `dt-sql`, seven retained receipts and zero live `run-*` directories;
+- unchanged app deploy ref/worktree/process start, 715 restarts and zero unstable restarts.
+
+For the required challenge leg he changed one baseline relation's `relkind` from `r` to `v` without changing the 697-row count. The comparator went red with one baseline-only and one live-only identity, proving that a same-cardinality type substitution is detected.
+
+OBJ-8 was the only red objective. His independent enumeration matched the owner result exactly: 85 helper rows across 79 files, 83 covered, and only `scripts/analysis/b_xstock_bar_availability_c6_timing_read.ts` and `server/db.ts` with empty dispositions. Step 9 must give both explicit dispositions and regenerate the reviewed artifact.
