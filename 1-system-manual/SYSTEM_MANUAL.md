@@ -11173,7 +11173,7 @@ These tables serve the canonical paper/live trading flow:
 | `rtb_signals` | Ready-to-Buy signal queue | 33 columns, 7 indexes (staging, measured 2026-10-17 after `B-RTB-QUEUED-STATUS-SWEEP` dropped three; it read "Ready-to-Brief … ~25 columns, 5 indexes") | Y |
 | `execution_attempt_audit` | Execution decision log | 14 columns, 5 indexes, executionDecision/blockReason enums | Y |
 | `system_context` | Engine state / LATTI | ~25 columns, 3 indexes, extensive defaults | Y |
-| `telemetry_history` | Signal telemetry persistence | 14 columns, 4 indexes, marketRegime enum. Written only when `shouldPersist()` holds (live mode, or `FORCE_PERSIST`), so empty in paper mode — read 2026-11-22: empty on staging | Y |
+| `telemetry_history` | Signal telemetry persistence | 25 columns, 5 indexes, `market_regime` enum. `B-DB-REGIME-ENUM-ALIGN` added the five canonical enum values, then repaired the seven writer-declared columns that both table-creation migrations omitted (`source`, global/pair regime context, global/pair friction, global/pair directional bias, decay penalty). The ordinary app writes only when `shouldPersist()` holds (live mode, or `FORCE_PERSIST`); the 2026-11-24 one-shot P11 proof used its own forced process and left exactly two paper/VTS proof rows, both stored as `IMPULSE_EXPANSION`. | Y |
 | `adaptive_learning` | Adaptive weight persistence | weights/metadata (jsonb), marketRegime enum. No production writer or reader (the 11.1A path is dead — §11 Adaptive Learning Repository) | Y |
 | `daily_performance_summary` | Performance tracking | 3 indexes | Y |
 | `screener_results` | Screener output | uniqueIndex(mode, scannedAt) | Y |

@@ -77,6 +77,8 @@
 
 **★ xSTOCK BAR AVAILABILITY (`#707`, live `e3a96a8126f0`, 2026-11-24):** the vendor label remains bar identity; exact decision/replay eligibility uses the revision's reader-visible availability carried through aggregates, snapshots and caches. Legacy/overwritten history remains unknown. R2prime is a nonblocking Observation from 2026-11-30T01:00Z to the first due grade 2026-12-10T00:15Z; report `B_XSTOCK_BAR_AVAILABILITY_PROGRESS_REPORT.md`.
 
+**★ STORED REGIME TELEMETRY (`B-DB-REGIME-ENUM-ALIGN`, `#1263`, 2026-11-24):** `market_regime` stores the original six labels plus the five canonical regimes; writers accept canonical regimes only and normalize ghosts before persistence. The seven telemetry fields omitted by both table-creation migrations are live; P11 left two distinct paper/VTS proof rows, both canonical. The legacy enum residue outside the regime leg remains at `#1263`'s after-live home.
+
 **★★ A GUARD ON AN EXTERNAL CONTRACT TESTS FOR THE GOOD SHAPE, NEVER FOR ABSENCE (`B-DEPLOY-DRIFT-LINE`, 2026-09-07):** a 404 rendered as ZERO DRIFT because the error body FILLS the field the guard tested for emptiness. ⛔ **Validate against the known-good set.** Full text + the `#744` two-clause rider: `MISTAKE_PATTERNS.md`.
 
 

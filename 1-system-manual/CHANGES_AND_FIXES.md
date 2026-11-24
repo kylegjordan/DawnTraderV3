@@ -4521,3 +4521,11 @@ Deploys `b8ab812de` (chunk A) + `2c986c231` (chunk B); CI green; Step-8 CONFIRME
 **Fix:** preserve the vendor label, local receipt and reader-visible revision availability as separate facts; carry exact revision evidence through 15/60-minute aggregates, snapshots and caches; apply one decision-time eligibility rule to scanner, regime refresh and post-cutover exact replay; record the evidence window in provenance; mark legacy/overwritten history unknown; separate the dashboard's clock measures. A durable unattended verdict plus a sweep hold protects the registered grade.
 
 **Verified so far:** exact implementation/reliability refs passed review and CI; the four heavy capacity legs completed over 8.3 days in 471,843/1,200,000 ms; R2prime is live in aggregate `e3a96a8126f0`. **Still open:** R2prime starts 2026-11-30T01:00Z and is first due 2026-12-10T00:15Z; PASS/FAIL and the resulting action remain Observation work.
+
+## FIX-2026-11-24-B — `B-DB-REGIME-ENUM-ALIGN` (`#1263`, CC-C / ANALYST Codex): canonical regime telemetry could not be stored
+
+**Symptom:** the code wrote the five canonical regimes, but the database enum still held only six older labels; both table-creation migrations also omitted seven fields the telemetry writer supplied. A live-mode write would therefore be refused, and the first real-writer proof exposed the missing-field half after the enum half was repaired.
+
+**Fix:** add the five canonical enum labels; remove `HIGH_VOL_IMPULSE` from the stored declaration and keep it only as a ghost normalized to `IMPULSE_EXPANSION`; derive the database regime type from the schema enum; normalize and warn before persistence; add and shape-check the complete seven-field population with a forward-only ledger rollback. Runtime code landed in aggregate `e3a96a812`; the seven-field repair is migration `8b371ce01`.
+
+**Verified:** implementation CI `45306811127` and evidence CI `45309277720` passed all four jobs. P11 returned schema 7/7 and exactly two distinct paper/VTS proof rows, both `IMPULSE_EXPANSION`; Coltrane independently reproduced the database, process, row and proof-blob evidence and re-derived all seven physical column shapes through `pg_catalog`. **Not covered:** the remaining non-regime enum residue under `#1263` stays on the after-live cleanup list.

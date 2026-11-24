@@ -15,6 +15,7 @@
 
 | plan row | batch | where it stands (2026-09-30) |
 |---|---|---|
+| CC-C list 1 | `B-DB-REGIME-ENUM-ALIGN` (`#1263`) | 🟦 STEP 10 2026-11-24 — five canonical regimes and the seven missing telemetry fields are live; P11 PASS and Coltrane Step 8 PROCEED; Step 11 next |
 | 13 | `B-OHLC-FRAME-GUARD` (`#1028`) | ✅ CLOSED 2026-11-06 — Step 11 CONFIRMED by Langston (`Batch Completion/B_OHLC_FRAME_GUARD_COMPLETION_REPORT.md`) |
 | 16 | `F-G-1` reopened (`#1031`) = `B-OHLC-WRITE-ORDER` | ✅ CLOSED 2026-11-06 — `Batch Completion/F_G_1_COMPLETION_REPORT.md` |
 | 17 · 3 · 2 | `B-PRICE-SIDE-BY-JOB` | `8a-P4c` incs 2-3 (row 3) CLOSED 2026-11-06 (Step 11 confirmed by Langston); `8c` SWITCHED ON 2026-11-16 09:45:01Z (KD-91), first sided open LIGHTER/USD UI-checked; Step 7 first-week read 2026-11-23 (alert `c15fb88d`, terms in the 8c plan section 13-SWITCHED-ON); `8d` CLOSED 2026-11-07 (absorbed by `8a-P3`, Langston); KD-19 (b)/(c) exit leg **DONE — Step 11 confirmed by Langston 2026-11-13** (Step 9 event met: first live unpriced close carries no `exitWalk`; record progress report §9.11); the KD-19 (c) entry leg follows as its own increment; the xStock half is row 2 |

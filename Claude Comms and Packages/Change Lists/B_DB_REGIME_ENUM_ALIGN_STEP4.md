@@ -221,25 +221,44 @@ proof rows, both canonical/paper/`source=vts`; rebased proof blob exactly `c8de6
 ## 11. STEP 8 COMPLETION — INDEPENDENT STAGING VERIFICATION (2026-11-24)
 
 Coltrane independently re-derived the deployed outcome and ruled PROCEED at
-2026-11-24T02:05:49Z against evidence ref `8a914667f41e1473cc1a434df3217335ceeffaf8`.
+2026-11-24T02:15:36Z against evidence ref `8a914667f41e1473cc1a434df3217335ceeffaf8`.
 The verification did not rely on the Step 9 report:
 
 1. Staging HEAD and `dist/BUILD_SHA` were both exact `e3a96a8126f0280a9568bb1823b9210783f0afe0`,
-   the worktree was empty, and a temporary-repository positive control proved the status instrument could
-   report an untracked file.
+   normal porcelain returned zero entries, and same-repository `--ignored` returned 1,224 entries as the
+   positive control.
 2. The application process remained online with the same identity: `pid=2822823`, `restart_time=715`,
    `pm_uptime=1795478578039`.
-3. `information_schema` returned the complete 7/7 telemetry-column population with the exact required
-   widths, precision/scale, nullability and `source='unknown'` default.
-4. `_migrations` contained exactly one row for
+3. Direct `psql` returned the complete 7/7 telemetry-column population with the exact required widths,
+   precision/scale, nullability and `source='unknown'` default.
+4. `_migrations` contained exactly one target row among 227 applied rows for
    `2026-11-24-b-db-regime-enum-align-telemetry-columns.sql`.
 5. `telemetry_history` contained exactly two rows and two distinct proof symbols. Both were
    `IMPULSE_EXPANSION`, `paper`, `source=vts`.
-6. Challenge leg: Coltrane directly cast `IMPULSE_EXPANSION` to `market_regime` successfully and proved
-   the legacy ghost `HIGH_VOL_IMPULSE` was rejected as an invalid enum value. This discriminates database-
-   enforced canonicality from a report that merely labels the rows canonical.
-7. No UI leg applies: this is a database-schema and background-writer contract with no panel or route.
+6. The proof source read from the exact evidence ref hashed to the reviewed blob
+   `c8de6c62dd8f2d3f0c69c149c15f91bbe8225ee0`.
+7. Challenge leg: Coltrane rejected `information_schema` alone as proof of physical shape and separately
+   derived all 7/7 exact columns through `pg_catalog`, `pg_attribute` and `format_type`, including typmods,
+   nullable state and the sole `source='unknown'` default.
+8. No UI leg applies: this is a database-schema and background-writer contract with no panel or route.
 
 Evidence-ref CI run `45309277720` passed TypeScript Check, Test Suite, Build and Docker Build. Delivery
 card #1263 remains in Verification with Review=Approved and Blocked on=Nothing. Step 8 is complete; the
 next workflow action is Step 10 governance.
+
+## 12. STEP 10 GOVERNANCE RECORD (2026-11-24)
+
+The architecture record now matches the deployed result rather than the original enum-only plan. The System
+Manual and System Impact Map record the 25-column telemetry table, the complete seven-field repair, the retained
+legacy labels and the two P11 proof rows. BATCH_CATALOG, PHASE_HISTORY, SPRINT_TO_LIVE_PLAN, RUNNING_ISSUES,
+CHANGES_AND_FIXES, DELETED_COMPONENTS_LOG, shared memory, Analyst memory and the Analyst task list carry the
+Step 10 state and Step 11 hand-off. MULTI_ASSET_VTS_EXPANSION_PLAN records that no 15-minute-bar item or
+calibration epoch changed. The remaining non-regime enum residue stays at `#1263`'s after-live home.
+
+The generated close-out matrix was run from the parent of Step 1 through the Step 8 boundary. It correctly
+identified the completion report as the next-step artifact and cannot judge content, local memory or whether
+another batch touched a document in the full range. Every row was therefore decided against the actual batch
+diff, not from the matrix verdict alone. The Delivery Board reads Governance, Review=Approved and Blocked on=Nothing.
+Langston's memory replaced a closed-batch mechanics line with the durable #1263 result through
+`langston-memory-write`; its loaded set decreased from 139,298 to 139,272 bytes against the 143,856-byte ceiling,
+with reviewer-ledger and retraction counts unchanged.
