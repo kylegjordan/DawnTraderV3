@@ -79,7 +79,13 @@ export function validateLedgerObject(ledger) {
   assert.deepEqual(counts, { OWNER_HOLD: 1, RETAIN_GOVERNED_DIRECT: 36, RETAIN_TEST_LOCAL: 20, RETIRE: 33, ROUTE_DT_SQL: 2 }, 'checked-in disposition counts');
 }
 
-function stripTypeScriptComments(source) {
+function stripTypeScriptComments(path, source) {
+  const suffix = extname(path).toLowerCase();
+  const scriptKind = suffix === '.tsx' ? ts.ScriptKind.TSX
+    : new Set(['.ts', '.mts']).has(suffix) ? ts.ScriptKind.TS
+      : ts.ScriptKind.JS;
+  const parsed = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, scriptKind);
+  if (parsed.parseDiagnostics.length) return source;
   const output = [...source];
   const scanner = ts.createScanner(ts.ScriptTarget.Latest, false, ts.LanguageVariant.Standard, source);
   for (let token = scanner.scan(); token !== ts.SyntaxKind.EndOfFileToken; token = scanner.scan()) {
@@ -95,7 +101,7 @@ function failClosedSourceText(path, text) {
   const source = text.replace(/\r\n/g, '\n');
   const suffix = extname(path).toLowerCase();
   const slashComments = new Set(['.ts', '.tsx', '.js', '.mjs', '.cjs', '.mts']).has(suffix);
-  if (slashComments) return stripTypeScriptComments(source);
+  if (slashComments) return stripTypeScriptComments(path, source);
   const blockComments = slashComments || suffix === '.sql';
   const hashComments = new Set(['.py', '.pyw', '.sh', '.yml', '.yaml']).has(suffix);
   const pythonSource = suffix === '.py' || suffix === '.pyw';
