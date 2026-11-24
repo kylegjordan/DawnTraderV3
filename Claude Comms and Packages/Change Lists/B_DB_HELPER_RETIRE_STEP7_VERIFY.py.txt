@@ -1,0 +1,164 @@
+#!/usr/bin/env python3
+"""Second-party-replayable Step-7 verifier for B-DB-HELPER-RETIRE.
+
+Run on staging after copying the reviewed live archive directory to a private
+temporary directory. Arguments:
+  1 control archive directory containing the 53 *.removed files
+  2 live top-level directory (/home/deploy)
+  3 installed manifest
+  4 durable removal journal
+  5 durable removal receipt
+"""
+
+import hashlib
+import json
+import os
+import re
+import stat
+import sys
+
+control_root, live_root, manifest_path, journal_path, receipt_path = sys.argv[1:6]
+known_suffixes = (".py", ".sh", ".mjs", ".cjs", ".js", ".ts")
+patterns = {
+    "psql": re.compile(rb"(?<![A-Za-z0-9_])psql(?![A-Za-z0-9_])"),
+    "DATABASE_URL": re.compile(rb"DATABASE_URL"),
+    "PGPASSWORD": re.compile(rb"PGPASSWORD"),
+    "dt-sql": re.compile(rb"(?:^|[^A-Za-z0-9_-])dt-sql(?:$|[^A-Za-z0-9_-])"),
+    "pg_module": re.compile(rb"(?:require\s*\(\s*['\"]pg['\"]\s*\)|from\s+['\"]pg['\"]|import\s*\(\s*['\"]pg['\"]\s*\))"),
+    "pg_constructor": re.compile(rb"new\s+(?:[A-Za-z_$][A-Za-z0-9_$]*\s*\.\s*)*(?:Client|Pool)\s*\("),
+}
+
+
+def read_object(path):
+    try:
+        with open(path, "rb") as handle:
+            data = handle.read()
+    except OSError as exc:
+        return None, str(exc)
+    return {
+        "bytes": len(data),
+        "sha256": hashlib.sha256(data).hexdigest(),
+        "markers": sorted(name for name, pattern in patterns.items() if pattern.search(data)),
+        "shebang": data.startswith(b"#!"),
+    }, None
+
+
+control_paths = sorted(
+    os.path.join(parent, name)
+    for parent, _, names in os.walk(control_root)
+    for name in names
+    if name.endswith(".removed")
+)
+control_errors = []
+control_hits = 0
+for path in control_paths:
+    found, error = read_object(path)
+    if error:
+        control_errors.append({"path": path, "error": error})
+    elif found["markers"]:
+        control_hits += 1
+
+entries = []
+entry_errors = []
+marker_hits = []
+extensionless_script_candidates = []
+suffix_paths = []
+suffix_hits = []
+for entry in sorted(os.scandir(live_root), key=lambda item: item.name):
+    try:
+        found_stat = entry.stat(follow_symlinks=False)
+    except OSError as exc:
+        entry_errors.append({"path": entry.path, "error": str(exc)})
+        continue
+    mode = found_stat.st_mode
+    target = None
+    scan_path = None
+    if stat.S_ISLNK(mode):
+        kind = "symlink"
+        try:
+            target = os.readlink(entry.path)
+            if os.path.isfile(entry.path):
+                scan_path = entry.path
+        except OSError as exc:
+            entry_errors.append({"path": entry.path, "error": str(exc)})
+    elif stat.S_ISREG(mode):
+        kind = "regular"
+        scan_path = entry.path
+    elif stat.S_ISDIR(mode):
+        kind = "directory"
+    else:
+        kind = "other"
+
+    executable = bool(mode & 0o111)
+    row = {
+        "path": entry.path,
+        "kind": kind,
+        "mode": format(stat.S_IMODE(mode), "04o"),
+        "target": target,
+        "executable": executable,
+    }
+    if scan_path:
+        read, error = read_object(scan_path)
+        if error:
+            entry_errors.append({"path": entry.path, "error": error})
+        else:
+            row.update(read)
+            if read["markers"]:
+                marker_hits.append(row.copy())
+            if entry.name.endswith(known_suffixes):
+                suffix_paths.append(entry.path)
+                if read["markers"]:
+                    suffix_hits.append(row.copy())
+            elif executable or read["shebang"]:
+                extensionless_script_candidates.append(row.copy())
+    entries.append(row)
+
+with open(manifest_path, encoding="utf-8") as handle:
+    manifest = json.load(handle)
+with open(journal_path, encoding="utf-8") as handle:
+    journal = json.load(handle)
+with open(receipt_path, encoding="utf-8") as handle:
+    receipt = json.load(handle)
+
+manifest_paths = [row["path"] for row in manifest["files"]]
+journal_paths = [row["path"] for row in journal["entries"]]
+receipt_paths = receipt["removed_paths"]
+journal_states = {}
+for row in journal["entries"]:
+    journal_states[row["state"]] = journal_states.get(row["state"], 0) + 1
+
+result = {
+    "control_population": len(control_paths),
+    "control_marker_hits": control_hits,
+    "control_read_errors": control_errors,
+    "suffix_population": len(suffix_paths),
+    "suffix_marker_hits": suffix_hits,
+    "top_level_population": len(entries),
+    "top_level_regular": sum(row["kind"] == "regular" for row in entries),
+    "top_level_directories": sum(row["kind"] == "directory" for row in entries),
+    "top_level_symlinks": sum(row["kind"] == "symlink" for row in entries),
+    "top_level_other": sum(row["kind"] == "other" for row in entries),
+    "top_level_read_errors": entry_errors,
+    "top_level_marker_hits": marker_hits,
+    "extensionless_script_candidates": extensionless_script_candidates,
+    "manifest_count": len(manifest_paths),
+    "manifest_unique_count": len(set(manifest_paths)),
+    "manifest_present_after_removal": [path for path in manifest_paths if os.path.lexists(path)],
+    "path_order_matches_manifest_journal_receipt": manifest_paths == journal_paths == receipt_paths,
+    "journal_status": journal.get("status"),
+    "journal_states": journal_states,
+    "receipt_actor": receipt.get("actor"),
+    "receipt_removed_count": receipt.get("removed_count"),
+    "reviewed_refs_match": len({manifest.get("reviewed_ref"), journal.get("reviewed_ref"), receipt.get("reviewed_ref")}) == 1,
+}
+print(json.dumps(result, indent=2, sort_keys=True))
+
+assert len(control_paths) == control_hits == 53 and not control_errors
+assert len(suffix_paths) == 36 and not suffix_hits
+assert not entry_errors and not extensionless_script_candidates
+assert len(manifest_paths) == len(set(manifest_paths)) == 53
+assert manifest_paths == journal_paths == receipt_paths
+assert not result["manifest_present_after_removal"]
+assert journal.get("status") == "complete" and journal_states == {"removed": 53}
+assert receipt.get("actor") == "codex-infra" and receipt.get("removed_count") == 53
+assert result["reviewed_refs_match"]
