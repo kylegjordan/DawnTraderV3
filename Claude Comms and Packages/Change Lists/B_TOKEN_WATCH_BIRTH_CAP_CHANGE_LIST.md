@@ -245,3 +245,10 @@ Part A verdict: **PROCEED** (Discord `1573344383842132081`). His two record corr
 **Not proven:** a real window's live behaviour — rides `install_storage.sh <sha>` and Step 7 OBJ-1.
 
 **Part B verdict: PROCEED** (Discord `1573388184308555899`; Review = Approved). Conditions (a), (b), (2), (3), (c) and the hash labels are folded above; the test fold pins the dilution threshold on both sides (suite 142 passed, 0 failed). Owed at Step 10/11: `SPRINT_TO_LIVE_PLAN.md` row 5a (stale), a routing-doc row for the `birthcap-*` keys, a completion report whose basename carries COMPLETION, or a declared-`open` row if it goes to observation on a PROGRESS report.
+
+## 9f. STEP-10 C-2 REVIEWER READ GATE — the directory-only ACL instruction was insufficient (2026-11-24)
+
+- **Live discriminator:** as `deploy`, `provenance/switches.jsonl`, `births/2026-11-17.jsonl` and `state/birthcap.json` all return unreadable; the public summary is the positive control and is readable. The five named directories carry `user:deploy:r-x` but `mask::---`; the birth and state files also carry a masked deploy entry, while `switches.jsonl` has no deploy entry at all. Therefore the earlier `setfacl -m m::r-x` instruction on the directories cannot make the objects auditable.
+- **Correction prepared for review:** `install_storage.sh` names exactly `provenance`, `births`, `state`, `observations` and `study`, recursively applies `u:deploy:rX,m::rX`, then runs a whole-tree unreadable-object check as `deploy` before recording the install. A private staging mutation proved the command changes a 0600 file from unreadable to readable; the temporary tree was removed in the same command.
+- **Tests:** `test_due_storage.py` 121 passed / 0 failed. `mutate_due_storage.py` 17 of 17 killed, including the exact regression back to a directory-only mask. Shell syntax check passed.
+- **State:** pending Coltrane's own gate at the exact pushed ref, then installation and a live `deploy` read of the complete OBJ-2 inputs before adjudication. No OBJ-2 data has been read through the reviewer path yet.
