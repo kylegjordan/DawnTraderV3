@@ -1550,9 +1550,11 @@ Sessions now have tools that answer "where is this used, how does the running ap
 
 **The crew now has one safe way to read the staging database by hand, and a mistyped password can no longer get the server banned on its own.** On 2026-11-16 four wrong passwords in 17 seconds got the staging server shut out of the database for an hour, and up to 132,466 recorded rows were lost. The new tool, `dt-sql`, holds the login itself, tries it exactly once, reads without being able to write by accident, and locks itself after any refused login and pages us, so a second wrong attempt never reaches the database. Every other database query on the server now also tries only once. What it does not yet cover is planned before live: encrypting the app's own database connections, a login that can only read, a map of the database, and retiring the ~50 older scripts that still log in for themselves.
 
-### 2026-11-24 — B-DB-READONLY-ROLE (Infra Codex, Kyle KD-100; `#1259`) — 🟦 STEP 10; Step 11 next
+### 2026-11-24 — B-DB-READONLY-ROLE (Infra Codex, Kyle KD-100; `#1259`) — ✅ CLOSED; Coltrane Step 11 CONFIRMED at `20541a639`
 
 **The crew's standard database tool now uses a login the database itself will not let write.** The earlier protection was a read-only setting around the app's own powerful login; now `dt_reader` has only broad read and monitoring access, while all seven tested kinds of write are refused even with that setting removed. The tool still tries the password once, locks after an uncertain login and verifies encryption. The remaining database-security work is the database map and retiring the older scripts that still log in for themselves.
+
+Completion report: `Claude Comms and Packages/Batch Completion/B_DB_READONLY_ROLE_COMPLETION_REPORT.md`. The database map and helper retirement remain placed next as sprint orders 5a2 and 5a3.
 
 ### 2026-11-16 — B-TOKEN-WATCH-BIRTH-CAP (Infra Claude, Kyle KD-90; `#1247`) — 🟨 IN OBSERVATION (Langston Step 8 PROCEED 2026-11-20; record `Batch Completion/B_TOKEN_WATCH_BIRTH_CAP_PROGRESS_REPORT.md`)
 

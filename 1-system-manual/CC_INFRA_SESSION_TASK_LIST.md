@@ -1,4 +1,4 @@
-# CC-INFRA (Infra Claude) — SESSION TASK LIST — plain language, as of 2026-11-19
+# CC-INFRA (Infra Claude) — SESSION TASK LIST — plain language, as of 2026-11-24
 
 > 📁 **Lives in `1-system-manual/`** beside the other session lists (`workflow-10-governance` Tier-1 task-list row).
 > ⚠️ **CREATED 2026-09-11 AT `B-WAKE-LEAD-NAME` STEP 10 — IT DID NOT EXIST BEFORE.** Only `CC_A_SESSION_TASK_LIST.md` was in this folder (control: the same listing showed that file), so every earlier close by this session had no list to update.
@@ -25,8 +25,8 @@
 | ✅ ~~`B-TOKEN-WATCH-LIQ-SHED-HOTFIX`~~ (`#1247`, hotfix) | **CLOSED 2026-11-16** (Langston Review = Approved) | — | note `Batch Completion/B_TOKEN_WATCH_LIQ_SHED_HOTFIX_COMPLETION_NOTE.md`; superseded by BIRTH-CAP's carve 0 at its install |
 | ▶ **`B-TOKEN-WATCH-FOLLOWUP-MEMORY`** (`#1132`, order 5 in my §0a list) | **Step 9** — P10 observation since 2026-11-15T15:12:41Z; the 48 h read taken late 2026-11-19 (store shrank, rule did not fire, `5dedd5e1b`) | the 7-day read, 2026-11-22 | never enable Langston worker 2 |
 | ▶ **`B-DISK-HEADROOM`** (plan row 6) | **Step 9; OBJ-4 production proof PASS 2026-11-12** | 12-01 direct peak | exact 14-target/19-total sweep passed; archive, hot absence and lock controls passed; alert `f8188c60-c0db-4fc2-a316-b6a4c8e59d68` carries the 12-01 02:05Z direct read |
-| ▶ **`B-DB-READONLY-ROLE`** (KD-100, plan Infra order 5a1) | **Step 10 done; Step 11 next** — live role and tool independently verified by Coltrane | Step 11 completion report | `dt_reader` is the database-enforced read boundary; then B-DB-MAP starts |
-| ⏳ **`B-DB-MAP`** (KD-101, plan Infra order 5a2) | queued | B-DB-READONLY-ROLE | the standard database map, through the read-only login; its read/write column from the repo at a named commit (Langston) |
+| ✅ ~~`B-DB-READONLY-ROLE`~~ (KD-100, plan Infra order 5a1) | **CLOSED 2026-11-24** — Coltrane Step 11 CONFIRMED at `20541a639` | — | report `Batch Completion/B_DB_READONLY_ROLE_COMPLETION_REPORT.md`; `dt_reader` is the database-enforced crew-read boundary |
+| ⏳ **`B-DB-MAP`** (KD-101, plan Infra order 5a2) | **NEXT — Step 1** | nothing | the standard database map, through the read-only login; its read/write column comes from the repo at a named commit |
 | ⏳ **`B-DB-HELPER-RETIRE`** (KD-100, plan Infra order 5a3) | queued | B-DB-MAP | retire or route through dt-sql the ~50 scripts that log in for themselves |
 | ⏳ **`#1237` + `#1238` `B-CODEX-CONVERSATION-BACKUP`** | after live (Kyle D-1, 2026-11-04) | me | one backed-up, searchable and restore-checked path for all five Claude sessions, all five Codex chats, Langston and Coltrane |
 | ✅ ~~`B-LANGSTON-RELIEF`~~ (sprint §0 row, Kyle 2026-10-16) | **CLOSED 2026-11-05** (Langston CONFIRMED 2026-11-05T03:04:32Z) | — | report `Batch Completion/B_LANGSTON_RELIEF_COMPLETION_REPORT.md`; the ceiling carried to `B-LANGSTON-CLAUDEMD-RESIDUAL` (Kyle option A) |

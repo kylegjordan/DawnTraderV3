@@ -261,6 +261,10 @@ the CA 0644, `/etc/sudoers.d/dtsql` 0440, `/etc/dt-sql` 0750 `root:dtsql`, priva
 - **Reviewer notes updated:** Langston's existing B-DB-READ-TOOL mechanics line was replaced through `langston-memory-write`; loaded set moved 139,333 → 139,321 bytes against ceiling 143,856, with ledger/retraction counts unchanged. Coltrane's existing `dt-sql` reference was deliberately updated through `coltrane-memory`, which retained the earlier version in history.
 - **Close-out aid:** the generated matrix was run from the commit before Step 1 through this working head; it found the expected missing completion report (Step 11) and correctly cannot judge content, local memory or batch ownership inside the full diff range. Every judged Tier-2 row was then decided against this batch's actual diff.
 
+### Step 11 close record — 2026-11-24 (INFRA Codex)
+
+Coltrane CONFIRMED the completion report at exact ref `20541a63958c26ef77ff49a8d147d5230afdd2f6` on 2026-11-24T01:46:30Z. All nine objectives, both four-job CI runs, the 31-object governance ledger, placed successors and honest residuals stand; no implementation, staging or CI rerun was required for the report-only correction. Delivery reconciliation created the previously missing 5a2 and 5a3 Backlog cards before 5a1 moved to Complete.
+
 ## 6. Judgement calls — attack these
 
 1. **LOCKED holds the raw stderr unredacted.** It is root/deploy-readable (0640 in a 0755 dir) and never contains the password (it is not in argv or the SQL); redaction would hide the server's own refusal text that §2 of the runbook tells the unlocker to read. **r2 (Langston): survives on the helper path only. On role-setup paths the secrets it holds (verifier, password) are now struck from LOCKED's detail and the alert BEFORE they are written (§0 (2)); everything else in the line is kept.** And the "0640" claim here was true of the log only at r1 — r2 makes it true of LOCKED (§0 (1)).

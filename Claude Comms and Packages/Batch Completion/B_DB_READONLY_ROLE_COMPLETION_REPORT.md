@@ -8,6 +8,8 @@
 
 **NO SCOPE OBJECTIVE IS OPEN.** `B-DB-MAP` and `B-DB-HELPER-RETIRE` remain separate, placed batches in Infra orders 5a2 and 5a3; they do not weaken this batch's `dt-sql` boundary.
 
+**Delivery-record reconciliation:** `POST_AUDIT_ROADMAP` has no row for this batch; the active plan, INFRA task list and this report close 5a1 and place 5a2 then 5a3; the delivery board holds 5a1 in Governance blocked on the reviewer until this exact close bundle is confirmed, with both successor cards in Backlog, after which the owner moves 5a1 to Complete.
+
 ---
 
 ## Outcome
