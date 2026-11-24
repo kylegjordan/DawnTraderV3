@@ -369,6 +369,25 @@ def build_snapshot(source_root: Path, snapshot: Path, repo_contract: dict,
         raise
 
 
+def _append_delete_record(log_path: Path, record: dict) -> None:
+    try:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        with log_path.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(record, sort_keys=True) + "\n")
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.chmod(log_path, 0o600)
+        if os.name != "nt":
+            flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+            parent_fd = os.open(log_path.parent, flags)
+            try:
+                os.fsync(parent_fd)
+            finally:
+                os.close(parent_fd)
+    except OSError as exc:
+        raise SnapshotError("deletion evidence could not be made durable: %s" % exc) from exc
+
+
 def delete_snapshot(snapshot: Path, expected_manifest_sha: str, log_path: Path | None = None) -> dict:
     if len(expected_manifest_sha) != 64 or any(c not in "0123456789abcdef" for c in expected_manifest_sha):
         raise SnapshotError("--delete requires the manifest's full lowercase SHA-256")
@@ -379,6 +398,15 @@ def delete_snapshot(snapshot: Path, expected_manifest_sha: str, log_path: Path |
     if actual != expected_manifest_sha:
         raise SnapshotError("manifest SHA-256 differs; refusing deletion")
     verify_snapshot(SOURCE_ROOT, snapshot, check_source=False)
+    prepared = {
+        "phase": "prepared",
+        "prepared_at": _iso(dt.datetime.now(dt.timezone.utc)),
+        "snapshot": str(snapshot),
+        "manifest_sha256": actual,
+        "postcondition_exists": True,
+    }
+    if log_path:
+        _append_delete_record(log_path, prepared)
     for path in snapshot.rglob("*"):
         os.chmod(path, 0o700 if path.is_dir() else 0o600)
     os.chmod(snapshot, 0o700)
@@ -386,18 +414,14 @@ def delete_snapshot(snapshot: Path, expected_manifest_sha: str, log_path: Path |
     if snapshot.exists():
         raise SnapshotError("snapshot still exists after deletion")
     evidence = {
+        "phase": "deleted",
         "deleted_at": _iso(dt.datetime.now(dt.timezone.utc)),
         "snapshot": str(snapshot),
         "manifest_sha256": actual,
         "postcondition_exists": False,
     }
     if log_path:
-        log_path.parent.mkdir(parents=True, exist_ok=True)
-        with log_path.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(evidence, sort_keys=True) + "\n")
-            fh.flush()
-            os.fsync(fh.fileno())
-        os.chmod(log_path, 0o600)
+        _append_delete_record(log_path, evidence)
     return evidence
 
 

@@ -145,10 +145,27 @@ check("C-2 a later live append does not change the fixed snapshot",
       and switch.stat().st_size > manifest["switch_prefix"]["bytes"])
 
 manifest_sha = hashlib.sha256((snapshot / "MANIFEST.json").read_bytes()).hexdigest()
-evidence = mod.delete_snapshot(snapshot, manifest_sha)
+blocked_log = ROOT / "blocked-log"
+blocked_log.mkdir()
+try:
+    mod.delete_snapshot(snapshot, manifest_sha, blocked_log)
+except mod.SnapshotError:
+    check("C-2 deletion evidence failure preserves snapshot",
+          snapshot.exists() and (snapshot / "MANIFEST.json").exists())
+else:
+    check("C-2 deletion evidence failure preserves snapshot", False, "deletion unexpectedly succeeded")
+
+delete_log = ROOT / "deletions.jsonl"
+evidence = mod.delete_snapshot(snapshot, manifest_sha, delete_log)
+delete_records = [json.loads(line) for line in delete_log.read_text(encoding="utf-8").splitlines()]
 check("C-2 explicit deletion is bound to the manifest and proves absence",
       evidence["manifest_sha256"] == manifest_sha and not snapshot.exists() and evidence["postcondition_exists"] is False,
       evidence)
+check("C-2 deletion has durable prepared and completed evidence",
+      [row["phase"] for row in delete_records] == ["prepared", "deleted"]
+      and delete_records[0]["postcondition_exists"] is True
+      and delete_records[1]["postcondition_exists"] is False,
+      delete_records)
 
 shutil.rmtree(ROOT, ignore_errors=True)
 print("%d passed, %d failed" % (PASS, FAIL))

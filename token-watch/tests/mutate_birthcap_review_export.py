@@ -19,6 +19,10 @@ MUTANTS = [
      'if _sha(source_prefix) != entry.get("source_prefix_sha256") or source_prefix != copied_data:',
      'if False:',
      "FAIL C-2 one omitted switch row turns verification red"),
+    ("snapshot removal can happen before durable deletion evidence",
+     'if log_path:\n        _append_delete_record(log_path, prepared)',
+     'if False:\n        _append_delete_record(log_path, prepared)',
+     "FAIL C-2 deletion evidence failure preserves snapshot"),
 ]
 
 
