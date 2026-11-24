@@ -4,9 +4,9 @@
 
 **Step-2 reference:** `Claude Comms and Packages/Scope Files/B_DB_MAP_PRE_AUDIT.md` at approved exact ref `93248a802efb6bda0b6559867d73c2c04446d934`.
 
-**Corrected implementation source ref R:** `00f9d2a36fe88310c4a3c2de577173fa40be061a`
+**Corrected implementation source ref R:** `d57690b116b8fea701424ff80e9ebe09579f547d`
 
-**Corrected immutable artifact commit C:** `1c4da2e8bebb5c93e3c227251ad9a437123afbde`
+**Corrected immutable artifact commit C:** `b5631e83473c4e91ed1cf4ca99f74d5833e8d47c`
 
 **Implementation compare base:** `2e9ee4b0584d4701d101d8f595a27bd6fa6acce4` (the Step-2 boundary record immediately before implementation)
 
@@ -92,7 +92,7 @@ This is not a Step-10 ledger. It makes the required Step-4 presence/absence stat
 - `scripts/db-map/tests/schedule.test.mjs`
 - `scripts/db-map/tests/snapshot-control.mjs`
 
-The headings above group the 35-file batch source set; `catalog.sql` is counted once. The Step-4 correction modifies 19 paths already in that set, so it does not expand the declared source-path population.
+The headings above group the 35-file batch source set; `catalog.sql` is counted once. The Step-4 corrections modify 21 paths already in that set, so they do not expand the declared source-path population.
 
 ### 2.2 Generated artifact — 2,119 files
 
@@ -100,7 +100,7 @@ The headings above group the 35-file batch source set; `catalog.sql` is counted 
 - 697 DawnTrader enrichment pages under `docs/database-map/tables/`, one per live relation.
 - 1,413 pinned `tbls` Markdown/SVG/schema/viewpoint artifacts under `docs/database-map/tbls/`.
 
-The corrected artifact contains 2,119 files and 48,388,015 bytes. The manifest records 2,118 artifact hashes and explicitly excludes only `manifest.json` from self-hashing. The corrected R..C positive control found `docs/database-map/catalog.json`; the Git range contains 452 changed paths, all under `docs/database-map/`, because 1,667 generated paths are byte-identical to the preceding baseline. The exact-set verifier independently enumerates all 2,119 files and rejects undeclared additions and missing declared files.
+The corrected artifact contains 2,119 files and 48,388,041 bytes. The manifest records 2,118 artifact hashes and explicitly excludes only `manifest.json` from self-hashing. The corrected R..C positive control found `docs/database-map/catalog.json`; the Git range contains 454 changed paths, all under `docs/database-map/`, because 1,665 generated paths are byte-identical to the preceding baseline. The exact-set verifier independently enumerates all 2,119 files and rejects undeclared additions and missing declared files.
 
 ---
 
@@ -115,7 +115,7 @@ The corrected artifact contains 2,119 files and 48,388,015 bytes. The manifest r
 7. Recursively enumerates the artifact root, requires exact set equality with the manifest, canonicalizes every declared path, hashes every non-manifest artifact, schema-validates the manifest, revalidates the official `tbls` schema, rejects likely credentials/DSNs, and applies the source-ref R / artifact-ref C allowlist fence.
 8. Generates Sunday at 06:30 UTC with up to 10 minutes of random delay and a 30-minute service timeout. A separate daily 07:15 UTC check makes no database connection.
 9. Separates failure, structural drift, missing-run staleness (>8 days), and baseline staleness (>35 days) into four alert keys routed to CC-INFRA. Only each named clean condition resolves its key.
-10. Keeps eight bounded receipts, removes private candidate directories after each run, never commits/pushes/deploys/restarts the app, and enrolls installed files, modes, directories, units, timers, the pinned TypeScript runtime, and installed SHA in install drift. A weekly run is not marked successful until all required alert delivery completes.
+10. Keeps eight bounded receipts, removes private candidate directories after each run, never commits/pushes/deploys/restarts the app, and enrolls installed files, modes, directories, units, timers, the pinned Node and TypeScript runtimes, and installed SHA in install drift. A weekly run is not marked successful until all required alert delivery completes.
 
 ---
 
@@ -310,14 +310,14 @@ Persistent=true
 
 ### 5.1 Artifact and population
 
-- Corrected artifact ref: `1c4da2e8bebb5c93e3c227251ad9a437123afbde`.
-- Corrected manifest source ref: `00f9d2a36fe88310c4a3c2de577173fa40be061a`.
-- Generated files: 2,119 totaling 48,388,015 bytes; manifest artifact hashes: 2,118; manifest self-hash: explicit `null`.
+- Corrected artifact ref: `b5631e83473c4e91ed1cf4ca99f74d5833e8d47c`.
+- Corrected manifest source ref: `d57690b116b8fea701424ff80e9ebe09579f547d`.
+- Generated files: 2,119 totaling 48,388,041 bytes; manifest artifact hashes: 2,118; manifest self-hash: explicit `null`.
 - Scanner population at R: 2,386 included and 103 excluded tracked code-bearing files.
 - Scanner evidence at R: 3,589 resolved usage rows; 6,102 unresolved rows; 85 direct-login/helper records.
-- Structural projection SHA-256: `a2e0292c88e28a6410dc5b95a4d96133d8c909e623dcb8ad6c318533274aee49`.
+- Structural projection SHA-256: `482de5ed345df991a760426752928f0312bd34700f49393e1c28fc29d3fde0d0`.
 - Runtime record: Node `v20.20.0` at SHA-256 `d01614ef369e36eee9ab8d86fbfa93ddf44931010add45e5262a63e3ddda784e`; ICU `77.1`; TypeScript `5.6.3` implementation SHA-256 `f316520790d4db220a10d890c5f85310e26a1bd3c104b8d3b5eb62ba0491651b`.
-- R..C changed Git paths: 452/452 under `docs/database-map/`; positive control `docs/database-map/catalog.json`; outside paths: 0; R is an ancestor of C. Independent artifact-root enumeration matched the exact declared set: 2,118 hashed files plus `manifest.json`.
+- R..C changed Git paths: 454/454 under `docs/database-map/`; positive control `docs/database-map/catalog.json`; outside paths: 0; R is an ancestor of C. Independent artifact-root enumeration matched the exact declared set: 2,118 hashed files plus `manifest.json`.
 
 ### 5.2 Live captured catalog
 
@@ -339,7 +339,7 @@ Persistent=true
 
 ### 5.4 Tests and CI
 
-- Local at corrected R: 35 core checks passed; 22/22 mutants killed; 19 schedule checks passed; install-drift positive control passed and its binary mutation went red.
+- Local at corrected R: 43 core checks passed; 38/38 mutants killed; 19 schedule checks passed; install-drift positive control passed and its binary, Node executable, and Node-version mutations went red.
 - Linux-only one-connection/two-call control, disposable-PostgreSQL one-statement/split-statement snapshot control, and real pinned `tbls` twice-byte-identical render all passed in CI.
 - Corrected READY-AT CI is reported in the Discord redispatch after all four jobs finish. The Test Suite now materializes and verifies the real checked-in baseline and its actual R/C fence within the same blocking database-map step as the focused controls.
 
@@ -356,10 +356,11 @@ Persistent=true
 7. Do the four alert keys and their independent resolution conditions avoid conflating failed generation, real structural drift, stale runs, and stale reviewed baselines?
 8. Is the 2,119-file / approximately 48 MB checked-in baseline an acceptable review/storage trade-off for complete relation pages, official `tbls` pages/diagrams, and machine-readable authorities?
 9. Does the corrected exact-set verifier now close both artifact-set directions, including undeclared additions, missing declared files, non-canonical paths, and traversal/absolute-path forms?
-10. Do the Node/TypeScript implementation hashes, recorded ICU version, bytewise ordering, installed isolated TypeScript copy, and install-drift enrollment sufficiently close ambient-runtime and locale-dependent output?
+10. Do the Node/TypeScript implementation hashes, recorded ICU version, bytewise JavaScript ordering, explicit database `C` collation, installed isolated TypeScript copy, and install-drift enrollment sufficiently close ambient-runtime and locale-dependent output?
 11. Does setting generation success before alert delivery, but total success only after delivery returns, preserve truthful phase diagnostics while guaranteeing a delivery exception exits red?
 12. Is reversible `%25`/`%2E` component escaping an unambiguous relation representation for dotted schema/table identifiers across catalog validation, adapters, scanner evidence, foreign keys, partitions, and pinned `tbls`/Graphviz rendering?
 13. Is the programmatic `allowUnpinnedRuntime` exception sufficiently confined to the synthetic pinned-render fixture, given that neither generator nor verifier exposes it on the command line and the real checked-in baseline still passes the strict verifier first?
+14. Does full canonical equality of each emitted index tuple, plus same-cardinality substitutions for its name, definition, table, columns, and optional comment, close index fidelity beyond a count-only check?
 
 ---
 
@@ -380,6 +381,18 @@ Coltrane returned **SEND BACK** at 2026-11-24T05:02:46Z on the first READY-AT re
 The first corrected CI attempt, run `45332251730`, was deliberately not dispatched because its Test Suite went red: SQL-style quoted dotted identifiers reached `tbls` but produced invalid Graphviz syntax. The renderer-safe escaping above was then proved with the exact pinned Linux `tbls` binary, the live baseline was regenerated from the new immutable R, and the failed run is retained here as defect evidence rather than presented as review authority.
 
 The second corrected CI attempt, run `45333600235`, was also deliberately not dispatched. Its real checked-in baseline, exact R/C fence, focused controls, and pinned Linux `tbls` render all passed, but the synthetic render-control fixture was generated with its explicit programmatic Node-pin exception and then verified without the matching exception. GitHub's Node `v20.20.2` therefore failed the fixture manifest's production Node `v20.20.0` pin after rendering. The correction passes the exception only to that synthetic fixture's programmatic verifier call; neither CLI exposes the exception, the real baseline is still verified strictly before the fixture runs, and TypeScript remains pinned in every path. This second red run is likewise retained as defect evidence and is not review authority.
+
+The complete corrected package at READY-AT `252eafe15c19a8045197a2c501e855d3c3bce0a4` passed all four CI jobs in run `45334610252`, but Coltrane returned **SEND BACK** at 2026-11-24T06:00:54Z with three remaining findings:
+
+1. **Node install drift was incomplete:** the generator pinned Node at generation, but the installed Node executable and reported version were absent from weekly drift detection.
+2. **Ordering was not completely explicit:** five production JavaScript ordering sites still used native sort instead of the declared byte comparator, and the control did not discriminate a non-ASCII substitution at those sites.
+3. **Index fidelity was count-only:** equal index counts could conceal same-cardinality substitutions.
+
+The new R/C pair above closes those findings. Install drift now pins the live Node executable checksum, ownership/mode, and exact reported version, with independent executable-byte and version mutations. Every production JavaScript string sort uses the UTF-8 byte comparator; the catalog query pins all nine string-order clauses to database `C` collation, the production reader refuses a changed 13-site ordering set, and non-ASCII controls exercise artifact paths, canonical JSON, enum groups, schema viewpoints, cross-schema tables, and logical roll-ups. Adapter fidelity now compares the complete emitted index tuple and same-cardinality mutants replace each of its five emitted fields.
+
+`REVIEWER: claim-only · Does the current correction fully close the Node drift, all production ordering, and complete index-tuple findings; what objects would settle that and what other states remain consistent? · HIT: the catalog query still used database-default string collation and the comparator-only control did not exercise each production ordering site · re-derived y`
+
+The owner re-derived that hit from the catalog query and generator path. The correction now pins the query collation, refuses a changed ordering-site set before the database call, and drives the non-ASCII pair through the individual JavaScript ordering sites; the fresh baseline was regenerated from the corrected immutable R rather than retaining the earlier candidate.
 
 ---
 
