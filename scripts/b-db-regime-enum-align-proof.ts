@@ -9,7 +9,7 @@
  * Before this batch the canonical label was not a value of the stored market_regime enum, so this insert was
  * refused; the PASS arm is a row read back with that label.
  *
- * Langston Step-2 condition (b): row read-back (id, regime, mode, symbol), pre/post count(*) (graded; n_tup_ins
+ * Langston Step-2 condition (b): row read-back (id, regime, mode, symbol, source), pre/post count(*) (graded; n_tup_ins
  * is printed but not graded because the statistics view can lag), a build-sha
  * assert, distinguishable symbols. Population note: server/tests/integration/cost_telemetry.test.ts:56 also
  * inserts into telemetry_history (mode 'system'), but only in the CI test database — never on staging.
@@ -27,6 +27,15 @@ import { TelemetryAggregatorService } from '../server/services/telemetry-aggrega
 
 const SYMBOLS = ['B1263-PROOF-CANON', 'B1263-PROOF-GHOST'] as const;
 const EXPECT: Record<string, string> = { 'B1263-PROOF-CANON': 'IMPULSE_EXPANSION', 'B1263-PROOF-GHOST': 'IMPULSE_EXPANSION' };
+const EXPECTED_COLUMNS = [
+  { name: 'source', dataType: 'character varying', charLen: 20, precision: null, scale: null, nullable: 'YES', defaultValue: "'unknown'::character varying" },
+  { name: 'global_regime', dataType: 'character varying', charLen: 40, precision: null, scale: null, nullable: 'YES', defaultValue: null },
+  { name: 'pair_friction', dataType: 'numeric', charLen: null, precision: 5, scale: 2, nullable: 'YES', defaultValue: null },
+  { name: 'global_friction', dataType: 'numeric', charLen: null, precision: 5, scale: 2, nullable: 'YES', defaultValue: null },
+  { name: 'pair_directional_bias', dataType: 'character varying', charLen: 20, precision: null, scale: null, nullable: 'YES', defaultValue: null },
+  { name: 'global_directional_bias', dataType: 'character varying', charLen: 20, precision: null, scale: null, nullable: 'YES', defaultValue: null },
+  { name: 'decay_penalty', dataType: 'numeric', charLen: null, precision: 5, scale: 4, nullable: 'YES', defaultValue: null },
+] as const;
 
 function refuse(msg: string): never {
   console.error(`REFUSED: ${msg}`);
@@ -42,10 +51,43 @@ async function counts(): Promise<{ rows: number; ins: number | null }> {
 }
 const fmtIns = (v: number | null): string => (v === null ? 'unavailable' : String(v));
 
-async function proofRows(): Promise<Array<{ id: number; regime: string; mode: string; symbol: string }>> {
-  const r = await db.execute(sql`select id, regime::text as regime, mode::text as mode, symbol from telemetry_history
+async function assertTelemetrySchema(): Promise<void> {
+  const r = await db.execute(sql`select column_name, data_type, character_maximum_length::int as char_len,
+      numeric_precision::int as precision, numeric_scale::int as scale, is_nullable, column_default
+    from information_schema.columns
+    where table_schema = 'public' and table_name = 'telemetry_history'
+      and column_name in ('source', 'global_regime', 'pair_friction', 'global_friction',
+        'pair_directional_bias', 'global_directional_bias', 'decay_penalty')
+    order by column_name`);
+  const rows = (r as unknown as { rows: Array<{
+    column_name: string; data_type: string; char_len: number | null; precision: number | null;
+    scale: number | null; is_nullable: string; column_default: string | null;
+  }> }).rows;
+  const byName = new Map(rows.map((row) => [row.column_name, row]));
+  const bad: string[] = [];
+  for (const expected of EXPECTED_COLUMNS) {
+    const actual = byName.get(expected.name);
+    if (!actual) {
+      bad.push(`${expected.name}:missing`);
+      continue;
+    }
+    if (actual.data_type !== expected.dataType
+      || actual.char_len !== expected.charLen
+      || actual.precision !== expected.precision
+      || actual.scale !== expected.scale
+      || actual.is_nullable !== expected.nullable
+      || actual.column_default !== expected.defaultValue) {
+      bad.push(`${expected.name}:wrong-shape`);
+    }
+  }
+  if (bad.length) throw new Error(`telemetry_history schema mismatch: ${bad.join(', ')}`);
+  console.log(`SCHEMA ${rows.length}/${EXPECTED_COLUMNS.length} expected telemetry columns exact`);
+}
+
+async function proofRows(): Promise<Array<{ id: string; regime: string; mode: string; symbol: string; source: string | null }>> {
+  const r = await db.execute(sql`select id, regime::text as regime, mode::text as mode, symbol, source from telemetry_history
     where symbol in (${SYMBOLS[0]}, ${SYMBOLS[1]}) order by id`);
-  return (r as unknown as { rows: Array<{ id: number; regime: string; mode: string; symbol: string }> }).rows;
+  return (r as unknown as { rows: Array<{ id: string; regime: string; mode: string; symbol: string; source: string | null }> }).rows;
 }
 
 async function main(): Promise<void> {
@@ -55,6 +97,7 @@ async function main(): Promise<void> {
   const head = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
   if (built !== expected || head !== expected) refuse(`build-sha mismatch: expected ${expected} dist/BUILD_SHA ${built} HEAD ${head}`);
   if (process.env.FORCE_PERSIST !== 'true' || process.env.MODE !== 'paper') refuse('needs FORCE_PERSIST=true and MODE=paper in this command env');
+  await assertTelemetrySchema();
   if ((await proofRows()).length) refuse('proof symbols already present — this proof has run; read those rows instead');
 
   const pre = await counts();
@@ -78,13 +121,14 @@ async function main(): Promise<void> {
   await new Promise((res) => setTimeout(res, 3000));
   const post = await counts();
   console.log(`POST rows=${post.rows} n_tup_ins=${fmtIns(post.ins)}`);
-  for (const r of rows) console.log(`ROW id=${r.id} symbol=${r.symbol} regime=${r.regime} mode=${r.mode}`);
+  for (const r of rows) console.log(`ROW id=${r.id} symbol=${r.symbol} regime=${r.regime} mode=${r.mode} source=${r.source}`);
 
   const fails: string[] = [];
   if (rows.length !== 2) fails.push(`expected 2 proof rows, read ${rows.length}`);
   for (const r of rows) {
     if (r.regime !== EXPECT[r.symbol]) fails.push(`${r.symbol}: regime ${r.regime}, expected ${EXPECT[r.symbol]}`);
     if (r.mode !== 'paper') fails.push(`${r.symbol}: mode ${r.mode}, expected paper`);
+    if (r.source !== 'vts') fails.push(`${r.symbol}: source ${r.source}, expected vts`);
   }
   if (post.rows - pre.rows < 2) fails.push(`count(*) moved ${post.rows - pre.rows}, expected >= 2`);
   // n_tup_ins is reported, not graded: the statistics view can lag the commit, and count(*) plus the
