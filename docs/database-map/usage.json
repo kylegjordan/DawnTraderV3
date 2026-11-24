@@ -3,7 +3,7 @@
     {
       "evidence_class": "test_only",
       "file": "scripts/db-map/tests/core.test.mjs",
-      "line": 50,
+      "line": 58,
       "operation": "update",
       "relation": "auth.users",
       "source": "raw_sql"
@@ -3202,6 +3202,86 @@
     },
     {
       "evidence_class": "operator",
+      "file": "scripts/analysis/b1250_exit_book_age.sql",
+      "line": 4,
+      "operation": "read",
+      "relation": "public.closed_trades",
+      "source": "raw_sql"
+    },
+    {
+      "evidence_class": "operator",
+      "file": "scripts/analysis/b1250_exit_book_age.sql",
+      "line": 11,
+      "operation": "read",
+      "relation": "public.closed_trades",
+      "source": "raw_sql"
+    },
+    {
+      "evidence_class": "operator",
+      "file": "scripts/analysis/b1250_step7_five_session.sql",
+      "line": 45,
+      "operation": "read",
+      "relation": "public.closed_trades",
+      "source": "raw_sql"
+    },
+    {
+      "evidence_class": "operator",
+      "file": "scripts/analysis/b1250_step7_five_session.sql",
+      "line": 53,
+      "operation": "read",
+      "relation": "public.closed_trades",
+      "source": "raw_sql"
+    },
+    {
+      "evidence_class": "operator",
+      "file": "scripts/analysis/b1250_step7_five_session.sql",
+      "line": 60,
+      "operation": "read",
+      "relation": "public.closed_trades",
+      "source": "raw_sql"
+    },
+    {
+      "evidence_class": "operator",
+      "file": "scripts/analysis/b1250_step7_five_session.sql",
+      "line": 63,
+      "operation": "read",
+      "relation": "public.closed_trades",
+      "source": "raw_sql"
+    },
+    {
+      "evidence_class": "operator",
+      "file": "scripts/analysis/b1250_step7_five_session.sql",
+      "line": 67,
+      "operation": "read",
+      "relation": "public.closed_trades",
+      "source": "raw_sql"
+    },
+    {
+      "evidence_class": "operator",
+      "file": "scripts/analysis/b1250_step7_five_session.sql",
+      "line": 69,
+      "operation": "read",
+      "relation": "public.closed_trades",
+      "source": "raw_sql"
+    },
+    {
+      "evidence_class": "operator",
+      "file": "scripts/analysis/b1250_step9_reread.sql",
+      "line": 29,
+      "operation": "read",
+      "relation": "public.closed_trades",
+      "source": "raw_sql"
+    },
+    {
+      "evidence_class": "operator",
+      "file": "scripts/analysis/b1250_step9_reread.sql",
+      "line": 38,
+      "operation": "read",
+      "relation": "public.closed_trades",
+      "source": "raw_sql"
+    },
+    {
+      "evidence_class": "operator",
       "file": "scripts/analysis/b_book_truncate_cadence.sql",
       "line": 1,
       "operation": "read",
@@ -3324,86 +3404,6 @@
       "evidence_class": "operator",
       "file": "scripts/analysis/b_xstock_fee_contract_verify.sql",
       "line": 90,
-      "operation": "read",
-      "relation": "public.closed_trades",
-      "source": "raw_sql"
-    },
-    {
-      "evidence_class": "operator",
-      "file": "scripts/analysis/b1250_exit_book_age.sql",
-      "line": 4,
-      "operation": "read",
-      "relation": "public.closed_trades",
-      "source": "raw_sql"
-    },
-    {
-      "evidence_class": "operator",
-      "file": "scripts/analysis/b1250_exit_book_age.sql",
-      "line": 11,
-      "operation": "read",
-      "relation": "public.closed_trades",
-      "source": "raw_sql"
-    },
-    {
-      "evidence_class": "operator",
-      "file": "scripts/analysis/b1250_step7_five_session.sql",
-      "line": 45,
-      "operation": "read",
-      "relation": "public.closed_trades",
-      "source": "raw_sql"
-    },
-    {
-      "evidence_class": "operator",
-      "file": "scripts/analysis/b1250_step7_five_session.sql",
-      "line": 53,
-      "operation": "read",
-      "relation": "public.closed_trades",
-      "source": "raw_sql"
-    },
-    {
-      "evidence_class": "operator",
-      "file": "scripts/analysis/b1250_step7_five_session.sql",
-      "line": 60,
-      "operation": "read",
-      "relation": "public.closed_trades",
-      "source": "raw_sql"
-    },
-    {
-      "evidence_class": "operator",
-      "file": "scripts/analysis/b1250_step7_five_session.sql",
-      "line": 63,
-      "operation": "read",
-      "relation": "public.closed_trades",
-      "source": "raw_sql"
-    },
-    {
-      "evidence_class": "operator",
-      "file": "scripts/analysis/b1250_step7_five_session.sql",
-      "line": 67,
-      "operation": "read",
-      "relation": "public.closed_trades",
-      "source": "raw_sql"
-    },
-    {
-      "evidence_class": "operator",
-      "file": "scripts/analysis/b1250_step7_five_session.sql",
-      "line": 69,
-      "operation": "read",
-      "relation": "public.closed_trades",
-      "source": "raw_sql"
-    },
-    {
-      "evidence_class": "operator",
-      "file": "scripts/analysis/b1250_step9_reread.sql",
-      "line": 29,
-      "operation": "read",
-      "relation": "public.closed_trades",
-      "source": "raw_sql"
-    },
-    {
-      "evidence_class": "operator",
-      "file": "scripts/analysis/b1250_step9_reread.sql",
-      "line": 38,
       "operation": "read",
       "relation": "public.closed_trades",
       "source": "raw_sql"
@@ -18593,14 +18593,6 @@
       "source": "raw_sql"
     },
     {
-      "evidence_class": "migration_ddl",
-      "file": "drizzle/migrations/2026-04-22-initial-schema.sql",
-      "line": 4626,
-      "operation": "ddl",
-      "relation": "public.paper_sim_sessions_backup_20251023",
-      "source": "raw_sql"
-    },
-    {
       "evidence_class": "runtime",
       "file": "PHASE_27.F.13.O_BACKUP.sql",
       "line": 5,
@@ -18613,6 +18605,14 @@
       "file": "PHASE_27.F.13.O_BACKUP.sql",
       "line": 8,
       "operation": "insert",
+      "relation": "public.paper_sim_sessions_backup_20251023",
+      "source": "raw_sql"
+    },
+    {
+      "evidence_class": "migration_ddl",
+      "file": "drizzle/migrations/2026-04-22-initial-schema.sql",
+      "line": 4626,
+      "operation": "ddl",
       "relation": "public.paper_sim_sessions_backup_20251023",
       "source": "raw_sql"
     },
@@ -18906,6 +18906,14 @@
     },
     {
       "evidence_class": "runtime",
+      "file": "PHASE_27.F.13.O_BACKUP.sql",
+      "line": 19,
+      "operation": "read",
+      "relation": "public.portfolio_state",
+      "source": "raw_sql"
+    },
+    {
+      "evidence_class": "runtime",
       "file": "diagnostics/single-tenant-pack/migration-drop-user-id.sql",
       "line": 1,
       "operation": "ddl",
@@ -19001,14 +19009,6 @@
       "source": "raw_sql"
     },
     {
-      "evidence_class": "runtime",
-      "file": "PHASE_27.F.13.O_BACKUP.sql",
-      "line": 19,
-      "operation": "read",
-      "relation": "public.portfolio_state",
-      "source": "raw_sql"
-    },
-    {
       "evidence_class": "operator",
       "file": "scripts/e2e-validate-flow-backend.ts",
       "line": 228,
@@ -19081,14 +19081,6 @@
       "source": "drizzle"
     },
     {
-      "evidence_class": "migration_ddl",
-      "file": "drizzle/migrations/2026-04-22-initial-schema.sql",
-      "line": 4853,
-      "operation": "ddl",
-      "relation": "public.portfolio_state_backup_20251023",
-      "source": "raw_sql"
-    },
-    {
       "evidence_class": "runtime",
       "file": "PHASE_27.F.13.O_BACKUP.sql",
       "line": 15,
@@ -19101,6 +19093,14 @@
       "file": "PHASE_27.F.13.O_BACKUP.sql",
       "line": 16,
       "operation": "insert",
+      "relation": "public.portfolio_state_backup_20251023",
+      "source": "raw_sql"
+    },
+    {
+      "evidence_class": "migration_ddl",
+      "file": "drizzle/migrations/2026-04-22-initial-schema.sql",
+      "line": 4853,
+      "operation": "ddl",
       "relation": "public.portfolio_state_backup_20251023",
       "source": "raw_sql"
     },
@@ -22250,38 +22250,6 @@
     },
     {
       "evidence_class": "operator",
-      "file": "scripts/analysis/b_xstock_fee_contract_deploy_baselines.sql",
-      "line": 64,
-      "operation": "read",
-      "relation": "public.signal_eval_archive",
-      "source": "raw_sql"
-    },
-    {
-      "evidence_class": "operator",
-      "file": "scripts/analysis/b_xstock_fee_contract_deploy_baselines.sql",
-      "line": 75,
-      "operation": "read",
-      "relation": "public.signal_eval_archive",
-      "source": "raw_sql"
-    },
-    {
-      "evidence_class": "operator",
-      "file": "scripts/analysis/b_xstock_fee_contract_deploy_baselines.sql",
-      "line": 86,
-      "operation": "read",
-      "relation": "public.signal_eval_archive",
-      "source": "raw_sql"
-    },
-    {
-      "evidence_class": "operator",
-      "file": "scripts/analysis/b_xstock_fee_contract_deploy_baselines.sql",
-      "line": 105,
-      "operation": "read",
-      "relation": "public.signal_eval_archive",
-      "source": "raw_sql"
-    },
-    {
-      "evidence_class": "operator",
       "file": "scripts/analysis/b1250_step7_five_session.sql",
       "line": 6,
       "operation": "read",
@@ -22404,6 +22372,38 @@
       "evidence_class": "operator",
       "file": "scripts/analysis/b1250_step9_reread.sql",
       "line": 46,
+      "operation": "read",
+      "relation": "public.signal_eval_archive",
+      "source": "raw_sql"
+    },
+    {
+      "evidence_class": "operator",
+      "file": "scripts/analysis/b_xstock_fee_contract_deploy_baselines.sql",
+      "line": 64,
+      "operation": "read",
+      "relation": "public.signal_eval_archive",
+      "source": "raw_sql"
+    },
+    {
+      "evidence_class": "operator",
+      "file": "scripts/analysis/b_xstock_fee_contract_deploy_baselines.sql",
+      "line": 75,
+      "operation": "read",
+      "relation": "public.signal_eval_archive",
+      "source": "raw_sql"
+    },
+    {
+      "evidence_class": "operator",
+      "file": "scripts/analysis/b_xstock_fee_contract_deploy_baselines.sql",
+      "line": 86,
+      "operation": "read",
+      "relation": "public.signal_eval_archive",
+      "source": "raw_sql"
+    },
+    {
+      "evidence_class": "operator",
+      "file": "scripts/analysis/b_xstock_fee_contract_deploy_baselines.sql",
+      "line": 105,
       "operation": "read",
       "relation": "public.signal_eval_archive",
       "source": "raw_sql"
@@ -23650,6 +23650,14 @@
     },
     {
       "evidence_class": "runtime",
+      "file": "PHASE_27.F.13.O_BACKUP.sql",
+      "line": 4,
+      "operation": "read",
+      "relation": "public.system_context",
+      "source": "raw_sql"
+    },
+    {
+      "evidence_class": "runtime",
       "file": "audit/coherency_rules.yaml",
       "line": 169,
       "operation": "read",
@@ -23786,14 +23794,6 @@
     },
     {
       "evidence_class": "runtime",
-      "file": "PHASE_27.F.13.O_BACKUP.sql",
-      "line": 4,
-      "operation": "read",
-      "relation": "public.system_context",
-      "source": "raw_sql"
-    },
-    {
-      "evidence_class": "runtime",
       "file": "server/diagnostics/phase27dx_queries.sql",
       "line": 21,
       "operation": "read",
@@ -23857,14 +23857,6 @@
       "source": "drizzle"
     },
     {
-      "evidence_class": "migration_ddl",
-      "file": "drizzle/migrations/2026-04-22-initial-schema.sql",
-      "line": 5840,
-      "operation": "ddl",
-      "relation": "public.system_context_backup_20251023",
-      "source": "raw_sql"
-    },
-    {
       "evidence_class": "runtime",
       "file": "PHASE_27.F.13.O_BACKUP.sql",
       "line": 1,
@@ -23877,6 +23869,14 @@
       "file": "PHASE_27.F.13.O_BACKUP.sql",
       "line": 3,
       "operation": "insert",
+      "relation": "public.system_context_backup_20251023",
+      "source": "raw_sql"
+    },
+    {
+      "evidence_class": "migration_ddl",
+      "file": "drizzle/migrations/2026-04-22-initial-schema.sql",
+      "line": 5840,
+      "operation": "ddl",
       "relation": "public.system_context_backup_20251023",
       "source": "raw_sql"
     },
@@ -24707,7 +24707,7 @@
     {
       "evidence_class": "test_only",
       "file": "scripts/db-map/tests/core.test.mjs",
-      "line": 50,
+      "line": 58,
       "operation": "delete",
       "relation": "public.users",
       "source": "raw_sql"
@@ -24715,7 +24715,7 @@
     {
       "evidence_class": "test_only",
       "file": "scripts/db-map/tests/core.test.mjs",
-      "line": 51,
+      "line": 59,
       "operation": "delete",
       "relation": "public.users",
       "source": "raw_sql"
@@ -25122,38 +25122,6 @@
     },
     {
       "evidence_class": "operator",
-      "file": "scripts/analysis/b_xstock_fee_contract_verify.sql",
-      "line": 9,
-      "operation": "read",
-      "relation": "public.vts_open_trades",
-      "source": "raw_sql"
-    },
-    {
-      "evidence_class": "operator",
-      "file": "scripts/analysis/b_xstock_fee_contract_verify.sql",
-      "line": 20,
-      "operation": "read",
-      "relation": "public.vts_open_trades",
-      "source": "raw_sql"
-    },
-    {
-      "evidence_class": "operator",
-      "file": "scripts/analysis/b_xstock_fee_contract_verify.sql",
-      "line": 31,
-      "operation": "read",
-      "relation": "public.vts_open_trades",
-      "source": "raw_sql"
-    },
-    {
-      "evidence_class": "operator",
-      "file": "scripts/analysis/b_xstock_fee_contract_verify.sql",
-      "line": 76,
-      "operation": "read",
-      "relation": "public.vts_open_trades",
-      "source": "raw_sql"
-    },
-    {
-      "evidence_class": "operator",
       "file": "scripts/analysis/b1250_step7_five_session.sql",
       "line": 77,
       "operation": "read",
@@ -25202,8 +25170,40 @@
     },
     {
       "evidence_class": "operator",
-      "file": "scripts/analysis/cohort_composition_b2_decomp.sql",
-      "line": 12,
+      "file": "scripts/analysis/b_xstock_fee_contract_verify.sql",
+      "line": 9,
+      "operation": "read",
+      "relation": "public.vts_open_trades",
+      "source": "raw_sql"
+    },
+    {
+      "evidence_class": "operator",
+      "file": "scripts/analysis/b_xstock_fee_contract_verify.sql",
+      "line": 20,
+      "operation": "read",
+      "relation": "public.vts_open_trades",
+      "source": "raw_sql"
+    },
+    {
+      "evidence_class": "operator",
+      "file": "scripts/analysis/b_xstock_fee_contract_verify.sql",
+      "line": 31,
+      "operation": "read",
+      "relation": "public.vts_open_trades",
+      "source": "raw_sql"
+    },
+    {
+      "evidence_class": "operator",
+      "file": "scripts/analysis/b_xstock_fee_contract_verify.sql",
+      "line": 76,
+      "operation": "read",
+      "relation": "public.vts_open_trades",
+      "source": "raw_sql"
+    },
+    {
+      "evidence_class": "operator",
+      "file": "scripts/analysis/cohort_composition.sql",
+      "line": 19,
       "operation": "read",
       "relation": "public.vts_open_trades",
       "source": "raw_sql"
@@ -25218,8 +25218,8 @@
     },
     {
       "evidence_class": "operator",
-      "file": "scripts/analysis/cohort_composition.sql",
-      "line": 19,
+      "file": "scripts/analysis/cohort_composition_b2_decomp.sql",
+      "line": 12,
       "operation": "read",
       "relation": "public.vts_open_trades",
       "source": "raw_sql"
@@ -25713,6 +25713,14 @@
       "source": "raw_sql"
     },
     {
+      "evidence_class": "runtime",
+      "file": "PHASE_27.F.13.O_BACKUP.sql",
+      "line": 14,
+      "operation": "read",
+      "relation": "public.watchlist_pairs",
+      "source": "raw_sql"
+    },
+    {
       "evidence_class": "migration_ddl",
       "file": "drizzle/migrations/2026-04-22-initial-schema.sql",
       "line": 6563,
@@ -25741,14 +25749,6 @@
       "file": "migrations/0000_flaky_freak.sql",
       "line": 2467,
       "operation": "ddl",
-      "relation": "public.watchlist_pairs",
-      "source": "raw_sql"
-    },
-    {
-      "evidence_class": "runtime",
-      "file": "PHASE_27.F.13.O_BACKUP.sql",
-      "line": 14,
-      "operation": "read",
       "relation": "public.watchlist_pairs",
       "source": "raw_sql"
     },
@@ -25801,14 +25801,6 @@
       "source": "drizzle"
     },
     {
-      "evidence_class": "migration_ddl",
-      "file": "drizzle/migrations/2026-04-22-initial-schema.sql",
-      "line": 6581,
-      "operation": "ddl",
-      "relation": "public.watchlist_pairs_backup_20251023",
-      "source": "raw_sql"
-    },
-    {
       "evidence_class": "runtime",
       "file": "PHASE_27.F.13.O_BACKUP.sql",
       "line": 11,
@@ -25821,6 +25813,14 @@
       "file": "PHASE_27.F.13.O_BACKUP.sql",
       "line": 14,
       "operation": "insert",
+      "relation": "public.watchlist_pairs_backup_20251023",
+      "source": "raw_sql"
+    },
+    {
+      "evidence_class": "migration_ddl",
+      "file": "drizzle/migrations/2026-04-22-initial-schema.sql",
+      "line": 6581,
+      "operation": "ddl",
       "relation": "public.watchlist_pairs_backup_20251023",
       "source": "raw_sql"
     },
@@ -27874,22 +27874,6 @@
     },
     {
       "evidence_class": "operator",
-      "file": "scripts/analysis/cohort_composition_b2_decomp.sql",
-      "line": 4,
-      "operation": "read",
-      "relation": "public.xstock_spot_ticker_snap",
-      "source": "raw_sql"
-    },
-    {
-      "evidence_class": "operator",
-      "file": "scripts/analysis/cohort_composition_b2.sql",
-      "line": 4,
-      "operation": "read",
-      "relation": "public.xstock_spot_ticker_snap",
-      "source": "raw_sql"
-    },
-    {
-      "evidence_class": "operator",
       "file": "scripts/analysis/cohort_composition.sql",
       "line": 4,
       "operation": "read",
@@ -27906,6 +27890,22 @@
     },
     {
       "evidence_class": "operator",
+      "file": "scripts/analysis/cohort_composition_b2.sql",
+      "line": 4,
+      "operation": "read",
+      "relation": "public.xstock_spot_ticker_snap",
+      "source": "raw_sql"
+    },
+    {
+      "evidence_class": "operator",
+      "file": "scripts/analysis/cohort_composition_b2_decomp.sql",
+      "line": 4,
+      "operation": "read",
+      "relation": "public.xstock_spot_ticker_snap",
+      "source": "raw_sql"
+    },
+    {
+      "evidence_class": "operator",
       "file": "scripts/analysis/cohort_dark_minutes.sql",
       "line": 4,
       "operation": "read",
@@ -27914,7 +27914,7 @@
     },
     {
       "evidence_class": "operator",
-      "file": "scripts/analysis/cohort_liveness_tail.sql",
+      "file": "scripts/analysis/cohort_liveness.sql",
       "line": 2,
       "operation": "read",
       "relation": "public.xstock_spot_ticker_snap",
@@ -27922,7 +27922,7 @@
     },
     {
       "evidence_class": "operator",
-      "file": "scripts/analysis/cohort_liveness_tail.sql",
+      "file": "scripts/analysis/cohort_liveness.sql",
       "line": 5,
       "operation": "read",
       "relation": "public.xstock_spot_ticker_snap",
@@ -27930,7 +27930,7 @@
     },
     {
       "evidence_class": "operator",
-      "file": "scripts/analysis/cohort_liveness.sql",
+      "file": "scripts/analysis/cohort_liveness_tail.sql",
       "line": 2,
       "operation": "read",
       "relation": "public.xstock_spot_ticker_snap",
@@ -27938,7 +27938,7 @@
     },
     {
       "evidence_class": "operator",
-      "file": "scripts/analysis/cohort_liveness.sql",
+      "file": "scripts/analysis/cohort_liveness_tail.sql",
       "line": 5,
       "operation": "read",
       "relation": "public.xstock_spot_ticker_snap",
@@ -28042,38 +28042,6 @@
     },
     {
       "evidence_class": "operator",
-      "file": "scripts/analysis/obj_pa_pb.cjs",
-      "line": 46,
-      "operation": "read",
-      "relation": "public.xstock_spot_ticker_snap",
-      "source": "raw_sql"
-    },
-    {
-      "evidence_class": "operator",
-      "file": "scripts/analysis/obj_pa_pb.cjs",
-      "line": 88,
-      "operation": "read",
-      "relation": "public.xstock_spot_ticker_snap",
-      "source": "raw_sql"
-    },
-    {
-      "evidence_class": "operator",
-      "file": "scripts/analysis/obj_pa_pb.cjs",
-      "line": 91,
-      "operation": "read",
-      "relation": "public.xstock_spot_ticker_snap",
-      "source": "raw_sql"
-    },
-    {
-      "evidence_class": "operator",
-      "file": "scripts/analysis/obj_pa_pb.cjs",
-      "line": 110,
-      "operation": "read",
-      "relation": "public.xstock_spot_ticker_snap",
-      "source": "raw_sql"
-    },
-    {
-      "evidence_class": "operator",
       "file": "scripts/analysis/obj9_counts_v2.sql",
       "line": 5,
       "operation": "read",
@@ -28100,6 +28068,38 @@
       "evidence_class": "operator",
       "file": "scripts/analysis/obj9_timeweighted.sql",
       "line": 10,
+      "operation": "read",
+      "relation": "public.xstock_spot_ticker_snap",
+      "source": "raw_sql"
+    },
+    {
+      "evidence_class": "operator",
+      "file": "scripts/analysis/obj_pa_pb.cjs",
+      "line": 46,
+      "operation": "read",
+      "relation": "public.xstock_spot_ticker_snap",
+      "source": "raw_sql"
+    },
+    {
+      "evidence_class": "operator",
+      "file": "scripts/analysis/obj_pa_pb.cjs",
+      "line": 88,
+      "operation": "read",
+      "relation": "public.xstock_spot_ticker_snap",
+      "source": "raw_sql"
+    },
+    {
+      "evidence_class": "operator",
+      "file": "scripts/analysis/obj_pa_pb.cjs",
+      "line": 91,
+      "operation": "read",
+      "relation": "public.xstock_spot_ticker_snap",
+      "source": "raw_sql"
+    },
+    {
+      "evidence_class": "operator",
+      "file": "scripts/analysis/obj_pa_pb.cjs",
+      "line": 110,
       "operation": "read",
       "relation": "public.xstock_spot_ticker_snap",
       "source": "raw_sql"
@@ -28714,6 +28714,6 @@
     }
   ],
   "schema_version": 1,
-  "source_ref": "c4b0eec545f6f7e89515bb6dc9f9e57fe604a288",
-  "zero_hit_wording": "none found by scanner at c4b0eec545f6f7e89515bb6dc9f9e57fe604a288"
+  "source_ref": "0a2f7e654ce282fc44f9f842c9883efc4341bf21",
+  "zero_hit_wording": "none found by scanner at 0a2f7e654ce282fc44f9f842c9883efc4341bf21"
 }

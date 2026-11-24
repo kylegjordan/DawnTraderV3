@@ -206,6 +206,103 @@
       "line": 1
     },
     {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "runtime",
+      "file": "Dockerfile",
+      "kind": "sql_relation",
+      "line": 1,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "FROM node"
+    },
+    {
+      "detail": "qualified relation is absent from catalog",
+      "evidence_class": "runtime",
+      "file": "Dockerfile",
+      "kind": "sql_relation",
+      "line": 2,
+      "operation": "ddl",
+      "source": "raw_sql",
+      "token": "COPY package.json"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "runtime",
+      "file": "Dockerfile",
+      "kind": "sql_relation",
+      "line": 4,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "FROM node"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "runtime",
+      "file": "Dockerfile",
+      "kind": "sql_relation",
+      "line": 7,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "FROM node"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "runtime",
+      "file": "PHASE_27.F.13.O_BACKUP.sql",
+      "kind": "sql_relation",
+      "line": 1,
+      "operation": "ddl",
+      "source": "raw_sql",
+      "token": "DROP TABLE IF"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "runtime",
+      "file": "PHASE_27.F.13.O_BACKUP.sql",
+      "kind": "sql_relation",
+      "line": 5,
+      "operation": "ddl",
+      "source": "raw_sql",
+      "token": "DROP TABLE IF"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "runtime",
+      "file": "PHASE_27.F.13.O_BACKUP.sql",
+      "kind": "sql_relation",
+      "line": 10,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "FROM paper_sim_sessions"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "runtime",
+      "file": "PHASE_27.F.13.O_BACKUP.sql",
+      "kind": "sql_relation",
+      "line": 10,
+      "operation": "ddl",
+      "source": "raw_sql",
+      "token": "DROP TABLE IF"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "runtime",
+      "file": "PHASE_27.F.13.O_BACKUP.sql",
+      "kind": "sql_relation",
+      "line": 15,
+      "operation": "ddl",
+      "source": "raw_sql",
+      "token": "DROP TABLE IF"
+    },
+    {
+      "detail": "computed SQL requires hand resolution",
+      "evidence_class": "runtime",
+      "file": "REPLIT_VALIDATION.sh",
+      "kind": "dynamic_sql",
+      "line": 1
+    },
+    {
       "detail": "computed SQL requires hand resolution",
       "evidence_class": "runtime",
       "file": "audit/coherency_rules.yaml",
@@ -1877,6 +1974,23 @@
     },
     {
       "detail": "computed SQL requires hand resolution",
+      "evidence_class": "operator",
+      "file": "comms-infra/discord/address_list.py",
+      "kind": "dynamic_sql",
+      "line": 1
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "comms-infra/discord/address_list.py",
+      "kind": "sql_relation",
+      "line": 7,
+      "operation": "ddl",
+      "source": "raw_sql",
+      "token": "copy it"
+    },
+    {
+      "detail": "computed SQL requires hand resolution",
       "evidence_class": "test_only",
       "file": "comms-infra/discord/address_list_test.py",
       "kind": "dynamic_sql",
@@ -1925,19 +2039,69 @@
     {
       "detail": "computed SQL requires hand resolution",
       "evidence_class": "operator",
-      "file": "comms-infra/discord/address_list.py",
+      "file": "comms-infra/discord/alert_lane.py",
       "kind": "dynamic_sql",
       "line": 1
     },
     {
       "detail": "bare relation is absent from catalog",
       "evidence_class": "operator",
-      "file": "comms-infra/discord/address_list.py",
+      "file": "comms-infra/discord/alert_lane.py",
       "kind": "sql_relation",
-      "line": 7,
-      "operation": "ddl",
+      "line": 52,
+      "operation": "read",
       "source": "raw_sql",
-      "token": "copy it"
+      "token": "from its"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "comms-infra/discord/alert_lane.py",
+      "kind": "sql_relation",
+      "line": 53,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from the"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "comms-infra/discord/alert_lane.py",
+      "kind": "sql_relation",
+      "line": 95,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from the"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "comms-infra/discord/alert_lane.py",
+      "kind": "sql_relation",
+      "line": 126,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from the"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "comms-infra/discord/alert_lane.py",
+      "kind": "sql_relation",
+      "line": 151,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from Langston"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "comms-infra/discord/alert_lane.py",
+      "kind": "sql_relation",
+      "line": 271,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from the"
     },
     {
       "detail": "computed SQL requires hand resolution",
@@ -2093,69 +2257,29 @@
     {
       "detail": "computed SQL requires hand resolution",
       "evidence_class": "operator",
-      "file": "comms-infra/discord/alert_lane.py",
+      "file": "comms-infra/discord/alert_owner_route.py",
       "kind": "dynamic_sql",
       "line": 1
     },
     {
       "detail": "bare relation is absent from catalog",
       "evidence_class": "operator",
-      "file": "comms-infra/discord/alert_lane.py",
+      "file": "comms-infra/discord/alert_owner_route.py",
       "kind": "sql_relation",
-      "line": 52,
-      "operation": "read",
+      "line": 5,
+      "operation": "ddl",
       "source": "raw_sql",
-      "token": "from its"
+      "token": "copy to"
     },
     {
-      "detail": "bare relation is absent from catalog",
+      "detail": "qualified relation is absent from catalog",
       "evidence_class": "operator",
-      "file": "comms-infra/discord/alert_lane.py",
+      "file": "comms-infra/discord/alert_owner_route.py",
       "kind": "sql_relation",
-      "line": 53,
+      "line": 37,
       "operation": "read",
       "source": "raw_sql",
-      "token": "from the"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "comms-infra/discord/alert_lane.py",
-      "kind": "sql_relation",
-      "line": 95,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from the"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "comms-infra/discord/alert_lane.py",
-      "kind": "sql_relation",
-      "line": 126,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from the"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "comms-infra/discord/alert_lane.py",
-      "kind": "sql_relation",
-      "line": 151,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from Langston"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "comms-infra/discord/alert_lane.py",
-      "kind": "sql_relation",
-      "line": 271,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from the"
+      "token": "from OPEN_BATCH_REGISTER.md"
     },
     {
       "detail": "computed SQL requires hand resolution",
@@ -2193,33 +2317,6 @@
       "operation": "read",
       "source": "raw_sql",
       "token": "from read_answer"
-    },
-    {
-      "detail": "computed SQL requires hand resolution",
-      "evidence_class": "operator",
-      "file": "comms-infra/discord/alert_owner_route.py",
-      "kind": "dynamic_sql",
-      "line": 1
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "comms-infra/discord/alert_owner_route.py",
-      "kind": "sql_relation",
-      "line": 5,
-      "operation": "ddl",
-      "source": "raw_sql",
-      "token": "copy to"
-    },
-    {
-      "detail": "qualified relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "comms-infra/discord/alert_owner_route.py",
-      "kind": "sql_relation",
-      "line": 37,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from OPEN_BATCH_REGISTER.md"
     },
     {
       "detail": "computed SQL requires hand resolution",
@@ -2301,103 +2398,6 @@
       "operation": "read",
       "source": "raw_sql",
       "token": "from BEFORE"
-    },
-    {
-      "detail": "computed SQL requires hand resolution",
-      "evidence_class": "operator",
-      "file": "comms-infra/discord/discord_common.py",
-      "kind": "dynamic_sql",
-      "line": 1
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "comms-infra/discord/discord_common.py",
-      "kind": "sql_relation",
-      "line": 5,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from the"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "comms-infra/discord/discord_common.py",
-      "kind": "sql_relation",
-      "line": 15,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from the"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "comms-infra/discord/discord_common.py",
-      "kind": "sql_relation",
-      "line": 18,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from the"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "comms-infra/discord/discord_common.py",
-      "kind": "sql_relation",
-      "line": 32,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from pathlib"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "comms-infra/discord/discord_common.py",
-      "kind": "sql_relation",
-      "line": 35,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from Telegram"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "comms-infra/discord/discord_common.py",
-      "kind": "sql_relation",
-      "line": 91,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from a"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "comms-infra/discord/discord_common.py",
-      "kind": "sql_relation",
-      "line": 103,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from length"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "comms-infra/discord/discord_common.py",
-      "kind": "sql_relation",
-      "line": 122,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from a"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "comms-infra/discord/discord_common.py",
-      "kind": "sql_relation",
-      "line": 321,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from an"
     },
     {
       "detail": "computed SQL requires hand resolution",
@@ -2656,6 +2656,103 @@
     {
       "detail": "computed SQL requires hand resolution",
       "evidence_class": "operator",
+      "file": "comms-infra/discord/discord_common.py",
+      "kind": "dynamic_sql",
+      "line": 1
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "comms-infra/discord/discord_common.py",
+      "kind": "sql_relation",
+      "line": 5,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from the"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "comms-infra/discord/discord_common.py",
+      "kind": "sql_relation",
+      "line": 15,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from the"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "comms-infra/discord/discord_common.py",
+      "kind": "sql_relation",
+      "line": 18,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from the"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "comms-infra/discord/discord_common.py",
+      "kind": "sql_relation",
+      "line": 32,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from pathlib"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "comms-infra/discord/discord_common.py",
+      "kind": "sql_relation",
+      "line": 35,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from Telegram"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "comms-infra/discord/discord_common.py",
+      "kind": "sql_relation",
+      "line": 91,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from a"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "comms-infra/discord/discord_common.py",
+      "kind": "sql_relation",
+      "line": 103,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from length"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "comms-infra/discord/discord_common.py",
+      "kind": "sql_relation",
+      "line": 122,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from a"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "comms-infra/discord/discord_common.py",
+      "kind": "sql_relation",
+      "line": 321,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from an"
+    },
+    {
+      "detail": "computed SQL requires hand resolution",
+      "evidence_class": "operator",
       "file": "comms-infra/discord/dt-deploy-drift.sh",
       "kind": "dynamic_sql",
       "line": 1
@@ -2746,13 +2843,6 @@
     },
     {
       "detail": "computed SQL requires hand resolution",
-      "evidence_class": "test_only",
-      "file": "comms-infra/discord/gateway_watchdog_test.py",
-      "kind": "dynamic_sql",
-      "line": 1
-    },
-    {
-      "detail": "computed SQL requires hand resolution",
       "evidence_class": "operator",
       "file": "comms-infra/discord/gateway_watchdog.py",
       "kind": "dynamic_sql",
@@ -2830,6 +2920,47 @@
     },
     {
       "detail": "computed SQL requires hand resolution",
+      "evidence_class": "test_only",
+      "file": "comms-infra/discord/gateway_watchdog_test.py",
+      "kind": "dynamic_sql",
+      "line": 1
+    },
+    {
+      "detail": "computed SQL requires hand resolution",
+      "evidence_class": "operator",
+      "file": "comms-infra/discord/langston-bridge-restart",
+      "kind": "dynamic_sql",
+      "line": 1
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "comms-infra/discord/langston-bridge-restart",
+      "kind": "sql_relation",
+      "line": 32,
+      "operation": "ddl",
+      "source": "raw_sql",
+      "token": "copy is"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "comms-infra/discord/langston-bridge-restart",
+      "kind": "sql_relation",
+      "line": 150,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from the"
+    },
+    {
+      "detail": "computed SQL requires hand resolution",
+      "evidence_class": "operator",
+      "file": "comms-infra/discord/langston-concurrency-smoke",
+      "kind": "dynamic_sql",
+      "line": 1
+    },
+    {
+      "detail": "computed SQL requires hand resolution",
       "evidence_class": "operator",
       "file": "comms-infra/discord/langston_alert_lane_probe.py",
       "kind": "dynamic_sql",
@@ -2891,23 +3022,6 @@
       "operation": "read",
       "source": "raw_sql",
       "token": "from Kyle\""
-    },
-    {
-      "detail": "computed SQL requires hand resolution",
-      "evidence_class": "test_only",
-      "file": "comms-infra/discord/langston_queue_test.py",
-      "kind": "dynamic_sql",
-      "line": 1
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "test_only",
-      "file": "comms-infra/discord/langston_queue_test.py",
-      "kind": "sql_relation",
-      "line": 114,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from enqueue"
     },
     {
       "detail": "computed SQL requires hand resolution",
@@ -3008,37 +3122,20 @@
     },
     {
       "detail": "computed SQL requires hand resolution",
-      "evidence_class": "operator",
-      "file": "comms-infra/discord/langston-bridge-restart",
+      "evidence_class": "test_only",
+      "file": "comms-infra/discord/langston_queue_test.py",
       "kind": "dynamic_sql",
       "line": 1
     },
     {
       "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "comms-infra/discord/langston-bridge-restart",
+      "evidence_class": "test_only",
+      "file": "comms-infra/discord/langston_queue_test.py",
       "kind": "sql_relation",
-      "line": 32,
-      "operation": "ddl",
-      "source": "raw_sql",
-      "token": "copy is"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "comms-infra/discord/langston-bridge-restart",
-      "kind": "sql_relation",
-      "line": 150,
+      "line": 114,
       "operation": "read",
       "source": "raw_sql",
-      "token": "from the"
-    },
-    {
-      "detail": "computed SQL requires hand resolution",
-      "evidence_class": "operator",
-      "file": "comms-infra/discord/langston-concurrency-smoke",
-      "kind": "dynamic_sql",
-      "line": 1
+      "token": "from enqueue"
     },
     {
       "detail": "computed SQL requires hand resolution",
@@ -3672,103 +3769,6 @@
       "operation": "update",
       "source": "raw_sql",
       "token": "update available"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "comms-infra/langston-memory/bin/langston_memory_allowlist.py",
-      "kind": "sql_relation",
-      "line": 2,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from\nthe"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "comms-infra/langston-memory/bin/langston_memory_allowlist.py",
-      "kind": "sql_relation",
-      "line": 11,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from the"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "comms-infra/langston-memory/bin/langston_memory_allowlist.py",
-      "kind": "sql_relation",
-      "line": 32,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from the"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "comms-infra/langston-memory/bin/langston_memory_allowlist.py",
-      "kind": "sql_relation",
-      "line": 84,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from the"
-    },
-    {
-      "detail": "computed SQL requires hand resolution",
-      "evidence_class": "operator",
-      "file": "comms-infra/langston-memory/bin/langston_memory.py",
-      "kind": "dynamic_sql",
-      "line": 1
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "comms-infra/langston-memory/bin/langston_memory.py",
-      "kind": "sql_relation",
-      "line": 15,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from MEMORY"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "comms-infra/langston-memory/bin/langston_memory.py",
-      "kind": "sql_relation",
-      "line": 31,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from the"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "comms-infra/langston-memory/bin/langston_memory.py",
-      "kind": "sql_relation",
-      "line": 302,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from the"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "comms-infra/langston-memory/bin/langston_memory.py",
-      "kind": "sql_relation",
-      "line": 351,
-      "operation": "ddl",
-      "source": "raw_sql",
-      "token": "copy would"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "comms-infra/langston-memory/bin/langston_memory.py",
-      "kind": "sql_relation",
-      "line": 513,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from in"
     },
     {
       "detail": "computed SQL requires hand resolution",
@@ -4844,6 +4844,103 @@
       "token": "from outside"
     },
     {
+      "detail": "computed SQL requires hand resolution",
+      "evidence_class": "operator",
+      "file": "comms-infra/langston-memory/bin/langston_memory.py",
+      "kind": "dynamic_sql",
+      "line": 1
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "comms-infra/langston-memory/bin/langston_memory.py",
+      "kind": "sql_relation",
+      "line": 15,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from MEMORY"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "comms-infra/langston-memory/bin/langston_memory.py",
+      "kind": "sql_relation",
+      "line": 31,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from the"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "comms-infra/langston-memory/bin/langston_memory.py",
+      "kind": "sql_relation",
+      "line": 302,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from the"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "comms-infra/langston-memory/bin/langston_memory.py",
+      "kind": "sql_relation",
+      "line": 351,
+      "operation": "ddl",
+      "source": "raw_sql",
+      "token": "copy would"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "comms-infra/langston-memory/bin/langston_memory.py",
+      "kind": "sql_relation",
+      "line": 513,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from in"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "comms-infra/langston-memory/bin/langston_memory_allowlist.py",
+      "kind": "sql_relation",
+      "line": 2,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from\nthe"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "comms-infra/langston-memory/bin/langston_memory_allowlist.py",
+      "kind": "sql_relation",
+      "line": 11,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from the"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "comms-infra/langston-memory/bin/langston_memory_allowlist.py",
+      "kind": "sql_relation",
+      "line": 32,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from the"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "comms-infra/langston-memory/bin/langston_memory_allowlist.py",
+      "kind": "sql_relation",
+      "line": 84,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from the"
+    },
+    {
       "detail": "bare relation is absent from catalog",
       "evidence_class": "operator",
       "file": "comms-infra/langston-memory/bin/mutate_memory_fence.py",
@@ -4906,43 +5003,6 @@
       "operation": "read",
       "source": "raw_sql",
       "token": "from byte"
-    },
-    {
-      "detail": "computed SQL requires hand resolution",
-      "evidence_class": "operator",
-      "file": "comms-infra/langston-memory/bin/obj_state_dir_move.py",
-      "kind": "dynamic_sql",
-      "line": 1
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "comms-infra/langston-memory/bin/obj_state_dir_move.py",
-      "kind": "sql_relation",
-      "line": 5,
-      "operation": "ddl",
-      "source": "raw_sql",
-      "token": "copy into"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "comms-infra/langston-memory/bin/obj_state_dir_move.py",
-      "kind": "sql_relation",
-      "line": 10,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from today"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "comms-infra/langston-memory/bin/obj_state_dir_move.py",
-      "kind": "sql_relation",
-      "line": 12,
-      "operation": "ddl",
-      "source": "raw_sql",
-      "token": "copy is"
     },
     {
       "detail": "computed SQL requires hand resolution",
@@ -5072,6 +5132,43 @@
     {
       "detail": "computed SQL requires hand resolution",
       "evidence_class": "operator",
+      "file": "comms-infra/langston-memory/bin/obj_state_dir_move.py",
+      "kind": "dynamic_sql",
+      "line": 1
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "comms-infra/langston-memory/bin/obj_state_dir_move.py",
+      "kind": "sql_relation",
+      "line": 5,
+      "operation": "ddl",
+      "source": "raw_sql",
+      "token": "copy into"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "comms-infra/langston-memory/bin/obj_state_dir_move.py",
+      "kind": "sql_relation",
+      "line": 10,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from today"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "comms-infra/langston-memory/bin/obj_state_dir_move.py",
+      "kind": "sql_relation",
+      "line": 12,
+      "operation": "ddl",
+      "source": "raw_sql",
+      "token": "copy is"
+    },
+    {
+      "detail": "computed SQL requires hand resolution",
+      "evidence_class": "operator",
       "file": "comms-infra/langston-memory/bin/test_index_guard.py",
       "kind": "dynamic_sql",
       "line": 1
@@ -5092,43 +5189,6 @@
       "operation": "ddl",
       "source": "raw_sql",
       "token": "copy\nlangston"
-    },
-    {
-      "detail": "computed SQL requires hand resolution",
-      "evidence_class": "operator",
-      "file": "comms-infra/langston-memory/bin/test_memory_fence_root.py",
-      "kind": "dynamic_sql",
-      "line": 1
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "comms-infra/langston-memory/bin/test_memory_fence_root.py",
-      "kind": "sql_relation",
-      "line": 19,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from it"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "comms-infra/langston-memory/bin/test_memory_fence_root.py",
-      "kind": "sql_relation",
-      "line": 74,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from those"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "comms-infra/langston-memory/bin/test_memory_fence_root.py",
-      "kind": "sql_relation",
-      "line": 171,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from the"
     },
     {
       "detail": "computed SQL requires hand resolution",
@@ -5176,6 +5236,43 @@
       "operation": "ddl",
       "source": "raw_sql",
       "token": "copy is"
+    },
+    {
+      "detail": "computed SQL requires hand resolution",
+      "evidence_class": "operator",
+      "file": "comms-infra/langston-memory/bin/test_memory_fence_root.py",
+      "kind": "dynamic_sql",
+      "line": 1
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "comms-infra/langston-memory/bin/test_memory_fence_root.py",
+      "kind": "sql_relation",
+      "line": 19,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from it"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "comms-infra/langston-memory/bin/test_memory_fence_root.py",
+      "kind": "sql_relation",
+      "line": 74,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from those"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "comms-infra/langston-memory/bin/test_memory_fence_root.py",
+      "kind": "sql_relation",
+      "line": 171,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from the"
     },
     {
       "detail": "computed SQL requires hand resolution",
@@ -6266,90 +6363,6 @@
     {
       "detail": "computed SQL requires hand resolution",
       "evidence_class": "operator",
-      "file": "comms-infra/laptop/transcript-archive/dt_archive_run.py",
-      "kind": "dynamic_sql",
-      "line": 1
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "comms-infra/laptop/transcript-archive/dt_archive_run.py",
-      "kind": "sql_relation",
-      "line": 8,
-      "operation": "ddl",
-      "source": "raw_sql",
-      "token": "COPY with"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "comms-infra/laptop/transcript-archive/dt_archive_run.py",
-      "kind": "sql_relation",
-      "line": 11,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from those"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "comms-infra/laptop/transcript-archive/dt_archive_run.py",
-      "kind": "sql_relation",
-      "line": 21,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from offset"
-    },
-    {
-      "detail": "computed SQL requires hand resolution",
-      "evidence_class": "operator",
-      "file": "comms-infra/laptop/transcript-archive/dt_archive_trigger.py",
-      "kind": "dynamic_sql",
-      "line": 1
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "comms-infra/laptop/transcript-archive/dt_archive_trigger.py",
-      "kind": "sql_relation",
-      "line": 8,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from the"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "comms-infra/laptop/transcript-archive/dt_archive_trigger.py",
-      "kind": "sql_relation",
-      "line": 8,
-      "operation": "ddl",
-      "source": "raw_sql",
-      "token": "copy at"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "comms-infra/laptop/transcript-archive/dt_archive_trigger.py",
-      "kind": "sql_relation",
-      "line": 8,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from a"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "comms-infra/laptop/transcript-archive/dt_archive_trigger.py",
-      "kind": "sql_relation",
-      "line": 10,
-      "operation": "ddl",
-      "source": "raw_sql",
-      "token": "copy too"
-    },
-    {
-      "detail": "computed SQL requires hand resolution",
-      "evidence_class": "operator",
       "file": "comms-infra/laptop/transcript-archive/dt_archive.py",
       "kind": "dynamic_sql",
       "line": 1
@@ -6463,6 +6476,90 @@
       "operation": "read",
       "source": "raw_sql",
       "token": "from the"
+    },
+    {
+      "detail": "computed SQL requires hand resolution",
+      "evidence_class": "operator",
+      "file": "comms-infra/laptop/transcript-archive/dt_archive_run.py",
+      "kind": "dynamic_sql",
+      "line": 1
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "comms-infra/laptop/transcript-archive/dt_archive_run.py",
+      "kind": "sql_relation",
+      "line": 8,
+      "operation": "ddl",
+      "source": "raw_sql",
+      "token": "COPY with"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "comms-infra/laptop/transcript-archive/dt_archive_run.py",
+      "kind": "sql_relation",
+      "line": 11,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from those"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "comms-infra/laptop/transcript-archive/dt_archive_run.py",
+      "kind": "sql_relation",
+      "line": 21,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from offset"
+    },
+    {
+      "detail": "computed SQL requires hand resolution",
+      "evidence_class": "operator",
+      "file": "comms-infra/laptop/transcript-archive/dt_archive_trigger.py",
+      "kind": "dynamic_sql",
+      "line": 1
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "comms-infra/laptop/transcript-archive/dt_archive_trigger.py",
+      "kind": "sql_relation",
+      "line": 8,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from the"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "comms-infra/laptop/transcript-archive/dt_archive_trigger.py",
+      "kind": "sql_relation",
+      "line": 8,
+      "operation": "ddl",
+      "source": "raw_sql",
+      "token": "copy at"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "comms-infra/laptop/transcript-archive/dt_archive_trigger.py",
+      "kind": "sql_relation",
+      "line": 8,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from a"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "comms-infra/laptop/transcript-archive/dt_archive_trigger.py",
+      "kind": "sql_relation",
+      "line": 10,
+      "operation": "ddl",
+      "source": "raw_sql",
+      "token": "copy too"
     },
     {
       "detail": "computed SQL requires hand resolution",
@@ -6826,13 +6923,6 @@
     {
       "detail": "computed SQL requires hand resolution",
       "evidence_class": "operator",
-      "file": "comms-infra/laptop/transcript-archive/mutate_dt_archive_trigger.py",
-      "kind": "dynamic_sql",
-      "line": 1
-    },
-    {
-      "detail": "computed SQL requires hand resolution",
-      "evidence_class": "operator",
       "file": "comms-infra/laptop/transcript-archive/mutate_dt_archive.py",
       "kind": "dynamic_sql",
       "line": 1
@@ -6906,6 +6996,13 @@
       "operation": "read",
       "source": "raw_sql",
       "token": "from the"
+    },
+    {
+      "detail": "computed SQL requires hand resolution",
+      "evidence_class": "operator",
+      "file": "comms-infra/laptop/transcript-archive/mutate_dt_archive_trigger.py",
+      "kind": "dynamic_sql",
+      "line": 1
     },
     {
       "detail": "bare relation is absent from catalog",
@@ -7035,50 +7132,6 @@
     {
       "detail": "computed SQL requires hand resolution",
       "evidence_class": "operator",
-      "file": "comms-infra/laptop/transcript-archive/test_dt_archive_run.py",
-      "kind": "dynamic_sql",
-      "line": 1
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "comms-infra/laptop/transcript-archive/test_dt_archive_run.py",
-      "kind": "sql_relation",
-      "line": 148,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from the"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "comms-infra/laptop/transcript-archive/test_dt_archive_run.py",
-      "kind": "sql_relation",
-      "line": 184,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from main"
-    },
-    {
-      "detail": "computed SQL requires hand resolution",
-      "evidence_class": "operator",
-      "file": "comms-infra/laptop/transcript-archive/test_dt_archive_trigger.py",
-      "kind": "dynamic_sql",
-      "line": 1
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "comms-infra/laptop/transcript-archive/test_dt_archive_trigger.py",
-      "kind": "sql_relation",
-      "line": 291,
-      "operation": "ddl",
-      "source": "raw_sql",
-      "token": "copy runs"
-    },
-    {
-      "detail": "computed SQL requires hand resolution",
-      "evidence_class": "operator",
       "file": "comms-infra/laptop/transcript-archive/test_dt_archive.py",
       "kind": "dynamic_sql",
       "line": 1
@@ -7152,6 +7205,50 @@
       "operation": "read",
       "source": "raw_sql",
       "token": "from its"
+    },
+    {
+      "detail": "computed SQL requires hand resolution",
+      "evidence_class": "operator",
+      "file": "comms-infra/laptop/transcript-archive/test_dt_archive_run.py",
+      "kind": "dynamic_sql",
+      "line": 1
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "comms-infra/laptop/transcript-archive/test_dt_archive_run.py",
+      "kind": "sql_relation",
+      "line": 148,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from the"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "comms-infra/laptop/transcript-archive/test_dt_archive_run.py",
+      "kind": "sql_relation",
+      "line": 184,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from main"
+    },
+    {
+      "detail": "computed SQL requires hand resolution",
+      "evidence_class": "operator",
+      "file": "comms-infra/laptop/transcript-archive/test_dt_archive_trigger.py",
+      "kind": "dynamic_sql",
+      "line": 1
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "comms-infra/laptop/transcript-archive/test_dt_archive_trigger.py",
+      "kind": "sql_relation",
+      "line": 291,
+      "operation": "ddl",
+      "source": "raw_sql",
+      "token": "copy runs"
     },
     {
       "detail": "computed SQL requires hand resolution",
@@ -7857,7 +7954,7 @@
       "evidence_class": "operator",
       "file": "comms-infra/staging/dt-install-drift",
       "kind": "sql_relation",
-      "line": 288,
+      "line": 295,
       "operation": "ddl",
       "source": "raw_sql",
       "token": "copy shadows"
@@ -7867,7 +7964,7 @@
       "evidence_class": "operator",
       "file": "comms-infra/staging/dt-install-drift",
       "kind": "sql_relation",
-      "line": 467,
+      "line": 474,
       "operation": "read",
       "source": "raw_sql",
       "token": "from sshd"
@@ -7877,7 +7974,7 @@
       "evidence_class": "operator",
       "file": "comms-infra/staging/dt-install-drift",
       "kind": "sql_relation",
-      "line": 525,
+      "line": 532,
       "operation": "ddl",
       "source": "raw_sql",
       "token": "copy can"
@@ -7887,7 +7984,7 @@
       "evidence_class": "operator",
       "file": "comms-infra/staging/dt-install-drift",
       "kind": "sql_relation",
-      "line": 553,
+      "line": 560,
       "operation": "read",
       "source": "raw_sql",
       "token": "from the"
@@ -7897,7 +7994,17 @@
       "evidence_class": "operator",
       "file": "comms-infra/staging/dt-install-drift",
       "kind": "sql_relation",
-      "line": 725,
+      "line": 580,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from the"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "comms-infra/staging/dt-install-drift",
+      "kind": "sql_relation",
+      "line": 758,
       "operation": "ddl",
       "source": "raw_sql",
       "token": "copy moved"
@@ -7907,7 +8014,7 @@
       "evidence_class": "operator",
       "file": "comms-infra/staging/dt-install-drift",
       "kind": "sql_relation",
-      "line": 751,
+      "line": 784,
       "operation": "read",
       "source": "raw_sql",
       "token": "from INSTALLED_SHA"
@@ -7917,7 +8024,7 @@
       "evidence_class": "operator",
       "file": "comms-infra/staging/dt-install-drift",
       "kind": "sql_relation",
-      "line": 822,
+      "line": 855,
       "operation": "read",
       "source": "raw_sql",
       "token": "from an"
@@ -8272,17 +8379,7 @@
       "evidence_class": "operator",
       "file": "comms-infra/staging/install-dt-db-map",
       "kind": "sql_relation",
-      "line": 44,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from pin\""
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "comms-infra/staging/install-dt-db-map",
-      "kind": "sql_relation",
-      "line": 45,
+      "line": 47,
       "operation": "read",
       "source": "raw_sql",
       "token": "from pin\""
@@ -8302,7 +8399,37 @@
       "evidence_class": "operator",
       "file": "comms-infra/staging/install-dt-db-map",
       "kind": "sql_relation",
-      "line": 49,
+      "line": 51,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from pin\""
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "comms-infra/staging/install-dt-db-map",
+      "kind": "sql_relation",
+      "line": 52,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from pin\""
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "comms-infra/staging/install-dt-db-map",
+      "kind": "sql_relation",
+      "line": 57,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from pin\""
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "comms-infra/staging/install-dt-db-map",
+      "kind": "sql_relation",
+      "line": 58,
       "operation": "read",
       "source": "raw_sql",
       "token": "from pin\""
@@ -9290,46 +9417,6 @@
       "file": "docker-compose.yml",
       "kind": "dynamic_sql",
       "line": 1
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "runtime",
-      "file": "Dockerfile",
-      "kind": "sql_relation",
-      "line": 1,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "FROM node"
-    },
-    {
-      "detail": "qualified relation is absent from catalog",
-      "evidence_class": "runtime",
-      "file": "Dockerfile",
-      "kind": "sql_relation",
-      "line": 2,
-      "operation": "ddl",
-      "source": "raw_sql",
-      "token": "COPY package.json"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "runtime",
-      "file": "Dockerfile",
-      "kind": "sql_relation",
-      "line": 4,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "FROM node"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "runtime",
-      "file": "Dockerfile",
-      "kind": "sql_relation",
-      "line": 7,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "FROM node"
     },
     {
       "detail": "qualified relation is absent from catalog",
@@ -23079,56 +23166,6 @@
       "token": "ALTER TABLE IF"
     },
     {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "runtime",
-      "file": "PHASE_27.F.13.O_BACKUP.sql",
-      "kind": "sql_relation",
-      "line": 1,
-      "operation": "ddl",
-      "source": "raw_sql",
-      "token": "DROP TABLE IF"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "runtime",
-      "file": "PHASE_27.F.13.O_BACKUP.sql",
-      "kind": "sql_relation",
-      "line": 5,
-      "operation": "ddl",
-      "source": "raw_sql",
-      "token": "DROP TABLE IF"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "runtime",
-      "file": "PHASE_27.F.13.O_BACKUP.sql",
-      "kind": "sql_relation",
-      "line": 10,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "FROM paper_sim_sessions"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "runtime",
-      "file": "PHASE_27.F.13.O_BACKUP.sql",
-      "kind": "sql_relation",
-      "line": 10,
-      "operation": "ddl",
-      "source": "raw_sql",
-      "token": "DROP TABLE IF"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "runtime",
-      "file": "PHASE_27.F.13.O_BACKUP.sql",
-      "kind": "sql_relation",
-      "line": 15,
-      "operation": "ddl",
-      "source": "raw_sql",
-      "token": "DROP TABLE IF"
-    },
-    {
       "detail": "computed SQL requires hand resolution",
       "evidence_class": "runtime",
       "file": "phase_41d_validation.sh",
@@ -23137,10 +23174,207 @@
     },
     {
       "detail": "computed SQL requires hand resolution",
-      "evidence_class": "runtime",
-      "file": "REPLIT_VALIDATION.sh",
+      "evidence_class": "operator",
+      "file": "scripts/analysis/b-instruments-over-rules-lsp-usage.py",
       "kind": "dynamic_sql",
       "line": 1
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/analysis/b-instruments-over-rules-lsp-usage.py",
+      "kind": "sql_relation",
+      "line": 20,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from datetime"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/analysis/b-token-burn-cut-wake-audit.py",
+      "kind": "sql_relation",
+      "line": 15,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from datetime"
+    },
+    {
+      "detail": "computed SQL requires hand resolution",
+      "evidence_class": "operator",
+      "file": "scripts/analysis/b-wake-arm-exclusive-c1-measure.py",
+      "kind": "dynamic_sql",
+      "line": 1
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/analysis/b1250_exit_book_age.sql",
+      "kind": "sql_relation",
+      "line": 3,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from closed_at"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/analysis/b1250_step7_five_session.sql",
+      "kind": "sql_relation",
+      "line": 21,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from t"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/analysis/b1250_step7_five_session.sql",
+      "kind": "sql_relation",
+      "line": 38,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from the"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/analysis/b1250_step7_five_session.sql",
+      "kind": "sql_relation",
+      "line": 45,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from t"
+    },
+    {
+      "detail": "qualified relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/analysis/b1250_step7_five_session.sql",
+      "kind": "sql_relation",
+      "line": 46,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from c.opened_at"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/analysis/b1250_step7_five_session.sql",
+      "kind": "sql_relation",
+      "line": 60,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from t"
+    },
+    {
+      "detail": "qualified relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/analysis/b1250_step7_five_session.sql",
+      "kind": "sql_relation",
+      "line": 61,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from c.opened_at"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/analysis/b1250_step7_five_session.sql",
+      "kind": "sql_relation",
+      "line": 62,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from jsonb_object_keys"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/analysis/b1250_step7_five_session.sql",
+      "kind": "sql_relation",
+      "line": 67,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from t"
+    },
+    {
+      "detail": "qualified relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/analysis/b1250_step7_five_session.sql",
+      "kind": "sql_relation",
+      "line": 67,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from c.opened_at"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/analysis/b1250_step7_five_session.sql",
+      "kind": "sql_relation",
+      "line": 79,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from v"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/analysis/b1250_step7_five_session.sql",
+      "kind": "sql_relation",
+      "line": 84,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from v"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/analysis/b1250_step7_five_session.sql",
+      "kind": "sql_relation",
+      "line": 90,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from v"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/analysis/b1250_step9_reread.sql",
+      "kind": "sql_relation",
+      "line": 23,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from the"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/analysis/b1250_step9_reread.sql",
+      "kind": "sql_relation",
+      "line": 29,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from t"
+    },
+    {
+      "detail": "qualified relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/analysis/b1250_step9_reread.sql",
+      "kind": "sql_relation",
+      "line": 30,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from c.opened_at"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/analysis/b1250_step9_reread.sql",
+      "kind": "sql_relation",
+      "line": 57,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from v"
     },
     {
       "detail": "bare relation is absent from catalog",
@@ -24291,208 +24525,14 @@
       "token": "from w"
     },
     {
-      "detail": "computed SQL requires hand resolution",
-      "evidence_class": "operator",
-      "file": "scripts/analysis/b-instruments-over-rules-lsp-usage.py",
-      "kind": "dynamic_sql",
-      "line": 1
-    },
-    {
       "detail": "bare relation is absent from catalog",
       "evidence_class": "operator",
-      "file": "scripts/analysis/b-instruments-over-rules-lsp-usage.py",
+      "file": "scripts/analysis/book-vs-ticker-divergence.mjs",
       "kind": "sql_relation",
-      "line": 20,
+      "line": 242,
       "operation": "read",
       "source": "raw_sql",
-      "token": "from datetime"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "scripts/analysis/b-token-burn-cut-wake-audit.py",
-      "kind": "sql_relation",
-      "line": 15,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from datetime"
-    },
-    {
-      "detail": "computed SQL requires hand resolution",
-      "evidence_class": "operator",
-      "file": "scripts/analysis/b-wake-arm-exclusive-c1-measure.py",
-      "kind": "dynamic_sql",
-      "line": 1
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "scripts/analysis/b1250_exit_book_age.sql",
-      "kind": "sql_relation",
-      "line": 3,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from closed_at"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "scripts/analysis/b1250_step7_five_session.sql",
-      "kind": "sql_relation",
-      "line": 21,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from t"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "scripts/analysis/b1250_step7_five_session.sql",
-      "kind": "sql_relation",
-      "line": 38,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from the"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "scripts/analysis/b1250_step7_five_session.sql",
-      "kind": "sql_relation",
-      "line": 45,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from t"
-    },
-    {
-      "detail": "qualified relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "scripts/analysis/b1250_step7_five_session.sql",
-      "kind": "sql_relation",
-      "line": 46,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from c.opened_at"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "scripts/analysis/b1250_step7_five_session.sql",
-      "kind": "sql_relation",
-      "line": 60,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from t"
-    },
-    {
-      "detail": "qualified relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "scripts/analysis/b1250_step7_five_session.sql",
-      "kind": "sql_relation",
-      "line": 61,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from c.opened_at"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "scripts/analysis/b1250_step7_five_session.sql",
-      "kind": "sql_relation",
-      "line": 62,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from jsonb_object_keys"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "scripts/analysis/b1250_step7_five_session.sql",
-      "kind": "sql_relation",
-      "line": 67,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from t"
-    },
-    {
-      "detail": "qualified relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "scripts/analysis/b1250_step7_five_session.sql",
-      "kind": "sql_relation",
-      "line": 67,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from c.opened_at"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "scripts/analysis/b1250_step7_five_session.sql",
-      "kind": "sql_relation",
-      "line": 79,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from v"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "scripts/analysis/b1250_step7_five_session.sql",
-      "kind": "sql_relation",
-      "line": 84,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from v"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "scripts/analysis/b1250_step7_five_session.sql",
-      "kind": "sql_relation",
-      "line": 90,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from v"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "scripts/analysis/b1250_step9_reread.sql",
-      "kind": "sql_relation",
-      "line": 23,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from the"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "scripts/analysis/b1250_step9_reread.sql",
-      "kind": "sql_relation",
-      "line": 29,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from t"
-    },
-    {
-      "detail": "qualified relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "scripts/analysis/b1250_step9_reread.sql",
-      "kind": "sql_relation",
-      "line": 30,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from c.opened_at"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "scripts/analysis/b1250_step9_reread.sql",
-      "kind": "sql_relation",
-      "line": 57,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from v"
+      "token": "FROM THE"
     },
     {
       "detail": "Drizzle relation symbol did not resolve",
@@ -24507,279 +24547,12 @@
     {
       "detail": "bare relation is absent from catalog",
       "evidence_class": "operator",
-      "file": "scripts/analysis/book-vs-ticker-divergence.mjs",
-      "kind": "sql_relation",
-      "line": 242,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "FROM THE"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
       "file": "scripts/analysis/census-triage-w41/data1n.py",
       "kind": "sql_relation",
       "line": 61,
       "operation": "read",
       "source": "raw_sql",
       "token": "from the"
-    },
-    {
-      "detail": "computed SQL requires hand resolution",
-      "evidence_class": "operator",
-      "file": "scripts/analysis/cohort_composition_b2_decomp.sql",
-      "kind": "dynamic_sql",
-      "line": 1
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "scripts/analysis/cohort_composition_b2_decomp.sql",
-      "kind": "sql_relation",
-      "line": 7,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from pairs"
-    },
-    {
-      "detail": "qualified relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "scripts/analysis/cohort_composition_b2_decomp.sql",
-      "kind": "sql_relation",
-      "line": 8,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from x.ny"
-    },
-    {
-      "detail": "qualified relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "scripts/analysis/cohort_composition_b2_decomp.sql",
-      "kind": "sql_relation",
-      "line": 9,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from x.ny"
-    },
-    {
-      "detail": "qualified relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "scripts/analysis/cohort_composition_b2_decomp.sql",
-      "kind": "sql_relation",
-      "line": 10,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from x.ny"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "scripts/analysis/cohort_composition_b2_decomp.sql",
-      "kind": "sql_relation",
-      "line": 16,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from dispatches"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "scripts/analysis/cohort_composition_b2_decomp.sql",
-      "kind": "sql_relation",
-      "line": 18,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from overnight_pairs"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "scripts/analysis/cohort_composition_b2_decomp.sql",
-      "kind": "sql_relation",
-      "line": 19,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from sig_symbols"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "scripts/analysis/cohort_composition_b2_decomp.sql",
-      "kind": "sql_relation",
-      "line": 22,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from overnight_pairs"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "scripts/analysis/cohort_composition_b2_decomp.sql",
-      "kind": "sql_relation",
-      "line": 24,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from dispatches"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "scripts/analysis/cohort_composition_b2_decomp.sql",
-      "kind": "sql_relation",
-      "line": 24,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "join s_live_per_min"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "scripts/analysis/cohort_composition_b2_decomp.sql",
-      "kind": "sql_relation",
-      "line": 29,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from overnight_pairs"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "scripts/analysis/cohort_composition_b2_decomp.sql",
-      "kind": "sql_relation",
-      "line": 30,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from peers"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "scripts/analysis/cohort_composition_b2_decomp.sql",
-      "kind": "sql_relation",
-      "line": 32,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from peers"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "scripts/analysis/cohort_composition_b2.sql",
-      "kind": "sql_relation",
-      "line": 7,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from pairs"
-    },
-    {
-      "detail": "qualified relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "scripts/analysis/cohort_composition_b2.sql",
-      "kind": "sql_relation",
-      "line": 8,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from x.ny"
-    },
-    {
-      "detail": "qualified relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "scripts/analysis/cohort_composition_b2.sql",
-      "kind": "sql_relation",
-      "line": 9,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from x.ny"
-    },
-    {
-      "detail": "qualified relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "scripts/analysis/cohort_composition_b2.sql",
-      "kind": "sql_relation",
-      "line": 10,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from x.ny"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "scripts/analysis/cohort_composition_b2.sql",
-      "kind": "sql_relation",
-      "line": 24,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from dispatches"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "scripts/analysis/cohort_composition_b2.sql",
-      "kind": "sql_relation",
-      "line": 25,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from overnight_pairs"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "scripts/analysis/cohort_composition_b2.sql",
-      "kind": "sql_relation",
-      "line": 25,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from sig_symbols"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "scripts/analysis/cohort_composition_b2.sql",
-      "kind": "sql_relation",
-      "line": 28,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from overnight_pairs"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "scripts/analysis/cohort_composition_b2.sql",
-      "kind": "sql_relation",
-      "line": 30,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from dispatches"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "scripts/analysis/cohort_composition_b2.sql",
-      "kind": "sql_relation",
-      "line": 30,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "join s_live_per_min"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "scripts/analysis/cohort_composition_b2.sql",
-      "kind": "sql_relation",
-      "line": 32,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from sig_symbols"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "scripts/analysis/cohort_composition_b2.sql",
-      "kind": "sql_relation",
-      "line": 38,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from peers"
     },
     {
       "detail": "bare relation is absent from catalog",
@@ -25054,6 +24827,263 @@
     {
       "detail": "bare relation is absent from catalog",
       "evidence_class": "operator",
+      "file": "scripts/analysis/cohort_composition_b2.sql",
+      "kind": "sql_relation",
+      "line": 7,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from pairs"
+    },
+    {
+      "detail": "qualified relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/analysis/cohort_composition_b2.sql",
+      "kind": "sql_relation",
+      "line": 8,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from x.ny"
+    },
+    {
+      "detail": "qualified relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/analysis/cohort_composition_b2.sql",
+      "kind": "sql_relation",
+      "line": 9,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from x.ny"
+    },
+    {
+      "detail": "qualified relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/analysis/cohort_composition_b2.sql",
+      "kind": "sql_relation",
+      "line": 10,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from x.ny"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/analysis/cohort_composition_b2.sql",
+      "kind": "sql_relation",
+      "line": 24,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from dispatches"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/analysis/cohort_composition_b2.sql",
+      "kind": "sql_relation",
+      "line": 25,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from overnight_pairs"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/analysis/cohort_composition_b2.sql",
+      "kind": "sql_relation",
+      "line": 25,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from sig_symbols"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/analysis/cohort_composition_b2.sql",
+      "kind": "sql_relation",
+      "line": 28,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from overnight_pairs"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/analysis/cohort_composition_b2.sql",
+      "kind": "sql_relation",
+      "line": 30,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from dispatches"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/analysis/cohort_composition_b2.sql",
+      "kind": "sql_relation",
+      "line": 30,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "join s_live_per_min"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/analysis/cohort_composition_b2.sql",
+      "kind": "sql_relation",
+      "line": 32,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from sig_symbols"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/analysis/cohort_composition_b2.sql",
+      "kind": "sql_relation",
+      "line": 38,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from peers"
+    },
+    {
+      "detail": "computed SQL requires hand resolution",
+      "evidence_class": "operator",
+      "file": "scripts/analysis/cohort_composition_b2_decomp.sql",
+      "kind": "dynamic_sql",
+      "line": 1
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/analysis/cohort_composition_b2_decomp.sql",
+      "kind": "sql_relation",
+      "line": 7,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from pairs"
+    },
+    {
+      "detail": "qualified relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/analysis/cohort_composition_b2_decomp.sql",
+      "kind": "sql_relation",
+      "line": 8,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from x.ny"
+    },
+    {
+      "detail": "qualified relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/analysis/cohort_composition_b2_decomp.sql",
+      "kind": "sql_relation",
+      "line": 9,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from x.ny"
+    },
+    {
+      "detail": "qualified relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/analysis/cohort_composition_b2_decomp.sql",
+      "kind": "sql_relation",
+      "line": 10,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from x.ny"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/analysis/cohort_composition_b2_decomp.sql",
+      "kind": "sql_relation",
+      "line": 16,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from dispatches"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/analysis/cohort_composition_b2_decomp.sql",
+      "kind": "sql_relation",
+      "line": 18,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from overnight_pairs"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/analysis/cohort_composition_b2_decomp.sql",
+      "kind": "sql_relation",
+      "line": 19,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from sig_symbols"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/analysis/cohort_composition_b2_decomp.sql",
+      "kind": "sql_relation",
+      "line": 22,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from overnight_pairs"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/analysis/cohort_composition_b2_decomp.sql",
+      "kind": "sql_relation",
+      "line": 24,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from dispatches"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/analysis/cohort_composition_b2_decomp.sql",
+      "kind": "sql_relation",
+      "line": 24,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "join s_live_per_min"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/analysis/cohort_composition_b2_decomp.sql",
+      "kind": "sql_relation",
+      "line": 29,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from overnight_pairs"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/analysis/cohort_composition_b2_decomp.sql",
+      "kind": "sql_relation",
+      "line": 30,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from peers"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/analysis/cohort_composition_b2_decomp.sql",
+      "kind": "sql_relation",
+      "line": 32,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from peers"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
       "file": "scripts/analysis/cohort_dark_minutes.sql",
       "kind": "sql_relation",
       "line": 6,
@@ -25120,86 +25150,6 @@
       "operation": "read",
       "source": "raw_sql",
       "token": "from open_min"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "scripts/analysis/cohort_liveness_tail.sql",
-      "kind": "sql_relation",
-      "line": 7,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from pairs"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "scripts/analysis/cohort_liveness_tail.sql",
-      "kind": "sql_relation",
-      "line": 9,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from per_min"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "scripts/analysis/cohort_liveness_tail.sql",
-      "kind": "sql_relation",
-      "line": 16,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from sessioned"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "scripts/analysis/cohort_liveness_tail.sql",
-      "kind": "sql_relation",
-      "line": 16,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from ny"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "scripts/analysis/cohort_liveness_tail.sql",
-      "kind": "sql_relation",
-      "line": 17,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from ny"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "scripts/analysis/cohort_liveness_tail.sql",
-      "kind": "sql_relation",
-      "line": 17,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from ny"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "scripts/analysis/cohort_liveness_tail.sql",
-      "kind": "sql_relation",
-      "line": 28,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from open_min"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "scripts/analysis/cohort_liveness_tail.sql",
-      "kind": "sql_relation",
-      "line": 28,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "join universe"
     },
     {
       "detail": "bare relation is absent from catalog",
@@ -25320,6 +25270,86 @@
       "operation": "read",
       "source": "raw_sql",
       "token": "from universe"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/analysis/cohort_liveness_tail.sql",
+      "kind": "sql_relation",
+      "line": 7,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from pairs"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/analysis/cohort_liveness_tail.sql",
+      "kind": "sql_relation",
+      "line": 9,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from per_min"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/analysis/cohort_liveness_tail.sql",
+      "kind": "sql_relation",
+      "line": 16,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from sessioned"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/analysis/cohort_liveness_tail.sql",
+      "kind": "sql_relation",
+      "line": 16,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from ny"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/analysis/cohort_liveness_tail.sql",
+      "kind": "sql_relation",
+      "line": 17,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from ny"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/analysis/cohort_liveness_tail.sql",
+      "kind": "sql_relation",
+      "line": 17,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from ny"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/analysis/cohort_liveness_tail.sql",
+      "kind": "sql_relation",
+      "line": 28,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from open_min"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/analysis/cohort_liveness_tail.sql",
+      "kind": "sql_relation",
+      "line": 28,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "join universe"
     },
     {
       "detail": "computed SQL requires hand resolution",
@@ -26844,16 +26874,6 @@
       "token": "from its"
     },
     {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "scripts/analysis/xs_frame_false_hollow_snaps.sql",
-      "kind": "sql_relation",
-      "line": 1,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "FROM captured_at"
-    },
-    {
       "detail": "computed SQL requires hand resolution",
       "evidence_class": "operator",
       "file": "scripts/analysis/xs_frame_false_hollow.py",
@@ -26889,6 +26909,16 @@
       "operation": "read",
       "source": "raw_sql",
       "token": "from a"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/analysis/xs_frame_false_hollow_snaps.sql",
+      "kind": "sql_relation",
+      "line": 1,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "FROM captured_at"
     },
     {
       "detail": "computed SQL requires hand resolution",
@@ -29625,7 +29655,7 @@
       "evidence_class": "operator",
       "file": "scripts/db-map/adapter.mjs",
       "kind": "sql_relation",
-      "line": 156,
+      "line": 159,
       "operation": "read",
       "source": "raw_sql",
       "token": "from catalog"
@@ -29635,7 +29665,7 @@
       "evidence_class": "operator",
       "file": "scripts/db-map/adapter.mjs",
       "kind": "sql_relation",
-      "line": 190,
+      "line": 193,
       "operation": "read",
       "source": "raw_sql",
       "token": "from the"
@@ -30120,6 +30150,74 @@
     {
       "detail": "computed SQL requires hand resolution",
       "evidence_class": "operator",
+      "file": "scripts/db-map/generate.mjs",
+      "kind": "dynamic_sql",
+      "line": 128
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/db-map/generate.mjs",
+      "kind": "sql_relation",
+      "line": 128,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from pin"
+    },
+    {
+      "detail": "computed SQL requires hand resolution",
+      "evidence_class": "operator",
+      "file": "scripts/db-map/generate.mjs",
+      "kind": "dynamic_sql",
+      "line": 129
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/db-map/generate.mjs",
+      "kind": "sql_relation",
+      "line": 129,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from pin"
+    },
+    {
+      "detail": "computed SQL requires hand resolution",
+      "evidence_class": "operator",
+      "file": "scripts/db-map/generate.mjs",
+      "kind": "dynamic_sql",
+      "line": 131
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/db-map/generate.mjs",
+      "kind": "sql_relation",
+      "line": 131,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from pin"
+    },
+    {
+      "detail": "computed SQL requires hand resolution",
+      "evidence_class": "operator",
+      "file": "scripts/db-map/generate.mjs",
+      "kind": "dynamic_sql",
+      "line": 132
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/db-map/generate.mjs",
+      "kind": "sql_relation",
+      "line": 132,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from pin"
+    },
+    {
+      "detail": "computed SQL requires hand resolution",
+      "evidence_class": "operator",
       "file": "scripts/db-map/remote-baseline.sh",
       "kind": "dynamic_sql",
       "line": 1
@@ -30129,7 +30227,7 @@
       "evidence_class": "operator",
       "file": "scripts/db-map/scanner.mjs",
       "kind": "drizzle_symbol",
-      "line": 54,
+      "line": 59,
       "operation": "delete",
       "source": "drizzle",
       "token": "name"
@@ -30139,7 +30237,7 @@
       "evidence_class": "operator",
       "file": "scripts/db-map/scanner.mjs",
       "kind": "sql_relation",
-      "line": 97,
+      "line": 102,
       "operation": "read",
       "source": "raw_sql",
       "token": "from catalog"
@@ -30149,7 +30247,7 @@
       "evidence_class": "operator",
       "file": "scripts/db-map/scanner.mjs",
       "kind": "sql_relation",
-      "line": 101,
+      "line": 106,
       "operation": "read",
       "source": "raw_sql",
       "token": "from catalog"
@@ -30159,7 +30257,7 @@
       "evidence_class": "operator",
       "file": "scripts/db-map/scanner.mjs",
       "kind": "sql_relation",
-      "line": 130,
+      "line": 135,
       "operation": "read",
       "source": "raw_sql",
       "token": "from catalog"
@@ -30169,7 +30267,7 @@
       "evidence_class": "test_only",
       "file": "scripts/db-map/tests/core.test.mjs",
       "kind": "sql_relation",
-      "line": 50,
+      "line": 58,
       "operation": "read",
       "source": "raw_sql",
       "token": "FROM users"
@@ -30179,7 +30277,7 @@
       "evidence_class": "test_only",
       "file": "scripts/db-map/tests/core.test.mjs",
       "kind": "sql_relation",
-      "line": 52,
+      "line": 60,
       "operation": "read",
       "source": "raw_sql",
       "token": "FROM node"
@@ -30327,17 +30425,47 @@
       "evidence_class": "operator",
       "file": "scripts/db-map/util.mjs",
       "kind": "drizzle_symbol",
-      "line": 6,
+      "line": 7,
       "operation": "update",
       "source": "drizzle",
       "token": "value"
+    },
+    {
+      "detail": "Drizzle relation symbol did not resolve",
+      "evidence_class": "operator",
+      "file": "scripts/db-map/util.mjs",
+      "kind": "drizzle_symbol",
+      "line": 12,
+      "operation": "update",
+      "source": "drizzle",
+      "token": "chunk"
+    },
+    {
+      "detail": "Drizzle relation symbol did not resolve",
+      "evidence_class": "operator",
+      "file": "scripts/db-map/util.mjs",
+      "kind": "drizzle_symbol",
+      "line": 17,
+      "operation": "read",
+      "source": "drizzle",
+      "token": "left"
+    },
+    {
+      "detail": "Drizzle relation symbol did not resolve",
+      "evidence_class": "operator",
+      "file": "scripts/db-map/util.mjs",
+      "kind": "drizzle_symbol",
+      "line": 17,
+      "operation": "read",
+      "source": "drizzle",
+      "token": "right"
     },
     {
       "detail": "bare relation is absent from catalog",
       "evidence_class": "operator",
       "file": "scripts/db-map/verify.mjs",
       "kind": "sql_relation",
-      "line": 55,
+      "line": 87,
       "operation": "read",
       "source": "raw_sql",
       "token": "from artifact"
@@ -30347,7 +30475,27 @@
       "evidence_class": "operator",
       "file": "scripts/db-map/verify.mjs",
       "kind": "sql_relation",
-      "line": 56,
+      "line": 88,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from the"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/db-map/verify.mjs",
+      "kind": "sql_relation",
+      "line": 90,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from the"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/db-map/verify.mjs",
+      "kind": "sql_relation",
+      "line": 91,
       "operation": "read",
       "source": "raw_sql",
       "token": "from the"
@@ -31507,6 +31655,46 @@
       "token": "from datetime"
     },
     {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/phase15b/a3_global_dbs_methodology.py",
+      "kind": "sql_relation",
+      "line": 5,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from per"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/phase15b/a3_global_dbs_methodology.py",
+      "kind": "sql_relation",
+      "line": 17,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from collections"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/phase15b/a3_global_dbs_methodology.py",
+      "kind": "sql_relation",
+      "line": 18,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from datetime"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/phase15b/a3_global_dbs_methodology.py",
+      "kind": "sql_relation",
+      "line": 215,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from the"
+    },
+    {
       "detail": "computed SQL requires hand resolution",
       "evidence_class": "operator",
       "file": "scripts/phase15b/a3_global_dbs_methodology_v2.py",
@@ -31592,46 +31780,6 @@
       "operation": "read",
       "source": "raw_sql",
       "token": "from their"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "scripts/phase15b/a3_global_dbs_methodology.py",
-      "kind": "sql_relation",
-      "line": 5,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from per"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "scripts/phase15b/a3_global_dbs_methodology.py",
-      "kind": "sql_relation",
-      "line": 17,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from collections"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "scripts/phase15b/a3_global_dbs_methodology.py",
-      "kind": "sql_relation",
-      "line": 18,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from datetime"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "scripts/phase15b/a3_global_dbs_methodology.py",
-      "kind": "sql_relation",
-      "line": 215,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from the"
     },
     {
       "detail": "computed SQL requires hand resolution",
@@ -51906,6 +52054,13 @@
     {
       "detail": "computed SQL requires hand resolution",
       "evidence_class": "runtime",
+      "file": "test-scripts/phase-41F-E-validation.sh",
+      "kind": "dynamic_sql",
+      "line": 1
+    },
+    {
+      "detail": "computed SQL requires hand resolution",
+      "evidence_class": "runtime",
       "file": "test_behavioral.mjs",
       "kind": "dynamic_sql",
       "line": 122
@@ -51953,13 +52108,6 @@
       "operation": "update",
       "source": "raw_sql",
       "token": "Update saved"
-    },
-    {
-      "detail": "computed SQL requires hand resolution",
-      "evidence_class": "runtime",
-      "file": "test-scripts/phase-41F-E-validation.sh",
-      "kind": "dynamic_sql",
-      "line": 1
     },
     {
       "detail": "computed SQL requires hand resolution",
@@ -53830,16 +53978,6 @@
       "token": "from the"
     },
     {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "test_only",
-      "file": "token-watch/tests/mutate_birthcap_review_export.py",
-      "kind": "sql_relation",
-      "line": 5,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from pathlib"
-    },
-    {
       "detail": "computed SQL requires hand resolution",
       "evidence_class": "test_only",
       "file": "token-watch/tests/mutate_birthcap.py",
@@ -53885,6 +54023,16 @@
       "operation": "read",
       "source": "raw_sql",
       "token": "from concurrent.futures"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "test_only",
+      "file": "token-watch/tests/mutate_birthcap_review_export.py",
+      "kind": "sql_relation",
+      "line": 5,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from pathlib"
     },
     {
       "detail": "bare relation is absent from catalog",
@@ -54013,14 +54161,14 @@
     {
       "detail": "computed SQL requires hand resolution",
       "evidence_class": "test_only",
-      "file": "token-watch/tests/mutate_p2b_fixes.py",
+      "file": "token-watch/tests/mutate_p2b2_fixes.py",
       "kind": "dynamic_sql",
       "line": 1
     },
     {
       "detail": "bare relation is absent from catalog",
       "evidence_class": "test_only",
-      "file": "token-watch/tests/mutate_p2b_fixes.py",
+      "file": "token-watch/tests/mutate_p2b2_fixes.py",
       "kind": "sql_relation",
       "line": 2,
       "operation": "read",
@@ -54030,7 +54178,7 @@
     {
       "detail": "bare relation is absent from catalog",
       "evidence_class": "test_only",
-      "file": "token-watch/tests/mutate_p2b_fixes.py",
+      "file": "token-watch/tests/mutate_p2b2_fixes.py",
       "kind": "sql_relation",
       "line": 2,
       "operation": "ddl",
@@ -54040,14 +54188,14 @@
     {
       "detail": "computed SQL requires hand resolution",
       "evidence_class": "test_only",
-      "file": "token-watch/tests/mutate_p2b2_fixes.py",
+      "file": "token-watch/tests/mutate_p2b_fixes.py",
       "kind": "dynamic_sql",
       "line": 1
     },
     {
       "detail": "bare relation is absent from catalog",
       "evidence_class": "test_only",
-      "file": "token-watch/tests/mutate_p2b2_fixes.py",
+      "file": "token-watch/tests/mutate_p2b_fixes.py",
       "kind": "sql_relation",
       "line": 2,
       "operation": "read",
@@ -54057,7 +54205,7 @@
     {
       "detail": "bare relation is absent from catalog",
       "evidence_class": "test_only",
-      "file": "token-watch/tests/mutate_p2b2_fixes.py",
+      "file": "token-watch/tests/mutate_p2b_fixes.py",
       "kind": "sql_relation",
       "line": 2,
       "operation": "ddl",
@@ -54292,23 +54440,6 @@
     {
       "detail": "computed SQL requires hand resolution",
       "evidence_class": "test_only",
-      "file": "token-watch/tests/test_birthcap_review_export.py",
-      "kind": "dynamic_sql",
-      "line": 1
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "test_only",
-      "file": "token-watch/tests/test_birthcap_review_export.py",
-      "kind": "sql_relation",
-      "line": 9,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from pathlib"
-    },
-    {
-      "detail": "computed SQL requires hand resolution",
-      "evidence_class": "test_only",
       "file": "token-watch/tests/test_birthcap.py",
       "kind": "dynamic_sql",
       "line": 1
@@ -54372,6 +54503,23 @@
       "operation": "read",
       "source": "raw_sql",
       "token": "from the"
+    },
+    {
+      "detail": "computed SQL requires hand resolution",
+      "evidence_class": "test_only",
+      "file": "token-watch/tests/test_birthcap_review_export.py",
+      "kind": "dynamic_sql",
+      "line": 1
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "test_only",
+      "file": "token-watch/tests/test_birthcap_review_export.py",
+      "kind": "sql_relation",
+      "line": 9,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from pathlib"
     },
     {
       "detail": "computed SQL requires hand resolution",
@@ -55024,43 +55172,6 @@
     {
       "detail": "computed SQL requires hand resolution",
       "evidence_class": "test_only",
-      "file": "token-watch/tests/test_p2b_memory_fixes.py",
-      "kind": "dynamic_sql",
-      "line": 1
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "test_only",
-      "file": "token-watch/tests/test_p2b_memory_fixes.py",
-      "kind": "sql_relation",
-      "line": 19,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from datetime"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "test_only",
-      "file": "token-watch/tests/test_p2b_memory_fixes.py",
-      "kind": "sql_relation",
-      "line": 33,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from config"
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "test_only",
-      "file": "token-watch/tests/test_p2b_memory_fixes.py",
-      "kind": "sql_relation",
-      "line": 180,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from rows"
-    },
-    {
-      "detail": "computed SQL requires hand resolution",
-      "evidence_class": "test_only",
       "file": "token-watch/tests/test_p2b2_memory_fixes.py",
       "kind": "dynamic_sql",
       "line": 1
@@ -55094,6 +55205,43 @@
       "operation": "read",
       "source": "raw_sql",
       "token": "from the"
+    },
+    {
+      "detail": "computed SQL requires hand resolution",
+      "evidence_class": "test_only",
+      "file": "token-watch/tests/test_p2b_memory_fixes.py",
+      "kind": "dynamic_sql",
+      "line": 1
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "test_only",
+      "file": "token-watch/tests/test_p2b_memory_fixes.py",
+      "kind": "sql_relation",
+      "line": 19,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from datetime"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "test_only",
+      "file": "token-watch/tests/test_p2b_memory_fixes.py",
+      "kind": "sql_relation",
+      "line": 33,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from config"
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "test_only",
+      "file": "token-watch/tests/test_p2b_memory_fixes.py",
+      "kind": "sql_relation",
+      "line": 180,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from rows"
     },
     {
       "detail": "computed SQL requires hand resolution",
@@ -57778,5 +57926,5 @@
     }
   ],
   "schema_version": 1,
-  "source_ref": "c4b0eec545f6f7e89515bb6dc9f9e57fe604a288"
+  "source_ref": "0a2f7e654ce282fc44f9f842c9883efc4341bf21"
 }
