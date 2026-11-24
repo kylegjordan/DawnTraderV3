@@ -13,7 +13,7 @@ Drafted for PM Claude on Kyle's word in the PM chat on 2026-11-23: *"Let's switc
 - **Alerts:** no automatic triage. Read due alerts by hand (`ssh root@188.245.193.8 'python3 -' < scripts/due-alerts.py`). Never ack an event-wait or persistent-condition alert; resolve only at its close, with evidence.
 - **Deploys restart the trading app.** Read `/home/deploy/dawntrader-deploy.record` first. `dt-deploy` ships the whole branch. Langston measured staging at `c21c1502a` (deployed 2026-11-21 05:08:44Z), 189 commits and 38 runtime files behind (msg `1574198965098782822`).
 - **Open deploy windows:** name every one with `--in-window` and tell owners (NEW lists 9 open windows, B:37).
-- **No staging browser on the Codex side:** mark Step 7 page checks "UI not yet checked" and ask Kyle.
+- **Codex staging UI:** read `.claude/skills/staging-browser-access/SKILL.md` and use the Browser plugin's Chrome backend with Kyle's existing signed-in staging tab. Desktop Computer Use stays off. Ask Kyle only if the browser-scoped Chrome connection or authenticated tab is genuinely unavailable after the skill's checks.
 
 ## OLD (CC-A)
 1. **B-UNIVERSE-REFRESH-ACTS (plan row 18, #1018): STEP: 4 of 11 · NEXT STEP: 5 of 11** (A:17). Change list `Change Lists/B_UNIVERSE_REFRESH_ACTS_CHANGE_LIST.md`; three one-file gates.

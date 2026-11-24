@@ -46,7 +46,7 @@ Kyle, 2026-11-09: the last switch left "a lot of stuff that hadn't been handed o
 ## Limits, stated
 - Kyle gives the word and PM issues the order. PM Codex can wake the four existing builder chats; Kyle opens only a missing or unreachable chat.
 - Receipts are self-asserted. The handover sheet and the git checks are the real evidence.
-- Codex uses browser-scoped Chrome automation for staging checks when the signed-in tab is available; desktop-wide Computer Use stays disabled under Kyle's active test.
+- Codex reads `staging-browser-access` and uses the Browser plugin's Chrome backend for staging checks when the signed-in tab is available; desktop-wide Computer Use stays disabled under Kyle's active test.
 
 ## Token-economy settings and their smoke check (B-TOKEN-ECONOMY OBJ-9)
 **The handover leaves these in the repo untouched.** Name them in the handover sheet so PM Codex's return run can verify them, and do not count the switch complete until the two repo checks below pass at the ref the Codex crew starts from.

@@ -20,7 +20,7 @@ With active trading on, **most changes have a staging-visible surface.** For any
 
 | surface | verdict |
 |---|---|
-| ✅ **`mcp__claude-in-chrome__*`** — Kyle's real Chrome, carrying his session | ⛔ **THE ONLY SURFACE FOR STAGING.** **The full dashboard loads with NO LOGIN** *(measured 2026-08-28: portfolio, Ready-to-Buy, Filter Health, strategy table all rendered).* |
+| ✅ **Claude: `mcp__claude-in-chrome__*`; Codex: the bundled Browser plugin's Chrome backend, following `staging-browser-access`** — Kyle's real Chrome, carrying his session | ⛔ **THE ONLY SURFACE FOR STAGING.** **The full dashboard loads with NO LOGIN** *(measured 2026-08-28: portfolio, Ready-to-Buy, Filter Health, strategy table all rendered).* Codex must not substitute desktop-wide Computer Use or ask Kyle for screenshots while the browser-scoped signed-in tab is available. |
 | ⛔⛔ the in-app Browser pane (`mcp__Claude_Browser__*`) | ⛔⛔ **DO NOT USE IT FOR STAGING. IT IS A DEAD END, NOT AN ALTERNATIVE.** It serves a `"Welcome Back / Sign in"` form, and **a session MAY NOT TYPE A PASSWORD INTO A FORM** — a hard boundary, not a permission we can grant. ⇒ **it can never get past that page, no matter what credentials exist.** |
 
 ⛔⛔ **THAT IS WHY THIS IS A PROHIBITION AND NOT A COMPARISON (Kyle, 2026-08-28).** ★ **His correction: *"if you need login details and the ability to log in with a password using the in-app method, then that can't work — so that needs to be removed, or we explicitly say don't use the in-app login method."*** ⚠️ **My first version described it as an option that merely *needs the credentials*. It is not an option. Documenting a dead end as a choice invites a session to spend a turn discovering it.**
