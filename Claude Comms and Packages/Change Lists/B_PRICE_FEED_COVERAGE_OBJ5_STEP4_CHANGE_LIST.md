@@ -159,3 +159,18 @@ void this.i8cResubscribeAllOpenPositions().then(() => this.restoreIntent('reconn
 
 ## Step 7 (pre-registered here, before deploy)
 (a) **Every reconnect after the deploy writes one `[OBJ-5][RESUB] … trigger=reconnect` line**, with `restored` > 0 whenever an RTB-queued crypto symbol was ACKed before it. (b) **The OBJ-5 drop rate, measured the same way as the pre-audit's ~11/day, goes to ~0** over the first full session after the deploy; a non-zero count is read symbol by symbol against the restore lines. (c) `WS_UNSUB_KEPT` lines are read against the queue at that moment (each must name a symbol the RTB had queued). (d) `RESUB_DEFERRED` appears at most once per outage. Failure = (a) missing on a reconnect, or (b) not lower than the pre-audit rate.
+
+### Step 7 interim natural-reconnect read — 2026-11-24T04:58Z
+
+The current `out.log` and `error.log` each began before the exact deploy anchor (`2026-11-24T00:03:08Z`) and extended through `04:58:03Z` / `04:58:02Z`, respectively. The surrounding known-present deployment controls were `[OBJ-5][RESUB] sent=0 candidates=0 trigger=open` at process start `00:03:02Z` and `sent=5 candidates=5 reasons=rtb trigger=audit` at `00:03:17Z`.
+
+Two natural reconnect markers occurred, and both had one same-second terminal restore line:
+
+| reconnect | terminal restore |
+|---|---|
+| `01:39:02Z` `[I8C-WS-RECONNECT] reconnect_detected` | `[OBJ-5][RESUB] sent=12 candidates=12 reasons=rtb trigger=reconnect` |
+| `03:28:52Z` `[I8C-WS-RECONNECT] reconnect_detected` | `[OBJ-5][RESUB] sent=7 candidates=7 reasons=rtb trigger=reconnect` |
+
+The same bounded pattern read found no `RESUB_ABORTED`, `RESUB_DEFERRED`, `skipped=restore_in_progress`, or `WS_UNSUB_KEPT` line. The process control remained online at restart count 715, unstable restarts 0, with the deploy record still naming exact build `e3a96a8126f0280a9568bb1823b9210783f0afe0`. This is positive interim evidence for criterion (a), not Step-7 completion: timestamp/trigger/order is the available pairing key, the logs cannot exclude an unlogged transport reconnect, the first-full-session drop-rate gate is not yet mature, and no close-path `WS_UNSUB_KEPT` carrier has appeared.
+
+`REVIEWER: staging current out.log + error.log, bounded from 2026-11-24T00:03:08Z · what other states fit the OBJ-5 interim claim? · claim matches: two markers and two same-second reconnect terminals; no named negative states; no correlation id beyond timestamp/trigger/order and an unlogged transport reconnect remains compatible · re-derived y`
