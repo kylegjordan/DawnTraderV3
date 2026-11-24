@@ -179,3 +179,41 @@ Step-9 correction:
 4. Fresh-reader result: CLEAN on cause and seven-column repair; HIT on any DROP rollback and on using the
    two inserted rows alone as proof of the six optional columns. The schema preflight is the independent
    evidence for that complete population.
+
+## 10. STEP 9 COMPLETION — EXACT CUTOFF MIGRATION + P11 PASS (2026-11-24)
+
+Coltrane PROCEED at 2026-11-24T01:15:46Z covered the fidelity ref
+`f2203f8e10b8619498e3fe24d2ab6e4d643dae87` and exact deployment cutoff
+`88c8840c22a34eb02dc09280f2e4404cd704af91`. The execution riders were followed exactly:
+
+1. The fidelity repair was rebased as `8b371ce013eba35ffad3832800c712221044ea11` onto shared
+   `57403d7d513e48584c1a87572b0c8863609f6290`. The forward migration, ledger-only rollback,
+   P11 proof and unit-test blobs remained byte-identical to the reviewed ref. Exact CI run
+   `45306811127` passed TypeScript Check, Test Suite, Build and Docker Build.
+2. Immediately before the write, staging HEAD and `dist/BUILD_SHA` were both exact live anchor
+   `e3a96a8126f0280a9568bb1823b9210783f0afe0`, the worktree was clean, and the migration census
+   returned exactly 1/1 pending file:
+   `2026-11-24-b-db-regime-enum-align-telemetry-columns.sql`. Positive control: `_migrations`
+   contained 226 applied rows and the original #1263 enum migration matched 1 row.
+3. The standard runner was executed only from exact cutoff `88c8840c22a34eb02dc09280f2e4404cd704af91`.
+   It applied the one migration and wrote one ledger row. Readback found all seven target columns.
+   The checkout was then restored to exact `e3a96a8126f0280a9568bb1823b9210783f0afe0` before P11.
+4. While HEAD and `dist/BUILD_SHA` remained exact e3, the worktree-only P11 overlay was exact reviewed
+   blob `c8de6c62dd8f2d3f0c69c149c15f91bbe8225ee0`. It was the sole modified path and was restored after
+   the run; final worktree status was clean.
+5. P11 result: `SCHEMA 7/7`; pre-count 0 and post-count 2; two distinct rows:
+   `68b6a1ae-bc29-4c03-971d-12b95a70e715` / `B1263-PROOF-CANON` and
+   `ee9f8298-31e6-4c6e-bb3e-8739ddf9e0ad` / `B1263-PROOF-GHOST`. Both read back
+   `regime=IMPULSE_EXPANSION`, `mode=paper`, `source=vts`. The ghost arm emitted the expected
+   `HIGH_VOL_IMPULSE` to `IMPULSE_EXPANSION` normalization warning. Verdict: PASS.
+6. No application restart occurred. Before migration, after migration and after P11 the process remained
+   `pid=2822823`, `restart_time=715`, `pm_uptime=1795478578039`, `status=online`; HEAD and build identity
+   remained e3. An independent `dt-sql` read confirmed the ledger row, exact seven-column shapes and the
+   two proof rows after the worktree was clean.
+
+The schema gap that made the first P11 fail is closed. The next workflow action is Step 8 independent
+verification of this exact pushed evidence; no Step 10 or completion claim is made here.
+
+**REVIEWER: CLEAN — fresh read after P11.** Exact e3 HEAD/build and zero-byte worktree status; unchanged
+process identity; 1 target ledger row among 227 applied rows; 7/7 exact column shapes; 2 total and 2 distinct
+proof rows, both canonical/paper/`source=vts`; rebased proof blob exactly `c8de6c62dd8f2d3f0c69c149c15f91bbe8225ee0`.
