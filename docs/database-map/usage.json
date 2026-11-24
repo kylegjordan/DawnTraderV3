@@ -3,7 +3,7 @@
     {
       "evidence_class": "test_only",
       "file": "scripts/db-map/tests/core.test.mjs",
-      "line": 58,
+      "line": 59,
       "operation": "update",
       "relation": "auth.users",
       "source": "raw_sql"
@@ -24707,7 +24707,7 @@
     {
       "evidence_class": "test_only",
       "file": "scripts/db-map/tests/core.test.mjs",
-      "line": 58,
+      "line": 59,
       "operation": "delete",
       "relation": "public.users",
       "source": "raw_sql"
@@ -24715,7 +24715,7 @@
     {
       "evidence_class": "test_only",
       "file": "scripts/db-map/tests/core.test.mjs",
-      "line": 59,
+      "line": 60,
       "operation": "delete",
       "relation": "public.users",
       "source": "raw_sql"
@@ -28714,6 +28714,6 @@
     }
   ],
   "schema_version": 1,
-  "source_ref": "0a2f7e654ce282fc44f9f842c9883efc4341bf21",
-  "zero_hit_wording": "none found by scanner at 0a2f7e654ce282fc44f9f842c9883efc4341bf21"
+  "source_ref": "d5ce8d5b3f3ed3c84cf4eaaf7c505a3217d06d6f",
+  "zero_hit_wording": "none found by scanner at d5ce8d5b3f3ed3c84cf4eaaf7c505a3217d06d6f"
 }

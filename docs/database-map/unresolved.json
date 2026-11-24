@@ -30267,7 +30267,7 @@
       "evidence_class": "test_only",
       "file": "scripts/db-map/tests/core.test.mjs",
       "kind": "sql_relation",
-      "line": 58,
+      "line": 59,
       "operation": "read",
       "source": "raw_sql",
       "token": "FROM users"
@@ -30277,7 +30277,7 @@
       "evidence_class": "test_only",
       "file": "scripts/db-map/tests/core.test.mjs",
       "kind": "sql_relation",
-      "line": 60,
+      "line": 61,
       "operation": "read",
       "source": "raw_sql",
       "token": "FROM node"
@@ -57926,5 +57926,5 @@
     }
   ],
   "schema_version": 1,
-  "source_ref": "0a2f7e654ce282fc44f9f842c9883efc4341bf21"
+  "source_ref": "d5ce8d5b3f3ed3c84cf4eaaf7c505a3217d06d6f"
 }

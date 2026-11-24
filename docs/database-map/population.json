@@ -8935,7 +8935,7 @@
       "classifier": "suffix",
       "evidenceClass": "operator",
       "mode": "100644",
-      "oid": "053a45d777a8d3493933fb1b2b04854c83562bd0",
+      "oid": "385a32b078df1b7d77fdf34c8ef6b0025c8c0abb",
       "path": "scripts/db-map/generate.mjs",
       "type": "blob"
     },
@@ -8975,7 +8975,7 @@
       "classifier": "suffix",
       "evidenceClass": "test_only",
       "mode": "100644",
-      "oid": "21379fd0a1077f196660d572a08525fd7adde2f3",
+      "oid": "988adbffc7d8615c45745a058b75006a8400b315",
       "path": "scripts/db-map/tests/core.test.mjs",
       "type": "blob"
     },
@@ -9031,7 +9031,7 @@
       "classifier": "suffix",
       "evidenceClass": "operator",
       "mode": "100644",
-      "oid": "b502cace517dd0ea7655c4c6499d7d01fb35fba6",
+      "oid": "14e2ea2a8795f8a62a585009d2227f9f751afed1",
       "path": "scripts/db-map/util.mjs",
       "type": "blob"
     },
@@ -20022,5 +20022,5 @@
   ],
   "included_count": 2386,
   "included_path_sha256": "743a43c861e4157a0825225e10dc23438018b0ae57322f58e811db2dd1937cf2",
-  "included_tuple_sha256": "04c1530ce8e6d227e4283e7575bc7fc140706123c738b6e910086c92c5c52445"
+  "included_tuple_sha256": "8a0340b1f6d52e5414685e5192405aff727cbf0b3c975ec74d560cb0605fddbe"
 }

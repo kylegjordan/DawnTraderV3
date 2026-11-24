@@ -52,4 +52,4 @@ RLS enabled: yes; forced: no.
 
 ## Code evidence
 
-- update: `scripts/db-map/tests/core.test.mjs:58` (raw_sql, test_only)
+- update: `scripts/db-map/tests/core.test.mjs:59` (raw_sql, test_only)
