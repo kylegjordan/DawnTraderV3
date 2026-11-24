@@ -105,6 +105,18 @@ Run `44853032767` on `cbfeab87793510bcb995f5119d912e7feaee27b7` (2026-11-21, sta
 
 ## 5. HONEST RESIDUAL
 
-- No page family has fired on organic traffic yet; each was forced. Until one does, their silence is not evidence of a healthy pool (item 0.6).
+- The `app-unplanned-restart:blind` family fired on organic staging state on 2026-11-24 and self-cleared after the stranded lock object was removed (§6). The pool wait, acquire-timeout and idle-in-transaction families still have not fired on organic traffic; their silence is not evidence of a healthy pool (item 0.6).
 - The OBJ-6 benefit under real panel contention is unobserved in the UI (item 0.1).
 - The TLS gate proves the URL's settings and a pinned, readable root at boot; it does not prove the root is still the one Supabase signs with — a rotation shows as connection failures after boot.
+
+---
+
+## 6. 2026-11-24 OPERATIONAL FOLLOW-UP — STRANDED DEPLOY-LOCK OBJECT
+
+Alert `ae6f7712-b820-43a8-8488-db06966fc2d7` (`app-unplanned-restart:blind`) fired because `/home/deploy/dawntrader-deploy.lock` existed as a root-owned, zero-byte regular file instead of the directory `dt-deploy` creates. The wrong-type object made the restart reader unable to read `pid`, `holder`, `sha` or `since`, and the same pathname would refuse the next deploy's atomic `mkdir`. Its creator is not attributable: process accounting and audit logging were inactive, and the host record retained only a one-second root SSH session at the file's birth time.
+
+OLD Codex applied the documented #540 tier-3 break on the exact object (inode `285446`, mtime `2026-11-24T07:08:00.140039801Z`): the installed deploy tool first refused with exit 2; three uncontaminated process samples found zero live `dt-deploy` processes; and the lock mtime remained unchanged from 07:24:04Z through 07:26:11Z. The zero-byte file was removed at 07:26:41Z and the removal was immediately posted to Discord. No deploy or restart ran.
+
+The monitor resolved the alert itself at `2026-11-24T07:28:05.902Z` as `db-pool-monitor`, transport `engine`, evidence `#1239`. A read at 07:28:52Z positively controlled the absence check with the still-present deploy record, found the lock path absent, and found zero open `app-unplanned-restart:*` rows. The crew never acknowledged the alert.
+
+`REVIEWER: claim-only · objects that settle the wrong-type lock cause, blocking effect and removal safety; other consistent states · HIT: origin remained unproven and an actual refusal plus multi-sample/≥60-second evidence were required · re-derived yes`
