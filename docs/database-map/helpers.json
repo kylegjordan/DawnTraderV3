@@ -429,7 +429,7 @@
     {
       "file": "comms-infra/staging/dt-install-drift",
       "kind": "dt-sql login",
-      "line": 116,
+      "line": 118,
       "operations": [],
       "unresolved": [
         {
@@ -484,7 +484,7 @@
           "evidence_class": "operator",
           "file": "comms-infra/staging/dt-install-drift",
           "kind": "sql_relation",
-          "line": 295,
+          "line": 297,
           "operation": "ddl",
           "source": "raw_sql",
           "token": "copy shadows"
@@ -494,7 +494,7 @@
           "evidence_class": "operator",
           "file": "comms-infra/staging/dt-install-drift",
           "kind": "sql_relation",
-          "line": 474,
+          "line": 476,
           "operation": "read",
           "source": "raw_sql",
           "token": "from sshd"
@@ -504,7 +504,7 @@
           "evidence_class": "operator",
           "file": "comms-infra/staging/dt-install-drift",
           "kind": "sql_relation",
-          "line": 532,
+          "line": 534,
           "operation": "ddl",
           "source": "raw_sql",
           "token": "copy can"
@@ -514,7 +514,7 @@
           "evidence_class": "operator",
           "file": "comms-infra/staging/dt-install-drift",
           "kind": "sql_relation",
-          "line": 560,
+          "line": 562,
           "operation": "read",
           "source": "raw_sql",
           "token": "from the"
@@ -524,7 +524,7 @@
           "evidence_class": "operator",
           "file": "comms-infra/staging/dt-install-drift",
           "kind": "sql_relation",
-          "line": 580,
+          "line": 583,
           "operation": "read",
           "source": "raw_sql",
           "token": "from the"
@@ -534,7 +534,7 @@
           "evidence_class": "operator",
           "file": "comms-infra/staging/dt-install-drift",
           "kind": "sql_relation",
-          "line": 758,
+          "line": 779,
           "operation": "ddl",
           "source": "raw_sql",
           "token": "copy moved"
@@ -544,7 +544,7 @@
           "evidence_class": "operator",
           "file": "comms-infra/staging/dt-install-drift",
           "kind": "sql_relation",
-          "line": 784,
+          "line": 805,
           "operation": "read",
           "source": "raw_sql",
           "token": "from INSTALLED_SHA"
@@ -554,7 +554,7 @@
           "evidence_class": "operator",
           "file": "comms-infra/staging/dt-install-drift",
           "kind": "sql_relation",
-          "line": 855,
+          "line": 876,
           "operation": "read",
           "source": "raw_sql",
           "token": "from an"
@@ -3985,12 +3985,12 @@
     {
       "file": "scripts/db-map/tests/core.test.mjs",
       "kind": "node-postgres Pool",
-      "line": 59,
+      "line": 103,
       "operations": [
         {
           "evidence_class": "test_only",
           "file": "scripts/db-map/tests/core.test.mjs",
-          "line": 59,
+          "line": 103,
           "operation": "update",
           "relation": "auth.users",
           "source": "raw_sql"
@@ -3998,7 +3998,7 @@
         {
           "evidence_class": "test_only",
           "file": "scripts/db-map/tests/core.test.mjs",
-          "line": 59,
+          "line": 103,
           "operation": "delete",
           "relation": "public.users",
           "source": "raw_sql"
@@ -4006,7 +4006,7 @@
         {
           "evidence_class": "test_only",
           "file": "scripts/db-map/tests/core.test.mjs",
-          "line": 60,
+          "line": 104,
           "operation": "delete",
           "relation": "public.users",
           "source": "raw_sql"
@@ -4018,7 +4018,7 @@
           "evidence_class": "test_only",
           "file": "scripts/db-map/tests/core.test.mjs",
           "kind": "sql_relation",
-          "line": 59,
+          "line": 103,
           "operation": "read",
           "source": "raw_sql",
           "token": "FROM users"
@@ -4028,7 +4028,7 @@
           "evidence_class": "test_only",
           "file": "scripts/db-map/tests/core.test.mjs",
           "kind": "sql_relation",
-          "line": 61,
+          "line": 105,
           "operation": "read",
           "source": "raw_sql",
           "token": "FROM node"
@@ -8854,5 +8854,5 @@
     }
   ],
   "schema_version": 1,
-  "source_ref": "00f9d2a36fe88310c4a3c2de577173fa40be061a"
+  "source_ref": "d57690b116b8fea701424ff80e9ebe09579f547d"
 }

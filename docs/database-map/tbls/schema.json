@@ -1,6 +1,6 @@
 {
   "name": "postgres",
-  "desc": "DawnTrader catalog extracted 2026-11-24T05:33:20.635032Z.",
+  "desc": "DawnTrader catalog extracted 2026-11-24T06:14:31.310381Z.",
   "tables": [
     {
       "name": "auth.audit_log_entries",

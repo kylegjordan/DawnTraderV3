@@ -4031,7 +4031,7 @@
       "classifier": "shebang",
       "evidenceClass": "operator",
       "mode": "100755",
-      "oid": "88e378273410821e43839e93eb5190fa4abd28c4",
+      "oid": "b3cf3c5d87f88eb36855bae150e9064820feb859",
       "path": "comms-infra/staging/dt-install-drift",
       "type": "blob"
     },
@@ -8903,7 +8903,7 @@
       "classifier": "suffix",
       "evidenceClass": "operator",
       "mode": "100644",
-      "oid": "fb16a3d0d6888c25ab971e51a67f99cee7501e90",
+      "oid": "cc525c664f8ea195e4a9ac2577a2bb0b653e4c16",
       "path": "scripts/db-map/adapter.mjs",
       "type": "blob"
     },
@@ -8911,7 +8911,7 @@
       "classifier": "suffix",
       "evidenceClass": "operator",
       "mode": "100644",
-      "oid": "5ff724562e011534c0151b7f627f36e63ed71536",
+      "oid": "91277ec12443cfdd65ec47532325d63d7dba9043",
       "path": "scripts/db-map/catalog.mjs",
       "type": "blob"
     },
@@ -8919,7 +8919,7 @@
       "classifier": "suffix",
       "evidenceClass": "operator",
       "mode": "100644",
-      "oid": "79ad44c04172b1d74d62fd88ce0ca53bb2f0e8e5",
+      "oid": "d8b5502eb377a0d9b5b9e22150f6e1292596620c",
       "path": "scripts/db-map/catalog.sql",
       "type": "blob"
     },
@@ -8935,7 +8935,7 @@
       "classifier": "suffix",
       "evidenceClass": "operator",
       "mode": "100644",
-      "oid": "385a32b078df1b7d77fdf34c8ef6b0025c8c0abb",
+      "oid": "88f6f0305bd3ac46598558657bb68be06e808faa",
       "path": "scripts/db-map/generate.mjs",
       "type": "blob"
     },
@@ -8975,7 +8975,7 @@
       "classifier": "suffix",
       "evidenceClass": "test_only",
       "mode": "100644",
-      "oid": "988adbffc7d8615c45745a058b75006a8400b315",
+      "oid": "6eb06ded72c8169b9b90025f43c330f5a21f407a",
       "path": "scripts/db-map/tests/core.test.mjs",
       "type": "blob"
     },
@@ -8983,7 +8983,7 @@
       "classifier": "suffix",
       "evidenceClass": "test_only",
       "mode": "100644",
-      "oid": "c0b10d0568ec596445be0a63c5a089ef40bb4789",
+      "oid": "86922e097c977f55d06e19e2b7fcf69102b5c022",
       "path": "scripts/db-map/tests/drift-enrollment.test.py",
       "type": "blob"
     },
@@ -8999,7 +8999,7 @@
       "classifier": "suffix",
       "evidenceClass": "test_only",
       "mode": "100644",
-      "oid": "5d89a1c470bd6fa1a607bc63c9e02df658b81c19",
+      "oid": "5e78d910e723397c8b60af04c8a1b5f8bdb929ab",
       "path": "scripts/db-map/tests/mutations.test.mjs",
       "type": "blob"
     },
@@ -9031,7 +9031,7 @@
       "classifier": "suffix",
       "evidenceClass": "operator",
       "mode": "100644",
-      "oid": "14e2ea2a8795f8a62a585009d2227f9f751afed1",
+      "oid": "a185f923e286cf49ece73c4c846c180d4865af6d",
       "path": "scripts/db-map/util.mjs",
       "type": "blob"
     },
@@ -20022,5 +20022,5 @@
   ],
   "included_count": 2386,
   "included_path_sha256": "743a43c861e4157a0825225e10dc23438018b0ae57322f58e811db2dd1937cf2",
-  "included_tuple_sha256": "e52dc8c4c2d2be7d03427480a4d7abc4976cb8740deab48f7a9fc71e2ebd7f25"
+  "included_tuple_sha256": "710ac3274978c23e72cd96ae94245d8eff93919ac0f94d16e99cf30d9e79f413"
 }

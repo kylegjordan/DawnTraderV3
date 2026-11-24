@@ -176044,7 +176044,7 @@
     {
       "file": "comms-infra/staging/dt-install-drift",
       "kind": "dt-sql login",
-      "line": 116,
+      "line": 118,
       "operations": [],
       "unresolved": [
         {
@@ -176099,7 +176099,7 @@
           "evidence_class": "operator",
           "file": "comms-infra/staging/dt-install-drift",
           "kind": "sql_relation",
-          "line": 295,
+          "line": 297,
           "operation": "ddl",
           "source": "raw_sql",
           "token": "copy shadows"
@@ -176109,7 +176109,7 @@
           "evidence_class": "operator",
           "file": "comms-infra/staging/dt-install-drift",
           "kind": "sql_relation",
-          "line": 474,
+          "line": 476,
           "operation": "read",
           "source": "raw_sql",
           "token": "from sshd"
@@ -176119,7 +176119,7 @@
           "evidence_class": "operator",
           "file": "comms-infra/staging/dt-install-drift",
           "kind": "sql_relation",
-          "line": 532,
+          "line": 534,
           "operation": "ddl",
           "source": "raw_sql",
           "token": "copy can"
@@ -176129,7 +176129,7 @@
           "evidence_class": "operator",
           "file": "comms-infra/staging/dt-install-drift",
           "kind": "sql_relation",
-          "line": 560,
+          "line": 562,
           "operation": "read",
           "source": "raw_sql",
           "token": "from the"
@@ -176139,7 +176139,7 @@
           "evidence_class": "operator",
           "file": "comms-infra/staging/dt-install-drift",
           "kind": "sql_relation",
-          "line": 580,
+          "line": 583,
           "operation": "read",
           "source": "raw_sql",
           "token": "from the"
@@ -176149,7 +176149,7 @@
           "evidence_class": "operator",
           "file": "comms-infra/staging/dt-install-drift",
           "kind": "sql_relation",
-          "line": 758,
+          "line": 779,
           "operation": "ddl",
           "source": "raw_sql",
           "token": "copy moved"
@@ -176159,7 +176159,7 @@
           "evidence_class": "operator",
           "file": "comms-infra/staging/dt-install-drift",
           "kind": "sql_relation",
-          "line": 784,
+          "line": 805,
           "operation": "read",
           "source": "raw_sql",
           "token": "from INSTALLED_SHA"
@@ -176169,7 +176169,7 @@
           "evidence_class": "operator",
           "file": "comms-infra/staging/dt-install-drift",
           "kind": "sql_relation",
-          "line": 855,
+          "line": 876,
           "operation": "read",
           "source": "raw_sql",
           "token": "from an"
@@ -179600,12 +179600,12 @@
     {
       "file": "scripts/db-map/tests/core.test.mjs",
       "kind": "node-postgres Pool",
-      "line": 59,
+      "line": 103,
       "operations": [
         {
           "evidence_class": "test_only",
           "file": "scripts/db-map/tests/core.test.mjs",
-          "line": 59,
+          "line": 103,
           "operation": "update",
           "relation": "auth.users",
           "source": "raw_sql"
@@ -179613,7 +179613,7 @@
         {
           "evidence_class": "test_only",
           "file": "scripts/db-map/tests/core.test.mjs",
-          "line": 59,
+          "line": 103,
           "operation": "delete",
           "relation": "public.users",
           "source": "raw_sql"
@@ -179621,7 +179621,7 @@
         {
           "evidence_class": "test_only",
           "file": "scripts/db-map/tests/core.test.mjs",
-          "line": 60,
+          "line": 104,
           "operation": "delete",
           "relation": "public.users",
           "source": "raw_sql"
@@ -179633,7 +179633,7 @@
           "evidence_class": "test_only",
           "file": "scripts/db-map/tests/core.test.mjs",
           "kind": "sql_relation",
-          "line": 59,
+          "line": 103,
           "operation": "read",
           "source": "raw_sql",
           "token": "FROM users"
@@ -179643,7 +179643,7 @@
           "evidence_class": "test_only",
           "file": "scripts/db-map/tests/core.test.mjs",
           "kind": "sql_relation",
-          "line": 61,
+          "line": 105,
           "operation": "read",
           "source": "raw_sql",
           "token": "FROM node"
@@ -237286,7 +237286,7 @@
       "evidence_class": "operator",
       "file": "comms-infra/staging/dt-install-drift",
       "kind": "sql_relation",
-      "line": 295,
+      "line": 297,
       "operation": "ddl",
       "source": "raw_sql",
       "token": "copy shadows"
@@ -237296,7 +237296,7 @@
       "evidence_class": "operator",
       "file": "comms-infra/staging/dt-install-drift",
       "kind": "sql_relation",
-      "line": 474,
+      "line": 476,
       "operation": "read",
       "source": "raw_sql",
       "token": "from sshd"
@@ -237306,7 +237306,7 @@
       "evidence_class": "operator",
       "file": "comms-infra/staging/dt-install-drift",
       "kind": "sql_relation",
-      "line": 532,
+      "line": 534,
       "operation": "ddl",
       "source": "raw_sql",
       "token": "copy can"
@@ -237316,7 +237316,7 @@
       "evidence_class": "operator",
       "file": "comms-infra/staging/dt-install-drift",
       "kind": "sql_relation",
-      "line": 560,
+      "line": 562,
       "operation": "read",
       "source": "raw_sql",
       "token": "from the"
@@ -237326,7 +237326,7 @@
       "evidence_class": "operator",
       "file": "comms-infra/staging/dt-install-drift",
       "kind": "sql_relation",
-      "line": 580,
+      "line": 583,
       "operation": "read",
       "source": "raw_sql",
       "token": "from the"
@@ -237336,7 +237336,7 @@
       "evidence_class": "operator",
       "file": "comms-infra/staging/dt-install-drift",
       "kind": "sql_relation",
-      "line": 758,
+      "line": 779,
       "operation": "ddl",
       "source": "raw_sql",
       "token": "copy moved"
@@ -237346,7 +237346,7 @@
       "evidence_class": "operator",
       "file": "comms-infra/staging/dt-install-drift",
       "kind": "sql_relation",
-      "line": 784,
+      "line": 805,
       "operation": "read",
       "source": "raw_sql",
       "token": "from INSTALLED_SHA"
@@ -237356,7 +237356,7 @@
       "evidence_class": "operator",
       "file": "comms-infra/staging/dt-install-drift",
       "kind": "sql_relation",
-      "line": 855,
+      "line": 876,
       "operation": "read",
       "source": "raw_sql",
       "token": "from an"
@@ -258997,7 +258997,7 @@
       "evidence_class": "operator",
       "file": "scripts/db-map/adapter.mjs",
       "kind": "sql_relation",
-      "line": 193,
+      "line": 204,
       "operation": "read",
       "source": "raw_sql",
       "token": "from the"
@@ -259484,23 +259484,6 @@
       "evidence_class": "operator",
       "file": "scripts/db-map/generate.mjs",
       "kind": "dynamic_sql",
-      "line": 128
-    },
-    {
-      "detail": "bare relation is absent from catalog",
-      "evidence_class": "operator",
-      "file": "scripts/db-map/generate.mjs",
-      "kind": "sql_relation",
-      "line": 128,
-      "operation": "read",
-      "source": "raw_sql",
-      "token": "from pin"
-    },
-    {
-      "detail": "computed SQL requires hand resolution",
-      "evidence_class": "operator",
-      "file": "scripts/db-map/generate.mjs",
-      "kind": "dynamic_sql",
       "line": 129
     },
     {
@@ -259518,14 +259501,14 @@
       "evidence_class": "operator",
       "file": "scripts/db-map/generate.mjs",
       "kind": "dynamic_sql",
-      "line": 131
+      "line": 130
     },
     {
       "detail": "bare relation is absent from catalog",
       "evidence_class": "operator",
       "file": "scripts/db-map/generate.mjs",
       "kind": "sql_relation",
-      "line": 131,
+      "line": 130,
       "operation": "read",
       "source": "raw_sql",
       "token": "from pin"
@@ -259543,6 +259526,23 @@
       "file": "scripts/db-map/generate.mjs",
       "kind": "sql_relation",
       "line": 132,
+      "operation": "read",
+      "source": "raw_sql",
+      "token": "from pin"
+    },
+    {
+      "detail": "computed SQL requires hand resolution",
+      "evidence_class": "operator",
+      "file": "scripts/db-map/generate.mjs",
+      "kind": "dynamic_sql",
+      "line": 133
+    },
+    {
+      "detail": "bare relation is absent from catalog",
+      "evidence_class": "operator",
+      "file": "scripts/db-map/generate.mjs",
+      "kind": "sql_relation",
+      "line": 133,
       "operation": "read",
       "source": "raw_sql",
       "token": "from pin"
@@ -259599,7 +259599,7 @@
       "evidence_class": "test_only",
       "file": "scripts/db-map/tests/core.test.mjs",
       "kind": "sql_relation",
-      "line": 59,
+      "line": 103,
       "operation": "read",
       "source": "raw_sql",
       "token": "FROM users"
@@ -259609,7 +259609,7 @@
       "evidence_class": "test_only",
       "file": "scripts/db-map/tests/core.test.mjs",
       "kind": "sql_relation",
-      "line": 61,
+      "line": 105,
       "operation": "read",
       "source": "raw_sql",
       "token": "FROM node"
@@ -287261,7 +287261,7 @@
     {
       "evidence_class": "test_only",
       "file": "scripts/db-map/tests/core.test.mjs",
-      "line": 59,
+      "line": 103,
       "operation": "update",
       "relation": "auth.users",
       "source": "raw_sql"
@@ -311965,7 +311965,7 @@
     {
       "evidence_class": "test_only",
       "file": "scripts/db-map/tests/core.test.mjs",
-      "line": 59,
+      "line": 103,
       "operation": "delete",
       "relation": "public.users",
       "source": "raw_sql"
@@ -311973,7 +311973,7 @@
     {
       "evidence_class": "test_only",
       "file": "scripts/db-map/tests/core.test.mjs",
-      "line": 60,
+      "line": 104,
       "operation": "delete",
       "relation": "public.users",
       "source": "raw_sql"
