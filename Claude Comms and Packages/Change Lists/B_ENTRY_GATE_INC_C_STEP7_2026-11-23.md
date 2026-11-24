@@ -10,7 +10,7 @@
 
 The cost cohort is empty rather than zero-cost: no xStock birth refusal produced a `(symbol,strategy)` member, so the promised “later opened in the same window?” read is **not applicable**. Crypto remained deliberately shadowed (`entry_window_birth_live=false`), with 0 live birth-refusal lines; this is a configuration outcome, not a crypto pass.
 
-Step 7 is **not yet complete** because the Codex shift has no staging Chrome surface. The backend evidence is captured and the observation window can close, but the workflow's page smoke-check remains `UI not yet checked` pending Kyle.
+**Step 7 is complete.** The backend evidence was captured when the observation window closed, and the 2026-11-24 browser-scoped Chrome pass in §6 completed the separate Ready-to-Buy and Filter Diagnostics rendering smoke-check. The parent remains open for Coltrane's Step 8 and the remaining workflow steps.
 
 ## 1. Window identity and the inherited deploy-enumeration condition
 
