@@ -1,5 +1,13 @@
 # DawnTrader: Changes, Fixes & Improvements Registry
 
+## FIX-2026-11-20-A — `B-ENTRY-GATE` increment C (`#1224`, CC-B / NEW Codex): one class-wide birth switch would have enabled an unread crypto arm with the xStock decision
+
+**CLASS: `architecture`. RISK:** increment B kept EntryWindow in shadow at birth through one hard-coded flag shared by both classes. The registered xStock week supported live birth enforcement, but crypto's taker-judged arm was unexercised because crypto is `maker_only`; flipping the shared flag would therefore have promoted an unread crypto decision. xStock also had no promotion-price ceiling, so an overnight row could remain eligible without a recent priced refresh.
+
+**FIX:** birth EntryWindow enforcement now reads exact per-class setting `entry_gate.entry_window_birth_live` on every birth. Only boolean `true` is live; false, absent, invalid or unresolved state stays shadowed, with invalid/unresolved state visible. Live rows are xStock `true` and crypto `false`. xStock also received `promotion_price_max_age_ms=300000`, matching crypto; the stale-plan limit remains unseeded and off.
+
+**Verified:** deployed `6a9b6802f` 2026-11-20T23:26:05Z. The first full xStock session produced 21 judged births, 21 passes and 0 refusals; the empty refusal-derived cost cohort was N/A, not zero. The promotion gate produced 40 unpriced refusals over 19 RTB rows, each paired to its separate claim-refused record. Coltrane independently reproduced the build/restart boundary, settings, backend populations and narrowed UI smoke-check at corrected exact ref `65c5926e8`; the whole-parent audit then passed 263/263 affected tests and re-read all 10 live `entry_gate` rows. Record: `Batch Completion/B_ENTRY_GATE_PROGRESS_REPORT.md`.
+
 ## FIX-2026-11-24-A — `B-DB-READONLY-ROLE` (`#1259`, Infra Codex): the crew's standard database tool still carried the app's write authority
 
 **CLASS: `non_architecture`. RISK:** `dt-sql` wrapped the app's `postgres` login in a read-only session setting. The setting stopped an ordinary accidental write through the tool, but it was not a database privilege boundary; the credential itself could still write, and a copied login retained the app's authority.
@@ -27,7 +35,7 @@
 
 **CLASS: `architecture`. SYMPTOM:** the orchestrator wrote the RTB row before the reward-to-risk/target-reach gate ran in the same function (`#1051`); the refresh re-decided the maker/taker choice only at the plan price; promotion checked no freshness at all; an absent stored net EV passed the SQE by a dead fail-open; and three `require()` calls of Node built-ins threw in the ESM bundle, silencing the TCL event trace.
 
-**FIX:** the target gate now runs before the queue write and the row stores the gated target; `InvalidTarget`, `EntryWindow` (birth shadow, refresh enforced) and `NetEVMissing` joined both SQE copies; every priced refresh pass re-prices the fixed plan at the live ask; promotion requires a priced pass inside `entry_gate.promotion_price_max_age_ms` (crypto 300000 ms; xStock unseeded); the three `require()` calls became imports behind a server-wide fence.
+**FIX:** the target gate now runs before the queue write and the row stores the gated target; `InvalidTarget`, `EntryWindow` (birth shadow, refresh enforced) and `NetEVMissing` joined both SQE copies; every priced refresh pass re-prices the fixed plan at the live ask; promotion requires a priced pass inside `entry_gate.promotion_price_max_age_ms` (at the increment-B boundary: crypto 300000 ms, xStock unseeded; increment C later seeded xStock); the three `require()` calls became imports behind a server-wide fence.
 
 **Verified:** deployed `77f6fd598` 2026-11-13T21:03:55Z; the 24 h read showed 0 wrongful refusals or evictions (325 priced passes, 1 RegimeWeight deletion, 558 target checks with 0 failures) and the TCL trace writing again; Langston Step-8 PROCEED. The xStock-only arms are read on 2026-11-20. Record: `Batch Completion/B_ENTRY_GATE_PROGRESS_REPORT.md`.
 

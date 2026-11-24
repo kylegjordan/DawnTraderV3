@@ -1,11 +1,11 @@
 # B-ENTRY-GATE (`#1224`) — PROGRESS REPORT
 
-## OPEN — increments A/B live; increment C Step 8 complete, Step 9 next
+## OPEN — all three increments verified; Step 10 governance complete, Step 11 next
 
 **Owner:** CC-B (NEW Codex on the current increment-C verification)
 **Change-class:** `architecture`
 **Plan home:** CC-B pre-sprint list item 2
-**Parent state:** OPEN (board column Verification) — increment A live and verified (Coltrane `56509024d`); increment B live since 2026-11-13 and verified on its 24 h read (Langston Step-8 PROCEED, Review = Approved, 2026-11-14); the xStock week read led to increment C. Increment C's 2026-11-23 first-session backend read is captured in `Change Lists/B_ENTRY_GATE_INC_C_STEP7_2026-11-23.md`: 0/21 judged xStock birth-phase outcomes refused, with 40 xStock unpriced promotion-refusal events. The 2026-11-24 Chrome-only staging smoke-check rendered Ready to Buy and both Filter Diagnostics views with populated data and no blank/error state. Coltrane independently reproduced all substantive evidence legs and PROCEEDED the corrected exact ref `65c5926e8`; Step 8 is complete and Step 9 is next.
+**Parent state:** OPEN (board column Governance) — increment A live and verified (Coltrane `56509024d`); increment B live since 2026-11-13 and verified on its 24 h read (Langston Step-8 PROCEED, Review = Approved, 2026-11-14); the xStock week read led to increment C. Increment C's 2026-11-23 first-session backend read is captured in `Change Lists/B_ENTRY_GATE_INC_C_STEP7_2026-11-23.md`: 0/21 judged xStock birth-phase outcomes refused, with 40 xStock unpriced promotion-refusal events. The 2026-11-24 Chrome-only staging smoke-check rendered Ready to Buy and both Filter Diagnostics views with populated data and no blank/error state. Coltrane independently reproduced all substantive evidence legs and PROCEEDED the corrected exact ref `65c5926e8`; the parent objective audit passed 263/263 tests and Step 10 reconciled the final governance set. Step 11 is next.
 
 ## 1. What the batch is for
 
@@ -15,7 +15,7 @@ The parent was split deliberately:
 
 - **Increment A — fill-time contract:** live and verified.
 - **Increment B — SQE, refresh and promotion contract:** live since `77f6fd598` (2026-11-13T21:03:55Z) and verified on its 24 h read; its xStock-only arms are read in the week to 2026-11-20.
-- **Increment C — per-class birth switch and xStock promotion-age seed:** live since `6a9b6802f` (2026-11-20T23:26:05Z); backend first-session read captured 2026-11-23 and staging UI smoke-check passed 2026-11-24; Coltrane Step-8 PROCEED on corrected exact ref `65c5926e8`, Step 9 next.
+- **Increment C — per-class birth switch and xStock promotion-age seed:** live since `6a9b6802f` (2026-11-20T23:26:05Z); backend first-session read captured 2026-11-23 and staging UI smoke-check passed 2026-11-24; Coltrane Step-8 PROCEED on corrected exact ref `65c5926e8`; parent Step 9 and Step 10 complete, Step 11 next.
 
 ## 2. Increment A — what shipped
 
@@ -72,7 +72,7 @@ Increment A changes which fills enter the paper/VTS outcome populations, so it h
 
 ## 6. Increment B — what shipped and what its first 24 h showed
 
-**Shipped** (landed `9d903ea9c` after Langston's Step-4 r5 re-review of the rebase; CI `43467219963` 4/4 on the candidate branch; deployed in OLD Claude's joint deploy `77f6fd598` 2026-11-13T21:03:55Z, restart 698, CI `43505196746` 4/4 at that sha): the SQE plan gates `InvalidTarget` and `EntryWindow` (shadow at birth, enforced on the refresh, judged only for a taker-chosen plan) and `NetEVMissing`; refresh re-pricing of the fixed plan at the live ask (`repriceAtAsk`); `last_priced_at` + `consecutive_unpriced_passes` and the promotion freshness gate (crypto 300000 ms; xStock unseeded); the stale-plan limit's reader (no row ⇒ off); the reward-to-risk/target gate moved ahead of the queue write (`#1051`); three ESM `require()` defects fixed (the TCL event trace writes again). Migration objects verified on staging after the restart.
+**Shipped** (landed `9d903ea9c` after Langston's Step-4 r5 re-review of the rebase; CI `43467219963` 4/4 on the candidate branch; deployed in OLD Claude's joint deploy `77f6fd598` 2026-11-13T21:03:55Z, restart 698, CI `43505196746` 4/4 at that sha): the SQE plan gates `InvalidTarget` and `EntryWindow` (shadow at birth, enforced on the refresh, judged only for a taker-chosen plan) and `NetEVMissing`; refresh re-pricing of the fixed plan at the live ask (`repriceAtAsk`); `last_priced_at` + `consecutive_unpriced_passes` and the promotion freshness gate (at this increment-B boundary, crypto 300000 ms and xStock unseeded; increment C later seeded xStock); the stale-plan limit's reader (no row ⇒ off); the reward-to-risk/target gate moved ahead of the queue write (`#1051`); three ESM `require()` defects fixed (the TCL event trace writes again). Migration objects verified on staging after the restart.
 
 **Step 7 — the 24 h read** (2026-11-13T21:03:55Z → 11-14T21:04:00Z; object `/root/b-entry-gate-incb-step7-interim-20261114/window-24h.txt`, 355 lines, sha256 `a920643a…5b87`; record `Change Lists/B_ENTRY_GATE_STEP4_INC_B_CHANGE_LIST.md`, commits `7d1ab3919`, `d59215892`, `0c4a50402`), against the change list's pre-registered list:
 | registered measurement | result |
@@ -99,7 +99,7 @@ Increment C made the birth EntryWindow switch class-specific (`xstock_spot=true`
 
 The complete recorded backend population ran on one build, `c21c1502a`, with no app-process or paper-engine restart. The xStock birth tally judged **21 birth-phase outcomes**: **21 passed and 0 refused (0.0%)**, below the >25% INVESTIGATE line. No refusal means no cost cohort: the promised later-open test is N/A, not zero. Crypto remained shadowed and emitted zero live refusal lines. C-4 recorded **40** xStock unpriced promotion-refusal events over **19** distinct RTB rows: **37 events / 17 rows** before 14:30Z and **3 events / 2 rows** during the regular session; all 40 carrier lines paired to their separate unpriced-claim line.
 
-The detailed evidence, controls, rotation census, Chrome-only UI smoke-check and Step-8 recipe are in `Change Lists/B_ENTRY_GATE_INC_C_STEP7_2026-11-23.md`. Coltrane independently reproduced the single-build/no-restart boundary, settings consumption, 0/21 birth result with empty/N/A cost cohort, 40-event promotion result, and the narrowed UI rendering claim. He sent back only the mutable deploy-record provenance, then PROCEEDED corrected exact ref `65c5926e81f2fa10f89afbc368caba0d40bce4a3` at 2026-11-24T15:15:47Z after that file was explicitly excluded from the reproduction recipe. Exact-ref CI `45419902706` was 4/4 green. Step 8 is complete; Step 9 is next.
+The detailed evidence, controls, rotation census, Chrome-only UI smoke-check and Step-8 recipe are in `Change Lists/B_ENTRY_GATE_INC_C_STEP7_2026-11-23.md`. Coltrane independently reproduced the single-build/no-restart boundary, settings consumption, 0/21 birth result with empty/N/A cost cohort, 40-event promotion result, and the narrowed UI rendering claim. He sent back only the mutable deploy-record provenance, then PROCEEDED corrected exact ref `65c5926e81f2fa10f89afbc368caba0d40bce4a3` at 2026-11-24T15:15:47Z after that file was explicitly excluded from the reproduction recipe. Exact-ref CI `45419902706` was 4/4 green. Steps 8–10 are complete; Step 11 is next.
 
 ## 6b. Parent Step 9 — all-objectives audit (2026-11-24)
 
@@ -125,7 +125,7 @@ The live `dt-sql --csv` setting read ran as `dt_reader` and returned exactly **1
 | 12 — exploration-lane contract | async/sync SQE and lane tests | existing `NetEV ` prefixes remain pinned; `NetEVMissing`, `EntryWindow` and `InvalidTarget` cannot become exploration bypasses |
 | 13 — registered magnitudes | increment-A session, increment-B 24 h/week reads, increment-C full session and Step-8 re-derivation | every available magnitude is reported over its named population; empty/unreachable cells remain N/A, shadowed or unverified rather than zero |
 
-The board object was re-read after the reviewer ruling: `Status=Verification`, `Owner=Claude New`, `Review=Approved`, `Blocked on=Nothing`. It stays in Verification through Step 9, as required.
+The board object was re-read after the Step-10 move: `Status=Governance`, `Owner=Claude New`, `Review=Approved`, `Blocked on=Nothing`.
 
 ## 7. Pre-registered parent close criterion
 
@@ -139,12 +139,13 @@ The parent may convert this file to `B_ENTRY_GATE_COMPLETION_REPORT.md` only aft
 6. Coltrane independently confirms the evidence at an exact pushed ref;
 7. Step 9 rechecks the whole parent objective set, Step 10 reconciles governance again, and Step 11 records both the increment-B data and the action/decision taken on it.
 
-**Status against this criterion, 2026-11-24:** (1) ✅ increment B landed after re-review; (2) ✅ candidate and deployed CI were each 4/4, and the single build serving increment C's session has CI `44847250518` 4/4; (3) ✅ increment C deployed at `6a9b6802f`, with the full registered session served by `c21c1502a`, restart 714; (4) ✅ the xStock week read and increment-C backend first-session read are captured, including the class-separated birth denominator and promotion-freshness result, and the staging UI smoke-check passed; (5) ✅ no registered failure fired — xStock birth refusals were 0/21; (6) ✅ Coltrane independently reproduced the increment-C evidence and PROCEEDED corrected exact ref `65c5926e8`; (7) ◑ Step 9 objective audit complete, Steps 10–11 remain.
+**Status against this criterion, 2026-11-24:** (1) ✅ increment B landed after re-review; (2) ✅ candidate and deployed CI were each 4/4, and the single build serving increment C's session has CI `44847250518` 4/4; (3) ✅ increment C deployed at `6a9b6802f`, with the full registered session served by `c21c1502a`, restart 714; (4) ✅ the xStock week read and increment-C backend first-session read are captured, including the class-separated birth denominator and promotion-freshness result, and the staging UI smoke-check passed; (5) ✅ no registered failure fired — xStock birth refusals were 0/21; (6) ✅ Coltrane independently reproduced the increment-C evidence and PROCEEDED corrected exact ref `65c5926e8`; (7) ◑ Step 9 objective audit and Step 10 governance are complete; Step 11 remains.
 
 ## 8. Governance files changed so far
 
 Increment A (2026-11-10, landed on `migration/aws-supabase` 2026-11-14 at `1bb10641b`): scope, pre-audit, increment-A change list and Step-7 evidence, this progress report, BATCH_CATALOG.md, PHASE_HISTORY.md, SPRINT_TO_LIVE_PLAN.md, CC_B_SESSION_TASK_LIST.md, SYSTEM_MANUAL.md, SYSTEM_IMPACT_MAP.md, RUNNING_ISSUES.md, CHANGES_AND_FIXES.md, ADJUSTMENT_FRAMEWORK.md, ASSET_CLASS_ONBOARDING_WORKFLOW.md, DELETED_COMPONENTS_LOG.md, GOVERNANCE_EXCEPTIONS.md, Langston's MEMORY.md (its MEMORY.md and MEMORY_CC_B.md edits were not carried: stale by landing time).
 Increment B (2026-11-14): increment-B change list, `Langston Design Asks/B_ENTRY_GATE_P7_XSTOCK_PREDICTION.md` (items 6-7), this progress report, BATCH_CATALOG.md, PHASE_HISTORY.md, SPRINT_TO_LIVE_PLAN.md, CC_B_SESSION_TASK_LIST.md, SYSTEM_MANUAL.md, SYSTEM_IMPACT_MAP.md, RUNNING_ISSUES.md, CHANGES_AND_FIXES.md, ADJUSTMENT_FRAMEWORK.md, GOVERNANCE_EXCEPTIONS.md, MEMORY_CC_B.md, Langston's MEMORY.md. Ledger: §10.
+Parent Step 10 (2026-11-24): this progress report, BATCH_CATALOG.md, PHASE_HISTORY.md, SPRINT_TO_LIVE_PLAN.md, CC_B_SESSION_TASK_LIST.md, SYSTEM_MANUAL.md, SYSTEM_IMPACT_MAP.md, RUNNING_ISSUES.md, CHANGES_AND_FIXES.md, ADJUSTMENT_FRAMEWORK.md, GOVERNANCE_EXCEPTIONS.md, shared MEMORY.md, MEMORY_CC_B.md and Coltrane's memory reference. Ledger: §11.
 
 ## 9. Tier ledger — increment A (2026-11-10)
 
@@ -220,3 +221,41 @@ CHANGE-CLASS: architecture
 | T2 | `ALERT_HANDLING_PROTOCOL.md` | N/A | No alert process changed. |
 | T2 | `DELIVERY_BOARD_PROTOCOL.md` | N/A | No board field or rule changed. |
 | T2 | `CLAUDE_CODE_FEATURE_WATCH.md` | N/A | The daily check did not run in this turn. |
+
+## 11. Tier ledger — parent Step 10 (2026-11-24)
+
+CHANGE-CLASS: architecture
+
+| # | document | verdict | one-line result |
+|---|---|---|---|
+| T1 | `BATCH_CATALOG.md` | ✅ | Reconciled all three increments, the final evidence, and the Step-11-only remainder. |
+| T1 | `PHASE_HISTORY.md` | ✅ | Added the parent verification result and preserved Step 11 as the remaining close gate. |
+| T1 | active plan `SPRINT_TO_LIVE_PLAN.md` | ✅ | Updated both B-ENTRY-GATE plan representations to Step 10 complete with the final result and report link. |
+| T1 | `PHASE_19_PLAN.md` | N/A | B-ENTRY-GATE has no row in PHASE_19_PLAN; its authority is the active sprint plan. |
+| T1 | shared `MEMORY.md` + `MEMORY_CC_B.md` | ✅ | Added the settled entry contract to shared memory and advanced NEW's position to Step 11. |
+| T1 | batch `SCOPE` | ✅ | The existing architecture scope still defines the parent objectives graded in §6b. |
+| T1 | batch `PRE_AUDIT` | ✅ | The existing pre-audit still defines the split, registered observations, and reviewed safe dispositions. |
+| T1 | `COMPLETION_REPORT` | ✅ | Updated this progress report in place; Step 11 owns its required rename and final completion gate. |
+| T1 | Observation column | ✅ | Every registered increment window has data and a governed decision; no observation remains open. |
+| T1 | four session task lists | ✅ mine / N/A ×3 | Updated CC_B_SESSION_TASK_LIST.md; CC_A, CC_C and CC_INFRA lists are not mine. |
+| T1 | Coltrane memory store (reviewer-shift substitute for Langston `MEMORY.md`) | ✅ | Recorded the exact verified contract and the completion record a future review should use. |
+| T2 | `SYSTEM_MANUAL.md` | ✅ | Added increment C's class-specific birth enforcement, final promotion-age values, and verified boundary. |
+| T2 | `SYSTEM_IMPACT_MAP.md` | ✅ | Added increment C's resolver, per-class setting coupling, promotion ceiling, and final report pointer. |
+| T2 | `RUNNING_ISSUES.md` | ✅ | Closed the original #1224 symptom and recorded the three-increment verification with Step 11 remaining. |
+| T2 | `CHANGES_AND_FIXES.md` | ✅ | Added the class-coupling risk and increment-C fix that prevented an unread crypto arm from being switched live. |
+| T2 | `POST_AUDIT_ROADMAP.md` | N/A | The batch changes no phase-level order; its Kyle-locked sprint-plan position is unchanged. |
+| T2 | `ADJUSTMENT_FRAMEWORK.md` | ✅ | Updated the live birth-switch and promotion-age levers for both classes from the ten-row live population. |
+| T2 | `AUTHORITY_BASELINE.md` | N/A | The batch changes trading admission and settings, not constitutional authority or operator powers. |
+| T2 | `STORAGE_POLICY.md` | N/A | The batch changes existing settings and queue fields but no retention period or storage tier. |
+| T2 | `MULTI_ASSET_VTS_EXPANSION_PLAN.md` | N/A | The temporary 15-minute working list was reviewed; increment C changes no VTS path or calibration assumption. |
+| T2 | `ASSET_CLASS_ONBOARDING_WORKFLOW.md` | N/A | No new onboarding learning emerged beyond increment A's already-recorded coupled-row rule. |
+| T2 | `BUILD_METHOD_PLAYBOOK.md` | N/A | No role, workflow gate, or reusable build method changed. |
+| T2 | `LANGSTON_ARCHITECTURE.md` | N/A | Coltrane reviewed this shift, but no reviewer model, runtime, authorization, or read path changed. |
+| T2 | `CLAUDE.md` / `CONDUCT.md` | N/A | No stable crew or conduct rule changed. |
+| T2 | `_archive/CLAUDE_MD_RULE_HISTORY.md` | N/A | No CLAUDE.md rule was added or materially changed. |
+| T2 | `DELETED_COMPONENTS_LOG.md` | ✅ | Re-read the existing increment-A removal record; increments B and C remove no further component. |
+| T2 | `MISTAKE_PATTERNS.md` | N/A | No MISTAKE trailer was written and the weekly pass did not run in this governance turn. |
+| T2 | `GOVERNANCE_EXCEPTIONS.md` | ✅ | Retired the declared-open row after all observation data and decisions landed, before alert resolution. |
+| T2 | `ALERT_HANDLING_PROTOCOL.md` | N/A | Alert state changes follow the existing resolve-after-evidence contract and change no process. |
+| T2 | `DELIVERY_BOARD_PROTOCOL.md` | N/A | The card moved to an existing Governance column; no board field, column, or ownership rule changed. |
+| T2 | `CLAUDE_CODE_FEATURE_WATCH.md` | N/A | The daily model and feature check did not run in this governance turn. |
