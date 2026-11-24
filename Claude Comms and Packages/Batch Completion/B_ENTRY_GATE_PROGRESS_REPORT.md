@@ -1,11 +1,11 @@
 # B-ENTRY-GATE (`#1224`) — PROGRESS REPORT
 
-## OPEN — increments A/B live; increment C backend read captured, UI and Step 8 open
+## OPEN — increments A/B live; increment C Step 7 complete, Step 8 open
 
 **Owner:** CC-B (NEW Codex on the current increment-C verification)
 **Change-class:** `architecture`
 **Plan home:** CC-B pre-sprint list item 2
-**Parent state:** OPEN (board column Verification) — increment A live and verified (Coltrane `56509024d`); increment B live since 2026-11-13 and verified on its 24 h read (Langston Step-8 PROCEED, Review = Approved, 2026-11-14); the xStock week read led to increment C. Increment C's 2026-11-23 first-session backend read is captured in `Change Lists/B_ENTRY_GATE_INC_C_STEP7_2026-11-23.md`: 0/21 judged xStock birth-phase outcomes refused, with 40 xStock unpriced promotion-refusal events. Step 7 still owes the staging UI smoke-check, then Coltrane's Step 8.
+**Parent state:** OPEN (board column Verification) — increment A live and verified (Coltrane `56509024d`); increment B live since 2026-11-13 and verified on its 24 h read (Langston Step-8 PROCEED, Review = Approved, 2026-11-14); the xStock week read led to increment C. Increment C's 2026-11-23 first-session backend read is captured in `Change Lists/B_ENTRY_GATE_INC_C_STEP7_2026-11-23.md`: 0/21 judged xStock birth-phase outcomes refused, with 40 xStock unpriced promotion-refusal events. The 2026-11-24 Chrome-only staging smoke-check rendered Ready to Buy and both Filter Diagnostics views with populated data and no blank/error state. Step 7 is complete; Coltrane's Step 8 is next.
 
 ## 1. What the batch is for
 
@@ -15,7 +15,7 @@ The parent was split deliberately:
 
 - **Increment A — fill-time contract:** live and verified.
 - **Increment B — SQE, refresh and promotion contract:** live since `77f6fd598` (2026-11-13T21:03:55Z) and verified on its 24 h read; its xStock-only arms are read in the week to 2026-11-20.
-- **Increment C — per-class birth switch and xStock promotion-age seed:** live since `6a9b6802f` (2026-11-20T23:26:05Z); backend first-session read captured 2026-11-23, UI and Step 8 open.
+- **Increment C — per-class birth switch and xStock promotion-age seed:** live since `6a9b6802f` (2026-11-20T23:26:05Z); backend first-session read captured 2026-11-23 and staging UI smoke-check passed 2026-11-24; Step 8 open.
 
 ## 2. Increment A — what shipped
 
@@ -99,7 +99,7 @@ Increment C made the birth EntryWindow switch class-specific (`xstock_spot=true`
 
 The complete recorded backend population ran on one build, `c21c1502a`, with no app-process or paper-engine restart. The xStock birth tally judged **21 birth-phase outcomes**: **21 passed and 0 refused (0.0%)**, below the >25% INVESTIGATE line. No refusal means no cost cohort: the promised later-open test is N/A, not zero. Crypto remained shadowed and emitted zero live refusal lines. C-4 recorded **40** xStock unpriced promotion-refusal events over **19** distinct RTB rows: **37 events / 17 rows** before 14:30Z and **3 events / 2 rows** during the regular session; all 40 carrier lines paired to their separate unpriced-claim line.
 
-The detailed evidence, controls, rotation census and Step-8 recipe are in `Change Lists/B_ENTRY_GATE_INC_C_STEP7_2026-11-23.md`. Step 7 remains open only for the staging UI smoke-check required by the Codex handover; after that, Coltrane receives the exact pushed ref.
+The detailed evidence, controls, rotation census, Chrome-only UI smoke-check and Step-8 recipe are in `Change Lists/B_ENTRY_GATE_INC_C_STEP7_2026-11-23.md`. Step 7 is complete; Coltrane receives the exact pushed ref next.
 
 ## 7. Pre-registered parent close criterion
 
@@ -113,7 +113,7 @@ The parent may convert this file to `B_ENTRY_GATE_COMPLETION_REPORT.md` only aft
 6. Coltrane independently confirms the evidence at an exact pushed ref;
 7. Step 9 rechecks the whole parent objective set, Step 10 reconciles governance again, and Step 11 records both the increment-B data and the action/decision taken on it.
 
-**Status against this criterion, 2026-11-23:** (1) ✅ increment B landed after re-review; (2) ✅ candidate and deployed CI were each 4/4, and the single build serving increment C's session has CI `44847250518` 4/4; (3) ✅ increment C deployed at `6a9b6802f`, with the full registered session served by `c21c1502a`, restart 714; (4) ✅ the xStock week read and increment-C backend first-session read are captured, including the class-separated birth denominator and promotion-freshness result; (5) ✅ no registered failure fired — xStock birth refusals were 0/21; (6) ◑ Coltrane's increment-C second pass waits on the UI smoke-check and pushed evidence ref; (7) open.
+**Status against this criterion, 2026-11-24:** (1) ✅ increment B landed after re-review; (2) ✅ candidate and deployed CI were each 4/4, and the single build serving increment C's session has CI `44847250518` 4/4; (3) ✅ increment C deployed at `6a9b6802f`, with the full registered session served by `c21c1502a`, restart 714; (4) ✅ the xStock week read and increment-C backend first-session read are captured, including the class-separated birth denominator and promotion-freshness result, and the staging UI smoke-check passed; (5) ✅ no registered failure fired — xStock birth refusals were 0/21; (6) ◑ Coltrane's increment-C second pass is next after the pushed evidence ref; (7) open.
 
 ## 8. Governance files changed so far
 

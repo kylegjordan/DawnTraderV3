@@ -108,9 +108,16 @@ That exact state is what the migration's DO-block requires. The separate runtime
 
 ## 6. UI state and Step-8 handoff
 
-**UI not yet checked.** Increment C adds no new display; the parent scope explicitly leaves the Filter Diagnostics display to KD-9. Even so, the Step-7 workflow requires a staging navigation smoke-check of the affected Ready-to-Buy / diagnostics path. The Codex handover states that the shift has no staging browser, so Kyle must supply that page check before this step can be marked complete.
+**UI smoke-check passed through browser-scoped Chrome on the signed-in staging site, 2026-11-24 13:53Z–13:56Z.** Desktop Computer Use remained off, no password was entered, and the Drift Dashboard was not opened.
 
-Once the UI check is recorded, Coltrane should independently re-read:
+- **Ready to Buy:** the selected tab rendered `Ready-to-Buy Signals (33)`, its 30-second refresh timestamp advanced to 14:55:11 local time, and the ranked table contained 33 populated signal rows, ranks 1–33. A repeated object read counted 30/33 rows explicitly marked `venue quiet`; those rows showed last-known prices instead of a blank/error state, so this smoke-check proves rendering rather than current price freshness or immediate tradability.
+- **Crypto Filter Diagnostics:** the selected tab rendered Crypto Scanner (VTS), Pipeline Summary, and Last Scan Filter Breakdown. At the 13:56Z object read it showed 300 pairs in the last scan against a 300 target, universe 1,436, and a populated 24-hour summary of 525,048 pair evaluations over 1,664 cycles.
+- **xStock Filter Diagnostics:** the selected tab rendered `xStocks (xstock_spot) — Paper Active-Trading Diagnostics`, Scanner `Running`, Trading Window `Open (24/5)`, `No active errors`, Pipeline Summary, and Last Scan Filter Breakdown. At the 13:56Z object read it showed 74 pairs in the latest scan against a 75 target, universe 474, and a populated 24-hour summary of 123,999 pair evaluations over 1,661 cycles. These live counters are a point-in-time UI control, not a fixed batch result.
+- **Analytics & Diagnostics:** the overview page loaded normally during navigation. Its Drift Dashboard control was left untouched as required by the standing safety rule.
+
+This completes the Step-7 staging UI smoke-check. Increment C adds no new display; the parent scope still leaves any Filter Diagnostics feature change to KD-9.
+
+For Step 8, Coltrane should independently re-read:
 
 1. the single-build/restart boundary;
 2. the 0/21 xStock refusal result and its live positive controls;
@@ -118,6 +125,8 @@ Once the UI check is recorded, Coltrane should independently re-read:
 4. the 37-night / 3-session promotion-refusal split over 40 events and 19 row ids.
 
 REVIEWER: claim-only · name the objects that settle the single-build, no-restart, no-refusal and night/session claims, and the alternative states consistent with them · **HIT: distinguish app vs engine restart, outcome tally vs unique births, pair the P7 carrier to its refusal line, and test the period-id intersection** · re-derived y (engine-start census with pre-window control; deployed source; 40/40 cross-stream pairs; period-id intersection 0; report narrowed)
+
+REVIEWER: live signed-in staging UI object · what other states are consistent with the Ready-to-Buy and Filter Diagnostics completion claim? · **HIT: the views were still populated several minutes later, but 30/33 Ready-to-Buy rows were venue-quiet, `No active errors` coexisted with three earlier process errors, and point-in-time counters do not prove continuous backend or downstream health** · re-derived y (parent repeated the live row census: 34 table rows including header, 33 ranked data rows, 30 venue-quiet; claim narrowed to a rendering smoke-check)
 
 ## 7. Reproduction recipe
 
