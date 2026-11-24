@@ -4,9 +4,11 @@
 
 **Step-2 reference:** `Claude Comms and Packages/Scope Files/B_DB_MAP_PRE_AUDIT.md` at approved exact ref `93248a802efb6bda0b6559867d73c2c04446d934`.
 
-**Corrected implementation source ref R:** `d57690b116b8fea701424ff80e9ebe09579f547d`
+**Step-9 corrected implementation source ref R:** `13154e33eb6db72fdfd7100646e4a72b77a09152`
 
-**Corrected immutable artifact commit C:** `b5631e83473c4e91ed1cf4ca99f74d5833e8d47c`
+**Step-9 corrected immutable artifact commit C:** `6d1b733291482abb538cc9caba049a482527d012`
+
+**Previously reviewed Step-4 R/C:** `d57690b116b8fea701424ff80e9ebe09579f547d` / `b5631e83473c4e91ed1cf4ca99f74d5833e8d47c`
 
 **Implementation compare base:** `2e9ee4b0584d4701d101d8f595a27bd6fa6acce4` (the Step-2 boundary record immediately before implementation)
 
@@ -459,3 +461,22 @@ At 2026-11-24T08:09:24Z Coltrane ruled **PROCEED** on Step 8 at exact ref `0d0e2
 For the required challenge leg he changed one baseline relation's `relkind` from `r` to `v` without changing the 697-row count. The comparator went red with one baseline-only and one live-only identity, proving that a same-cardinality type substitution is detected.
 
 OBJ-8 was the only red objective. His independent enumeration matched the owner result exactly: 85 helper rows across 79 files, 83 covered, and only `scripts/analysis/b_xstock_bar_availability_c6_timing_read.ts` and `server/db.ts` with empty dispositions. Step 9 must give both explicit dispositions and regenerate the reviewed artifact.
+
+---
+
+## 11. Step-9 OBJ-8 correction
+
+The scanner is now version 3. For every direct-login helper row, it continues to attach resolved relation operations and file-local unresolved evidence. If both sets are empty, it emits an explicit `helper_usage` disposition naming the helper kind and stating that constructor-only or delegated use requires hand resolution. The same exact disposition object is present in the helper row and the top-level unresolved inventory. A file containing more than one helper kind gets a distinct reason for each kind rather than reusing the first helper's reason.
+
+The original Step-7 measurement was rerun against the whole five-pattern helper population. The corrected source at R has 85 helper rows across 79 files: 9 Pool, 48 Client, 19 psql-process, 9 dt-sql-login and 0 Python-client rows. There are zero missing or extra helper identities, zero empty dispositions, and exactly two synthesized reasons:
+
+- `scripts/analysis/b_xstock_bar_availability_c6_timing_read.ts` — `node-postgres Client`, operator evidence;
+- `server/db.ts` — `node-postgres Pool`, runtime evidence.
+
+The focused core suite passed 45/45 checks and the mutation suite killed 38/38 mutants. The constructor-only fixture contains both Client and Pool in the same file and requires two distinct reasons whose `helper_kind` equals the corresponding helper row; both exact objects must also exist in top-level `unresolved`. A fresh reader reran the production census, the original empty-disposition measurement, both suites and a repeated two-helper probe, then returned CLEAN on the current correction.
+
+The source-only R push correctly made the old scanner-version-2 artifact fail its version fence; CI run `45355392017` is red at the database-map integrity step and is not review authority. The artifact was then regenerated on staging from exact R through the governed `dt_reader` catalog path and pinned Node, TypeScript and `tbls` runtimes. The private candidate verified before transfer, contained 2,118 manifested artifacts plus `manifest.json`, and was archived as SHA-256 `cef2533cb2a42503e545846e4915262ceb5ac6eae5c7c938a3f5a162b578afe1`. C records scanner version 3, source R, structural SHA-256 `b577920d50dd1f3c8d62bffd4ea1c5a653071c2669994b889de3e7e1f38053df`, 85 helper rows across 79 files, zero empty dispositions and both fallback objects identically in `unresolved.json`.
+
+### 11.1 Requested Step-9 ruling
+
+Coltrane: inspect exact R/C above, re-run the 85-row helper census and original empty-disposition measurement, and challenge the multi-helper-file association. Rule **PROCEED** or **SEND BACK** on this Step-9 correction. A PROCEED authorizes installing only the reviewed scanner/config/test increment and replacing the reviewed baseline with C, followed by the real weekly entry point and exact-set verification; it does not authorize batch close.
