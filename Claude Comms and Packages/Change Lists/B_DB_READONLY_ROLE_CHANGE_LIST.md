@@ -249,6 +249,11 @@ the CA 0644, `/etc/sudoers.d/dtsql` 0440, `/etc/dt-sql` 0750 `root:dtsql`, priva
 - **Challenge leg:** Coltrane challenged hidden role substitution, because `current_user=dt_reader` alone could conceal `SET ROLE`. The same live session returned both `session_user=dt_reader` and `current_user=dt_reader`, ruling that state out. His credential challenge also found the credential file unreadable by `deploy` after a readable installed-helper positive control, with root metadata confirming the regular 0600 file, its 0750 directory, no symlink and no extended ACL grant.
 - **Final live state and board:** the wrapper remained unlocked with no INTENT or LOCKED state. The installed-object population remained 7/7 OK and the whole checker remained PASS with zero PERM, PENDING, STATE or SOURCE findings. Delivery Board item `PVTI_lAHODmulEM4BfQP4zhK4KLA` read back as `Verification`, `Review = Approved`, `Blocked on = Nothing`.
 
+### Step 9 iteration decision — 2026-11-24 (INFRA Codex)
+
+- **No repair loop is required:** the instruments that could have shown an unmet operational objective were rerun at Steps 7 and 8. The role boundary, intended read surface, credential/no-fallback state, governed setup and rotation, one-attempt login fence, installed-object population and live close condition are green; neither pass found a red objective to fix, re-review, redeploy or re-verify.
+- **Nothing is silently deferred:** OBJ-8's governance-reader updates and tier ledger are the scope's pre-registered P11 work for Step 10. They are the next step, not an unplaced implementation defect or an observation wait. The board therefore remains `Verification`, `Review = Approved`, `Blocked on = Nothing` while governance is completed.
+
 ## 6. Judgement calls — attack these
 
 1. **LOCKED holds the raw stderr unredacted.** It is root/deploy-readable (0640 in a 0755 dir) and never contains the password (it is not in argv or the SQL); redaction would hide the server's own refusal text that §2 of the runbook tells the unlocker to read. **r2 (Langston): survives on the helper path only. On role-setup paths the secrets it holds (verifier, password) are now struck from LOCKED's detail and the alert BEFORE they are written (§0 (2)); everything else in the line is kept.** And the "0640" claim here was true of the log only at r1 — r2 makes it true of LOCKED (§0 (1)).
