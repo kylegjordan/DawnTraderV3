@@ -162,3 +162,27 @@ Installed objects:
 The installed remover first verified all 53 exact live files against the reviewed bytes and metadata and reported no change. It then ran once as `codex-infra`, completed at `2026-11-24T15:03:49.569859+00:00`, and recorded 53 removed paths. Durable state hashes are `8689a639baa161ac7b647f199075ba276dc54e9beef564b2c70c25a397f724f6` for `remove-journal.json` and `881edd1b5438d34a712698d998a138cefbe8f48991f813d6392b7337df165a8b` for `last-remove.json`; both are `root:root` mode `0600`.
 
 The immediate boundary check found the application ref still `e3a96a8126f0280a9568bb1823b9210783f0afe0`, DawnTrader PID still `2822823`, restart count still `715`, and unchanged SHA-256 values for the application environment, application pool source, built application and deploy record. Step 7 owns the independent full live census, governed-read/write-refusal checks and installed-drift proof; those results are not claimed by this Step-6 record.
+
+## Step 7 — first-pass live verification (2026-11-24)
+
+### Removal state and the live surface
+
+An independent verifier reconciled the installed manifest, durable journal and receipt: all three have the same ordered 53-path set and reviewed disposition ref; the journal is `complete` with 53 `removed` entries; the receipt attributes 53 removals to `codex-infra`; and none of the 53 paths exists.
+
+The live census first ran the same marker detector against the 53 exact archived helper bodies as a population-sized positive control: 53/53 produced a direct database marker with zero read errors. Against the original top-level script suffix population, 36 files remain (89 before minus the reviewed 53), all 36 reads succeeded, and zero contains `psql`, `DATABASE_URL`, `PGPASSWORD`, `dt-sql`, a node-postgres module marker or a Client/Pool constructor marker.
+
+A claim-only fresh reader correctly challenged that suffix-bounded scan as insufficient for an unqualified top-level absence claim. The re-derived all-entry census inspected all 541 immediate `/home/deploy` entries: 500 regular files and 41 directories, with zero symlinks, zero other types, zero read errors and zero extensionless executable/shebang candidates. Three non-executable artifacts contain marker words: `c1.err` is a 112-byte `dt-sql` refusal output, `c2.err` is an 85-byte `psql` syntax-error output, and `c4.sql` is a 693-byte read-only SQL input file. None is an executable helper or contains a database login. The completion claim is therefore limited to the measured top-level entry population; it does not claim that no database-capable program exists elsewhere on the host.
+
+### Governed read and write refusal
+
+The installed `dt-sql` returned `current_user = dt_reader`. A named probe table was absent before the write attempt; `BEGIN; CREATE TABLE ...; ROLLBACK;` failed with `cannot execute CREATE TABLE in a read-only transaction` and exit 1; the same read afterward again returned `dt_reader` and confirmed the table absent. `dt-sql --status` remained `OK — not locked`.
+
+The exact reviewed price-side alias census then completed live through `dt-sql`, printed `database role: dt_reader`, read 499 universe rows and reached its known `DASH/USD` positive control. The exact reviewed AMR correctness audit did not reach its database leg: its existing hard-coded test-account login returned HTTP 401 `Invalid credentials`, after which both diagnostic requests returned 401. This is not a removal or `dt-sql` failure, but it means the retained AMR helper is not currently runnable end to end; the defect is carried to Step 8 and, if confirmed, Step 9.
+
+### Application and installed-boundary state
+
+The application ref remained `e3a96a8126f0280a9568bb1823b9210783f0afe0`; PID remained `2822823`; restart count remained `715`; and the pre/post SHA-256 values remained identical for the application environment, `server/db.ts`, built application and deploy record. DawnTrader remained online. `dt-install-drift` passed every governed installed object and control. The newly installed remover and manifest still matched the exact reviewed artifact hashes recorded at Step 6, and all temporary verification artifacts were removed.
+
+This batch has no UI surface: it changed only retired top-level server helpers, a root-only remover and repository-only diagnostics. No application route, response, page or browser asset changed, so there is no affected staging tab to navigate; UI verification is explicitly not claimed.
+
+`REVIEWER: claim-only · B-DB-HELPER-RETIRE Step-7 completion/absence/mechanism claim · HIT — extension-selected census and endpoint-only state hashes left unmanifested-helper and database-history counterexamples · re-derived y (all top-level entries scanned; database claim narrowed to the reviewed retirement process and observed no-deploy/no-restart boundary)`
