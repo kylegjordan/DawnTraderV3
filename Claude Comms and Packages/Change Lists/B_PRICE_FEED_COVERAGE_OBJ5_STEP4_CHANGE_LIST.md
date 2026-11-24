@@ -174,3 +174,18 @@ Two natural reconnect markers occurred, and both had one same-second terminal re
 The same bounded pattern read found no `RESUB_ABORTED`, `RESUB_DEFERRED`, `skipped=restore_in_progress`, or `WS_UNSUB_KEPT` line. The process control remained online at restart count 715, unstable restarts 0, with the deploy record still naming exact build `e3a96a8126f0280a9568bb1823b9210783f0afe0`. This is positive interim evidence for criterion (a), not Step-7 completion: timestamp/trigger/order is the available pairing key, the logs cannot exclude an unlogged transport reconnect, the first-full-session drop-rate gate is not yet mature, and no close-path `WS_UNSUB_KEPT` carrier has appeared.
 
 `REVIEWER: staging current out.log + error.log, bounded from 2026-11-24T00:03:08Z · what other states fit the OBJ-5 interim claim? · claim matches: two markers and two same-second reconnect terminals; no named negative states; no correlation id beyond timestamp/trigger/order and an unlogged transport reconnect remains compatible · re-derived y`
+
+### Step 7 interim natural-reconnect extension — 2026-11-24T09:46Z
+
+The complete overlapping post-deploy population was re-read across `out__2026-11-24_05-00-05.log` (`00:01:32–05:00:17Z`), current `out.log` (`05:00:18–09:46:04Z`), and current `error.log` (`00:01:16–09:46:04Z`); the predecessor archives ended before the `00:03:08Z` deploy boundary. The known-present control found six OBJ-5 lines in that population, five after the deploy boundary, including the independent `00:03:17Z` audit-trigger record.
+
+Two later reconnect markers extend the interim carrier to four, each with exactly one same- or next-second terminal restore:
+
+| reconnect | terminal restore |
+|---|---|
+| `07:37:46Z` `[I8C-WS-RECONNECT] reconnect_detected` | `07:37:47Z` `[OBJ-5][RESUB] sent=12 candidates=12 reasons=rtb trigger=reconnect` |
+| `08:05:21Z` `[I8C-WS-RECONNECT] reconnect_detected` | `08:05:21Z` `[OBJ-5][RESUB] sent=12 candidates=12 reasons=rtb trigger=reconnect` |
+
+Across the complete overlapping population the cumulative counts are four reconnect markers, four reconnect-trigger terminal restore lines, zero `RESUB_ABORTED`, zero `RESUB_DEFERRED`, zero `skipped=restore_in_progress`, and zero `WS_UNSUB_KEPT`. The app remained online on exact deployed Git HEAD and `dist/BUILD_SHA` `e3a96a8126f0280a9568bb1823b9210783f0afe0`, restart count 715, unstable restarts 0. This proves dispatch intent at the four observed reconnects; it does not prove exchange acceptance or later tick delivery, cannot distinguish a naturally caused reconnect from a manually induced socket reconnect, and still does not complete the first-full-session drop-rate or close-path-carrier gates.
+
+`REVIEWER: claim-only · independently select objects and identify compatible alternate states · counts supported; natural cause and downstream acceptance remain unproven · re-derived y`
