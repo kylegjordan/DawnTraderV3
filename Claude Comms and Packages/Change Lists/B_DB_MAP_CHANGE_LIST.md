@@ -482,3 +482,21 @@ The source-only R push correctly made the old scanner-version-2 artifact fail it
 Coltrane: inspect exact R/C above, re-run the 85-row helper census and original empty-disposition measurement, and challenge the multi-helper-file association. Rule **PROCEED** or **SEND BACK** on this Step-9 correction. A PROCEED authorizes installing only the reviewed scanner/config/test increment and replacing the reviewed baseline with C, followed by the real weekly entry point and exact-set verification; it does not authorize batch close.
 
 At 2026-11-24T08:50:27Z Coltrane returned **SEND BACK** on READY ref `54c3e9cda80c7ea8b4bc0bedc878cfc3c2d2e36c` for the incorrect 38/38 review-record count only. His independent census, exact R/C verification, two-helper challenge and missing-association mutant all passed; he measured the exact Linux suite at 39 killed mutants. CI run `45356143871` independently records `db-map core: 45 checks passed` and `db-map mutations: 39 mutants killed`. The record and OBJ-8 row are corrected to 39/39; R and C remain byte-for-byte unchanged.
+
+At 2026-11-24T08:54:20Z Coltrane ruled **PROCEED** on the corrected READY ref `7ce51165123fcfa17d08d45cab6951dc9aa1721d`. He verified that the only changes from the rejected READY ref were the two requested review-record corrections, that the Windows-local 38 result is explained by the executable-mode mutant's explicit `win32` skip, and that immutable R and C remained unchanged. His authorization was limited to the reviewed database-map install, baseline C, the real weekly entry point and exact-set verification; it did not authorize batch close.
+
+### 11.2 Reviewed install and real weekly verification
+
+The staging installer resolved exact R and installed only the reviewed database-map package at `13154e33eb6db72fdfd7100646e4a72b77a09152`; the installer blob in the governance checkout was exactly the blob at R. The first post-install drift read correctly went red because an attempted root-level repository fetch had left `.git/FETCH_HEAD` empty. That freshness proof was restored by a successful fetch under the governance checkout's normal `deploy` identity, after which `/usr/local/sbin/dt-install-drift` returned PASS before generation began.
+
+The real `dt-db-map-weekly.service` started from inactive at 2026-11-24T09:02:26Z and completed successfully. Receipt `/var/lib/dt-db-map/receipts/20261124T090226116Z-match.json` records:
+
+- result `match`, with generation, alert delivery and total success all true;
+- fetched source ref `7ce51165123fcfa17d08d45cab6951dc9aa1721d`;
+- baseline artifact C `6d1b733291482abb538cc9caba049a482527d012` and baseline source R `13154e33eb6db72fdfd7100646e4a72b77a09152`;
+- identical baseline and candidate structural SHA-256 `b577920d50dd1f3c8d62bffd4ea1c5a653071c2669994b889de3e7e1f38053df`;
+- 697 relations, 11,511 columns, 1,567 constraints and 2,199 indexes.
+
+The final exact artifact measurement found 85 helper rows across 79 files, zero empty operation-plus-unresolved dispositions, exactly two `helper_usage` fallbacks, and both exact fallback objects mirrored in the top-level unresolved evidence. The two rows are the timing-read `node-postgres Client` and `server/db.ts` `node-postgres Pool`, and each reason's `helper_kind` matches its owning row.
+
+After the run, all three governance timers were enabled and active; `dt-sql --status` was `OK — not locked`; install drift remained PASS; eight receipts were retained; and the live `run-*` count was zero against a two-directory positive control at the searched root. The Dawn Trader app remained online and untouched at ref `e3a96a8126f0280a9568bb1823b9210783f0afe0`, clean tracked worktree, PID 2822823, restart count 715 and zero unstable restarts. OBJ-8 is now green and Step 9 is complete; batch close remains for Steps 10 and 11.
