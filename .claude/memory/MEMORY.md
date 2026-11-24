@@ -61,6 +61,8 @@
 
 **★ CREW DATABASE READS + MAP (`B-DB-READONLY-ROLE`, `B-DB-MAP`, `#1259`):** only `dt-sql`, using database-enforced `dt_reader`, one verified-TLS attempt and the fail-closed lock. `docs/database-map` is the reviewed whole-database and exact-ref usage map; staging regenerates it weekly and routes drift/failure/staleness to CC-INFRA. RLS-shaped emptiness is not absence, and static-analysis misses stay unresolved rather than being called unused.
 
+**★ DIRECT-LOGIN HELPER RETIREMENT (`B-DB-HELPER-RETIRE`, KD-100, 2026-11-24):** 33 obsolete checked-in connection surfaces are retired and 53 reviewed top-level staging helpers are removed under a durable journal/receipt; two surviving operator reads route through `dt-sql` as `dt_reader`. The checked-in default-deny ledger owns every direct connection surface. The sole `OWNER_HOLD` is `scripts/xstock-hollow-recut.ts` for B-XSTOCK-FEED-SANITY P6; `reviewer_staging_access.py` is instead an exact governed-direct exception owned by B-CREW-ACCESS-HARDEN. No DawnTrader app deploy or restart occurred.
+
 **★ TRADE RECORDS (B-CLOSE-WRITER-COSTS, closed 2026-11-14):** a close books against exactly ONE record (symbol + asset class + mode) or refuses and keeps the position (critical `close-record-unresolved-*`); the trade tables carry NO default on cost, class or mode — every writer states them.
 
 **★ ALERT IDENTITY IS CANONICAL SINCE 2026-09-02 (`#987`, CC-B, `fa563982c`):** `--by` on ack/resolve must be an exact canonical actor or it is REFUSED; the `cc-session-<date>` form is retired. ⛔ **Read the set from `ALERT_ACTORS` in `server/services/system-alerts.ts`, never from here.**
