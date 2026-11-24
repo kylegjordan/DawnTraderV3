@@ -9007,7 +9007,7 @@
       "classifier": "suffix",
       "evidenceClass": "test_only",
       "mode": "100644",
-      "oid": "cc45daffb317b57355494288285ad023407a8125",
+      "oid": "4385094117ce3ea04e0907b11288a5fadec914dc",
       "path": "scripts/db-map/tests/render-control.mjs",
       "type": "blob"
     },
@@ -9039,7 +9039,7 @@
       "classifier": "suffix",
       "evidenceClass": "operator",
       "mode": "100644",
-      "oid": "ae32a36c741a228505bc7ef81e873edb5a0998fb",
+      "oid": "e944aec5cd1457c84af0a33955a9fcfd924dfdba",
       "path": "scripts/db-map/verify.mjs",
       "type": "blob"
     },
@@ -20022,5 +20022,5 @@
   ],
   "included_count": 2386,
   "included_path_sha256": "743a43c861e4157a0825225e10dc23438018b0ae57322f58e811db2dd1937cf2",
-  "included_tuple_sha256": "8a0340b1f6d52e5414685e5192405aff727cbf0b3c975ec74d560cb0605fddbe"
+  "included_tuple_sha256": "e52dc8c4c2d2be7d03427480a4d7abc4976cb8740deab48f7a9fc71e2ebd7f25"
 }

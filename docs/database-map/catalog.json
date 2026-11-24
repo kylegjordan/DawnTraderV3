@@ -208481,15 +208481,15 @@
     {
       "child_count": 45,
       "known_estimated_rows": 7843078,
-      "known_total_bytes": 3361185792,
+      "known_total_bytes": 3361734656,
       "parent": "public.crypto_perp_ohlc_1m",
       "unknown_row_child_count": 14,
       "unknown_size_child_count": 0
     },
     {
       "child_count": 45,
-      "known_estimated_rows": 32888841,
-      "known_total_bytes": 11134902272,
+      "known_estimated_rows": 32911705,
+      "known_total_bytes": 11136540672,
       "parent": "public.crypto_perp_ticker_snap",
       "unknown_row_child_count": 14,
       "unknown_size_child_count": 0
@@ -208497,7 +208497,7 @@
     {
       "child_count": 13,
       "known_estimated_rows": 7582490,
-      "known_total_bytes": 2926977024,
+      "known_total_bytes": 2927271936,
       "parent": "public.crypto_spot_ohlc_1m",
       "unknown_row_child_count": 11,
       "unknown_size_child_count": 0
@@ -208505,7 +208505,7 @@
     {
       "child_count": 18,
       "known_estimated_rows": 17642060,
-      "known_total_bytes": 5534695424,
+      "known_total_bytes": 5535145984,
       "parent": "public.crypto_spot_ticker_snap",
       "unknown_row_child_count": 16,
       "unknown_size_child_count": 0
@@ -208521,7 +208521,7 @@
     {
       "child_count": 18,
       "known_estimated_rows": 71331,
-      "known_total_bytes": 37355520,
+      "known_total_bytes": 37363712,
       "parent": "public.macro_feed_archive",
       "unknown_row_child_count": 16,
       "unknown_size_child_count": 0
@@ -208529,15 +208529,15 @@
     {
       "child_count": 18,
       "known_estimated_rows": 10825340,
-      "known_total_bytes": 10804060160,
+      "known_total_bytes": 10805346304,
       "parent": "public.pair_scan_archive",
       "unknown_row_child_count": 16,
       "unknown_size_child_count": 0
     },
     {
       "child_count": 30,
-      "known_estimated_rows": 32855569,
-      "known_total_bytes": 21244641280,
+      "known_estimated_rows": 32899409,
+      "known_total_bytes": 21252931584,
       "parent": "public.signal_eval_archive",
       "unknown_row_child_count": 14,
       "unknown_size_child_count": 0
@@ -208545,7 +208545,7 @@
     {
       "child_count": 18,
       "known_estimated_rows": 31241400,
-      "known_total_bytes": 11218608128,
+      "known_total_bytes": 11220148224,
       "parent": "public.signal_eval_provenance",
       "unknown_row_child_count": 16,
       "unknown_size_child_count": 0
@@ -208553,7 +208553,7 @@
     {
       "child_count": 15,
       "known_estimated_rows": 3356656,
-      "known_total_bytes": 814399488,
+      "known_total_bytes": 814432256,
       "parent": "public.switch_on_shadow_evidence",
       "unknown_row_child_count": 11,
       "unknown_size_child_count": 0
@@ -208569,7 +208569,7 @@
     {
       "child_count": 23,
       "known_estimated_rows": 5809691,
-      "known_total_bytes": 4870946816,
+      "known_total_bytes": 4871823360,
       "parent": "public.xstock_bar_revision_event",
       "unknown_row_child_count": 14,
       "unknown_size_child_count": 0
@@ -208577,7 +208577,7 @@
     {
       "child_count": 13,
       "known_estimated_rows": 769010,
-      "known_total_bytes": 332496896,
+      "known_total_bytes": 332513280,
       "parent": "public.xstock_perp_ohlc_1m",
       "unknown_row_child_count": 11,
       "unknown_size_child_count": 0
@@ -208585,7 +208585,7 @@
     {
       "child_count": 18,
       "known_estimated_rows": 9787500,
-      "known_total_bytes": 3472719872,
+      "known_total_bytes": 3472842752,
       "parent": "public.xstock_perp_ticker_snap",
       "unknown_row_child_count": 16,
       "unknown_size_child_count": 0
@@ -208593,15 +208593,15 @@
     {
       "child_count": 13,
       "known_estimated_rows": 7849000,
-      "known_total_bytes": 3954958336,
+      "known_total_bytes": 3955245056,
       "parent": "public.xstock_spot_ohlc_1m",
       "unknown_row_child_count": 11,
       "unknown_size_child_count": 0
     },
     {
       "child_count": 45,
-      "known_estimated_rows": 61502676,
-      "known_total_bytes": 20648927232,
+      "known_estimated_rows": 61528722,
+      "known_total_bytes": 20649902080,
       "parent": "public.xstock_spot_ticker_snap",
       "unknown_row_child_count": 14,
       "unknown_size_child_count": 0
@@ -208611,7 +208611,7 @@
     "catalog_version": 1,
     "current_user": "dt_reader",
     "database": "postgres",
-    "extracted_at_utc": "2026-11-24T05:25:44.216666Z",
+    "extracted_at_utc": "2026-11-24T05:33:20.635032Z",
     "server_version_num": "170006"
   },
   "partition_edges": [
@@ -211550,7 +211550,7 @@
     }
   ],
   "physical_totals": {
-    "known_total_bytes": 113192534016,
+    "known_total_bytes": 113209622528,
     "unknown_relation_count": 0
   },
   "policies": [],
@@ -212457,13 +212457,13 @@
       "estimated_rows": {
         "reason": null,
         "state": "known",
-        "value": 18
+        "value": 19
       },
       "index_bytes": 573440,
       "is_partition_child": false,
       "key": "public.active_open_positions",
       "last_analyze": null,
-      "last_autoanalyze": "2026-11-24T05:24:55.491323+00:00",
+      "last_autoanalyze": "2026-11-24T05:32:55.677227+00:00",
       "name": "active_open_positions",
       "parent": null,
       "persistence": "p",
@@ -212472,8 +212472,8 @@
       "rls_forced": false,
       "schema": "public",
       "size_applicable": true,
-      "table_bytes": 1220608,
-      "total_bytes": 1794048
+      "table_bytes": 1228800,
+      "total_bytes": 1802240
     },
     {
       "comment": null,
@@ -213494,7 +213494,7 @@
         "state": "known",
         "value": 4557860
       },
-      "index_bytes": 769818624,
+      "index_bytes": 769892352,
       "is_partition_child": false,
       "key": "public.context_bridge_log",
       "last_analyze": null,
@@ -213507,8 +213507,8 @@
       "rls_forced": false,
       "schema": "public",
       "size_applicable": true,
-      "table_bytes": 2673016832,
-      "total_bytes": 3442835456
+      "table_bytes": 2673025024,
+      "total_bytes": 3442917376
     },
     {
       "comment": null,
@@ -214345,7 +214345,7 @@
         "state": "known",
         "value": 56913
       },
-      "index_bytes": 9961472,
+      "index_bytes": 10264576,
       "is_partition_child": true,
       "key": "public.crypto_perp_ohlc_1m_2026_11_24",
       "last_analyze": null,
@@ -214358,8 +214358,8 @@
       "rls_forced": false,
       "schema": "public",
       "size_applicable": true,
-      "table_bytes": 11059200,
-      "total_bytes": 21020672
+      "table_bytes": 11304960,
+      "total_bytes": 21569536
     },
     {
       "comment": null,
@@ -215401,13 +215401,13 @@
       "estimated_rows": {
         "reason": null,
         "state": "known",
-        "value": 226291
+        "value": 249155
       },
-      "index_bytes": 29999104,
+      "index_bytes": 30400512,
       "is_partition_child": true,
       "key": "public.crypto_perp_ticker_snap_2026_11_24",
       "last_analyze": null,
-      "last_autoanalyze": "2026-11-24T04:56:55.88445+00:00",
+      "last_autoanalyze": "2026-11-24T05:26:56.200937+00:00",
       "name": "crypto_perp_ticker_snap_2026_11_24",
       "parent": "public.crypto_perp_ticker_snap",
       "persistence": "p",
@@ -215416,8 +215416,8 @@
       "rls_forced": false,
       "schema": "public",
       "size_applicable": true,
-      "table_bytes": 51134464,
-      "total_bytes": 81133568
+      "table_bytes": 52371456,
+      "total_bytes": 82771968
     },
     {
       "comment": null,
@@ -215794,7 +215794,7 @@
         "state": "known",
         "value": 3254380
       },
-      "index_bytes": 623083520,
+      "index_bytes": 623198208,
       "is_partition_child": true,
       "key": "public.crypto_spot_ohlc_1m_2026_11",
       "last_analyze": null,
@@ -215807,8 +215807,8 @@
       "rls_forced": false,
       "schema": "public",
       "size_applicable": true,
-      "table_bytes": 637878272,
-      "total_bytes": 1260961792
+      "table_bytes": 638058496,
+      "total_bytes": 1261256704
     },
     {
       "comment": null,
@@ -216116,7 +216116,7 @@
         "state": "known",
         "value": 7614660
       },
-      "index_bytes": 840777728,
+      "index_bytes": 840916992,
       "is_partition_child": true,
       "key": "public.crypto_spot_ticker_snap_2026_11",
       "last_analyze": null,
@@ -216129,8 +216129,8 @@
       "rls_forced": false,
       "schema": "public",
       "size_applicable": true,
-      "table_bytes": 1546969088,
-      "total_bytes": 2387746816
+      "table_bytes": 1547280384,
+      "total_bytes": 2388197376
     },
     {
       "comment": null,
@@ -217440,8 +217440,8 @@
       "rls_forced": false,
       "schema": "public",
       "size_applicable": true,
-      "table_bytes": 145612800,
-      "total_bytes": 232374272
+      "table_bytes": 145620992,
+      "total_bytes": 232382464
     },
     {
       "comment": null,
@@ -218314,8 +218314,8 @@
       "rls_forced": false,
       "schema": "public",
       "size_applicable": true,
-      "table_bytes": 10772480,
-      "total_bytes": 15736832
+      "table_bytes": 10780672,
+      "total_bytes": 15745024
     },
     {
       "comment": null,
@@ -218899,7 +218899,7 @@
         "state": "known",
         "value": 4216890
       },
-      "index_bytes": 1029398528,
+      "index_bytes": 1029701632,
       "is_partition_child": true,
       "key": "public.pair_scan_archive_2026_11",
       "last_analyze": null,
@@ -218912,8 +218912,8 @@
       "rls_forced": false,
       "schema": "public",
       "size_applicable": true,
-      "table_bytes": 3239804928,
-      "total_bytes": 4269203456
+      "table_bytes": 3240787968,
+      "total_bytes": 4270489600
     },
     {
       "comment": null,
@@ -219796,7 +219796,7 @@
         "state": "known",
         "value": 2056590
       },
-      "index_bytes": 283516928,
+      "index_bytes": 283672576,
       "is_partition_child": false,
       "key": "public.rtb_shadow_pool_members",
       "last_analyze": null,
@@ -219809,21 +219809,21 @@
       "rls_forced": false,
       "schema": "public",
       "size_applicable": true,
-      "table_bytes": 698761216,
-      "total_bytes": 982278144
+      "table_bytes": 699162624,
+      "total_bytes": 982835200
     },
     {
       "comment": null,
       "estimated_rows": {
         "reason": null,
         "state": "known",
-        "value": 83
+        "value": 82
       },
       "index_bytes": 475136,
       "is_partition_child": false,
       "key": "public.rtb_signals",
       "last_analyze": null,
-      "last_autoanalyze": "2026-11-24T05:24:55.457515+00:00",
+      "last_autoanalyze": "2026-11-24T05:32:55.647393+00:00",
       "name": "rtb_signals",
       "parent": null,
       "persistence": "p",
@@ -219947,8 +219947,8 @@
       "rls_forced": false,
       "schema": "public",
       "size_applicable": true,
-      "table_bytes": 27049984,
-      "total_bytes": 40353792
+      "table_bytes": 27058176,
+      "total_bytes": 40361984
     },
     {
       "comment": null,
@@ -220392,9 +220392,9 @@
       "estimated_rows": {
         "reason": null,
         "state": "known",
-        "value": 505539
+        "value": 549379
       },
-      "index_bytes": 100532224,
+      "index_bytes": 103161856,
       "is_partition_child": true,
       "key": "public.signal_eval_archive_2026_11_24",
       "last_analyze": null,
@@ -220407,8 +220407,8 @@
       "rls_forced": false,
       "schema": "public",
       "size_applicable": true,
-      "table_bytes": 241606656,
-      "total_bytes": 342138880
+      "table_bytes": 247267328,
+      "total_bytes": 350429184
     },
     {
       "comment": null,
@@ -220785,7 +220785,7 @@
         "state": "known",
         "value": 12289700
       },
-      "index_bytes": 425426944,
+      "index_bytes": 425574400,
       "is_partition_child": true,
       "key": "public.signal_eval_provenance_2026_11",
       "last_analyze": null,
@@ -220798,8 +220798,8 @@
       "rls_forced": false,
       "schema": "public",
       "size_applicable": true,
-      "table_bytes": 4138352640,
-      "total_bytes": 4563779584
+      "table_bytes": 4139745280,
+      "total_bytes": 4565319680
     },
     {
       "comment": null,
@@ -221590,7 +221590,7 @@
         "state": "known",
         "value": 458384
       },
-      "index_bytes": 32751616,
+      "index_bytes": 32784384,
       "is_partition_child": true,
       "key": "public.switch_on_shadow_evidence_2026_11",
       "last_analyze": null,
@@ -221604,7 +221604,7 @@
       "schema": "public",
       "size_applicable": true,
       "table_bytes": 66953216,
-      "total_bytes": 99704832
+      "total_bytes": 99737600
     },
     {
       "comment": null,
@@ -224239,7 +224239,7 @@
       "is_partition_child": false,
       "key": "public.xstock_bar_clock_guard",
       "last_analyze": null,
-      "last_autoanalyze": "2026-11-24T05:24:55.461136+00:00",
+      "last_autoanalyze": "2026-11-24T05:29:55.548677+00:00",
       "name": "xstock_bar_clock_guard",
       "parent": null,
       "persistence": "p",
@@ -224294,8 +224294,8 @@
       "rls_forced": false,
       "schema": "public",
       "size_applicable": true,
-      "table_bytes": 592420864,
-      "total_bytes": 630800384
+      "table_bytes": 592478208,
+      "total_bytes": 630857728
     },
     {
       "comment": "B-XSTOCK-BAR-AVAILABILITY v1: append-only post-buffer projection attempts. interval_begin remains the Kraken label; visibility is a later primary observation.",
@@ -224511,7 +224511,7 @@
         "state": "known",
         "value": 43542
       },
-      "index_bytes": 12173312,
+      "index_bytes": 12443648,
       "is_partition_child": true,
       "key": "public.xstock_bar_revision_event_2026_11_24",
       "last_analyze": null,
@@ -224524,8 +224524,8 @@
       "rls_forced": false,
       "schema": "public",
       "size_applicable": true,
-      "table_bytes": 23052288,
-      "total_bytes": 35225600
+      "table_bytes": 23658496,
+      "total_bytes": 36102144
     },
     {
       "comment": null,
@@ -224929,7 +224929,7 @@
       "is_partition_child": false,
       "key": "public.xstock_book_state_rings",
       "last_analyze": null,
-      "last_autoanalyze": "2026-11-24T05:24:55.481844+00:00",
+      "last_autoanalyze": "2026-11-24T05:32:55.66826+00:00",
       "name": "xstock_book_state_rings",
       "parent": null,
       "persistence": "p",
@@ -225040,7 +225040,7 @@
         "state": "known",
         "value": 331470
       },
-      "index_bytes": 77144064,
+      "index_bytes": 77160448,
       "is_partition_child": true,
       "key": "public.xstock_perp_ohlc_1m_2026_11",
       "last_analyze": null,
@@ -225054,7 +225054,7 @@
       "schema": "public",
       "size_applicable": true,
       "table_bytes": 76333056,
-      "total_bytes": 153477120
+      "total_bytes": 153493504
     },
     {
       "comment": null,
@@ -225362,7 +225362,7 @@
         "state": "known",
         "value": 4317560
       },
-      "index_bytes": 541499392,
+      "index_bytes": 541622272,
       "is_partition_child": true,
       "key": "public.xstock_perp_ticker_snap_2026_11",
       "last_analyze": null,
@@ -225376,7 +225376,7 @@
       "schema": "public",
       "size_applicable": true,
       "table_bytes": 956563456,
-      "total_bytes": 1498062848
+      "total_bytes": 1498185728
     },
     {
       "comment": null,
@@ -225845,7 +225845,7 @@
         "state": "known",
         "value": 3392590
       },
-      "index_bytes": 682221568,
+      "index_bytes": 682344448,
       "is_partition_child": true,
       "key": "public.xstock_spot_ohlc_1m_2026_11",
       "last_analyze": null,
@@ -225858,8 +225858,8 @@
       "rls_forced": false,
       "schema": "public",
       "size_applicable": true,
-      "table_bytes": 1136566272,
-      "total_bytes": 1818787840
+      "table_bytes": 1136730112,
+      "total_bytes": 1819074560
     },
     {
       "comment": null,
@@ -226855,13 +226855,13 @@
       "estimated_rows": {
         "reason": null,
         "state": "known",
-        "value": 235859
+        "value": 261905
       },
-      "index_bytes": 27828224,
+      "index_bytes": 28327936,
       "is_partition_child": true,
       "key": "public.xstock_spot_ticker_snap_2026_11_24",
       "last_analyze": null,
-      "last_autoanalyze": "2026-11-24T04:49:55.012219+00:00",
+      "last_autoanalyze": "2026-11-24T05:30:56.06526+00:00",
       "name": "xstock_spot_ticker_snap_2026_11_24",
       "parent": "public.xstock_spot_ticker_snap",
       "persistence": "p",
@@ -226870,8 +226870,8 @@
       "rls_forced": false,
       "schema": "public",
       "size_applicable": true,
-      "table_bytes": 51126272,
-      "total_bytes": 78954496
+      "table_bytes": 51601408,
+      "total_bytes": 79929344
     },
     {
       "comment": null,

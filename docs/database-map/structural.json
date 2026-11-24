@@ -259817,7 +259817,7 @@
       "evidence_class": "operator",
       "file": "scripts/db-map/verify.mjs",
       "kind": "sql_relation",
-      "line": 90,
+      "line": 91,
       "operation": "read",
       "source": "raw_sql",
       "token": "from the"
@@ -259827,7 +259827,7 @@
       "evidence_class": "operator",
       "file": "scripts/db-map/verify.mjs",
       "kind": "sql_relation",
-      "line": 91,
+      "line": 93,
       "operation": "read",
       "source": "raw_sql",
       "token": "from the"
