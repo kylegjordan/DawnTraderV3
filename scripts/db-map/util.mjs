@@ -45,13 +45,13 @@ export async function resetPrivateDir(path) {
   await mkdir(path, { recursive: true, mode: 0o700 });
 }
 
-function quoteIdentifier(value) {
+function escapeRelationPart(value) {
   assert(typeof value === 'string' && value.length > 0 && !value.includes('\0'), 'database identifier is empty or contains NUL');
-  return /^[a-z_][a-z0-9_$]*$/.test(value) ? value : `"${value.replaceAll('"', '""')}"`;
+  return value.replaceAll('%', '%25').replaceAll('.', '%2E');
 }
 
 export function relationKey(schema, name) {
-  return `${quoteIdentifier(schema)}.${quoteIdentifier(name)}`;
+  return `${escapeRelationPart(schema)}.${escapeRelationPart(name)}`;
 }
 
 export function posixJoin(...parts) {

@@ -103,7 +103,7 @@ async function renderTbls(binary, out, schemaPath) {
   const result = spawnSync(binary, ['doc', '--rm-dist', `json://${schemaPath}`, dist], {
     encoding: 'utf8', env: { PATH: process.env.PATH ?? '/usr/bin:/bin', HOME: tmpdir() }, maxBuffer: 64 * 1024 * 1024,
   });
-  assert(result.status === 0, `tbls offline render failed: ${(result.stderr ?? result.stdout).slice(-2000)}`);
+  assert(result.status === 0, `tbls offline render failed: ${(result.stderr || result.stdout || '').slice(-2000)}`);
   return { rendered: true, version: `${version.stdout}${version.stderr}`.trim() };
 }
 
