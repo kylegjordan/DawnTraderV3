@@ -2,6 +2,8 @@
 
 change-class: non_architecture
 
+> **Step-1 ruling — PROCEED.** Coltrane approved r1 at exact ref `4f9f549c7021502a7f17daa642c7163ee0c7eb1c`, Discord 2026-11-24T10:24:26Z. Step 2 must resolve every conditional/held row, enumerate the complete 49-file live `psql` population (not only the 53 `DATABASE_URL` files), and pre-register reconstructible rollback material—not hashes alone—for each untracked live deletion. No edit, deletion, staging install, deploy or Step-3 work was authorized by the ruling.
+
 **Owner:** Infra Codex (standing in for Infra Claude / CC-INFRA) · **Plan:** `SPRINT_TO_LIVE_PLAN.md` row 5a3 · **Decision:** KD-100 (2026-11-16) · **Issue:** `#1259` · **Ordering:** after the closed `B-DB-MAP`, before `B-CONVERSATION-INDEX`.
 
 **Class judgement:** this is a staging-operations and repository-tooling reduction. It removes obsolete direct-login helpers, routes still-needed crew reads through the existing `dt-sql` / `dt_reader` boundary, and explicitly governs the few paths that must retain a write-capable or test-local connection. It changes no trading decision, application database pool, database schema, role grant, RLS policy or stored row.
