@@ -1,7 +1,7 @@
 # B-DB-HELPER-RETIRE — Step-4 change list (Coltrane code review)
 
-**GRADED CODE REF:** `c6acd0d374b7b3b830eef5c5ead90bf570c30242` on `migration/b-db-helper-retire-step4` and `review/b-db-helper-retire-step4`.
-**Range:** `1e42fccd0de007ee0477b12daf118996995aea33..c6acd0d374b7b3b830eef5c5ead90bf570c30242` — 8 commits, 109 files, +5,299 / -108.
+**GRADED CODE REF:** `5e223c8a1e19db10cdea3c55479b4ff4656a45bf` on `migration/b-db-helper-retire-step4` and `review/b-db-helper-retire-step4`.
+**Range:** `1e42fccd0de007ee0477b12daf118996995aea33..5e223c8a1e19db10cdea3c55479b4ff4656a45bf` — 10 commits, 109 files, +5,333 / -108.
 **Owner:** INFRA Codex for CC-INFRA · **Date:** 2026-11-24 · **Live state:** no install, removal, deploy, restart or database write has occurred.
 
 ## Dispatch header — the three required workflow-04 fields
@@ -18,7 +18,7 @@
 2. **Checked-in retirement.** The 33 reviewed `RETIRE` sources and the sole-use P7h processor are absent from executable source paths. Each was moved byte-for-byte into a non-executable `.removed` archive. The phase-A2 package command and the W20c sole-input configuration were removed with their sources.
 3. **Live rollback before action.** All 53 live helpers were copied into the repository as exact raw bytes with path, SHA-256, byte size, owner, group, mode and nanosecond mtime in one immutable manifest. The live files themselves are unchanged.
 4. **Two retained reads routed.** The price-side alias census and the AMR correctness audit no longer load the application credential or create their own database client. Each invokes `/usr/local/bin/dt-sql` and refuses unless `current_user` is `dt_reader`.
-5. **Surface-exact default deny.** The validator compares the immutable 85-row B-DB-MAP hand-off plus seven supplemental rows with the exact ledger; proves source and live archive bytes; and now pins marker class and occurrence count for every one of 97 currently classified paths. A second call inside an already-approved file turns the full validator red. JavaScript/TypeScript comments are tokenized by the TypeScript scanner only after a clean syntax parse; parse errors return to raw fail-closed scanning. Other supported source types likewise return to raw scanning if quote/comment structure is ambiguous.
+5. **Surface-exact default deny.** The validator compares the immutable 85-row B-DB-MAP hand-off plus seven supplemental rows with the exact ledger; proves source and live archive bytes; and now pins marker class and occurrence count for every one of 97 currently classified paths. A second call inside an already-approved file turns the full validator red. Literal, constructor-alias, ES namespace-alias and whole-module CommonJS `pg` constructors are recognized. JavaScript/TypeScript comments are tokenized by the TypeScript scanner only after a clean syntax parse; parse errors return to raw fail-closed scanning. Other supported source types likewise return to raw scanning if quote/comment structure is ambiguous.
 6. **Live removal is a separate, journaled later action.** The remover defaults to verification. Removal requires root plus an allowed actor, verifies all 53 paths before acting, durably records intent and per-path state before each unlink, rechecks inode identity immediately adjacent to each transition, fsyncs the parent and journal, and reconciles either side of an interrupted unlink on resume. `--status` exposes an incomplete journal instead of saying nothing changed. It has not been installed or run.
 
 ## Load-bearing hunks
@@ -114,7 +114,7 @@ for row, entry in zip(manifest["files"], journal["entries"]):
 | check | result |
 |---|---|
 | disposition/archive/default-deny validator | PASS: 92 checked-in dispositions, 53 live archives, 97 classified current marker paths, each pinned by marker class/count |
-| validator mutation suite | 26/26 PASS, including the reviewer’s second-call-in-one-file mutant and syntax-valid string/block-comment filesystem-enrollment trap |
+| validator mutation suite | 28/28 PASS, including the reviewer’s second-call-in-one-file mutant, syntax-valid string/block-comment trap, ES namespace `pg` alias and whole-module CommonJS `pg` alias, all filesystem-enrolled through the full validator |
 | DB-map core suite | 45/45 PASS; the closed map's scanner version and checked-in artifact remain aligned |
 | focused retained/retired consumer suites | 85/85 PASS |
 | Linux remover suite | 18/18 PASS, including replacement at transition, durable partial-state status, mid-sequence failure and successful resume |
@@ -122,7 +122,7 @@ for row, entry in zip(manifest["files"], journal["entries"]):
 | TypeScript baseline | 314 current = 314 baseline |
 | production build | PASS; only the two pre-existing warnings |
 | shell syntax | both changed shell entry points PASS |
-| shared CI at graded ref | run `45406363340`: TypeScript Check, Test Suite, Build and Docker Build all green at `c6acd0d374b7b3b830eef5c5ead90bf570c30242` |
+| shared CI at graded ref | run `45411919787`: TypeScript Check, Test Suite, Build and Docker Build all green at `5e223c8a1e19db10cdea3c55479b4ff4656a45bf` |
 
 The database-map snapshot control was not locally runnable because this laptop has no database credential. It remains a CI-controlled check and is not claimed as a local pass.
 
@@ -130,9 +130,9 @@ The database-map snapshot control was not locally runnable because this laptop h
 
 1. **Removal recovery boundary.** The remover now makes partial progress explicit rather than claiming an impossible multi-file atomic unlink: a durable journal records `pending` / `removing` / `removed`, adjacent identity checks fence replacement, and resume reconciles an unlink that occurred immediately before interruption. Is this recoverable, rollback-detectable boundary sufficient?
 2. **Archive form.** Checked-in retired sources remain exact Git bytes under a non-executable `.removed` archive rather than relying only on Git history. Does this satisfy the rule-18 rollback/evidence need without leaving a surviving executable path?
-3. **Marker scanner boundary.** It scans tracked plus untracked non-ignored source, pins marker class/count for all 97 classified paths, uses the TypeScript scanner for JS-family comments, and fails closed on ambiguous other-source parsing. It recognizes bare/absolute `psql`, `DATABASE_URL`, `PGPASSWORD`, literal or locally-aliased node-postgres Client/Pool constructors, and `dt-sql`. Generated/ignored files and arbitrary dynamic alias chains remain outside this checked-in-source gate; live staging has its separate 53-path manifest. Is that an honest and sufficient boundary?
+3. **Marker scanner boundary.** It scans tracked plus untracked non-ignored source, pins marker class/count for all 97 classified paths, uses the TypeScript scanner for JS-family comments, and fails closed on ambiguous other-source parsing. It recognizes bare/absolute `psql`, `DATABASE_URL`, `PGPASSWORD`, literal, constructor-aliased and namespace-aliased node-postgres Client/Pool constructors, and `dt-sql`. Generated/ignored files and arbitrary dynamic alias chains remain outside this checked-in-source gate; live staging has its separate 53-path manifest. Is that an honest and sufficient boundary?
 4. **The one hold.** `reviewer_staging_access.py` remains `OWNER_HOLD` under B-CREW-ACCESS-HARDEN; it is not weakened, rerouted or retired here. Is that the correct boundary until its owning increment lands?
-5. **Step-2 versus implementation identity.** The live manifest and remover pin the Step-2 reviewed disposition ref `3261801a1`; source archive comparisons pin the correction ref `231a8c194`; this code review grades `220476bba`. Should the installed remover instead pin the Step-4 code ref, or is keeping provenance and implementation identities separate preferable?
+5. **Step-2 versus implementation identity.** The live manifest and remover pin the Step-2 reviewed disposition ref `3261801a1`; source archive comparisons pin the correction ref `231a8c194`; this code review grades `5e223c8a1e19db10cdea3c55479b4ff4656a45bf`. Keeping provenance and implementation identities separate remains the reviewed choice; Step 6 must record this graded implementation ref and installed hashes.
 
 ## Fresh-reader record
 
@@ -145,3 +145,5 @@ The Step-4 claim-only reader identified two limits: the exact-ref objects cannot
 `REVIEWER: claim-only · Step-4 completion/mechanism/absence claim · HIT — aliased node-postgres construction escaped and Git alone cannot prove live absence · re-derived yes (alias); live absence deferred to remote gate`
 
 Coltrane then SEND BACK at Discord `1574776559171141733` on exact graded ref `b8cfab3e76de8d80d219fd26d3c426966929367d`. He reproduced three blockers: path-only rather than occurrence-exact enforcement, quote-blind block-comment stripping, and a non-journaled sequential live removal. Exact reproductions were added end to end. The corrected implementation at `c6acd0d374b7b3b830eef5c5ead90bf570c30242` makes the surface gate class/count exact, uses syntax-aware/fail-closed comment handling, and makes every live transition durably journaled, replacement-fenced and resumable.
+
+Coltrane’s second SEND BACK at 14:08:36Z accepted those corrections and found one remaining static alias gap plus the stale judgement-call ref: ES namespace imports and whole-module CommonJS aliases could construct `pg` clients without a marker. Both exact forms are now filesystem-enrolled full-validator mutations and turn red when introduced; the record now names the actual graded implementation ref.
