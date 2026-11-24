@@ -2,6 +2,8 @@
 
 **Workflow:** Step 2 of 11 · **Owner:** ANALYST Codex / CC-C · **Audit code ref:** `origin/migration/aws-supabase` at `40d06d3661da2690a58ea10e2a2e832555030d70` · **Approved scope:** `B_PRICE_SIDE_BY_JOB_8C_OFF_REMOVAL_SCOPE.md` r2, Coltrane PROCEED at `8d9755129980a0ce012b697e3c4821a52a54b9db` on 2026-11-24T15:40:50Z.
 
+**Step 2 ruling:** Coltrane **PROCEED** at 2026-11-24T16:45:04Z on exact OFF-BRANCH ref `7c65050f5ab377e21782cd96a9d3c1314fa82377`; CI run `45435113439` passed Build, TypeScript Check, Test Suite, and Docker Build at that exact ref. The ruling independently confirmed the mandatory parent-ordered A/B refs, the exact-`sided` active-crypto boundary, the frozen fossil allowlist, and every named red control in §§12 and 14.
+
 This document audits first and plans second. It authorizes no implementation, migration, deployment, database write, restart, or switch change by itself.
 
 ## 0. PREVIOUSLY-STATED-VS-NOW
