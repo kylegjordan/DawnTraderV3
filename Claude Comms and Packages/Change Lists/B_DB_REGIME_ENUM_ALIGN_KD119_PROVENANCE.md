@@ -164,14 +164,14 @@ Supporting current design/audit homes: `ML_DESIGN_PRELIMINARY_2026-05-21.md`, `L
 2. reproduce a pre-restart `getTopPairs` ordering exactly from that replay, including latest-value ordering, the known-zero retired `finalScore`, event time and close success;
 3. mutate asset class, session/epoch identity and open-versus-close event identity and require the proof to fail;
 4. name any field the existing corpus genuinely cannot reconstruct instead of pre-supposing a new store;
-5. only those proven-missing fields may fold into sprint row 103 or 123 as typed, class/source/build/session-stamped capture;
+5. name any proven-missing fields as typed, class/source/build/session-stamped capture; rows 103 and 123 are related contracts but are not approved homes;
 6. no DSE, AMR, confidence, rank or scanner-authority change; do not flip `FORCE_PERSIST`, start either old rehydrator, or retain the unused cascade file helper.
 
-**Recommendation:** **do not create or place a new event store yet.** First run the replay proof against existing durable rows. The measured loss horizon is 24 hours and the main training corpus is durable, so the proof and any later missing-field capture remain nonblocking for go-live. If the proof exposes a real missing identity/field, fold only that gap into row 103 or 123 after its slot check.
+**Recommendation:** **do not create or place a new event store yet.** First run the replay proof against existing durable rows. The measured loss horizon is 24 hours and the main training corpus is durable, so the proof and any later missing-field capture remain nonblocking for go-live. Rows 103 and 123 identify nearby contracts only; Kyle must place any proven gap before work begins.
 
 ### Cost-history sibling
 
-Cost-environment history has distinct value because it can observe broad market friction even when no trade is selected; per-decision fields are selection-biased. Scope a separate capture-only cost table with real class/scope and mode contracts, explicit fee/slippage/spread units, provenance and retention. It must not start the old `mode='system'` writer or feed DSE. This remains nonblocking and slot-checks against the existing fee/provenance rows.
+Cost-environment history has distinct value because it can observe broad market friction even when no trade is selected; per-decision fields are selection-biased. Scope a separate capture-only cost table with real class/scope and mode contracts, explicit fee/slippage/spread units, provenance and retention. It must not start the old `mode='system'` writer or feed DSE. Rows 107a and 108 are related contracts, not approved homes; this remains nonblocking and unplaced pending Kyle's list decision.
 
 ## 7. Static reachability and fresh-reader record
 

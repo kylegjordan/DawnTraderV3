@@ -275,5 +275,6 @@ before any new store is proposed. The corrected pack maps all twelve rows plus t
 limbs to repair-the-duty/delete-the-old-body or delete-after-hold outcomes. Coltrane ruled PROCEED at
 2026-11-24T14:43:27Z on exact ref `0ee3b49f1e6c1049497b02d0f6a8950e561ff94d`: rows 1, 3–8 and 10–12
 DELETE after hold/placement; row 2 REPAIR replay duty then DELETE old body; row 9 REPAIR typed cost capture
-then DELETE old limb. The completion-report gate is next; no cleanup, reconnect, deploy, restart, mode change
-or batch close is authorized by the technical ruling.
+then DELETE old limb. The completion gate found the follow-ups remain unplaced: related sprint rows and the
+existing enum-residue cleanup are not authorized homes. Step 11 therefore waits on Kyle's placement decision;
+no cleanup, reconnect, deploy, restart, mode change or batch close is authorized.

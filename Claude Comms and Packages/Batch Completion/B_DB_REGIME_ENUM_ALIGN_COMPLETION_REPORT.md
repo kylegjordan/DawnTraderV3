@@ -1,6 +1,6 @@
 # B-DB-REGIME-ENUM-ALIGN (#1263) — COMPLETION REPORT
 
-**COMPLETION GATE PENDING:** this report is not yet a batch close. Coltrane ruled PROCEED on the corrected KD-119 technical disposition at 2026-11-24T14:43:27Z on exact ref `0ee3b49f1e6c1049497b02d0f6a8950e561ff94d`; Step 11 completes only after he confirms this completed governance package.
+**PLACEMENT DECISION PENDING:** this report is not a batch close. Coltrane ruled PROCEED on the corrected KD-119 technical disposition, but the replay, typed cost-capture and old-limb cleanup follow-ups have no authorized plan homes. Step 11 remains open until Kyle decides whether they join his list and where they are placed.
 
 ## Outcome
 
@@ -26,6 +26,7 @@ Kyle's KD-119 no-delete hold remains binding over the twelve dormant adaptive/DS
 - Independent-evidence CI `45309277720`: all four jobs passed.
 - KD-119 provenance-record CI `45407469429`: all four jobs passed.
 - Corrected KD-119 disposition CI `45413421576`: TypeScript Check, Test Suite, Build and Docker Build all passed.
+- Completion-candidate CI `45419014843`: TypeScript Check, Test Suite, Build and Docker Build all passed.
 - Staging before, during and after P11 remained on exact runtime aggregate `e3a96a8126f0280a9568bb1823b9210783f0afe0`; process identity remained unchanged.
 - The migration ledger contains exactly one seven-field migration row. Direct physical-shape verification returned all 7/7 required columns, including exact widths, numeric precision/scale, nullability and the sole `source='unknown'` default.
 - P11 left exactly two distinct proof rows. Both are canonical paper/VTS rows; the count increased by two and no application restart occurred.
@@ -57,9 +58,9 @@ No progress report existed to convert. The Step 4 change list is the continuous 
 ## Open scope and placed homes
 
 1. **Non-regime enum residue remains open under `#1263`.** Owner: the after-live cleanup owner assigned by the plan. Home: `PRE_LIVE_SPRINT` legacy/dead-code cleanup, after `B-AI-CHAT-REMOVAL`. Closing condition: every remaining `strategy_type`, `trading_mode`, `tuning_status` and database-only enum residue gets a provenance-backed retain/rebuild/remove disposition. Failure condition: live work relies on a residue value before that review.
-2. **The twelve dormant adaptive/DSE review rows and adjacent limbs remain under KD-119 no-delete hold.** Owner: ANALYST for the technical record; PM/Kyle for later placement. Reviewed end state: repair the restart and cost-capture duties in replacements; delete every old body and the whole DSE/cascade residue only after the hold is lifted and placement is approved. Home: the existing after-live legacy/dead-code cleanup after `B-AI-CHAT-REMOVAL`. Failure condition: any old row is deleted, reconnected or treated as future ML merely by name before that placement.
-3. **Rolling pair-telemetry restart continuity is not delivered here.** Owner/home: sprint row 100 learning-record restart scope and slot gate. Closing condition: a bounded replay from existing durable VTS/outcome rows reproduces pre-restart `getTopPairs` ordering, while mutations to class, session/epoch and open/close identity fail the proof. Only proven-missing fields may fold into row 103 or row 123 after slot check. This is nonblocking for go-live. Failure condition: a new event store is proposed before that proof, or a restart is claimed to preserve the map while it still does not.
-4. **Cost-environment history remains absent.** Owner/home: slot check against row 107a fee-basis stamp and row 108 remaining learning columns; any separate time series stays nonblocking and capture-only. Closing condition: typed class/scope/mode/units/provenance/retention, with old writer/readers/routes/tests replaced or removed. Failure condition: the old `system`-mode writer starts or any cost data connects to DSE.
+2. **The twelve dormant adaptive/DSE review rows and adjacent limbs remain under KD-119 no-delete hold.** Owner: ANALYST for the technical record. Reviewed end state: repair the restart and cost-capture duties in replacements; delete every old body and the whole DSE/cascade residue only after the hold is lifted and placement is approved. **Home: UNPLACED — Kyle decides whether the settled cleanup joins his list and where.** Failure condition: any old row is deleted, reconnected or treated as future ML merely by name before that placement.
+3. **Rolling pair-telemetry restart continuity is not delivered here.** Owner: unassigned. Closing condition: a bounded replay from existing durable VTS/outcome rows reproduces pre-restart `getTopPairs` ordering, while mutations to class, session/epoch and open/close identity fail the proof. Rows 103 and 123 are related capture/provenance contracts, not approved homes. **Home: UNPLACED under KD-119 pending Kyle's list decision.** This remains nonblocking for go-live. Failure condition: a new event store is proposed before that proof, or a restart is claimed to preserve the map while it still does not.
+4. **Cost-environment history remains absent.** Owner: unassigned. Closing condition: typed class/scope/mode/units/provenance/retention, with old writer/readers/routes/tests replaced or removed. Rows 107a and 108 are related fee/learning-field contracts, not approved homes. **Home: UNPLACED under KD-119 pending Kyle's list decision.** Failure condition: the old `system`-mode writer starts or any cost data connects to DSE.
 
 ## Honest residual
 
@@ -76,6 +77,8 @@ Coltrane returned **CHANGES NEEDED** at 2026-11-24T14:15:55Z on exact ref `d5c74
 
 Coltrane then ruled **PROCEED** at 2026-11-24T14:43:27Z on exact ref `0ee3b49f1e6c1049497b02d0f6a8950e561ff94d`. He independently re-derived the singleton invocation and empty cascade payload, the scanner's live ranking consumer and 24-hour ordering, the materially different VTS open/close events, and the need for a demonstrated outcome join. He confirmed the exact end state: rows 1, 3–8 and 10–12 DELETE after hold/placement; row 2 REPAIR the replay duty then DELETE the old body; row 9 REPAIR typed cost capture then DELETE the old limb. The adjacent DSE and cost boundaries are complete. This ruling authorizes no deletion, reconnect, deploy, restart, mode change or batch close.
 
+At the completion gate, Coltrane returned **CHANGES NEEDED** at 2026-11-24T15:13:42Z on exact ref `d136d9fbb5da1a41635bbec70784301ae251e092`: the report had incorrectly treated related rows 100/103/107a/108/123 and the existing `#1263` enum-residue cleanup as authorized homes for different KD-119 follow-ups. The technical disposition remains approved; the follow-ups are now recorded as unplaced pending Kyle's list decision.
+
 ## Final verdict
 
-**PENDING COMPLETION CONFIRMATION.** The regime/schema repair is implemented, deployed and independently verified, and the corrected KD-119 technical disposition has Coltrane's PROCEED. Step 11 and the batch close now await his confirmation of this completed governance package, without weakening the no-delete hold.
+**PENDING KYLE PLACEMENT DECISION.** The regime/schema repair is implemented, deployed and independently verified, and the corrected KD-119 technical disposition has Coltrane's PROCEED. Step 11 cannot close until the three settled follow-ups have authorized homes; KD-119 and the no-delete/no-reconnect boundary remain unchanged.
