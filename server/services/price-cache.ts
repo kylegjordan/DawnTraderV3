@@ -28,6 +28,7 @@ import { normalizeToInternalSymbol as normalizeKrakenPair } from '../markets/kra
 import { buildWriteKeyLedger, formatWriteKeyLedger, WriteKeyAccumulator, type RestWriteKeys, type WriteKeyLedger } from './market-data/rest-write-keys.js';
 import { krakenAssetPairsService } from '../markets/kraken-asset-pairs-service.js';
 import { pairwiseStatedSides } from './market-data/stated-sides.js';
+import { krakenPriceSourceDiagnostics } from './market-data/kraken-price-source-diagnostics.js';
 
 export type PriceSourceTag = 'kraken_ws' | 'kraken_rest';
 
@@ -263,6 +264,7 @@ class UnifiedPriceCache {
 
   constructor() {
     this.krakenService = new KrakenService();
+    krakenPriceSourceDiagnostics.bindCache(() => this.cache.entries());
   }
 
   initialize(): void {
@@ -435,16 +437,24 @@ class UnifiedPriceCache {
       const entry = this.venue.resolveByKrakenKey(pair);
       if (!entry) {
         unresolved++;
+        if (ticker && restTickerSides(ticker)) {
+          krakenPriceSourceDiagnostics.startIfReady();
+          krakenPriceSourceDiagnostics.recordDroppedAssignment(pair);
+        }
         continue;
       }
       const internal = entry.internalSymbol;
       const requested = sent.get(entry.krakenRestPair.toUpperCase());
       const keys = requested && requested !== internal ? [internal, requested] : [internal];
       const sides = restTickerSides(ticker);
+      if (sides) {
+        krakenPriceSourceDiagnostics.startIfReady();
+        krakenPriceSourceDiagnostics.checkRestResponseIdentity(pair, entry);
+      }
       for (const key of keys) {
         // `3n.l` increment 2 (P8, P9 ii): one row builder for the REST ticker sites, built PER KEY WRITTEN.
         const row = this.restTickerRow(key, internal, ticker, writer, now, sides);
-        this.storeRestRow(key, row, sides !== null);
+        this.storeRow(key, row, sides !== null, internal);
         onRow?.(key, row);
       }
       writes.push({ responseKey: pair, writtenKeys: keys });
@@ -853,7 +863,7 @@ class UnifiedPriceCache {
     const _stated = _pair !== null && sidesWriter != null ? _pair : null;
     const _bid = _stated ? _stated.bid : (existing?.bid ?? price);
     const _ask = _stated ? _stated.ask : (existing?.ask ?? price);
-    this.cache.set(symbol, {
+    this.storeRow(symbol, {
       symbol,
       price,
       ask: _ask,
@@ -882,7 +892,7 @@ class UnifiedPriceCache {
       markKind: markKind ?? null,
       ...carryLastTrade(existing, lastTradePrice, now),
       lastUpdatedAt: now,
-    });
+    }, _stated !== null);
   }
 
   /**
@@ -913,7 +923,7 @@ class UnifiedPriceCache {
     const now = Date.now();
     const existing = this.cache.get(symbol);
     const stated = sides ?? null;
-    this.storeRestRow(symbol, {
+    this.storeRow(symbol, {
       symbol,
       price,
       ask: stated ? stated.ask : (existing?.ask ?? price),
@@ -935,14 +945,17 @@ class UnifiedPriceCache {
     }, stated !== null && pairwiseStatedSides(stated.bid, stated.ask) !== null);
   }
 
-  private storeRestRow(key: string, row: CachedPrice, stated: boolean): void {
-    const incumbent = this.cache.get(key);
+  private storeRow(key: string, row: CachedPrice, stated: boolean, canonicalHint?: string): void {
+    const incumbent = stated && row.lastSource === 'kraken_rest' ? this.cache.get(key) : undefined;
+    if (stated) krakenPriceSourceDiagnostics.startIfReady();
     this.cache.set(key, row);
+    if (!stated) return;
+    krakenPriceSourceDiagnostics.recordAssignment(key, row, canonicalHint);
 
     // #1146 compares two local receipt stamps on the actual key. A carried pair has no new receipt.
     const previousStamp = incumbent?.sidesCapturedAtMs;
     const currentStamp = row.sidesCapturedAtMs;
-    if (!stated || !row.sidesWriter?.startsWith('rest_') ||
+    if (!row.sidesWriter?.startsWith('rest_') ||
         (incumbent?.sidesWriter !== 'ws_ticker' && incumbent?.sidesWriter !== 'ws_book') ||
         previousStamp == null || currentStamp == null ||
         !Number.isFinite(previousStamp) || !Number.isFinite(currentStamp)) return;

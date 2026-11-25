@@ -558,9 +558,11 @@ app.use((req, res, next) => {
   // Phase 8.8.3-I7-MAP-AUTO: Initialize automatic Kraken symbol mapping
   try {
     const { krakenAssetPairsService } = await import('./markets/kraken-asset-pairs-service.js');
+    const { krakenPriceSourceDiagnostics } = await import('./services/market-data/kraken-price-source-diagnostics.js');
     const { storage } = await import('./storage');
     
     await krakenAssetPairsService.initialize();
+    krakenPriceSourceDiagnostics.startIfReady();
     const summary = krakenAssetPairsService.getSummary();
     
     // Audit active positions for mapping coverage
