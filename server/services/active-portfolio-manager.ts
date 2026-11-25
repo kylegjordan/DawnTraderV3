@@ -211,6 +211,7 @@ export class ActivePortfolioManager {
     this.signalOrchestrator = new SignalOrchestrator({
       mode: this.mode,
       evaluationIntervalMs: 30000, // 30 seconds
+      entryGateObservationOrigin: 'active_portfolio',
     });
 
     // [8.8.4-C.10][FLOW_FIX] Dual-path removed - signals flow through RTB queue only

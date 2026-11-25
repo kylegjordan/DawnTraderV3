@@ -42,6 +42,11 @@ import { signalQualityEvaluator, type SQEInput } from '../filters/signal_quality
 // rejectedInRefresh) + the SQE-during-refresh tally (phase='refresh', the honest MUST-4 double-count vs
 // SQE-at-generation). cyclesRun is ticked separately in rtb-refresh-service (anchor-a). Dormant until B8.5.
 import { recordActiveRtbRefresh, recordActiveSqeEvaluation, type FunnelAssetClass } from '../observability/active-funnel-tracker';
+import {
+  classifyEntryGateUpsertError,
+  observeEntryGateEvaluation,
+  type EntryGateEvaluation,
+} from '../observability/entry-gate-evidence.js';
 // B79.0n.STORAGE (2026-05-21): AssetClass type for SQEInput population.
 // P19-B4a (C4): prefer the row's stamp (asValidAssetClass), safe-resolve+skip as fallback.
 import { safeResolveAssetClass, asValidAssetClass, type AssetClass } from '../../../shared/asset-classes';
@@ -131,6 +136,7 @@ export interface SQESignalMetadata extends Record<string, unknown> {
 }
 
 export interface SQESignalInput {
+  entryGateEvaluation?: EntryGateEvaluation;
   signalId: string;
   mode: TradingMode;
   symbol: string;
@@ -2225,6 +2231,12 @@ class ReadyToBuyService {
    * @returns The queued signal record or null if rejected
    */
   async queueSQESignal(input: SQESignalInput): Promise<RtbSignal | null> {
+    const evaluation = input.entryGateEvaluation;
+    if (evaluation) {
+      observeEntryGateEvaluation(evaluation, 'rtb_call', {
+        mode: input.mode, assetClass: input.assetClass, strategy: input.strategy, symbol: input.symbol,
+      });
+    }
     const now = new Date();
     // R9.3-C: TTL removed - lifecycle governed by SQE results only
     
@@ -2329,6 +2341,7 @@ class ReadyToBuyService {
       } catch (b70Err) {
         console.warn(`[OBJ-1b][ARCH] pair-exclusivity archive enqueue failed:`, b70Err instanceof Error ? b70Err.message : b70Err);
       }
+      observeEntryGateEvaluation(evaluation, 'rtb_refused', { reason: 'active_pair' });
       return null;
     }
 
@@ -2354,6 +2367,7 @@ class ReadyToBuyService {
         `per-class active gate is OFF in ${input.mode} — REJECTED (defense-in-depth). ` +
         `symbol=${normalizedSymbol} strategy=${input.strategy} signalId=${input.signalId}`,
       );
+      observeEntryGateEvaluation(evaluation, 'rtb_refused', { reason: 'class_inactive' });
       return null;
     }
 
@@ -2412,6 +2426,7 @@ class ReadyToBuyService {
         const _lastStop = (r as any).rows?.[0]?.closed_at;
         if (_lastStop) {
           console.log(`[P19-B8.5][REENTRY_COOLDOWN] ${normalizedSymbol}/${input.strategy}: stopped out at ${_lastStop} — re-entry blocked for ${_cooldownMin}min post-stop (#509)`);
+          observeEntryGateEvaluation(evaluation, 'rtb_refused', { reason: 'reentry_cooldown' });
           return null;
         }
       }
@@ -2514,7 +2529,27 @@ class ReadyToBuyService {
     this.logRtbTrace(input.mode, normalizedSymbol, input.strategy, 'none', 'active', 'insertion'); // a new row: no prior status
 
     // Phase 8.8.4-C.13.B: Use upsert to prevent duplicate key errors
-    const signal = await storage.upsertRtbSignal(insertData);
+    observeEntryGateEvaluation(evaluation, 'upsert_attempt');
+    let signal: RtbSignal;
+    try {
+      signal = await storage.upsertRtbSignal(insertData);
+    } catch (error) {
+      if (evaluation) {
+        const sqlState = classifyEntryGateUpsertError(error);
+        observeEntryGateEvaluation(evaluation, sqlState ? 'upsert_failed' : 'upsert_unconfirmed', { sqlState });
+      }
+      throw error;
+    }
+    if (evaluation) {
+      if (signal?.id) {
+        observeEntryGateEvaluation(evaluation, 'upsert_committed', {
+          rowId: signal.id, mode: signal.mode, assetClass: signal.assetClass ?? undefined,
+          strategy: signal.strategy, storedSymbol: signal.symbol,
+        });
+      } else {
+        observeEntryGateEvaluation(evaluation, 'upsert_unconfirmed', { reason: 'missing_returned_row' });
+      }
+    }
 
     // P19-B8.5 (SWITCH-ON fix, found live 2026-07-15): warm the Kraken WS book at
     // QUEUE time for crypto. The [11.8B→#295] depth gate requires a live two-sided
@@ -2562,6 +2597,7 @@ class ReadyToBuyService {
     // Directive 8.8.4-A3.R9.3-D: Simplified TCL - always check threshold on enqueue
     // Global barrier removed per R9.3-A (per-signal refresh model)
     await tclWatchdog.checkSignalThresholdLive(input.mode);
+    observeEntryGateEvaluation(evaluation, 'rtb_returned');
     
     return signal;
   }

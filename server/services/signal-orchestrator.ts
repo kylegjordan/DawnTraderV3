@@ -212,11 +212,22 @@ import {
   normalizePatternToCanonical,
   normalizeRegime,
   resolvePatternConsumingStrategy,
+  getStrategiesForRegime,
   getPatternNoMatchDropStats,
   isStrategyEnabledForAssetClass,
   STRATEGY_FAMILY_MAP,
   type CanonicalRegimeType as MarketRegimeType
 } from '../config/canonical-regime-strategy-map.js';
+import {
+  endEntryGateScan,
+  newEntryGateInstance,
+  observeEntryGateEvaluation,
+  planEntryGateEvaluation,
+  startEntryGateScan,
+  type EntryGateEvaluation,
+  type EntryGateScan,
+  type EntryGateScanOutcome,
+} from '../core/observability/entry-gate-evidence.js';
 // P19-B7.2: the shared maker/taker best-of-both entry decision (pure) + its
 // per-class DB-governed haircut resolver (fail-hard). Computed once at the
 // shared signal-build convergence, snapshotted onto the RTB row (OBJ-1/OBJ-3).
@@ -289,6 +300,7 @@ import { recordNormalizerAtr } from '../strategies/guard-eval-tracker.js'; // #3
 export interface SignalOrchestratorConfig {
   mode: 'live' | 'paper';
   evaluationIntervalMs?: number;
+  entryGateObservationOrigin?: EntryGateScan['origin'];
 }
 
 export interface EvaluationStats {
@@ -392,6 +404,8 @@ export class SignalOrchestrator {
   }
 
   private mode: 'live' | 'paper';
+  private readonly entryGateInstance = newEntryGateInstance();
+  private readonly entryGateObservationOrigin: EntryGateScan['origin'];
   private strategyEngine: StrategyEngine;
   // Phase 8.8.7: FilteredPairsService DEPRECATED - using activeFilterPool instead
   private kraken: KrakenService;
@@ -413,6 +427,7 @@ export class SignalOrchestrator {
 
   constructor(config: SignalOrchestratorConfig) {
     this.mode = config.mode;
+    this.entryGateObservationOrigin = config.entryGateObservationOrigin ?? 'legacy';
     this.evaluationIntervalMs = config.evaluationIntervalMs ||
       getCachedNumberRequired('signal_orchestrator', 'evaluation_interval_ms',
         { exchange: '*', assetClass: '*', strategy: '*', regime: '*' });
@@ -591,6 +606,26 @@ export class SignalOrchestrator {
     return this.buildSizedSignalForStrategy(rawSignal, strategyId, sizingContext, marketContext);
   }
 
+  private buildObservedSizedSignal(
+    rawSignal: StrategySignal,
+    strategy: StrategyType,
+    sizingContext: SizingContext,
+    evaluation: EntryGateEvaluation | undefined,
+  ): Promise<SizedStrategySignal | null> {
+    if (!evaluation) return this.buildSizedSignalForStrategy(rawSignal, strategy, sizingContext);
+    observeEntryGateEvaluation(evaluation, 'sizing_enter', { mode: sizingContext.mode, assetClass: sizingContext.assetClass });
+    return this.buildSizedSignalForStrategy(rawSignal, strategy, sizingContext, undefined, evaluation).then(
+      signal => {
+        observeEntryGateEvaluation(evaluation, 'evaluation_end', { outcome: signal ? 'built' : 'build_refused' });
+        return signal;
+      },
+      error => {
+        observeEntryGateEvaluation(evaluation, 'evaluation_end', { outcome: 'build_error' });
+        throw error;
+      },
+    );
+  }
+
   /**
    * B6 + B.1 + B.3: Build a sized signal from a raw strategy signal
    * Routes all strategies through the centralized sizing helper
@@ -604,7 +639,8 @@ export class SignalOrchestrator {
     rawSignal: StrategySignal | null,
     strategyId: StrategyType,
     sizingContext: SizingContext,
-    marketContext?: { high24h?: number; low24h?: number; atr?: number }
+    marketContext?: { high24h?: number; low24h?: number; atr?: number },
+    entryGateEvaluation?: EntryGateEvaluation,
   ): Promise<SizedStrategySignal | null> {
     if (!rawSignal) return null;
 
@@ -1564,6 +1600,10 @@ export class SignalOrchestrator {
       minRR: _b2Gate.minRR,
       atr: _b2Atr ?? NaN, reachAtrMax: _b2Gate.reachAtrMax,
     });
+    if (entryGateEvaluation) {
+      observeEntryGateEvaluation(entryGateEvaluation, _b2.ok ? 'target_pass' : 'target_refused',
+        { reason: _b2.ok ? undefined : _b2.reason, mode: sizingContext.mode, assetClass: sizingContext.assetClass });
+    }
     // ★ #371 normalizer-side ATR capture (active path): the RAW atr this gate read, same
     // (strategy,class) bucket as the guard side so the divergence is within-bucket.
     try { recordNormalizerAtr(strategyId, sizingContext.assetClass, _b2Atr ?? NaN); } catch { /* never blocks the gate */ }
@@ -1586,6 +1626,7 @@ export class SignalOrchestrator {
     // Build RTB signal using pre-computed values from extendedMetrics
     const sqeSignalInput: SQESignalInput = {
       signalId,
+      entryGateEvaluation,
       mode: sizingContext.mode,
       symbol: rawSignal.symbol,
       strategy: strategyId,
@@ -1701,6 +1742,7 @@ export class SignalOrchestrator {
     // bare console.error that read like normal operation while silently losing every
     // signal. recordQueueFailure increments a metric + logs [RTB_QUEUE_DROP][CRITICAL].
     readyToBuyService.queueSQESignal(sqeSignalInput).catch(err => {
+      observeEntryGateEvaluation(entryGateEvaluation, 'rtb_error');
       readyToBuyService.recordQueueFailure(rawSignal.symbol, strategyId, err);
     });
 
@@ -2185,12 +2227,17 @@ export class SignalOrchestrator {
     }
 
     const startTime = Date.now();
+    const entryGateScan = startEntryGateScan(
+      this.entryGateInstance, this.entryGateObservationOrigin, this.mode, DEFAULT_ASSET_CLASS, startTime,
+    );
+    let scanOutcome: EntryGateScanOutcome = 'complete';
     console.log(`[37.A][SIGNAL] Strategy evaluation tick triggered [mode=${this.mode}]`);
     telemetryTrace.trace('SignalOrchestrator', 'MARKET_EVALUATION_START', 'INFO', { mode: this.mode });
 
     try {
       const systemContext = await storage.getSystemContext(this.mode);
       if (!systemContext) {
+        scanOutcome = 'no_system_context';
         console.error(`[37.A][SIGNAL] No system context found for mode ${this.mode}`);
         telemetryTrace.trace('SignalOrchestrator', 'NO_SYSTEM_CONTEXT', 'ERROR', { mode: this.mode });
         return;
@@ -2202,6 +2249,7 @@ export class SignalOrchestrator {
       // loops below. No silent fallback.
       const filters = await storage.getScreenerFilters({ mode: this.mode, assetClass: DEFAULT_ASSET_CLASS });
       if (!filters) {
+        scanOutcome = 'no_filters';
         console.error(`[37.A][SIGNAL] No filters found for mode ${this.mode}`);
         telemetryTrace.trace('SignalOrchestrator', 'NO_FILTERS', 'ERROR', { mode: this.mode });
         return;
@@ -2216,6 +2264,7 @@ export class SignalOrchestrator {
       // This fixes the filter bypass where FilteredPairsService returned pairs that hadn't passed FX5 filters
       const fx5Survivors = activeFilterPool.getActivePool(this.mode);
       if (!fx5Survivors || fx5Survivors.length < 1) {
+        scanOutcome = 'empty_fx5';
         console.warn(`[8.8.7][Orchestrator] Skipping signal generation – no FX5 survivors (mode=${this.mode})`);
         return;
       }
@@ -2258,6 +2307,7 @@ export class SignalOrchestrator {
       });
 
       if (!systemContext.lastStartedBy) {
+        scanOutcome = 'no_engine_owner';
         console.error(`[37.A][SIGNAL] No user associated with ${this.mode} mode engine`);
         return;
       }
@@ -2280,6 +2330,7 @@ export class SignalOrchestrator {
         portfolioValue = await getMoneyHeld(this.mode);
       } catch (e) {
         if (!(e instanceof MoneyHeldUnavailable)) throw e;
+        scanOutcome = 'money_held_unavailable';
         console.error(`[B6][SIZING_ERROR] money held unavailable: ${e.reason}`);
         return;
       }
@@ -2316,7 +2367,10 @@ export class SignalOrchestrator {
             enabledCount: selectedStrategies.length
           }));
 
-          const signals = await this.evaluateSymbol(symbol, settings, filters, sizingContext, fx5Survivors, symbolFamilies, STRATEGY_FAMILY_MAP, HYBRID_FAMILY_ELIGIBILITY, vnMaxVeto);
+          const signals = await this.evaluateSymbol(
+            symbol, settings, filters, sizingContext, fx5Survivors, symbolFamilies,
+            STRATEGY_FAMILY_MAP, HYBRID_FAMILY_ELIGIBILITY, vnMaxVeto, entryGateScan,
+          );
           symbolsEvaluated++;
           // P19-B4a C5: stat counter — the disposed enabledStrategies.size is replaced by
           // the canonical strategy-universe count (activeStrategies is local to
@@ -2411,6 +2465,9 @@ export class SignalOrchestrator {
       // patternToTradeSignal's RangeError (no usable ATR) lands here if the guard below is ever bypassed.
       let patternEvalErrors = 0;
       for (const symbol of patternSymbols) {
+        let patternParents: Map<string, EntryGateEvaluation> | undefined;
+        let patternChildren: Map<number, EntryGateEvaluation> | undefined;
+        let patternChild: EntryGateEvaluation | undefined;
         try {
           // Batch 19G VN HF2: Do NOT skip quant pool pairs — they deserve pattern evaluation too
           // A pair surviving both quant and pattern paths should generate signals from BOTH paths
@@ -2465,16 +2522,59 @@ export class SignalOrchestrator {
           // B79.0n.PATTERN-DETECT (2026-05-24): REQUIRED-`assetClass` threaded
           // through scanPatterns + patternToTradeSignal. Signal-orchestrator is
           // the crypto active-trading path — class is crypto_spot by construction.
+          // The expected consumers are enumerated before detection. Keep the same
+          // first-match order as the actual canonical routing, without its counters.
+          let firstPatternConsumer: Map<string, string> | undefined;
+          if (entryGateScan) {
+            const patternRegime = normalizeRegime((context as any).regime?.regime ?? '');
+            firstPatternConsumer = new Map();
+            patternParents = new Map();
+            for (const consumer of getStrategiesForRegime('crypto_spot', patternRegime)) {
+              if ((consumer.signalType !== 'PATTERN' && consumer.signalType !== 'HYBRID')
+                || !consumer.patternType || firstPatternConsumer.has(consumer.patternType)) continue;
+              firstPatternConsumer.set(consumer.patternType, consumer.strategyKey);
+              if (patternParents.has(consumer.strategyKey)) continue;
+              const evaluation = planEntryGateEvaluation(entryGateScan, symbol, consumer.strategyKey, 'pattern_parent');
+              if (evaluation) patternParents.set(consumer.strategyKey, evaluation);
+            }
+          }
           const patternSignals = getPatternRecognizer().scanPatterns(candles, symbol, 'crypto_spot');
           const buyPatterns = patternSignals.filter(p => p.direction === 'BUY');
 
-          for (const patternSig of buyPatterns) {
+          if (patternParents) {
+            patternChildren = new Map();
+            const matches = new Map<string, number>();
+            for (const [index, patternSig] of buyPatterns.entries()) {
+              const key = normalizePatternToCanonical(patternSig.pattern);
+              if (!key) continue;
+              const strategy = firstPatternConsumer?.get(key);
+              if (!strategy || !patternParents.has(strategy)) continue;
+              const evaluation = planEntryGateEvaluation(entryGateScan, symbol, strategy, 'pattern', index);
+              if (evaluation) {
+                patternChildren.set(index, evaluation);
+                matches.set(strategy, (matches.get(strategy) ?? 0) + 1);
+              }
+            }
+            for (const [strategy, parent] of patternParents) {
+              const children = matches.get(strategy) ?? 0;
+              observeEntryGateEvaluation(parent, 'evaluation_end', { outcome: children ? 'matched' : 'no_matching_buy', children });
+            }
+            patternParents = undefined;
+          }
+
+          for (const [index, patternSig] of buyPatterns.entries()) {
+            patternChild = patternChildren?.get(index);
+            patternChildren?.delete(index);
             // B-ATR-BAD-PRINT (#1153): no fallback. The old `?? (currentPrice * 0.02)` could never fire (the MCE
             // always returns a number) and, had it fired, would have fabricated a 2 % ATR into stop/target
             // geometry. A missing or unusable ATR now drops the pattern, counted.
             // The gate and its counter live in `usableAtrOrCount` (true-range-atr.ts), where a test drives them.
             const atr = usableAtrOrCount(context.indicators?.atr, patternAtrDrops);
-            if (atr === null) continue;
+            if (atr === null) {
+              observeEntryGateEvaluation(patternChild, 'evaluation_end', { outcome: 'atr_refused' });
+              patternChild = undefined;
+              continue;
+            }
 
             // P19-B6.5c: patterns are TRIGGERS, not strategies. Resolve the detected
             // pattern to the CANONICAL strategy that consumes it in THIS regime
@@ -2487,9 +2587,14 @@ export class SignalOrchestrator {
             // fabrication that the rtb_signals enum rejected on every row (B6.5b dry-run).
             const patternRegime = normalizeRegime((context as any).regime?.regime ?? '');
             const consuming = resolvePatternConsumingStrategy(patternRegime, patternSig.pattern, 'crypto_spot');
+            if (patternChild && consuming?.strategy !== patternChild.strategy) {
+              observeEntryGateEvaluation(patternChild, 'evaluation_end', { outcome: 'route_mismatch' });
+              patternChild = undefined;
+            }
             if (!consuming) {
               continue;
             }
+            patternChild ??= planEntryGateEvaluation(entryGateScan, symbol, consuming.strategy, 'pattern', index, 'unexpected_dispatch');
 
             const tradeSignal = getPatternRecognizer().patternToTradeSignal(patternSig, currentPrice, atr, 'crypto_spot');
 
@@ -2539,8 +2644,10 @@ export class SignalOrchestrator {
             // (quant stamps raw `mceContext.indicators.atr` at :2531, no fallback — gate parity).
             sizingContext.atr = context.indicators?.atr;
 
-            const sizedSignal = await this.buildSizedSignalForStrategy(
-              rawSignal, consuming.strategy as StrategyType, sizingContext
+            const evaluation = patternChild;
+            patternChild = undefined;
+            const sizedSignal = await this.buildObservedSizedSignal(
+              rawSignal, consuming.strategy as StrategyType, sizingContext, evaluation,
             );
 
             if (sizedSignal) {
@@ -2562,6 +2669,13 @@ export class SignalOrchestrator {
             }
           }
         } catch (err) {
+          observeEntryGateEvaluation(patternChild, 'evaluation_end', { outcome: 'pattern_error' });
+          for (const evaluation of patternParents?.values() ?? []) {
+            observeEntryGateEvaluation(evaluation, 'evaluation_end', { outcome: 'pattern_error' });
+          }
+          for (const evaluation of patternChildren?.values() ?? []) {
+            observeEntryGateEvaluation(evaluation, 'evaluation_end', { outcome: 'upstream_error' });
+          }
           patternEvalErrors++;
           console.error(`[14.5][ORCHESTRATOR][B-ATR-BAD-PRINT][PATTERN_EVAL_ERROR] Pattern pool eval failed for ${symbol}:`, err);
         }
@@ -2586,7 +2700,10 @@ export class SignalOrchestrator {
       console.log(`[37.A][SIGNAL] Evaluation complete: ${symbolsEvaluated} symbols, ${signalsGenerated} signals, ${duration}ms`);
 
     } catch (error) {
+      scanOutcome = 'error';
       console.error(`[37.A][SIGNAL] Market evaluation error:`, error);
+    } finally {
+      endEntryGateScan(entryGateScan, scanOutcome);
     }
   }
 
@@ -2602,9 +2719,14 @@ export class SignalOrchestrator {
     symbolFamilies: Map<string, Set<string>>,
     STRATEGY_FAMILY_MAP: Record<string, string>,
     HYBRID_FAMILY_ELIGIBILITY: Record<string, string[]>,
-    vnMaxVeto: number = 0.93  // Batch 19G VN HF: DB-driven VN veto threshold
+    vnMaxVeto: number = 0.93,  // Batch 19G VN HF: DB-driven VN veto threshold
+    entryGateScan?: EntryGateScan,
   ): Promise<SizedStrategySignal[]> {
     const signals: SizedStrategySignal[] = [];
+    let plannedDirect: Map<string, EntryGateEvaluation> | undefined;
+    let enteredDetector: EntryGateEvaluation | undefined;
+    let plannedHybrid: Map<number, EntryGateEvaluation> | undefined;
+    let enteredHybrid: EntryGateEvaluation | undefined;
 
     try {
       // Batch 18: Use OHLC cache (5-min TTL) — 60-min candles only change once/hour
@@ -2745,6 +2867,14 @@ export class SignalOrchestrator {
       if (activeStrategies.size === 0) {
         console.log(`[Phase13][MCE] SKIP ${symbol}: No enabled strategies for regime ${mceContext.regime.regime}`);
         return signals;
+      }
+
+      if (entryGateScan) {
+        plannedDirect = new Map();
+        for (const strategy of activeStrategies) {
+          const evaluation = planEntryGateEvaluation(entryGateScan, symbol, strategy, 'direct');
+          if (evaluation) plannedDirect.set(strategy, evaluation);
+        }
       }
 
       console.log(`[Phase13][MCE] ${symbol}: activeStrategies=[${[...activeStrategies].join(',')}] for regime=${mceContext.regime.regime}`);
@@ -3227,15 +3357,21 @@ export class SignalOrchestrator {
         // WITHOUT THIS the read below inherits the LAST value set by ANY strategy, symbol, or even a
         // VTS cycle in this process, and records it confidently — silent mis-attribution, no error.
         resetNullReason();
+        const evaluation = plannedDirect?.get('inside_bar_reversal');
+        plannedDirect?.delete('inside_bar_reversal');
+        enteredDetector = evaluation;
+        observeEntryGateEvaluation(evaluation, 'detector_enter');
         const rawSignal = this.strategyEngine.detectInsideBarReversal(indicators, ohlcAsAny, buildPatternInputForStrategy('inside_bar_reversal'), assetClass);
+        enteredDetector = undefined;
         if (!rawSignal) {
           // B-FILTER-DIAG-STANDARDIZE (Kyle 2026-08-07): the strategy declined — record WHY.
           // The reason is already set by the strategy via the shared null-reason-tracker; this is
           // the read the active path never performed. Non-throwing by construction.
           if (_fClass) recordActiveStrategyNull(sizingContext.mode, _fClass, 'inside_bar_reversal', getNullReason());
+          observeEntryGateEvaluation(evaluation, 'evaluation_end', { outcome: 'no_candidate' });
         } else {
           rawSignal.symbol = symbol;
-          const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'inside_bar_reversal' as any, sizingContext);
+          const sizedSignal = await this.buildObservedSizedSignal(rawSignal, 'inside_bar_reversal' as any, sizingContext, evaluation);
           if (sizedSignal) signals.push(sizedSignal);
         }
       }
@@ -3284,15 +3420,21 @@ export class SignalOrchestrator {
         // WITHOUT THIS the read below inherits the LAST value set by ANY strategy, symbol, or even a
         // VTS cycle in this process, and records it confidently — silent mis-attribution, no error.
         resetNullReason();
+        const evaluation = plannedDirect?.get('reverse_impulse');
+        plannedDirect?.delete('reverse_impulse');
+        enteredDetector = evaluation;
+        observeEntryGateEvaluation(evaluation, 'detector_enter');
         const rawSignal = this.strategyEngine.detectReverseImpulse(indicators, ohlcAsAny, buildPatternInputForStrategy('reverse_impulse'), assetClass);
+        enteredDetector = undefined;
         if (!rawSignal) {
           // B-FILTER-DIAG-STANDARDIZE (Kyle 2026-08-07): the strategy declined — record WHY.
           // The reason is already set by the strategy via the shared null-reason-tracker; this is
           // the read the active path never performed. Non-throwing by construction.
           if (_fClass) recordActiveStrategyNull(sizingContext.mode, _fClass, 'reverse_impulse', getNullReason());
+          observeEntryGateEvaluation(evaluation, 'evaluation_end', { outcome: 'no_candidate' });
         } else {
           rawSignal.symbol = symbol;
-          const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'reverse_impulse' as any, sizingContext);
+          const sizedSignal = await this.buildObservedSizedSignal(rawSignal, 'reverse_impulse' as any, sizingContext, evaluation);
           if (sizedSignal) signals.push(sizedSignal);
         }
       }
@@ -3364,15 +3506,21 @@ export class SignalOrchestrator {
         // WITHOUT THIS the read below inherits the LAST value set by ANY strategy, symbol, or even a
         // VTS cycle in this process, and records it confidently — silent mis-attribution, no error.
         resetNullReason();
+        const evaluation = plannedDirect?.get('strong_bull_trend');
+        plannedDirect?.delete('strong_bull_trend');
+        enteredDetector = evaluation;
+        observeEntryGateEvaluation(evaluation, 'detector_enter');
         const rawSignal = this.strategyEngine.detectStrongBullTrend(indicators, ohlcAsAny, buildPatternInputForStrategy('strong_bull_trend'), assetClass);
+        enteredDetector = undefined;
         if (!rawSignal) {
           // B-FILTER-DIAG-STANDARDIZE (Kyle 2026-08-07): the strategy declined — record WHY.
           // The reason is already set by the strategy via the shared null-reason-tracker; this is
           // the read the active path never performed. Non-throwing by construction.
           if (_fClass) recordActiveStrategyNull(sizingContext.mode, _fClass, 'strong_bull_trend', getNullReason());
+          observeEntryGateEvaluation(evaluation, 'evaluation_end', { outcome: 'no_candidate' });
         } else {
           rawSignal.symbol = symbol;
-          const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'strong_bull_trend' as any, sizingContext);
+          const sizedSignal = await this.buildObservedSizedSignal(rawSignal, 'strong_bull_trend' as any, sizingContext, evaluation);
           if (sizedSignal) signals.push(sizedSignal);
         }
       }
@@ -3446,8 +3594,17 @@ export class SignalOrchestrator {
       
       if (quantSignals.length > 0 && buyPatternSignals.length > 0) {
         const hybridSignals = hybridIntegration.detectConfluence(quantSignals, buyPatternSignals);
-        
-        for (const hybrid of hybridSignals) {
+        if (entryGateScan) {
+          plannedHybrid = new Map();
+          for (const [index, hybrid] of hybridSignals.entries()) {
+            const evaluation = planEntryGateEvaluation(entryGateScan, hybrid.symbol, hybrid.strategy, 'hybrid', index);
+            if (evaluation) plannedHybrid.set(index, evaluation);
+          }
+        }
+
+        for (const [index, hybrid] of hybridSignals.entries()) {
+          enteredHybrid = plannedHybrid?.get(index);
+          plannedHybrid?.delete(index);
           const rawHybridSignal = {
             symbol: hybrid.symbol,
             strategy: hybrid.strategy as any,
@@ -3472,7 +3629,9 @@ export class SignalOrchestrator {
             }
           };
           
-          const sizedHybridSignal = await this.buildSizedSignalForStrategy(rawHybridSignal as any, hybrid.strategy as StrategyType, sizingContext);
+          const evaluation = enteredHybrid;
+          enteredHybrid = undefined;
+          const sizedHybridSignal = await this.buildObservedSizedSignal(rawHybridSignal as any, hybrid.strategy as StrategyType, sizingContext, evaluation);
           if (sizedHybridSignal) {
             (sizedHybridSignal as any).signalType = 'HYBRID';
             (sizedHybridSignal as any).hybridScore = hybrid.hybridScore;
@@ -3545,6 +3704,14 @@ export class SignalOrchestrator {
       }
 
     } catch (error) {
+      observeEntryGateEvaluation(enteredDetector, 'evaluation_end', { outcome: 'detector_error' });
+      observeEntryGateEvaluation(enteredHybrid, 'evaluation_end', { outcome: 'hybrid_error' });
+      for (const evaluation of plannedDirect?.values() ?? []) {
+        observeEntryGateEvaluation(evaluation, 'evaluation_end', { outcome: 'upstream_error' });
+      }
+      for (const evaluation of plannedHybrid?.values() ?? []) {
+        observeEntryGateEvaluation(evaluation, 'evaluation_end', { outcome: 'upstream_error' });
+      }
       console.error(`[37.A][SIGNAL] Error evaluating strategies for ${symbol}:`, error);
     }
 

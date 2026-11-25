@@ -31,6 +31,7 @@ import type { TradingMode } from './guardrail-policy';
 // P19-B8.4b: active-path funnel — cyclesRun ticks on the REFRESH path (Langston anchor-a), so the
 // Paper/Live Filter Diagnostics tab flips dormant→active only when a refresh micro-cycle actually runs.
 import { recordActiveRtbRefresh, type FunnelAssetClass } from '../core/observability/active-funnel-tracker.js';
+import { observeEntryGateRefresh } from '../core/observability/entry-gate-evidence.js';
 import {
   ACT_CONFIG,
   getAdaptivePoolSize,
@@ -218,16 +219,17 @@ class RTBRefreshService {
     console.log(`[A4.R10R-3][RTBRefresh] Starting service... (wasRunning=${wasRunning})`);
 
     centralClock.subscribe('RTBRefreshService', (tick: ClockTick) => {
-      this.onTick(tick.tickNumber);
+      this.onTick(tick);
     });
 
     console.log('[A4.R10R-3][RTBRefresh][SYNCED] Service synchronized with Central Clock (micro=15s, macro=120s, buckets=8)');
     console.log(`[A4.R10R-3][RTBRefresh][INIT] Central Clock running: ${centralClock.getIsRunning()}, tickNumber: ${centralClock.getTickNumber()}`);
   }
 
-  private onTick(tickNumber: number): void {
+  private onTick({ tickNumber, timestamp }: ClockTick): void {
     if (tickNumber % this.MICRO_CYCLE_INTERVAL !== 0) return;
 
+    observeEntryGateRefresh(tickNumber, timestamp, this.isRefreshing);
     if (this.isRefreshing) {
       console.log('[A4.R10R-3][RTBRefresh] Skipping - refresh in progress');
       return;

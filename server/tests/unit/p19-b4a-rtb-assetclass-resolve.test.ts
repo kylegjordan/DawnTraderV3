@@ -25,6 +25,15 @@
 import { describe, it, expect, vi } from 'vitest';
 
 let capturedInsert: any = null;
+const { getSystemContext, upsert, evidence } = vi.hoisted(() => ({
+  getSystemContext: vi.fn(async () => ({ isEngineActive: true, activeAssetClasses: { crypto_spot: true, xstock_spot: true } })),
+  upsert: vi.fn(async (data: Record<string, unknown>) => ({ id: 'rtb-1', ...data })),
+  evidence: vi.fn(),
+}));
+vi.mock('../../core/observability/entry-gate-evidence.js', async importOriginal => ({
+  ...await importOriginal<typeof import('../../core/observability/entry-gate-evidence.js')>(),
+  observeEntryGateEvaluation: evidence,
+}));
 
 // Light DB stub (B79.0n.RTB / B3b precedent) so importing the singleton pulls no live DB.
 vi.mock('../../db.js', () => ({
@@ -44,10 +53,10 @@ vi.mock('../../storage.js', () => ({
     // These stamp-honoring tests exercise legitimately-active classes, so return both ON — the
     // guard passes and the stamp-honoring assertions run unchanged (the gate itself is tested in
     // p19-b6-5b-crypto-isolation.test.ts).
-    getSystemContext: async () => ({ isEngineActive: true, activeAssetClasses: { crypto_spot: true, xstock_spot: true } }),
+    getSystemContext,
     upsertRtbSignal: async (data: any) => {
       capturedInsert = data;
-      return { id: 1, ...data };
+      return upsert(data);
     },
   },
 }));
@@ -124,4 +133,57 @@ describe('P19-B4a C1 (stamp-at-source) — queueSQESignal honors the pipe-stampe
       expect(capturedInsert).toBeNull();
     },
   );
+});
+
+describe('Entry Gate increment D records the actual Ready-to-Buy upsert boundary', () => {
+  function observedInput() {
+    return {
+      ...baseInput('BTC/USD', 'crypto_spot'),
+      strategy: 'strong_bull_trend',
+      entryGateEvaluation: { id: 'observed-1' },
+    };
+  }
+
+  function observedKinds() {
+    return evidence.mock.calls.filter(([evaluation]) => evaluation?.id === 'observed-1').map(([, kind]) => kind);
+  }
+
+  it('a class refusal records one service call and zero actual upserts', async () => {
+    evidence.mockClear();
+    upsert.mockClear();
+    getSystemContext.mockResolvedValueOnce({ isEngineActive: true, activeAssetClasses: { crypto_spot: false, xstock_spot: true } });
+    expect(await readyToBuyService.queueSQESignal(observedInput())).toBeNull();
+    expect(upsert).not.toHaveBeenCalled();
+    expect(observedKinds()).toEqual(['rtb_call', 'rtb_refused']);
+    expect(evidence).toHaveBeenLastCalledWith({ id: 'observed-1' }, 'rtb_refused', { reason: 'class_inactive' });
+  });
+
+  it('records the acknowledged row before the service rejects on later work', async () => {
+    evidence.mockClear();
+    upsert.mockClear();
+    const laterError = new Error('Pool size unavailable after upsert');
+    const poolSize = vi.spyOn(readyToBuyService, 'getPoolSize').mockRejectedValueOnce(laterError);
+    try {
+      await expect(readyToBuyService.queueSQESignal(observedInput())).rejects.toBe(laterError);
+      expect(upsert).toHaveBeenCalledTimes(1);
+      expect(observedKinds()).toEqual(['rtb_call', 'upsert_attempt', 'upsert_committed']);
+      expect(evidence).toHaveBeenLastCalledWith({ id: 'observed-1' }, 'upsert_committed',
+        expect.objectContaining({ rowId: 'rtb-1', mode: 'paper', assetClass: 'crypto_spot' }));
+      expect(capturedInsert).not.toHaveProperty('entryGateEvaluation');
+      expect(capturedInsert.metadata).not.toHaveProperty('entryGateEvaluation');
+    } finally {
+      poolSize.mockRestore();
+    }
+  });
+
+  it.each([
+    [{ cause: { severity: 'ERROR', code: '23514' } }, 'upsert_failed'],
+    [{ cause: { code: 'ECONNRESET' } }, 'upsert_unconfirmed'],
+    [{ cause: { severity: 'ERROR', code: '40003' } }, 'upsert_unconfirmed'],
+  ])('distinguishes a server refusal from a lost statement acknowledgement (%s)', async (error, outcome) => {
+    evidence.mockClear();
+    upsert.mockRejectedValueOnce(error);
+    await expect(readyToBuyService.queueSQESignal(observedInput())).rejects.toBe(error);
+    expect(observedKinds()).toEqual(['rtb_call', 'upsert_attempt', outcome]);
+  });
 });

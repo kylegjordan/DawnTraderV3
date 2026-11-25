@@ -18,6 +18,7 @@
  */
 
 import { EventEmitter } from 'events';
+import { observeEntryGateClock } from '../core/observability/entry-gate-evidence.js';
 
 export interface ClockTick {
   timestamp: number;
@@ -122,6 +123,7 @@ class CentralClockService extends EventEmitter {
       console.log(`[CentralClock][HEALTH] tickNumber=${this.tickNumber} avgDrift=${avgDrift.toFixed(1)}ms subscribers=${this.subscribers.size}`);
     }
 
+    observeEntryGateClock(tick.tickNumber, tick.timestamp);
     this.emit('tick', tick);
   }
 
