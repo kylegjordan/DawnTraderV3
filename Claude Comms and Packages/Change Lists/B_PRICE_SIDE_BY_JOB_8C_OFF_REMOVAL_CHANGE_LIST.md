@@ -141,3 +141,15 @@ Integrate exact A as a parent of the shared branch first. A's application change
 NEW confirmed the 2026-11-25T10:40:21Z HOLD on exact A while OLD's universe-refresh migration remains held. NEW can run its own reviewed rollback-row comparison and pre-counts immediately before a slot after 21:00 UTC, conditional on OLD clearing the hold and agreeing to fold in the alert-orphan migration. NEW owns the immediate orphan and total-count verification after that combined migration. Coordination is with PM (Discord `1575098895472795718`), OLD, NEW and INFRA.
 
 INFRA installed the exact reviewed deployer on 2026-11-25 at 11:12:51Z (Discord `1575107040416899237`, evidence ref `4adf16fdb46f447af8fbcaa6a59a5ecd6c976414`). ANALYST read back root:root mode 0755 and the required SHA-256. The staging application HEAD, build marker and deploy record still identify `e3a96a8126f0280a9568bb1823b9210783f0afe0`, restart 715. The two app deployments remain separate from this completed installation. Recheck the installed digest immediately before publishing B.
+
+The A-only shared integration `d3ec4a5d8d3da591dde466e68b1c6ed3a79e742a` passed all four jobs of CI `45605238768` as of 11:48:39 UTC on November 25. This completes Step 5 for Phase A. Phase B has its approved exact-ref CI and awaits shared integration after Phase A is proven on staging.
+
+## Phase A staging slot
+
+KD-120 discharged the inherited OLD migration hold. OLD, NEW, INFRA and ANALYST agreed to one Phase A deploy by ANALYST on 2026-11-26 from 02:30 to 02:55 UTC. The target is exact A `5ecd7ee24fb7a741e8e015e0e6a262a464e7d016`, with CI `45589022150` green per job. It is an ancestor of shared `d3ec4a5d8d3da591dde466e68b1c6ed3a79e742a` and a descendant of the serving ref. The A-only shared merge preserved the reviewed application and migration blobs. Use exact A because the Phase B lock verifies the running build against that exact SHA.
+
+Read the current staging deploy record and B75 sweep for that date. Require its DONE line, the fresh pending census exactly matching the OLD universe-refresh and NEW alert-orphan migrations, and the current window census. Repeat NEW’s reviewed C-2 rollback comparison and orphan/total precount immediately before the deploy. The slot is usable only if the sweep, owner gates, preflight and restart fit. Name every open window returned by the immediate census. The planning census found B-RTB-PROMOTION-RETRY-STORM, B-TOKEN-WATCH-BIRTH-CAP, B-TOKEN-WATCH-FOLLOWUP-MEMORY, B-UNIVERSE-REFRESH-ACTS and B-XSTOCK-BAR-AVAILABILITY.
+
+After the deploy, run the Phase A identity verifier and the reviewed four-row census, which must read `PENDING_ON`. Give INFRA the actual restart time for the Token Watch checks. NEW owns the immediate orphan and alert-total readback. OLD owns the first natural 03:00 UTC refresh and readback. Preserve the legacy B74 crontab entry and cache until OLD verifies the in-app run. Wait for OLD’s release before Phase B or another restart.
+
+Coordination in Discord on November 25. OLD `1575113736723898369`, NEW `1575113776116662383`, ANALYST xStock window `1575114334424793119`, and INFRA `1575114755482583101`.
