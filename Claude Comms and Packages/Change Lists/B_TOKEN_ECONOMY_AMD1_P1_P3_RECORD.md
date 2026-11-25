@@ -62,7 +62,7 @@ Langston's memory content stays on Helsinki and is not copied here. Every figure
 | check | result |
 |---|---|
 | the trim log names all four (B-CODEX-FAILOVER, B-ARM-REMOVAL, B-FILTER-DIAG-STANDARDIZE, B-DEPLOY-DRIFT-LINE) | PASS. `journalctl -u langston-memory-trim.service`, 2026-11-22 03:50:34Z: `TRIM: evicted 5 section(s) [B-FILTER-DIAG-STANDARDIZE, B-CODEX-FAILOVER, B-TOKEN-ECONOMY-AMD1-P2, B-ARM-REMOVAL, B-DEPLOY-DRIFT-LINE] to MEMORY-ARCHIVE.md; 7 open stay` |
-| each section's text is found in `MEMORY-ARCHIVE.md` | PASS for placement: each is a `## <batch>` section at `MEMORY-ARCHIVE.md` lines 445, 453, 482, 489 (P2's at 460), each under an `evicted 2026-11-22T03:50:34Z … --trim` marker. Byte-identity is proved only for the P2 passages (move-ledger check below); for the four P1 sections no pre-trim copy was kept, so their text identity rests on the trim tool, not on a separate check. The remaining mentions in the part are the two lifted class rulings (lines 69-70), the P2 pointer (87) and a `keep:` pointer (234), as intended. |
+| each section's text is found in `MEMORY-ARCHIVE.md` | PASS: four tagged sections match the writer's archived pre-trim part at `6403341ff652d5cb12c35b8a2b6582753c44c881e3563c9e0318ae007ea44d7e` byte-for-byte between each heading and its STATE line. The later disappearance of the hoisted P1 line from loaded memory is recorded in the Step-4 handoff. |
 | net always-loaded change, measured (R2-8a) | Langston's `MEMORY.md` 73,848 B before P1 -> 73,360 B after the P1+P2 writes (-488 B, FINDING-1) -> 68,693 B after the trim (-4,667 B); loaded set 138,458 B vs ceiling 143,856 B, under by 5,398 B (trim tool's own line). Read again 2026-11-22 ~10:45Z: `MEMORY.md` 68,836 B (Langston's own saves since); the ceiling for P3 is read fresh at P3, not from here. |
 | write 2 landed (above); its two sections in the same trim | PASS: all four P1 sections plus the P2 section went in the one 03:50:34Z run. |
 
@@ -146,7 +146,7 @@ Langston's memory content stays on Helsinki and is not copied here. Every figure
 
   | id | the rule | the case that will exercise it |
   |---|---|---|
-  | `P2C1` | read a staged file in full; inbox before the Drive mount; the canonical committed home | this batch's own Step-4 dispatch, staged at `/home/langston/inbox/B-TOKEN-ECONOMY/`; the pointer's "when a dispatch points at a staged file" fires on it |
+  | `P2C1` | read a staged file in full; inbox before the Drive mount; the canonical committed home | first genuine staged-file dispatch after installation that requires reading the pointer and the staged file. This Step-4 dispatch precedes installation, so the exercise is pending |
   | `P2C2` | a voice note naming him arrives as text; a failure is a `*_voice_failed` row | no seeded case: the first natural voice failure after install. Unexercised until then |
   | `P2C3` | his replies wake the sessions they name | every reply he posts after install (the bridge does the naming; the rule is his model of it) |
   | `P2C4` | the wake-file summon, name routing, closed sessions | seeded at Step 8: ask him how he would summon a closed session, without naming the file, and check he follows the pointer to `P2C4` |
@@ -171,7 +171,7 @@ Langston's memory content stays on Helsinki and is not copied here. Every figure
 
 ## P3 — reviewer instruction ceilings and the combined review
 
-**Resume check, 2026-11-25 22:14Z.** Helsinki's scheduled Langston trim on 2026-11-22 at 03:50:34Z named five evictions, including the four tracked P1 sections and the P2 ledger section. The trim log records 73,360 → 68,693 B in the loaded `MEMORY.md`, with seven open sections retained. The net change since the pre-P1 measurement of 73,848 B was −5,155 B. The archive-placement evidence above covers the P1 blocks. The ledger check separately matched both P2 ledger moves in the captured files and all four P2 communications passages in Git, each byte-for-byte at one declared destination. The P1 archive proof covers placement only.
+**Resume check, 2026-11-25 22:14Z.** Helsinki's scheduled Langston trim on 2026-11-22 at 03:50:34Z named five evictions, including the four tracked P1 sections and the P2 ledger section. The trim log records 73,360 → 68,693 B in the loaded `MEMORY.md`, with seven open sections retained. The net change since the pre-P1 measurement of 73,848 B was −5,155 B. The ledger check matched both P2 ledger moves in the captured files and all four P2 communications passages in Git, each byte-for-byte at one declared destination. The Step-4 re-read adds byte-identity proof for the four P1 blocks.
 
 | Reviewer | Helsinki measured total, 22:14Z | Existing ceiling | Proposed instruction-file bytes |
 |---|---:|---:|---:|
@@ -184,6 +184,63 @@ The two Helsinki reads reported all watched files present. Langston's installed 
 - **Combined review.** Grade this change list with Langston's P2 item 3 at `adbafcd34` and the folded guard fix at `a5a8739cc`. Langston's original hold in `1573672336627081260` requires the combined review before installation. Coltrane is the on-duty reviewer. His own loaded rules and ceiling require independently authorized review before that increment can install. Langston remains off for the Codex shift.
 - **Install gate and verification.** Confirm the approved window and install exact reviewed bytes with the existing governed install path. Confirm both installed hashes, then take fresh `--status` readings. For each reviewed ceiling change, require all watched files present and `measured_total` at or below the existing ceiling, then lower the ceiling to that measured total with an authorized actor in the same close. Use a second fresh status and record its actual total, ceiling, actor, timestamp and net change from baseline. Stop if content or state differs. The table is a pre-install reading. Any shortfall against the approved reduction returns to review with the measured gap and the next one-in-one-out candidate.
 - **Observation return points.** Token Watch P10 resumes after ANALYST reports the actual Phase A restart, to check publish freshness against that timestamp and disposition alert `6f9fa1d3-0aa6-4ac2-aa29-61fd3b5428aa`. Its seven-day read is armed for 2026-11-27 00:05Z under `88fc097f-b903-4a3e-9720-7f9c353dadbd`. Birth-cap OBJ-5 stays in observation through 2026-11-27 00:00Z. Protected staging windows and the Phase B restart hold stay in force.
+
+### Step 4 — review handoff
+
+**Implementation READY-AT:** `1656e1c5205cb4a560695b34599438fd7b3ae887`. The combined gates are P1 trim evidence, P2 moves and index-guard fix, and P3 instruction and ceiling procedure.
+
+1. **DECLARED CHANGE-CLASS:** `non_architecture`, from `Claude Comms and Packages/Scope Files/B_TOKEN_ECONOMY_AMENDMENT_1.md`.
+2. **DOC SET for this class:**
+
+   | Document | Disposition at Step 4 |
+   |---|---|
+   | Scope | Present in the amendment named above |
+   | Pre-audit | Present in the Step-2 reference below |
+   | Completion report | Absent for this increment. The parent progress report is `Claude Comms and Packages/Batch Completion/B_TOKEN_ECONOMY_PROGRESS_REPORT.md` |
+   | Batch catalog | Parent present in `1-system-manual/BATCH_CATALOG.md`. Increment reconciliation is due at Step 10 |
+   | Phase history | Parent present in `1-system-manual/PHASE_HISTORY.md`. Increment reconciliation is due at Step 10 |
+   | Sprint plan | Parent present at stage 0 row 1 in `1-system-manual/SPRINT_TO_LIVE_PLAN.md` |
+   | Memory | Shared `.claude/memory/MEMORY.md`, INFRA's `.claude/memory/MEMORY_CC_INFRA.md` and PM's `.claude/memory/MEMORY_PM.md` present. Langston's capture and trim are evidenced above. Closeout synchronization is due |
+   | System Impact Map | `1-system-manual/SYSTEM_IMPACT_MAP.md` present. The increment's reconciliation is due at Step 10 under A10 |
+   | Changes and Fixes | `1-system-manual/CHANGES_AND_FIXES.md` present. Increment entry due at Step 10 under A10 |
+   | Running Issues | `1-system-manual/RUNNING_ISSUES.md` present. #1256 pertains to the Coltrane ceiling setter and state below |
+   | System Manual and Adjustment Framework | N/A. This increment covers reviewer tooling and instructions |
+   | Deleted Components log | N/A. The closed text moved, and the instruction operation still exists |
+   | Post-audit roadmap and Phase 19 plan | N/A. The amendment is already placed in the sprint plan |
+   | Reviewer architecture and related comms docs | `1-system-manual/LANGSTON_ARCHITECTURE.md` and the comms file named above are present. A10's remaining parent documentation stays with its applicable legs |
+3. **STEP-2 REFERENCE:** `Claude Comms and Packages/Scope Files/B_TOKEN_ECONOMY_AMENDMENT_1_PRE_AUDIT.md`, R2-8 and A1–A2.
+
+**Modified, Coltrane AGENTS.md, §4.** Verify that the operational prohibition remains at the point of action. The deleted lines below are exactly the P3-C1 block archived in this record.
+
+```diff
+ ✅ **"I DON'T KNOW" IS A GOOD ANSWER. INVENTING A PLAUSIBLE ONE IS THE WORST THING YOU CAN
+ DO.**
+-★ **This is not hypothetical.** On 2026-09-08 an automated probe asked the reviewer for a
+-value he could not reach. Instead of refusing, he produced a convincing token and a
+-convincing file path — **neither of which existed anywhere on the machine** — and the
+-checking tool scored it clean. **A fabricated answer is worse than a wrong one, because a
+-wrong answer gets caught and a plausible one gets used.**
+ ⇒ **If you do not have something, say that. Do not supply the shape of an answer.**
++The 2026-09-08 example is in `B_TOKEN_ECONOMY_AMD1_P1_P3_RECORD.md` under P3-C1
++(`coltrane-review ls` locates the record).
+```
+
+**Modified, loaded ceiling pointers.** Each points to its own authority, preserving the existing live lookup and pairing it with one-in-one-out.
+
+```diff
++> **Loaded-set cap: `langston-size-watch --status`. ONE-IN-ONE-OUT** — to add a rule, move one out.
++> **Cap: `coltrane-size-watch --status`. ONE-IN-ONE-OUT** — to add a rule, move one out.
+```
+
+**P1 archive and keep re-read.** Compared the writer's SHA-256-verified 73,158 B pre-trim part to the archive blocks at the exact November 22 eviction stamp. All four match byte-for-byte through STATE (FILTER-DIAG 907 B, CODEX-FAILOVER 342 B, ARM-REMOVAL 555 B, DEPLOY-DRIFT 1,028 B). The DEPLOY-DRIFT `keep:` line matches once in the archive and once in the first post-trim loaded snapshot `23e074e328ab6d…`. In the November 24 02:27:31Z whole-part write for B-DB-REGIME-ENUM-ALIGN, it was present in both before objects (`1b9e2296e7828a…`, `a309f207480637…`) and absent from both after objects (`7c5d4689d04492…`, `710bd512e2f94b…`). The current composed memory still has both lifted class rulings. It has zero copies of the DEPLOY-DRIFT keep line against the one-copy archive and pre-write controls. The separate terminal-exit and scheduled-observation obligations on that line were approved to remain loaded. Proposed repair is one exact-line restoration under the existing kept-lines heading through the governed part writer, with a fresh expected SHA, no growth bypass, a one-line before/after check and a composed-memory re-read. Take a reviewer ruling before any restore. The writer audit shows which write removed it, without establishing intent.
+
+**Remaining before install.** The measured 5,155 B memory change plus the proposed 1,377 B rules change accounts for 6,532 B across those two Langston files. KD-108 described approximately 55 KB of material to consider. This increment leaves roughly 48 KB of that estimate to account for. A further one-in-one-out pass under R2-8c is owed. Report the measured reduction and preserve point-of-action rules while inventorying further candidates. Live verification and a final ceiling reading remain future gates.
+
+**Ceiling-setter checks.** The installed Langston actor allowlist must admit the actor actually performing the change. The reviewed source admits the Claude actor and excludes `codex-infra`. Keep the lower-ceiling operation gated pending an authorized actor or reviewed allowlist parity. The two setters accept a number that can differ from the live measured total. The Coltrane setter also accepts a number below the currently measured size. Scratch reproduction of the current source used a 14,755 B file and a 15,000 B ceiling. A 15,100 B request was refused (exit 3), and a 14,555 B request succeeded while the larger file was still present (exit 0). The operational step must pin the installed file and verify the live total immediately before any setter call. Preserve the independent ruling on Coltrane's own files and knobs.
+
+**#1256.** Live `ceiling_bytes` and the latest history entry both read 15,000 B after the KD-115 recovery. The underlying history-integrity requirement remains open. A scratch fixture with top-level 15,118 B and latest history 15,000 B was accepted by the current `--status` (exit 0). This is the first approved work touching the size watches after that issue's disposition. Carry the history-consistency check as an install prerequisite for Coltrane's ceiling change and review it separately from this trim diff. No live state was written by these checks.
+
+REVIEWER: claim-only · What states could the loaded rules, move evidence and ceiling executables still permit? · Found the P1 archive backup and a later missing keep line, prospective P2C1 proof, setters that accept ceilings different from the fresh total, and the Langston actor restriction · re-derived y
 
 ### P3-C1 — Coltrane's 2026-09-08 proof example
 
