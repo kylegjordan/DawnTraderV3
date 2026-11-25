@@ -95,11 +95,13 @@ function recordEvidence(record: EvidenceRecord): void {
 
 const markedWindows = new Map<number, 'start' | 'end'>();
 let nextScan = 0;
+let latestMeasuredTick: { tickNumber: number; at: number; monotonicAt: number } | undefined;
 
 export function observeEntryGateClock(tickNumber: number, at: number): void {
   if (tickNumber % ENTRY_GATE_REFRESH_TICKS !== 0) return;
   const window = windows.find(window => at >= window.start - GUARD_MS && at < window.end + DRAIN_MS + GUARD_MS);
   if (!window) return;
+  latestMeasuredTick = { tickNumber, at, monotonicAt: performance.now() };
   if (!markedWindows.has(window.start)) {
     markedWindows.set(window.start, 'start');
     recordEvidence({ kind: 'window_start', window: window.start, at, end: window.end, tickNumber, scanSequence: nextScan });
@@ -119,25 +121,34 @@ export function observeEntryGateRefresh(tickNumber: number, at: number, busy: bo
   const base = { window: window.start, at, tickNumber };
   recordEvidence({ ...base, kind: busy ? 'cycle_busy' : 'cycle_start' });
   if (busy) return;
+  if (latestMeasuredTick?.tickNumber !== tickNumber || latestMeasuredTick.at !== at) {
+    recordEvidence({ ...base, kind: 'snapshot_missing', reason: 'missing_clock_anchor' });
+    return;
+  }
   if (snapshotInFlight) {
     recordEvidence({ ...base, kind: 'snapshot_missing', reason: 'observer_busy' });
     return;
   }
   snapshotInFlight = true;
-  void readQueueSnapshot(base);
+  void readQueueSnapshot(base, latestMeasuredTick.monotonicAt);
 }
 
-async function readQueueSnapshot(base: { window: number; at: number; tickNumber: number }): Promise<void> {
+async function readQueueSnapshot(
+  base: { window: number; at: number; tickNumber: number }, monotonicTick: number,
+): Promise<void> {
+  const queryStartedAt = Date.now();
   try {
     const row = await readEntryGateQueueSnapshot();
+    const elapsedMs = Date.now() - base.at;
+    const monotonicElapsedMs = Math.ceil(performance.now() - monotonicTick);
     if (typeof row?.observed_at !== 'number' || !Number.isFinite(row.observed_at)
       || typeof row.crypto !== 'number' || !Number.isSafeInteger(row.crypto) || row.crypto < 0
       || typeof row.xstock !== 'number' || !Number.isSafeInteger(row.xstock) || row.xstock < 0) {
       recordEvidence({ ...base, kind: 'snapshot_missing', reason: 'invalid_result' });
       return;
     }
-    recordEvidence({ ...base, kind: 'snapshot', observedAt: row.observed_at, elapsedMs: Date.now() - base.at,
-      crypto: row.crypto, xstock: row.xstock });
+    recordEvidence({ ...base, kind: 'snapshot', queryStartedAt, observedAt: row.observed_at,
+      elapsedMs, monotonicElapsedMs, crypto: row.crypto, xstock: row.xstock });
   } catch {
     recordEvidence({ ...base, kind: 'snapshot_missing', reason: 'query_failed', elapsedMs: Date.now() - base.at });
   } finally {
@@ -183,6 +194,11 @@ export interface EntryGateEvaluation extends EntryGateScanIdentity {
   readonly strategy: EntryGateStrategy;
   readonly lane: EntryGateLane;
   readonly ordinal: number;
+  readonly progress: {
+    targetVerdict: 'not_reached' | 'target_pass' | 'target_refused';
+    rtbCalls: number;
+    upsertOutcome: 'not_attempted' | 'attempted' | 'upsert_committed' | 'upsert_failed' | 'upsert_unconfirmed';
+  };
 }
 
 type EvaluationEvent =
@@ -241,8 +257,9 @@ export function planEntryGateEvaluation(
     const group = `${lane}:${strategy}`;
     expected.set(group, (expected.get(group) ?? 0) + 1);
   }
-  const evaluation = { ...identity, symbol, strategy, lane, ordinal,
-    id: JSON.stringify([scope.instance, scope.scan, lane, symbol, strategy, ordinal]) };
+  const evaluation: EntryGateEvaluation = { ...identity, symbol, strategy, lane, ordinal,
+    id: JSON.stringify([scope.instance, scope.scan, lane, symbol, strategy, ordinal]),
+    progress: { targetVerdict: 'not_reached', rtbCalls: 0, upsertOutcome: 'not_attempted' } };
   observeEntryGateEvaluation(evaluation, kind);
   return evaluation;
 }
@@ -253,7 +270,35 @@ export function observeEntryGateEvaluation(
   details?: Omit<EvidenceRecord, 'kind' | 'window' | 'at'>,
 ): void {
   if (!evaluation) return;
-  recordEvidence({ ...evaluation, kind, at: Date.now(), mode: 'paper', assetClass: 'crypto_spot', ...details });
+  const { progress, ...identity } = evaluation;
+  // Carry the reached seams in later terminals even when an individual record is lost.
+  let terminal: Omit<EvidenceRecord, 'kind' | 'window' | 'at'> | undefined;
+  switch (kind) {
+    case 'target_pass':
+    case 'target_refused':
+      progress.targetVerdict = kind;
+      break;
+    case 'rtb_call':
+      progress.rtbCalls++;
+      break;
+    case 'upsert_attempt':
+      progress.upsertOutcome = 'attempted';
+      break;
+    case 'upsert_committed':
+    case 'upsert_failed':
+    case 'upsert_unconfirmed':
+      progress.upsertOutcome = kind;
+      break;
+    case 'evaluation_end':
+      terminal = { targetVerdict: progress.targetVerdict, rtbCalls: progress.rtbCalls };
+      break;
+    case 'rtb_error':
+    case 'rtb_refused':
+    case 'rtb_returned':
+      terminal = { upsertOutcome: progress.upsertOutcome };
+      break;
+  }
+  recordEvidence({ ...identity, kind, at: Date.now(), mode: 'paper', assetClass: 'crypto_spot', ...details, ...terminal });
 }
 
 // A PostgreSQL rejection of this statement is distinct from a lost acknowledgement.

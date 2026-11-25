@@ -28,7 +28,8 @@ function fixture() {
       continue;
     }
     emit('cycle_start', at, { tickNumber });
-    emit('snapshot', at, { tickNumber, observedAt: at + 12, elapsedMs: 18, crypto: at === start ? 1 : 0, xstock: 67 });
+    emit('snapshot', at, { tickNumber, queryStartedAt: at + 1, observedAt: at + 12, elapsedMs: 18, monotonicElapsedMs: 19,
+      crypto: at === start ? 1 : 0, xstock: 67 });
   }
   const scan = { instance: 4, scan: 17, origin: 'active_portfolio', mode: 'paper', assetClass: 'crypto_spot' };
   emit('scan_start', start, scan);
@@ -50,12 +51,21 @@ function fixture() {
     { strategy: 'strong_bull_trend', lane: 'direct', symbol: 'EE/USD',
       events: [['detector_enter'], ['sizing_enter'], ['target_pass'], ['rtb_call'], ['upsert_attempt'],
         ['upsert_failed', { sqlState: '23514' }], ['rtb_error'], ['evaluation_end', { outcome: 'built' }]] },
+    { strategy: 'strong_bull_trend', lane: 'hybrid', symbol: 'FF/USD',
+      events: [['sizing_enter'], ['target_pass'], ['rtb_call'], ['rtb_error'], ['evaluation_end', { outcome: 'build_error' }]] },
   ];
   for (const { strategy, lane, symbol, events } of attempts) {
     const evaluation = { ...scan, strategy, lane, symbol, ordinal: 0,
       id: JSON.stringify([scan.instance, scan.scan, lane, symbol, strategy, 0]) };
     emit('census', start + 1, evaluation);
-    for (const [index, [kind, details]] of events.entries()) emit(kind, start + 2 + index, { ...evaluation, ...details });
+    const targetVerdict = events.find(([kind]) => ['target_pass', 'target_refused'].includes(kind))?.[0] ?? 'not_reached';
+    const rtbCalls = events.filter(([kind]) => kind === 'rtb_call').length;
+    const upsertOutcome = events.find(([kind]) => ['upsert_committed', 'upsert_failed'].includes(kind))?.[0] ?? 'not_attempted';
+    for (const [index, [kind, details]] of events.entries()) {
+      const terminal = kind === 'evaluation_end' ? { targetVerdict, rtbCalls }
+        : ['rtb_error', 'rtb_refused', 'rtb_returned'].includes(kind) ? { upsertOutcome } : {};
+      emit(kind, start + 2 + index, { ...evaluation, ...details, ...terminal });
+    }
   }
   const expected: { [key: string]: number } = {};
   for (const { lane, strategy } of attempts) {
@@ -79,7 +89,9 @@ describe('Entry Gate increment D fixed-session reconciliation', () => {
     expect(result.opportunities.totals.inside_bar_reversal.pattern).toMatchObject({
       targetJudged: 1, rtbCalls: 1, commits: 0, outcomes: { rtb_refused: 1 },
     });
-    expect(result.opportunities.totals.strong_bull_trend.hybrid).toMatchObject({ commits: 1, outcomes: { post_commit_error: 1 } });
+    expect(result.opportunities.totals.strong_bull_trend.hybrid).toMatchObject({
+      commits: 1, outcomes: { post_commit_error: 1, pre_upsert_error: 1 },
+    });
     expect(result.opportunities.totals.strong_bull_trend.direct).toMatchObject({ commits: 0, outcomes: { upsert_failed: 1 } });
   });
 
@@ -102,6 +114,22 @@ describe('Entry Gate increment D fixed-session reconciliation', () => {
     sample.crypto = 0;
     sample.observedAt = Number(sample.at) + 201;
     expect(verifyEntryGateWindow(input).clock.medians).toBeNull();
+  });
+
+  it.each([
+    { statementLagMs: 199 },
+    { startLagMs: 13 },
+    { elapsedMs: 201 },
+    { monotonicElapsedMs: 201 },
+    { monotonicElapsedMs: 190 },
+  ])('rejects physically inconsistent or late samples (%j)', changes => {
+    const input = fixture();
+    const sample = input.records.find(row => row.kind === 'snapshot' && row.at === start + 30_000)!;
+    if (changes.statementLagMs !== undefined) sample.observedAt = Number(sample.at) + changes.statementLagMs;
+    if (changes.startLagMs !== undefined) sample.queryStartedAt = Number(sample.at) + changes.startLagMs;
+    sample.elapsedMs = changes.elapsedMs ?? sample.elapsedMs;
+    sample.monotonicElapsedMs = changes.monotonicElapsedMs ?? sample.monotonicElapsedMs;
+    expect(verifyEntryGateWindow(input).errors).toContain('Unusable snapshot for tick 210');
   });
 
   it('fails if a whole trace disappears after its independent census', () => {
@@ -134,6 +162,25 @@ describe('Entry Gate increment D fixed-session reconciliation', () => {
     const lost = fixture();
     lost.records.find(row => row.symbol === 'DD/USD' && row.kind === 'upsert_committed')!.kind = 'upsert_unconfirmed';
     expect(verifyEntryGateWindow(lost).errors).toEqual(expect.arrayContaining([expect.stringContaining('write acknowledgement missing')]));
+  });
+
+  it('rejects a missing target verdict that would otherwise look like an early sizing refusal', () => {
+    const input = fixture();
+    input.records = input.records.filter(row => row.kind !== 'target_refused');
+    expect(verifyEntryGateWindow(input).errors).toEqual(expect.arrayContaining([
+      expect.stringContaining('terminal evidence disagrees with the observed target, RTB call or upsert outcome'),
+    ]));
+  });
+
+  it.each(['upsert_committed', 'upsert_unconfirmed'])('rejects loss of the upsert attempt and %s when the RTB error survives', outcome => {
+    const input = fixture();
+    const result = input.records.find(row => row.symbol === 'DD/USD' && row.kind === 'upsert_committed')!;
+    result.kind = outcome;
+    input.records.find(row => row.symbol === 'DD/USD' && row.kind === 'rtb_error')!.upsertOutcome = outcome;
+    input.records = input.records.filter(row => row.symbol !== 'DD/USD' || !['upsert_attempt', outcome].includes(row.kind));
+    expect(verifyEntryGateWindow(input).errors).toEqual(expect.arrayContaining([
+      expect.stringContaining('terminal evidence disagrees with the observed target, RTB call or upsert outcome'),
+    ]));
   });
 
   it('rejects an orphan pattern child and a cross-class Ready-to-Buy call', () => {

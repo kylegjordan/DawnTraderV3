@@ -114,6 +114,7 @@ describe('Entry Gate observation through the original Central Clock and RTB refr
     expect(carriers).toContain('"reason":"observer_busy"');
     expect(carriers).toContain('"reason":"query_failed"');
     expect(carriers).toContain('"crypto":0,"xstock":9');
+    expect(carriers).toMatch(/"kind":"snapshot"[^\n]*"queryStartedAt":\d+[^\n]*"monotonicElapsedMs":\d+/);
   });
 
   it('brackets the registered scans with sequence counts emitted on the clock path', async () => {
@@ -143,5 +144,49 @@ describe('Entry Gate observation through the original Central Clock and RTB refr
       expect.objectContaining({ kind: 'window_start', scanSequence: 0 }),
       expect.objectContaining({ kind: 'window_end', scanSequence: 2 }),
     ]);
+  });
+
+  it('carries the actual reached target and upsert seams into later terminal records', async () => {
+    vi.resetModules();
+    vi.stubEnv('ENTRY_GATE_EVIDENCE_WINDOWS_UTC', interval);
+    const { startEntryGateScan, planEntryGateEvaluation, observeEntryGateEvaluation } =
+      await import('../../core/observability/entry-gate-evidence.js');
+    const lines: string[] = [];
+    const stdout = vi.spyOn(process.stdout, 'write').mockImplementation(chunk => {
+      lines.push(String(chunk));
+      return true;
+    });
+    try {
+      const scan = startEntryGateScan(1, 'active_portfolio', 'paper', 'crypto_spot', initialTime);
+      const refusal = planEntryGateEvaluation(scan, 'A/USD', 'reverse_impulse', 'direct');
+      observeEntryGateEvaluation(refusal, 'target_refused');
+      observeEntryGateEvaluation(refusal, 'evaluation_end', { outcome: 'build_refused' });
+      for (const outcome of ['upsert_committed', 'upsert_unconfirmed', 'not_attempted'] as const) {
+        const evaluation = planEntryGateEvaluation(scan, outcome, 'strong_bull_trend', 'hybrid');
+        observeEntryGateEvaluation(evaluation, 'target_pass');
+        observeEntryGateEvaluation(evaluation, 'rtb_call');
+        observeEntryGateEvaluation(evaluation, 'evaluation_end', { outcome: 'built' });
+        if (outcome !== 'not_attempted') {
+          observeEntryGateEvaluation(evaluation, 'upsert_attempt');
+          observeEntryGateEvaluation(evaluation, outcome);
+        }
+        observeEntryGateEvaluation(evaluation, 'rtb_error');
+      }
+      await collectOutput();
+    } finally {
+      stdout.mockRestore();
+    }
+    const records = lines.join('').trimEnd().split('\n').map(line => JSON.parse(line.slice('[B-ENTRY-GATE-D] '.length)));
+    const terminals = records.filter(row => row.kind === 'evaluation_end' || row.kind === 'rtb_error');
+    expect(terminals).toEqual([
+      expect.objectContaining({ kind: 'evaluation_end', targetVerdict: 'target_refused', rtbCalls: 0 }),
+      expect.objectContaining({ kind: 'evaluation_end', targetVerdict: 'target_pass', rtbCalls: 1 }),
+      expect.objectContaining({ kind: 'rtb_error', upsertOutcome: 'upsert_committed' }),
+      expect.objectContaining({ kind: 'evaluation_end', targetVerdict: 'target_pass', rtbCalls: 1 }),
+      expect.objectContaining({ kind: 'rtb_error', upsertOutcome: 'upsert_unconfirmed' }),
+      expect.objectContaining({ kind: 'evaluation_end', targetVerdict: 'target_pass', rtbCalls: 1 }),
+      expect.objectContaining({ kind: 'rtb_error', upsertOutcome: 'not_attempted' }),
+    ]);
+    expect(records.some(row => 'progress' in row)).toBe(false);
   });
 });

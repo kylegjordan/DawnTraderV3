@@ -68,6 +68,8 @@ WHERE mode = 'paper' AND status IN ('active', 'reconfirmed')
   AND asset_class IN ('crypto_spot', 'xstock_spot')
 ```
 
+Step 4 r4 requires the database statement timestamp to fall between the app's query start time and response. The verifier applies the pre-registered maximum to both wall-clock and monotonic tick-to-response time. A difference above 2 ms between the app durations makes the sample unusable. The 2 ms covers millisecond rounding and the adjacent clock reads. We apply no offset adjustment to the database timestamp. A statement measured 199 ms after a tick with an app response at 18 ms fails even under a 200 ms bound.
+
 ## Modified, independent opportunity census and storage result
 
 `signal-orchestrator.ts` census reads the selected strategies independently of detector output, the canonical first pattern consumer before pattern scanning, and the list of actual inner-hybrid outputs before processing. Pattern children enroll separately before the processing loop and share a parent count. The active portfolio explicitly stamps its origin. The oracle rejects a legacy paper crypto scan or an unexpected class or mode.
@@ -102,6 +104,19 @@ try {
 
 The next event requires a returned row ID. A reissue can retain the existing storage signal ID, so the measurement does not infer insert versus conflict update from that ID.
 
+Step 4 r4 duplicates the reached seams in later terminal records. Its transient progress stays within the evidence context and never joins persisted trade or queue fields. The verifier reconciles each terminal declaration with the earlier events.
+
+```ts
+case 'evaluation_end':
+  terminal = { targetVerdict: progress.targetVerdict, rtbCalls: progress.rtbCalls };
+  break;
+case 'rtb_error':
+case 'rtb_refused':
+case 'rtb_returned':
+  terminal = { upsertOutcome: progress.upsertOutcome };
+  break;
+```
+
 ## New, bounded collection and offline verifier
 
 - `entry-gate-evidence.ts` enqueues scalar records, caps the queue at 2,048, drains batches up to 64 outside tick dispatch, and marks loss under the affected session. Data is off by default. The approved Step-6 deploy may add only its registered observation values to `ENTRY_GATE_EVIDENCE_WINDOWS_UTC`. The existing PM2 launcher reads `.env` at process start. Inspect the registered values before the deploy and verify the running process and bound markers after it.
@@ -120,3 +135,5 @@ The next event requires a returned row ID. A reissue can retain the existing sto
 - **NOT RE-READ** before the prospective sessions: real lane populations, arrival volume under staging load, the registered-build timing distribution, and the four-session Strong Bull Trend carrier.
 - **REVIEWER:** claim-only · what other states fit a complete opportunity census and equivalent timed refresh? · HIT: deleting both an opportunity's census and all its outcomes previously passed; the SQL count may see a commit after tick emission · re-derived y. The scan roster detects the combined deletion. The queue result represents the PostgreSQL statement time inside the registered lag bound, which can differ from exact tick-time membership. Inner-hybrid coverage begins with the output array the implementation actually dispatches.
 - **REVIEWER:** claim-only · can a whole first or last allocated scan disappear inside valid window anchors? · CLEAN on the scoped claim · re-derived y. The two boundary-deletion mutations passed on `20bd25da9` and fail with the anchor comparison.
+- **Coltrane Step 4 CHANGES**, `497533ac292f4c4a0f897e0de0e7aee9004a0913`, 2026-11-25 13:23:14Z. Removing the target-refusal line, removing the upsert attempt plus its confirmed or unconfirmed result, and an impossible database/app timing pair passed r3. R4 rejects those changes against the real verifier. The intact fixture includes a genuine pre-upsert error and still distinguishes it from a successful write followed by an error.
+- **REVIEWER:** claim-only · can reached seams or a physical statement bound still be misread? · HIT: a preliminary r4 accepted a statement before query start and an inconsistent wall/monotonic pair · re-derived y. Exact timing now brackets the raw statement timestamp, bounds both full durations, and rejects both mutations. Deleting individual trace records in the passing fixture did not bypass the terminal declarations.

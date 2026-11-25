@@ -10,6 +10,7 @@ const TICK_INTERVAL = 15;
 const HEALTH_INTERVAL = 60;
 const GUARD_MS = 120_000;
 const DRAIN_MS = 900_000;
+const APP_CLOCK_ROUNDING_MS = 2;
 
 function group(records, key) {
   const groups = new Map();
@@ -96,9 +97,13 @@ function clockAndQueue(records, health, start, end, cutoff, maxSnapshotLagMs, { 
     const sample = exactlyOne(sampleRows, `snapshot ${tick.tickNumber}`, errors);
     if (!sample) continue;
     if (sample.kind !== 'snapshot' || sample.at !== tick.at
-      || !Number.isFinite(sample.observedAt) || sample.observedAt < tick.at
+      || !integerCount(sample.queryStartedAt) || sample.queryStartedAt < tick.at
+      || !Number.isFinite(sample.observedAt) || sample.observedAt < sample.queryStartedAt
       || sample.observedAt > tick.at + maxSnapshotLagMs || sample.observedAt >= ticks[index + 1]?.at
-      || !integerCount(sample.elapsedMs) || sample.at + sample.elapsedMs > cutoff
+      || !integerCount(sample.elapsedMs) || sample.elapsedMs > maxSnapshotLagMs
+      || !integerCount(sample.monotonicElapsedMs) || sample.monotonicElapsedMs > maxSnapshotLagMs
+      || Math.abs(sample.elapsedMs - sample.monotonicElapsedMs) > APP_CLOCK_ROUNDING_MS
+      || sample.observedAt - tick.at > sample.elapsedMs || sample.at + sample.elapsedMs > cutoff
       || !integerCount(sample.crypto) || !integerCount(sample.xstock)) {
       errors.push(`Unusable snapshot for tick ${tick.tickNumber}${sample.reason ? `: ${sample.reason}` : ''}`);
       continue;
@@ -134,6 +139,13 @@ function classifyEvaluation(rows, context, errors) {
   const detector = census.lane === 'direct' ? ['detector_enter'] : [];
   const sizing = ['census', ...detector, 'sizing_enter'];
   const target = kinds.filter(kind => kind === 'target_pass' || kind === 'target_refused');
+  const rtbCalls = kinds.filter(kind => kind === 'rtb_call').length;
+  const upsert = kinds.find(kind => ['upsert_committed', 'upsert_failed', 'upsert_unconfirmed'].includes(kind));
+  const rtbTerminals = rows.filter(row => ['rtb_refused', 'rtb_returned', 'rtb_error'].includes(row.kind));
+  if (endRow.targetVerdict !== (target[0] ?? 'not_reached') || endRow.rtbCalls !== rtbCalls
+    || rtbTerminals.some(row => row.upsertOutcome !== (upsert ?? 'not_attempted'))) {
+    errors.push(`${context}: terminal evidence disagrees with the observed target, RTB call or upsert outcome`);
+  }
   const storage = kinds.filter(kind => kind !== 'evaluation_end').slice(sizing.length + target.length);
   const same = (left, right) => left.join('/') === right.join('/');
   const endIndex = kinds.indexOf('evaluation_end');
@@ -176,8 +188,7 @@ function classifyEvaluation(rows, context, errors) {
   if (commit && (typeof commit.rowId !== 'string' || !commit.rowId || commit.storedSymbol !== census.symbol)) {
     errors.push(`${context}: confirmed row identity does not match the evaluation`);
   }
-  return { census, endRow, target: target[0], commit: Boolean(commit),
-    rtbCalls: kinds.includes('rtb_call') ? 1 : 0,
+  return { census, endRow, target: target[0], commit: Boolean(commit), rtbCalls,
     storageOutcome: commit ? (kinds.includes('rtb_error') ? 'post_commit_error' : 'upsert_committed')
       : storage.find(kind => ['upsert_failed', 'upsert_unconfirmed', 'rtb_refused'].includes(kind))
         ?? (storage.includes('rtb_error') ? 'pre_upsert_error' : undefined) };
