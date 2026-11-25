@@ -185,8 +185,17 @@ export interface StatedSides {
   sizes: SideSizes | null;
 }
 
+interface RestReceiptOrderingCounts {
+  eligibleOverwrites: number;
+  strictInversions: number;
+}
+
 /** The REST ticker fields the cache's own REST sites read (structural; `KrakenTicker` is not exported). */
 type RestTickerFields = { a?: string[]; b?: string[]; c?: string[]; v?: string[]; h?: string[]; l?: string[] };
+
+function restTickerSides(ticker: RestTickerFields) {
+  return pairwiseStatedSides(parseFloat(ticker.b?.[0] || '0'), parseFloat(ticker.a?.[0] || '0'));
+}
 
 /**
  * B-PRICE-FEED-TRUTH I2: the venue's own pair list, as the REST sites use it — its readiness, the pair to SEND for an
@@ -233,6 +242,7 @@ class UnifiedPriceCache {
   private reasonOwners = new Map<CacheBucketType, Map<string, Set<string>>>();
 
   private cache: Map<string, CachedPrice> = new Map();
+  private restReceiptOrdering = new Map<SidesWriter, RestReceiptOrderingCounts>();
   private currentWeight = 0;
   private refreshing = false;
   private krakenService: KrakenService;
@@ -430,10 +440,11 @@ class UnifiedPriceCache {
       const internal = entry.internalSymbol;
       const requested = sent.get(entry.krakenRestPair.toUpperCase());
       const keys = requested && requested !== internal ? [internal, requested] : [internal];
+      const sides = restTickerSides(ticker);
       for (const key of keys) {
         // `3n.l` increment 2 (P8, P9 ii): one row builder for the REST ticker sites, built PER KEY WRITTEN.
-        const row = this.restTickerRow(key, internal, ticker, writer, now);
-        this.cache.set(key, row);
+        const row = this.restTickerRow(key, internal, ticker, writer, now, sides);
+        this.storeRestRow(key, row, sides !== null);
         onRow?.(key, row);
       }
       writes.push({ responseKey: pair, writtenKeys: keys });
@@ -451,10 +462,16 @@ class UnifiedPriceCache {
    *    store ONE object under both keys, copying the normalised key's liveness onto the requested key with no push.
    * `symbol` stays the normalised key on both rows, as before.
    */
-  private restTickerRow(key: string, normalizedSymbol: string, ticker: RestTickerFields, writer: SidesWriter, now: number): CachedPrice {
+  private restTickerRow(
+    key: string,
+    normalizedSymbol: string,
+    ticker: RestTickerFields,
+    writer: SidesWriter,
+    now: number,
+    sides = restTickerSides(ticker),
+  ): CachedPrice {
     const existing = this.cache.get(key);
     const price = parseFloat(ticker.c?.[0] || '0');
-    const sides = pairwiseStatedSides(parseFloat(ticker.b?.[0] || '0'), parseFloat(ticker.a?.[0] || '0'));
     return {
       symbol: normalizedSymbol,
       price,
@@ -896,7 +913,7 @@ class UnifiedPriceCache {
     const now = Date.now();
     const existing = this.cache.get(symbol);
     const stated = sides ?? null;
-    this.cache.set(symbol, {
+    this.storeRestRow(symbol, {
       symbol,
       price,
       ask: stated ? stated.ask : (existing?.ask ?? price),
@@ -915,7 +932,34 @@ class UnifiedPriceCache {
       markKind: markKind ?? null,
       ...carryLastTrade(existing, lastTradePrice, now),
       lastUpdatedAt: now,
-    });
+    }, stated !== null && pairwiseStatedSides(stated.bid, stated.ask) !== null);
+  }
+
+  private storeRestRow(key: string, row: CachedPrice, stated: boolean): void {
+    const incumbent = this.cache.get(key);
+    this.cache.set(key, row);
+
+    // #1146 compares two local receipt stamps on the actual key. A carried pair has no new receipt.
+    const previousStamp = incumbent?.sidesCapturedAtMs;
+    const currentStamp = row.sidesCapturedAtMs;
+    if (!stated || !row.sidesWriter?.startsWith('rest_') ||
+        (incumbent?.sidesWriter !== 'ws_ticker' && incumbent?.sidesWriter !== 'ws_book') ||
+        previousStamp == null || currentStamp == null ||
+        !Number.isFinite(previousStamp) || !Number.isFinite(currentStamp)) return;
+
+    let counts = this.restReceiptOrdering.get(row.sidesWriter);
+    if (!counts) {
+      counts = { eligibleOverwrites: 0, strictInversions: 0 };
+      this.restReceiptOrdering.set(row.sidesWriter, counts);
+    }
+    counts.eligibleOverwrites++;
+    if (currentStamp < previousStamp) counts.strictInversions++;
+  }
+
+  getRestReceiptOrdering(): Partial<Record<SidesWriter, RestReceiptOrderingCounts>> {
+    return Object.fromEntries(
+      Array.from(this.restReceiptOrdering, ([writer, counts]) => [writer, { ...counts }]),
+    );
   }
 
   get(symbol: string): CachedPrice | null {
