@@ -1,6 +1,6 @@
 # B-TOKEN-ECONOMY — PROGRESS REPORT
 
-**OPEN — waiting on the Claude crew rollout of the 250k window (OBJ-2), review of the Codex canary evidence (OBJ-3) and the alert-delta shadow reaching 50 verified deltas (parent P6).**
+**OPEN — waiting on the Claude crew rollout of the 250k window (OBJ-2), landing the approved Codex canary record (OBJ-3), and the alert-delta shadow reaching 50 verified deltas (parent P6).**
 
 Owner: PM Claude · Kyle KD-103 · change-class `non_architecture` · sprint plan stage 0 row 1 · written 2026-11-19.
 Scope `Scope Files/B_TOKEN_ECONOMY_SCOPE.md` · pre-audit `Scope Files/B_TOKEN_ECONOMY_PRE_AUDIT.md` · change list `Change Lists/B_TOKEN_ECONOMY_CHANGE_LIST.md`.
@@ -51,7 +51,7 @@ Window shape: **quantity** (50 verified deltas) for P6; **event** (crew resume, 
 
 ### PM-only continuation on 2026-11-24
 
-- **OBJ-3 evidence is ready for review.** The pushed `review/b-token-economy-obj3-codex` branch carries the canary record in `Change Lists/B_TOKEN_ECONOMY_CANARY.md`, Observation 6. It records a strict configuration read in all five DawnTrader Codex folders and an isolated low-threshold run that compacted and continued. The 250k threshold was checked by configuration and precedence. The original trial did not force a 250k crossing. Keep the Workflow Improve OBJ-8 step-file reading leg distinct from this compaction evidence.
+- **OBJ-3 evidence passed independent review.** Coltrane ruled PROCEED at `43ab8679d` on 2026-11-23 at 22:44:30 UTC. The canary record in `Change Lists/B_TOKEN_ECONOMY_CANARY.md`, Observation 6, records a strict configuration read in all five DawnTrader Codex folders and an isolated low-threshold run that compacted and continued. The 250k threshold was checked by configuration and precedence. The original trial did not force a 250k crossing. Keep the Workflow Improve OBJ-8 step-file reading leg distinct from this compaction evidence.
 - **PM-owned alert follow-up (KD-115 follow-on, amendment P8).** The hourly check now recognizes `CC-PM` receipt records and `PM Claude` action posts. When PM owns the alert, follow-up asks PM to check its own receipt or action. Four seeded cases went from failing to passing, including a critical alert with no receipt and a builder's post that must not count as PM action. All 21 offline checks passed. This change is pending reviewer acceptance and has not been installed or run on live alert data.
 - **P6 has two separate evidence sets.** The parent's 50 verified deltas are the gate for shortening the injected alert list. The amendment's alert-owner routing observation is documented in `Change Lists/B_TOKEN_ECONOMY_AMD1_P6_STEP7_VERIFY.md`. Its day-3 read (`6fcc5d572`) found no routing events while Langston was off and contributes no agreement evidence.
 - **Remaining amendment closeout:** P10 consolidates measured Claude/Codex parity by leg, and P11 reconciles the governance records. Both remain open.
