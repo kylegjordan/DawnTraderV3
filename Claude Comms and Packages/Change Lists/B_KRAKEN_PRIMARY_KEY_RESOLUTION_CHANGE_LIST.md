@@ -90,4 +90,11 @@ REVIEWER: claim-only · Which read and writes prove adapter-only history on a st
 
 The local fixture uses an away-and-back real mapper refresh without intervening quote activity, an actual selector lookup of the unrelated suffix-derived key, and an invalid REST pair committed and replaced before the next read. The current instrument exposes permanent coverage gaps on each applicable surface.
 
+## Step 4 revision 2
+
+Coltrane sent back `6596b3139775c66d71496bf8c172ad9bf10d6207` at 23:09:32 UTC on November 25. His focused review passed 86 of 86 cases and reproduced legacy JSON and JSONL parity as well as the route-level interleaving control. The revision addresses his two blockers.
+
+1. Mapping publication retains every declared or indexed claimant to an ambiguous name. It records a permanent gap for each attributable covered symbol, at startup and on a live refresh. In the real mapper fixture, BTC keeps primary key `XXBTZUSD` while ETH briefly claims the same name as its REST alias. There are no intervening quote actions. After the map returns to normal both symbols show the gap. Mutation retaining just the frozen claimant fails.
+2. The unlisted-row evidence inspection catches a coercion failure so it can record a coverage gap and skip the offending row. A real `getBatch` fixture supplies a malformed unlisted row first and one valid ETH/USD quote second. The one listed row is returned and cached. Reverting to an unguarded inspection drops the valid sibling and fails the fixture.
+
 **Question for Coltrane** — can a materially mixed symbol satisfy the present writer-coverage and parity evidence, or can any of these synchronous diagnostic hooks alter the existing quote decision or default output? Challenge the initialized alias, the interpreter's later await and the positive-evidence rule.

@@ -19,6 +19,7 @@ const ticker = { a: ['102', '1', '2'], b: ['98', '1', '3'], c: ['100'] };
 const fakeVenue = { resolveByKrakenKey: (key: string) => key === 'XXBTZUSD' ? pair : undefined };
 const cache = priceCache as unknown as {
   venue: unknown;
+  krakenService: { getTicker: (keys: string) => Promise<Record<string, unknown>> };
   restReceiptOrdering: Map<unknown, unknown>;
   fileRestResponse: (
     data: Record<string, typeof ticker>, requested: ReadonlyMap<string, string>,
@@ -219,6 +220,20 @@ it('reconciles both sources from an inherited alias and freezes the whole opt-in
   }));
   expect(afterRemap.coverage.symbols.find(row => row.symbol === 'ETH/USD')?.gaps.identity_change).toBeGreaterThan(0);
 
+  // BTC keeps the primary. ETH briefly claims the same spelling as its REST alias.
+  getAssetPairs.mockResolvedValueOnce({ data: { error: [], result: {
+    ...pairs, XETHZUSD: metadata('XXBTZUSD', 'ETH/USD', 'XETH'),
+  } } });
+  await krakenAssetPairsService.refresh();
+  expect(krakenAssetPairsService.resolveByKrakenKey('XXBTZUSD')?.internalSymbol).toBe('BTC/USD');
+  expect(krakenAssetPairsService.resolveByRestPair('XXBTZUSD')?.internalSymbol).toBe('ETH/USD');
+  await krakenAssetPairsService.refresh();
+  const afterAmbiguity = captureLevelBasisDiagnostics(priceCache.getRestReceiptOrdering()).krakenPriceSourceBySymbol!;
+  for (const affected of ['BTC/USD', 'ETH/USD']) {
+    expect(afterAmbiguity.coverage.symbols.find(row => row.symbol === affected)?.gaps.ambiguous_identity)
+      .toBeGreaterThan(0);
+  }
+
   const rawPrimary = 'XETHZCAD';
   expect(krakenAssetPairsService.resolveByKrakenKey(rawPrimary)?.internalSymbol).toBe('ETH/CAD');
   writeRest('ETH/CAD', 5090);
@@ -235,4 +250,24 @@ it('reconciles both sources from an inherited alias and freezes the whole opt-in
   expect(afterUnresolved.untracked).toContainEqual({
     key: ladderKey, reason: 'unresolved', attempted: 1, byAcceptedSource: {},
   });
+});
+
+it('keeps the listed quote when an earlier unlisted response row cannot be parsed', async () => {
+  const listed = 'ETH/USD';
+  cache.venue = {
+    isReady: () => true,
+    toKrakenRest: (key: string) => key === listed ? 'ETHUSD' : null,
+    resolveByKrakenKey: (key: string) => key === 'XETHZUSD' ? {
+      internalSymbol: listed, krakenRestPair: 'ETHUSD', krakenPairKey: 'XETHZUSD',
+    } : undefined,
+  };
+  const getTicker = vi.spyOn(cache.krakenService, 'getTicker').mockResolvedValue({
+    MALFORMED_UNLISTED: { a: [{ toString: null, valueOf: null }], b: ['99'] },
+    XETHZUSD: ticker,
+  });
+  const rows = await priceCache.getBatch('openTrade', [listed], { restEligible: new Set([listed]) });
+  expect(getTicker).toHaveBeenCalledWith('ETHUSD');
+  expect(rows.get(listed)).toMatchObject({ bid: 98, ask: 102, sidesWriter: 'rest_batch' });
+  expect(priceCache.get(listed)).toEqual(rows.get(listed));
+  expect(priceCache.get('MALFORMED_UNLISTED')).toBeNull();
 });

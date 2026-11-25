@@ -200,6 +200,12 @@ function restTickerSides(ticker: RestTickerFields) {
   return pairwiseStatedSides(parseFloat(ticker.b?.[0] || '0'), parseFloat(ticker.a?.[0] || '0'));
 }
 
+function skippedTickerMayStateSides(ticker: RestTickerFields | null | undefined): boolean {
+  // A bad unlisted row can only affect coverage. It must never block the listed rows beside it.
+  try { return ticker != null && restTickerSides(ticker) !== null; }
+  catch { return true; }
+}
+
 /**
  * B-PRICE-FEED-TRUTH I2: the venue's own pair list, as the REST sites use it — its readiness, the pair to SEND for an
  * internal symbol, and the internal symbol a RESPONSE key belongs to. A field (not a direct import call) so a test can
@@ -440,7 +446,7 @@ class UnifiedPriceCache {
       const entry = this.venue.resolveByKrakenKey(pair);
       if (!entry) {
         unresolved++;
-        if (ticker && restTickerSides(ticker)) {
+        if (skippedTickerMayStateSides(ticker)) {
           krakenPriceSourceDiagnostics.startIfReady();
           krakenPriceSourceDiagnostics.recordDroppedAssignment(pair);
         }

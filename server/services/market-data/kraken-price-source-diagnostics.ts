@@ -13,7 +13,7 @@ type VenueMap = Pick<typeof krakenAssetPairsService,
   'isReady' | 'getAllMappings' | 'resolveByInternal' | 'resolveByWsPair' |
   'resolveByRestPair' | 'resolveByKrakenKey' | 'resolveByCompactSymbol'>;
 type StoredSides = Pick<CachedPrice, 'sidesWriter' | 'sidesCapturedAtMs' | 'symbol' | 'bid' | 'ask'>;
-type CoverageGap = 'inherited_identity' | 'missing_provenance' | 'identity_change' |
+type CoverageGap = 'inherited_identity' | 'missing_provenance' | 'identity_change' | 'ambiguous_identity' |
   'unresolved_write' | 'dropped_write' | 'unresolved_walk' | 'observer_error';
 type UntrackedReason = 'pre_ready' | 'outside_cohort' | 'outside_class' | 'unresolved' | 'identity_change';
 type Counts<Key extends string> = Partial<Record<Key, number>>;
@@ -52,6 +52,23 @@ function sameIdentity(left: Identity, right: Identity) {
   return left.symbol === right.symbol && left.venueKey === right.venueKey;
 }
 
+function identityOf(entry: AutoMappingEntry): Identity {
+  return { symbol: entry.internalSymbol, venueKey: entry.krakenPairKey };
+}
+
+function indexMappingClaims(mappings: AutoMappingEntry[]) {
+  const claims = new Map<string, AutoMappingEntry[]>();
+  for (const entry of mappings) {
+    for (const name of new Set([entry.internalSymbol, entry.krakenRestPair, entry.krakenWsPair,
+      entry.krakenPairKey, entry.base + entry.quote].map(key => key.toUpperCase()))) {
+      const prior = claims.get(name);
+      if (prior) prior.push(entry);
+      else claims.set(name, [entry]);
+    }
+  }
+  return claims;
+}
+
 function readBuildSha() {
   try { return readFileSync('dist/BUILD_SHA', 'utf8').trim() || null; }
   catch { return null; }
@@ -80,28 +97,48 @@ export class KrakenPriceSourceDiagnostics {
     }
     try {
       // Record changes at publication, even if nobody reads or writes a quote before the next refresh.
-      for (const [key, frozen] of this.keys) {
-        const current = this.exactIdentity(key);
-        if (!current || !sameIdentity(frozen, current)) this.markGap('identity_change', frozen, current);
+      const claims = indexMappingClaims(this.venue.getAllMappings());
+      for (const key of new Set([...this.keys.keys(), ...claims.keys()])) {
+        const frozen = this.keys.get(key);
+        const candidates = this.identitiesForPublication(key, claims.get(key));
+        if (candidates.length > 1) this.markGap('ambiguous_identity', frozen, ...candidates);
+        else if (frozen && (!candidates[0] || !sameIdentity(frozen, candidates[0]))) {
+          this.markGap('identity_change', frozen, candidates[0]);
+        }
       }
     } catch {
       this.markGap('observer_error');
     }
   }
 
-  private exactIdentity(key: string, canonicalHint?: string): Identity | undefined {
-    // The writer/selection supplied an actual key. Guessed suffix identities cannot prove coverage.
-    const matches = [
+  private lookupClaims(key: string): AutoMappingEntry[] {
+    return [
       this.venue.resolveByInternal(key),
       this.venue.resolveByWsPair(key),
       this.venue.resolveByRestPair(key),
       this.venue.resolveByKrakenKey(key),
       this.venue.resolveByCompactSymbol(key),
     ].filter((entry): entry is AutoMappingEntry => entry !== undefined);
+  }
+
+  private identitiesForPublication(key: string, declared: AutoMappingEntry[] = []): Identity[] {
+    // The exact indexes can each retain just one owner for a spelling. Retain declared claimants too.
+    const distinct = new Map<string, Identity>();
+    for (const entry of [...this.lookupClaims(key), ...declared]) {
+      const identity = identityOf(entry);
+      distinct.set(JSON.stringify([identity.symbol, identity.venueKey]), identity);
+    }
+    return Array.from(distinct.values());
+  }
+
+  private exactIdentity(key: string, canonicalHint?: string): Identity | undefined {
+    // The writer/selection supplied an actual key. Guessed suffix identities cannot prove coverage.
+    const matches = this.lookupClaims(key);
     const first = matches[0];
-    if (!first || matches.some(entry => entry.krakenPairKey !== first.krakenPairKey)) return undefined;
+    if (!first || matches.some(entry => entry.krakenPairKey !== first.krakenPairKey ||
+      entry.internalSymbol !== first.internalSymbol)) return undefined;
     if (canonicalHint !== undefined && first.internalSymbol !== canonicalHint) return undefined;
-    return { symbol: first.internalSymbol, venueKey: first.krakenPairKey };
+    return identityOf(first);
   }
 
   private markGap(reason: CoverageGap, ...identities: Array<Identity | undefined>): void {
@@ -121,11 +158,11 @@ export class KrakenPriceSourceDiagnostics {
       if (mappings.length === 0) return;
       for (const entry of mappings) {
         this.symbols.set(entry.internalSymbol, { inherited: {}, assigned: {}, gaps: {} });
-        for (const key of [entry.internalSymbol, entry.krakenRestPair, entry.krakenWsPair,
-          entry.krakenPairKey, entry.base + entry.quote]) {
-          const identity = this.exactIdentity(key);
-          if (identity) this.keys.set(key.toUpperCase(), identity);
-        }
+      }
+      for (const [key, declared] of indexMappingClaims(mappings)) {
+        const candidates = this.identitiesForPublication(key, declared);
+        if (candidates.length > 1) this.markGap('ambiguous_identity', ...candidates);
+        else if (candidates[0]) this.keys.set(key, candidates[0]);
       }
       // Iterate actual cache keys, including aliases that do not appear in the row values.
       for (const [key, row] of this.cacheEntries()) {
