@@ -24,17 +24,19 @@
  * ticker until the maintained xStock book passes a checksum-validated control with no crossed books. An ineligible book
  * refuses as `book_not_eligible`, so a reader can tell "we did not use the book" from "the book was bad".
  *
- * PURE: no clock read, no feed import. `nowMs` and the policy are injected, like `buildLevelBasis`.
+ * The selector is pure. `nowMs` and the policy are injected, like `buildLevelBasis`. The recorder is a separate call.
  * RECORD-ONLY IN COMMIT LAYER 1: no decision reads this yet; OBJ-8 wires it (P-8a exits, P-8c levels).
  */
 import {
   buildLevelBasis,
   recordLevelBasisOutcome,
+  type FunnelOutcome,
   type LevelBasisRefusal,
   type LevelBasisLane,
   type LevelBasisStage,
   type TickerAcceptBookVerdict,
 } from './level-basis.js';
+import { krakenPriceSourceDiagnostics } from '../../services/market-data/kraken-price-source-diagnostics.js';
 
 /** Which clock an age was measured on. Never pooled. */
 export type ClockBasis = 'venue' | 'receipt';
@@ -261,7 +263,9 @@ export function tickerLegFromCachedQuote(q: CachedQuoteSides | null | undefined)
 export function recordTouchSelection(
   base: { lane: LevelBasisLane; assetClass: string; stage: LevelBasisStage },
   sel: TouchSelection,
+  symbol: string,
 ): void {
+  krakenPriceSourceDiagnostics.startIfReady();
   // ⛔ THE ACCEPTED QUOTE'S OWN AGE, AND WHICH LEG CARRIED IT (row `8a-P1`, P1-4). Derived HERE,
   // once, from the selection the caller already holds - a call site computing it would be a second
   // derivation of one fact, which is how the two drift.
@@ -271,12 +275,10 @@ export function recordTouchSelection(
     ? { acceptedAgeMs: sel.quote.ageMs, acceptedLeg: (sel.quote.basis === 'book_top' ? 'book' : 'ticker') as 'book' | 'ticker' }
     : {};
   // The book rung: `bookRefusal === null` means the book itself carried the selection.
-  recordLevelBasisOutcome(
-    { ...base, rung: 'book' },
-    sel.ok && sel.bookRefusal === null
-      ? { ok: true, acceptedSource: `${sel.quote.basis}:${sel.quote.producer}`, ..._age }
-      : { ok: false, reason: sel.bookRefusal ?? 'no_book' },
-  );
+  const bookOutcome: FunnelOutcome = sel.ok && sel.bookRefusal === null
+    ? { ok: true, acceptedSource: `${sel.quote.basis}:${sel.quote.producer}`, ..._age }
+    : { ok: false, reason: sel.bookRefusal ?? 'no_book' };
+  recordLevelBasisOutcome({ ...base, rung: 'book' }, bookOutcome);
   // The ladder: accepted if ANY rung carried it; the refusal recorded is the LAST rung's, because
   // that is the one that had the final say. The book's reason is already in its own cell.
   // ⛔ `acceptedSource` carries the TRANSPORT (Langston condition 1). `ticker_bbo` names the
@@ -291,10 +293,9 @@ export function recordTouchSelection(
       : sel.bookRefusal === 'book_untrusted' ? 'book_untrusted'
       : 'book_refused')
     : undefined;
-  recordLevelBasisOutcome(
-    { ...base, rung: 'ladder' },
-    sel.ok
-      ? { ok: true, acceptedSource: `${sel.quote.basis}:${sel.quote.producer}`, ..._age, ...(_bookVerdict ? { tickerAcceptedBookVerdict: _bookVerdict } : {}) }
-      : { ok: false, reason: sel.tickerRefusal },
-  );
+  const ladderOutcome: FunnelOutcome = sel.ok
+    ? { ok: true, acceptedSource: `${sel.quote.basis}:${sel.quote.producer}`, ..._age, ...(_bookVerdict ? { tickerAcceptedBookVerdict: _bookVerdict } : {}) }
+    : { ok: false, reason: sel.tickerRefusal };
+  recordLevelBasisOutcome({ ...base, rung: 'ladder' }, ladderOutcome);
+  krakenPriceSourceDiagnostics.recordWalkOutcomes(base, symbol, bookOutcome, ladderOutcome);
 }

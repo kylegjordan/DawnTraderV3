@@ -960,7 +960,7 @@ export class LivePricingAdapter {
       priceCache.updateFromRest(normalized, midpoint, _restKind, _lastTradeOrNull,
         _restSides ? { bid: _restSides.bid, ask: _restSides.ask, capturedAtMs: Date.now(), writer: 'rest_adapter',
           // KD-19 P3: REST `lot volume`, CEILED to a whole base unit by Kraken — labelled, never read as exact.
-          sizes: sideSizesOf(tickerData?.b?.[2], tickerData?.a?.[2], 'rest_rounded_up') } : null);
+          sizes: sideSizesOf(tickerData?.b?.[2], tickerData?.a?.[2], 'rest_rounded_up') } : null, resultKey);
       
       // A real venue read: `observedAt` is genuinely now, and it is the ONLY return here that
       // may say so.

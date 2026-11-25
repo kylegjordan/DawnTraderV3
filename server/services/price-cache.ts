@@ -28,6 +28,7 @@ import { normalizeToInternalSymbol as normalizeKrakenPair } from '../markets/kra
 import { buildWriteKeyLedger, formatWriteKeyLedger, WriteKeyAccumulator, type RestWriteKeys, type WriteKeyLedger } from './market-data/rest-write-keys.js';
 import { krakenAssetPairsService } from '../markets/kraken-asset-pairs-service.js';
 import { pairwiseStatedSides } from './market-data/stated-sides.js';
+import { krakenPriceSourceDiagnostics } from './market-data/kraken-price-source-diagnostics.js';
 
 export type PriceSourceTag = 'kraken_ws' | 'kraken_rest';
 
@@ -185,8 +186,25 @@ export interface StatedSides {
   sizes: SideSizes | null;
 }
 
+interface RestReceiptOrderingCounts {
+  eligibleOverwrites: number;
+  strictInversions: number;
+}
+
+type SideAssignment = 'none' | 'stated' | 'malformed';
+
 /** The REST ticker fields the cache's own REST sites read (structural; `KrakenTicker` is not exported). */
 type RestTickerFields = { a?: string[]; b?: string[]; c?: string[]; v?: string[]; h?: string[]; l?: string[] };
+
+function restTickerSides(ticker: RestTickerFields) {
+  return pairwiseStatedSides(parseFloat(ticker.b?.[0] || '0'), parseFloat(ticker.a?.[0] || '0'));
+}
+
+function skippedTickerMayStateSides(ticker: RestTickerFields | null | undefined): boolean {
+  // A bad unlisted row can only affect coverage. It must never block the listed rows beside it.
+  try { return ticker != null && restTickerSides(ticker) !== null; }
+  catch { return true; }
+}
 
 /**
  * B-PRICE-FEED-TRUTH I2: the venue's own pair list, as the REST sites use it — its readiness, the pair to SEND for an
@@ -233,6 +251,7 @@ class UnifiedPriceCache {
   private reasonOwners = new Map<CacheBucketType, Map<string, Set<string>>>();
 
   private cache: Map<string, CachedPrice> = new Map();
+  private restReceiptOrdering = new Map<SidesWriter, RestReceiptOrderingCounts>();
   private currentWeight = 0;
   private refreshing = false;
   private krakenService: KrakenService;
@@ -253,6 +272,8 @@ class UnifiedPriceCache {
 
   constructor() {
     this.krakenService = new KrakenService();
+    krakenPriceSourceDiagnostics.bindCache(() => this.cache.entries());
+    krakenAssetPairsService.bindPriceSourceMappingObserver(() => krakenPriceSourceDiagnostics.observeMappingPublication());
   }
 
   initialize(): void {
@@ -425,15 +446,24 @@ class UnifiedPriceCache {
       const entry = this.venue.resolveByKrakenKey(pair);
       if (!entry) {
         unresolved++;
+        if (skippedTickerMayStateSides(ticker)) {
+          krakenPriceSourceDiagnostics.startIfReady();
+          krakenPriceSourceDiagnostics.recordDroppedAssignment(pair);
+        }
         continue;
       }
       const internal = entry.internalSymbol;
       const requested = sent.get(entry.krakenRestPair.toUpperCase());
       const keys = requested && requested !== internal ? [internal, requested] : [internal];
+      const sides = restTickerSides(ticker);
+      if (sides) {
+        krakenPriceSourceDiagnostics.startIfReady();
+        krakenPriceSourceDiagnostics.checkRestResponseIdentity(pair, entry);
+      }
       for (const key of keys) {
         // `3n.l` increment 2 (P8, P9 ii): one row builder for the REST ticker sites, built PER KEY WRITTEN.
-        const row = this.restTickerRow(key, internal, ticker, writer, now);
-        this.cache.set(key, row);
+        const row = this.restTickerRow(key, internal, ticker, writer, now, sides);
+        this.storeRow(key, row, sides ? 'stated' : 'none', internal);
         onRow?.(key, row);
       }
       writes.push({ responseKey: pair, writtenKeys: keys });
@@ -451,10 +481,16 @@ class UnifiedPriceCache {
    *    store ONE object under both keys, copying the normalised key's liveness onto the requested key with no push.
    * `symbol` stays the normalised key on both rows, as before.
    */
-  private restTickerRow(key: string, normalizedSymbol: string, ticker: RestTickerFields, writer: SidesWriter, now: number): CachedPrice {
+  private restTickerRow(
+    key: string,
+    normalizedSymbol: string,
+    ticker: RestTickerFields,
+    writer: SidesWriter,
+    now: number,
+    sides = restTickerSides(ticker),
+  ): CachedPrice {
     const existing = this.cache.get(key);
     const price = parseFloat(ticker.c?.[0] || '0');
-    const sides = pairwiseStatedSides(parseFloat(ticker.b?.[0] || '0'), parseFloat(ticker.a?.[0] || '0'));
     return {
       symbol: normalizedSymbol,
       price,
@@ -836,7 +872,7 @@ class UnifiedPriceCache {
     const _stated = _pair !== null && sidesWriter != null ? _pair : null;
     const _bid = _stated ? _stated.bid : (existing?.bid ?? price);
     const _ask = _stated ? _stated.ask : (existing?.ask ?? price);
-    this.cache.set(symbol, {
+    this.storeRow(symbol, {
       symbol,
       price,
       ask: _ask,
@@ -865,7 +901,7 @@ class UnifiedPriceCache {
       markKind: markKind ?? null,
       ...carryLastTrade(existing, lastTradePrice, now),
       lastUpdatedAt: now,
-    });
+    }, _stated ? 'stated' : 'none');
   }
 
   /**
@@ -884,7 +920,8 @@ class UnifiedPriceCache {
    * it states sides. A new caller must do the same; the object shape is what stops it from stating half a book.
    *
    * `lastSource: 'kraken_rest'` and `lastWsMessageAtMs` carried (a REST write is not a push), as before.
-   * `sides` is REQUIRED; `?? null` because a test file outside tsc can omit it.
+   * `sides` is REQUIRED; `?? null` because a test file outside tsc can omit it. The adapter's raw response key
+   * qualifies only the diagnostic attribution of newly stated sides.
    */
   updateFromRest(
     symbol: string,
@@ -892,11 +929,14 @@ class UnifiedPriceCache {
     markKind: CacheMarkKind | null,
     lastTradePrice: number | null,
     sides: StatedSides | null,
+    restResponseKey?: string,
   ): void {
     const now = Date.now();
     const existing = this.cache.get(symbol);
     const stated = sides ?? null;
-    this.cache.set(symbol, {
+    const assignment: SideAssignment = !stated ? 'none' :
+      pairwiseStatedSides(stated.bid, stated.ask) ? 'stated' : 'malformed';
+    this.storeRow(symbol, {
       symbol,
       price,
       ask: stated ? stated.ask : (existing?.ask ?? price),
@@ -915,7 +955,44 @@ class UnifiedPriceCache {
       markKind: markKind ?? null,
       ...carryLastTrade(existing, lastTradePrice, now),
       lastUpdatedAt: now,
-    });
+    }, assignment, undefined, restResponseKey);
+  }
+
+  private storeRow(
+    key: string,
+    row: CachedPrice,
+    assignment: SideAssignment,
+    canonicalHint?: string,
+    restResponseKey?: string,
+  ): void {
+    const incumbent = assignment === 'stated' && row.lastSource === 'kraken_rest' ? this.cache.get(key) : undefined;
+    if (assignment !== 'none') krakenPriceSourceDiagnostics.startIfReady();
+    this.cache.set(key, row);
+    if (assignment === 'none') return;
+    krakenPriceSourceDiagnostics.recordAssignment(key, row, assignment === 'stated', canonicalHint, restResponseKey);
+    if (assignment === 'malformed') return;
+
+    // #1146 compares two local receipt stamps on the actual key. A carried pair has no new receipt.
+    const previousStamp = incumbent?.sidesCapturedAtMs;
+    const currentStamp = row.sidesCapturedAtMs;
+    if (!row.sidesWriter?.startsWith('rest_') ||
+        (incumbent?.sidesWriter !== 'ws_ticker' && incumbent?.sidesWriter !== 'ws_book') ||
+        previousStamp == null || currentStamp == null ||
+        !Number.isFinite(previousStamp) || !Number.isFinite(currentStamp)) return;
+
+    let counts = this.restReceiptOrdering.get(row.sidesWriter);
+    if (!counts) {
+      counts = { eligibleOverwrites: 0, strictInversions: 0 };
+      this.restReceiptOrdering.set(row.sidesWriter, counts);
+    }
+    counts.eligibleOverwrites++;
+    if (currentStamp < previousStamp) counts.strictInversions++;
+  }
+
+  getRestReceiptOrdering(): Partial<Record<SidesWriter, RestReceiptOrderingCounts>> {
+    return Object.fromEntries(
+      Array.from(this.restReceiptOrdering, ([writer, counts]) => [writer, { ...counts }]),
+    );
   }
 
   get(symbol: string): CachedPrice | null {

@@ -276,7 +276,7 @@ describe('P12 — the ticker rung\'s acceptances split by the book\'s verdict (O
   const LANE = { lane: 'active' as const, assetClass: 'crypto_spot', stage: 'active_signal_birth' as const };
   const book = (o: Partial<TouchLegInput> = {}): TouchLegInput => ({ bid: 100, ask: 100.2, stampMs: NOW - 1_000, arrivalMs: NOW - 1_000, clockBasis: 'receipt', producer: 'b', ...o });
   const ticker = (o: Partial<TouchLegInput> = {}): TouchLegInput => ({ bid: 99.9, ask: 100.3, stampMs: NOW - 2_000, arrivalMs: NOW - 2_000, clockBasis: 'receipt', producer: 'rest_adapter', ...o });
-  const walk = (i: Parameters<typeof selectTouchPrice>[0]) => recordTouchSelection(LANE, selectTouchPrice(i, NOW, POLICY));
+  const walk = (i: Parameters<typeof selectTouchPrice>[0]) => recordTouchSelection(LANE, selectTouchPrice(i, NOW, POLICY), SYM);
   beforeEach(() => __resetLevelBasisFunnelForTest());
 
   it('15. no book / ineligible book / untrusted book / stale book each land in their own cell; a book-carried walk lands in none', () => {

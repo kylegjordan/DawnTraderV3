@@ -70,7 +70,7 @@ const ticker = (o: Partial<TouchLegInput> = {}): TouchLegInput => ({
 
 /** One walk, recorded. Returns nothing — the assertions read the funnel, not a return value. */
 function walk(input: Parameters<typeof selectTouchPrice>[0]): void {
-  recordTouchSelection(LANE, selectTouchPrice(input, NOW, POLICY));
+  recordTouchSelection(LANE, selectTouchPrice(input, NOW, POLICY), 'BTC/USD');
 }
 
 /** The ladder row's reason map, under its rung-scoped names. */
@@ -172,6 +172,7 @@ describe('row 8c P1 — the ladder funnel', () => {
     recordTouchSelection(
       { lane: 'vts', assetClass: 'crypto_spot', stage: 'vts_signal_birth' },
       selectTouchPrice({ book: null, bookEligible: true, bookTrusted: true, ticker: null, tickerBasis: 'ticker_bbo' }, NOW, POLICY),
+      'BTC/USD',
     );
 
     expect(getLevelBasisFunnelRow(LADDER_CELL)).toMatchObject({ accepted: 1, refused: 0 });

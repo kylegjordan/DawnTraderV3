@@ -691,7 +691,7 @@ export class SignalOrchestrator {
       );
       // An already-sided triple (a HYBRID re-sizing a sized quant signal) takes no walk: it is not a new level build.
       if (rawSignal.metadata?.levelGeometry !== 'sided') {
-        recordTouchSelection({ lane: 'active', assetClass: 'crypto_spot', stage: 'active_level_build' }, _cbSel);
+        recordTouchSelection({ lane: 'active', assetClass: 'crypto_spot', stage: 'active_level_build' }, _cbSel, _cbSym);
       }
       const _cb = baseCryptoLevelsAtBirth({
         planEntry: rawSignal.entryPrice, planStop: rawSignal.stopPrice, planTarget: rawSignal.targetPrice,
@@ -3022,7 +3022,7 @@ export class SignalOrchestrator {
         );
         // ⚠️ ONE CEILING GOVERNS BOTH LEGS, stated as `touch-price.ts:50` requires of whoever wires this: both rungs are
         // judged at `level_basis.level_build_max_age_ms`. A per-leg ceiling is P-8a's, not this row's.
-        recordTouchSelection({ lane: 'active', assetClass: _lbClass, stage: 'active_signal_birth' }, _lbSel);
+        recordTouchSelection({ lane: 'active', assetClass: _lbClass, stage: 'active_signal_birth' }, _lbSel, symbol);
         }
       }
 

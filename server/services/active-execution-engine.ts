@@ -1894,7 +1894,7 @@ export class ActiveExecutionEngine {
         else this._entryFillRefusedSteady++;
       }
       try {
-        recordTouchSelection({ lane: 'active', assetClass: 'crypto_spot', stage: 'active_entry_fill' }, _ft.selection);
+        recordTouchSelection({ lane: 'active', assetClass: 'crypto_spot', stage: 'active_entry_fill' }, _ft.selection, _ft.internalSymbol);
       } catch (err) {
         // A recorder may never break the fill path.
         console.error(`[8a-P3][ENTRY_FILL_RECORD_FAILED:${this.mode}] ${position.symbol}:`, err instanceof Error ? err.message : err);
@@ -3314,7 +3314,7 @@ export class ActiveExecutionEngine {
             // ⛔ THE CELL IS THE SHARED-STORE BASIS AT THE EXIT INSTANT. ⚠️ SINCE `8a-P2` IT IS ALSO
             //    WHAT DRIVES THE TRIGGER — so this is no longer a pure observation of an unused
             //    quantity, and a reader must not cite it as one.
-            recordTouchSelection({ lane: 'active', assetClass: 'crypto_spot', stage: 'exit_trigger' }, _lsSel);
+            recordTouchSelection({ lane: 'active', assetClass: 'crypto_spot', stage: 'exit_trigger' }, _lsSel, _lsSym);
             recordSideAgeAttempt(
               { lane: 'active', assetClass: 'crypto_spot' },
               {

@@ -1828,7 +1828,7 @@ async function generatePhase10Signal(
     );
     // One ceiling governs both rungs, at `level_basis.level_build_max_age_ms` — stated with its
     // name as `touch-price.ts:50` requires of whoever wires this.
-    recordTouchSelection({ lane: 'vts', assetClass: _assetClass, stage: 'vts_signal_birth' }, _lbSel);
+    recordTouchSelection({ lane: 'vts', assetClass: _assetClass, stage: 'vts_signal_birth' }, _lbSel, symbol);
     }
   }
 
@@ -3845,7 +3845,7 @@ async function resolveOpenVirtualTrades(): Promise<{
           if (_pFirstLook) _vtsTouch.entryFillRefusedFirstLook++;
           else _vtsTouch.entryFillRefusedSteady++;
         }
-        try { recordTouchSelection({ lane: 'vts', assetClass: 'crypto_spot', stage: 'vts_entry_fill' }, _pt.selection); } catch { /* a recorder never breaks the resolve loop */ }
+        try { recordTouchSelection({ lane: 'vts', assetClass: 'crypto_spot', stage: 'vts_entry_fill' }, _pt.selection, _pt.internalSymbol); } catch { /* a recorder never breaks the resolve loop */ }
       }
       if (trade.assetClass === 'xstock_spot') {
         // `8a-P4c` increment 1 — would the ASK have filled this rest, beside the `last` rule? (kept: the S1 comparison.)
@@ -4002,7 +4002,7 @@ async function resolveOpenVirtualTrades(): Promise<{
         : _et.selection.ok && _et.selection.quote.bidQty !== null && _et.selection.quote.sizeBasis !== null
           ? { levels: [{ price: _et.selection.quote.bid, qty: _et.selection.quote.bidQty }], basis: _et.selection.quote.sizeBasis }
           : null;
-      try { recordTouchSelection({ lane: 'vts', assetClass: 'crypto_spot', stage: 'vts_exit_trigger' }, _et.selection); } catch { /* a recorder never breaks the resolve loop */ }
+      try { recordTouchSelection({ lane: 'vts', assetClass: 'crypto_spot', stage: 'vts_exit_trigger' }, _et.selection, _et.internalSymbol); } catch { /* a recorder never breaks the resolve loop */ }
     }
     // ⭐⭐ Row 2 increment (4b) — THE ONE EXIT-TRIGGER RULE (`core/trading/exit-trigger.ts`), shared with paper and the
     // shadow lane. The VTS xStock arm is always true (its guard is the stateless selector above, by design). ⛔ The
