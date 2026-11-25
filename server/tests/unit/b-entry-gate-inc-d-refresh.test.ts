@@ -115,4 +115,33 @@ describe('Entry Gate observation through the original Central Clock and RTB refr
     expect(carriers).toContain('"reason":"query_failed"');
     expect(carriers).toContain('"crypto":0,"xstock":9');
   });
+
+  it('brackets the registered scans with sequence counts emitted on the clock path', async () => {
+    vi.resetModules();
+    vi.stubEnv('ENTRY_GATE_EVIDENCE_WINDOWS_UTC', interval);
+    const { observeEntryGateClock, startEntryGateScan } = await import('../../core/observability/entry-gate-evidence.js');
+    const lines: string[] = [];
+    const stdout = vi.spyOn(process.stdout, 'write').mockImplementation(chunk => {
+      lines.push(String(chunk));
+      return true;
+    });
+    try {
+      const start = Date.parse('2026-12-07T14:30:00Z');
+      const end = Date.parse('2026-12-07T21:00:00Z');
+      observeEntryGateClock(15, start - 15_000);
+      expect(startEntryGateScan(1, 'active_portfolio', 'paper', 'crypto_spot', start - 1)).toBeUndefined();
+      expect(startEntryGateScan(1, 'active_portfolio', 'paper', 'crypto_spot', start)?.scan).toBe(1);
+      expect(startEntryGateScan(1, 'active_portfolio', 'paper', 'crypto_spot', end - 1)?.scan).toBe(2);
+      expect(startEntryGateScan(1, 'active_portfolio', 'paper', 'crypto_spot', end)).toBeUndefined();
+      observeEntryGateClock(30, end + 900_000);
+      await collectOutput();
+    } finally {
+      stdout.mockRestore();
+    }
+    const records = lines.join('').trimEnd().split('\n').map(line => JSON.parse(line.slice('[B-ENTRY-GATE-D] '.length)));
+    expect(records.filter(row => row.kind.startsWith('window_'))).toEqual([
+      expect.objectContaining({ kind: 'window_start', scanSequence: 0 }),
+      expect.objectContaining({ kind: 'window_end', scanSequence: 2 }),
+    ]);
+  });
 });

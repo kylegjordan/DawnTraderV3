@@ -94,6 +94,7 @@ function recordEvidence(record: EvidenceRecord): void {
 }
 
 const markedWindows = new Map<number, 'start' | 'end'>();
+let nextScan = 0;
 
 export function observeEntryGateClock(tickNumber: number, at: number): void {
   if (tickNumber % ENTRY_GATE_REFRESH_TICKS !== 0) return;
@@ -101,11 +102,11 @@ export function observeEntryGateClock(tickNumber: number, at: number): void {
   if (!window) return;
   if (!markedWindows.has(window.start)) {
     markedWindows.set(window.start, 'start');
-    recordEvidence({ kind: 'window_start', window: window.start, at, end: window.end, tickNumber });
+    recordEvidence({ kind: 'window_start', window: window.start, at, end: window.end, tickNumber, scanSequence: nextScan });
   }
   if (at >= window.end + DRAIN_MS && markedWindows.get(window.start) === 'start') {
     markedWindows.set(window.start, 'end');
-    recordEvidence({ kind: 'window_end', window: window.start, at, tickNumber });
+    recordEvidence({ kind: 'window_end', window: window.start, at, tickNumber, scanSequence: nextScan });
   }
   recordEvidence({ kind: 'tick', window: window.start, at, tickNumber });
 }
@@ -202,7 +203,6 @@ type EvaluationEvent =
   | 'evaluation_end';
 
 let nextInstance = 0;
-let nextScan = 0;
 
 export function newEntryGateInstance(): number {
   return ++nextInstance;

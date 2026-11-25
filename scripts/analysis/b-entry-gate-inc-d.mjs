@@ -37,10 +37,8 @@ function exactlyOne(rows, context, errors) {
   errors.push(`${context}: expected 1, got ${rows.length}`);
 }
 
-function clockAndQueue(records, health, start, end, cutoff, maxSnapshotLagMs, errors) {
+function clockAndQueue(records, health, start, end, cutoff, maxSnapshotLagMs, { open, close }, errors) {
   const ticks = records.filter(record => record.kind === 'tick');
-  const open = exactlyOne(records.filter(record => record.kind === 'window_start'), 'window start', errors);
-  const close = exactlyOne(records.filter(record => record.kind === 'window_end'), 'window end', errors);
   if (!open || !close || open.at >= start || open.at < start - GUARD_MS || open.end !== end
     || close.at < cutoff || close.at >= cutoff + GUARD_MS
     || ticks[0]?.tickNumber !== open.tickNumber || ticks[0]?.at !== open.at
@@ -185,11 +183,17 @@ function classifyEvaluation(rows, context, errors) {
         ?? (storage.includes('rtb_error') ? 'pre_upsert_error' : undefined) };
 }
 
-function evaluations(records, start, end, cutoff, errors) {
+function evaluations(records, start, end, cutoff, { open: windowOpen, close: windowClose }, errors) {
   const scans = group(records.filter(row => row.kind === 'scan_start' || row.kind === 'scan_end'), row => row.scan);
   const identities = group(records.filter(row => row.id !== undefined), row => row.id);
   const instances = new Set();
-  let priorScan;
+  const firstSequence = windowOpen?.scanSequence;
+  const lastSequence = windowClose?.scanSequence;
+  if (!integerCount(firstSequence) || !integerCount(lastSequence)
+    || lastSequence - firstSequence !== scans.size) {
+    errors.push('Scan sequence differs from the registered window anchors');
+  }
+  let priorScan = firstSequence;
   for (const [scan, rows] of scans) {
     const [open, close] = rows;
     if (rows.length !== 2 || open.kind !== 'scan_start' || close.kind !== 'scan_end'
@@ -287,8 +291,12 @@ export function verifyEntryGateWindow({ records, health, lifecycle, start, end, 
     || (record.at >= start - GUARD_MS && record.at < cutoff + GUARD_MS)))) {
     errors.push('Evidence buffer reported loss');
   }
-  const clock = clockAndQueue(windowRows, health, start, end, cutoff, maxSnapshotLagMs, errors);
-  const opportunities = evaluations(windowRows, start, end, cutoff, errors);
+  const markers = {
+    open: exactlyOne(windowRows.filter(record => record.kind === 'window_start'), 'window start', errors),
+    close: exactlyOne(windowRows.filter(record => record.kind === 'window_end'), 'window end', errors),
+  };
+  const clock = clockAndQueue(windowRows, health, start, end, cutoff, maxSnapshotLagMs, markers, errors);
+  const opportunities = evaluations(windowRows, start, end, cutoff, markers, errors);
   if (errors.length) clock.medians = null;
   return { start: new Date(start).toISOString(), clock, opportunities, errors };
 }

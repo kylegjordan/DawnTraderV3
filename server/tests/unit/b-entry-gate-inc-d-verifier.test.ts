@@ -17,9 +17,9 @@ function fixture() {
   };
   const first = start - 120_000;
   const cutoff = end + 900_000;
-  emit('window_start', first, { end, tickNumber: 60 });
+  emit('window_start', first, { end, tickNumber: 60, scanSequence: 16 });
   for (let at = first, tickNumber = 60; at <= cutoff; at += 15_000, tickNumber += 15) {
-    if (at === cutoff) emit('window_end', at, { tickNumber });
+    if (at === cutoff) emit('window_end', at, { tickNumber, scanSequence: 18 });
     emit('tick', at, { tickNumber });
     if (tickNumber % 60 === 0) health.push({ at, tickNumber, subscribers: 5 });
     if (at < start || at >= end) continue;
@@ -63,6 +63,8 @@ function fixture() {
     expected[key] = (expected[key] ?? 0) + 1;
   }
   emit('scan_end', start + 40, { ...scan, outcome: 'complete', expected: JSON.stringify(expected) });
+  emit('scan_start', start + 60_000, { ...scan, scan: 18 });
+  emit('scan_end', start + 60_001, { ...scan, scan: 18, outcome: 'empty_fx5', expected: '{}' });
   return { records, health, lifecycle: [] as number[], start, end, processId, maxSnapshotLagMs: 200 };
 }
 
@@ -112,6 +114,12 @@ describe('Entry Gate increment D fixed-session reconciliation', () => {
     const input = fixture();
     input.records = input.records.filter(row => row.symbol !== 'AA/USD' && row.symbol !== 'CC/USD');
     expect(verifyEntryGateWindow(input).errors).toContain('Scan 17: census differs from its independent planned roster');
+  });
+
+  it.each([17, 18])('uses the window anchors to detect loss of the whole boundary scan %s', scan => {
+    const input = fixture();
+    input.records = input.records.filter(row => row.scan !== scan);
+    expect(verifyEntryGateWindow(input).errors).toContain('Scan sequence differs from the registered window anchors');
   });
 
   it('fails if storage is suppressed, if commit precedes attempt, or if its acknowledgement is lost', () => {
