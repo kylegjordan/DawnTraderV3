@@ -35,6 +35,7 @@
     { "path": "comms-infra/staging/tests/setter_mutations.py", "type": "test_fixture", "reason": "credential-writer mutation fixture" },
     { "path": "server/tests/integration/b-alert-insert-contract-db.test.ts", "type": "test_fixture", "reason": "isolated database integration test" },
     { "path": "server/tests/integration/b-balance-truth-mode-partition-fence.test.ts", "type": "test_fixture", "reason": "source-marker fence" },
+    { "path": "server/tests/integration/b-entry-gate-inc-d-db.test.ts", "type": "test_fixture", "reason": "uses only the exact Vitest localhost test database and confines writes to a fresh schema" },
     { "path": "server/tests/integration/b-expectancy-tuning-rows-retire.test.ts", "type": "test_fixture", "reason": "isolated database integration test" },
     { "path": "server/tests/integration/b-killswitch-window.test.ts", "type": "test_fixture", "reason": "isolated database integration test" },
     { "path": "server/tests/integration/b-loss-window-operator-closes-db.test.ts", "type": "test_fixture", "reason": "isolated database integration test" },

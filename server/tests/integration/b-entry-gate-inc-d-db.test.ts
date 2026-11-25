@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({ writer: undefined as unknown, observer: undefi
 vi.mock('../../db.js', () => ({ db: mocks.writer, diagDb: mocks.observer }));
 
 const connectionString = process.env.DATABASE_URL ?? '';
-const localTestDb = /^postgres(?:ql)?:\/\/[^@]+@(localhost|127\.0\.0\.1|postgres)(?::\d+)?\/test(?:\?|$)/.test(connectionString);
+const localTestDb = connectionString === 'postgresql://test:test@localhost:5432/test';
 const schema = `entry_gate_d_${randomBytes(6).toString('hex')}`;
 let reader: Client | undefined;
 let writer: Pool | undefined;

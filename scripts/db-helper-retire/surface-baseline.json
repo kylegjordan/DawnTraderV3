@@ -530,6 +530,13 @@
       }
     },
     {
+      "path": "server/tests/integration/b-entry-gate-inc-d-db.test.ts",
+      "markers": {
+        "database_url": 1,
+        "node_postgres_constructor": 3
+      }
+    },
+    {
       "path": "server/tests/integration/b-expectancy-tuning-rows-retire.test.ts",
       "markers": {
         "database_url": 1
