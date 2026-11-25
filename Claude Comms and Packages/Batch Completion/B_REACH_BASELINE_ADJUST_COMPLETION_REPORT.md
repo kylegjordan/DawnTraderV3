@@ -125,6 +125,42 @@
 - strong_bull_trend: **118 of 164 crypto opens (72.0 %)** (read 5: 72 of 100, 72.0 %);
 - vwap_pullback: **380 of 914 xStock opens (41.6 %)** (read 5: 322 of 652, 49.4 %).
 
+**WEEKLY READ 7, 2026-11-25 12:17:45.615271Z (alert `55ac2b76-fc3c-4008-bf35-86db6d6c7391`, due 12:00Z).**
+
+One `dt-sql` repeatable-read snapshot. Paper entries are grouped by `opened_at`. The first interval begins at the September 20 deployment and ends at the paper reset on October 6 15:52:57Z. Crypto opens after the reset split at the November 16 09:45:01Z 8c switch. Terminal rows have a close timestamp. Count those once with current paper positions for opens, including attempts subsequently marked never filled. Compute returns and winners only from terminal rows with an actual entry price, excluding never-filled attempts. Every filled terminal row below has a non-null return. Still-open counts come from the position store. Across these cells, none of those positions was pending.
+
+| setting | open-time interval | opened | filled and closed | winners | mean net % | net USD | still open |
+|---|---|---:|---:|---:|---:|---:|---:|
+| strong_bull_trend crypto, reach 6.5 | before reset | 28 | 27 | 10 | −1.2316 | −52.26 | 0 |
+| | reset to 8c | 91 | 77 | 20 | −1.9415 | −62.87 | 0 |
+| | since 8c | 52 | 38 | 12 | −2.0061 | −22.55 | 4 |
+| vwap_bounce crypto, min_rr 1.95 | before reset | 0 | 0 | 0 | — | — | 0 |
+| | reset to 8c | 0 | 0 | 0 | — | — | 0 |
+| | since 8c | 1 | 1 | 0 | −2.9241 | −1.58 | 0 |
+| vwap_pullback crypto, min_rr 1.95 | before reset | 0 | 0 | 0 | — | — | 0 |
+| | reset to 8c | 1 | 1 | 0 | −6.7246 | −2.63 | 0 |
+| | since 8c | 5 | 4 | 2 | +2.2145 | +3.66 | 0 |
+| strong_bull_trend xStock, reach 6.5 + min_rr 1.95 | before reset | 0 | 0 | 0 | — | — | 0 |
+| | since reset | 155 | 130 | 14 | −1.1764 | −55.65 | 13 |
+| vwap_pullback xStock, reach 6.0 | before reset | 1 | 1 | 0 | −1.1390 | −1.92 | 0 |
+| | since reset | 391 | 345 | 62 | −0.9463 | −122.63 | 1 |
+
+**Archive census, Nov 19 23:25:16Z through this snapshot.** No limit. Grouped by mode, class, strategy, stage, gate and the first 60 characters of the reason with numeric spans collapsed. All 4,343 matching non-VTS rows were `paper_sim`. An admission is an archive event and can repeat within a symbol. A shadow is an observation.
+
+| cell | all matching rows | complete stage and reason counts |
+|---|---:|---|
+| strong_bull_trend crypto | 2,448 | 1,431 admitted; 582 duplicate pair; 361 RTB price shadow; 30 friction coverage shadow; 25 RTB ask at/through stop; 19 regime weight |
+| vwap_bounce crypto | 9 | 6 admitted; 2 RTB price shadow; 1 friction coverage shadow |
+| vwap_pullback crypto | 512 | 282 admitted; 179 duplicate pair; 45 RTB price shadow; 4 friction coverage shadow; 2 regime weight |
+| strong_bull_trend xStock | 1,035 | 794 RTB price shadow; 172 admitted; 34 friction coverage shadow; 25 RTB ask at/through stop; 5 duplicate pair; 2 RTB ask at/through target; 1 entry-fill ask at/through stop; 1 entry window; 1 regime weight |
+| vwap_pullback xStock | 339 | 266 RTB price shadow; 54 admitted; 12 friction coverage shadow; 6 RTB ask at/through stop; 1 duplicate pair |
+
+**New direct carrier:** read 6 recorded zero archived rows for crypto VWAP Bounce. This window has one filled and closed paper trade, PEARL/USD (`eadf51c2-2029-4958-87c4-728d50a648b9`). Its maker placement was November 22 at 11:37:44.201Z. The later maker-fill stamp records decision ask 1.9900 against the filled limit 2.0081 and a 166 ms book quote age. `opened_at` is the placement timestamp. The trade closed at 12:13:44.552Z at 1.9732 with `stop_hit`, for −2.9241 % / −$1.58. The `position_closed` event binds the trade ID to position `1be3f765-ee69-4a4a-aaa1-f500661d145d`, which identifies the exit archive event at the same time and prices. All nine evaluation archive events were PEARL/USD, including the engine's admission at placement and one friction coverage shadow. Those evaluation events describe stages around placement. The durable fill and close establish the one outcome on the post-switch path. One outcome does not isolate the effect of 8c.
+
+`REVIEWER: claim-only · what settles the paper crypto VWAP Bounce fill? · HIT: maker placement precedes fill, the entry-fill-labelled archive row is a shadow, and the exit archive uses the position ID · re-derived y`
+
+**Tracked opens and counting control.** Strong Bull Trend was 143/215 (66.5 %) of counted crypto opens since the reset, with 91/128 (71.1 %) before 8c and 52/87 (59.8 %) after it. VWAP Pullback was 391/1,013 (38.6 %) of counted xStock opens since the reset. A follow-up read returned five crypto and fourteen xStock post-reset history rows without a close timestamp. All nineteen had a current position in the same mode, class, symbol and strategy. Excluding unclosed history rows from the opens union prevents double-counting. With this rule, a reconstruction of entries opened before read 6's timestamp returned 113/159 crypto Strong Bull Trend and 379/905 xStock VWAP Pullback. The numbers previously printed in read 6 were 118/164 and 380/914 respectively. The pre-reset result reproduces 28 crypto Strong Bull Trend opens with 27 filled closes and one filled xStock VWAP Pullback close. The six governed settings matched the deployed values at the start of this batch, including both Strong Bull Trend reach rows and its xStock floor. The weekly read made no settings change.
+
 ### (c) Objectives
 | objective | result | evidence |
 |---|---|---|
