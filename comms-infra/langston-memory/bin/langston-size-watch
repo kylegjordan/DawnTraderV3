@@ -43,6 +43,8 @@ USAGE:
                                         lower the ceiling to N. REFUSES to raise, refuses a
                                         value already below the current total, and refuses a
                                         --by outside the actor allowlist.
+                                        Add --require-current-total to require N to match
+                                        the freshly measured total.
     langston-size-watch --self-test     positive control: prove it CAN alarm
     langston-size-watch --fire-drill    prove the alarm can REACH a human — injects a breach
                                         and really posts, labelled as a drill, and adds + resolves one
@@ -897,18 +899,18 @@ def run(quiet=False, injected_total=None, injected_archive_bytes=None, drill_sto
 #    history nobody can attribute.
 # ⚠️ THIS IS A KNOWINGLY UNFENCED HAND-COPY, AND THE DERIVATION IS STATED SO A LATER
 #    READER CAN CHECK IT RATHER THAN TRUST THE WORD "mirrors" (Langston, r3 minor 3).
-#    `ALERT_ACTORS` in server/services/system-alerts.ts has NINE entries. This is the
-#    same subset `B-DEPLOY-ACTOR-ALLOWLIST` used: tag !== 'machine' — i.e. the four
-#    roster sessions plus the two humans — canonical values only, aliases NOT accepted.
+#    See `ALERT_ACTORS` in server/services/system-alerts.ts for the canonical names.
+#    This admits the crew's Claude identities and the owner of this watch. INFRA Codex uses
+#    its own actor during failover. Canonical values only.
 #    The three machine actors are excluded because no timer sets this ceiling; a human
 #    or a session does.
 # ⛔ NOTHING SYNCS THE TWO. If `ALERT_ACTORS` gains a roster session this list will not
 #    know, and the failure is a REFUSAL of a legitimate actor — loud, not silent, which
 #    is why the copy is acceptable and the silence about it was not.
-ACTORS = ("cc-a", "cc-b", "cc-c", "cc-infra", "kyle", "langston")
+ACTORS = ("cc-a", "cc-b", "cc-c", "cc-infra", "codex-infra", "kyle", "langston")
 
 
-def set_ceiling(new, by):
+def set_ceiling(new, by, require_current_total=False):
     if by not in ACTORS:
         print("REFUSED: --by must be one of: " + ", ".join(ACTORS))
         print("A free-text actor produces a history nobody can attribute (#987, #656).")
@@ -922,7 +924,7 @@ def set_ceiling(new, by):
         print("REFUSED: no state yet — run the watch once so a ceiling exists to lower.")
         return 2
     cur = st["ceiling_bytes"]
-    if new >= cur:
+    if new > cur or (new == cur and not require_current_total):
         # ★ THE MONOTONICITY IS ENFORCED HERE, MECHANICALLY. A rule that can be broken by
         #   typing a bigger number is a habit; this is a refusal.
         print("REFUSED: the ceiling may only ever DECREASE. Current %d B, asked for %d B."
@@ -950,11 +952,28 @@ def set_ceiling(new, by):
         print("REFUSED: %d B is below the CURRENT total of %d B — that would be a ceiling "
               "already breached on the day it was set." % (new, total))
         return 2
-    st["history"].append({"ts": iso(), "ceiling": new, "by": by,
-                          "from": cur, "measured_total": total})
-    st["ceiling_bytes"], st["set_at"] = new, iso()
+    if require_current_total and new != total:
+        print("REFUSED: requested ceiling %d B differs from the current total %d B."
+              % (new, total))
+        return 2
+    if new == cur:
+        print("ceiling already %d B; state unchanged" % cur)
+        return 0
+    now = iso()
+    entry = {"ts": now, "ceiling": new, "by": by, "from": cur, "measured_total": total}
+    st["history"].append(entry)
+    st["ceiling_bytes"], st["set_at"] = new, now
     st["set_by"] = by
     save_state(st)
+    try:
+        readback = load_state()
+    except StateUnreadable as e:
+        print("REFUSED: cannot verify the saved ceiling: %s" % e)
+        return 2
+    if (not readback or readback.get("ceiling_bytes") != new
+            or not readback.get("history") or readback["history"][-1] != entry):
+        print("REFUSED: the saved ceiling and history did not match the requested change.")
+        return 2
     print("ceiling lowered %d B -> %d B (current total %d B)" % (cur, new, total))
     return 0
 
@@ -1001,7 +1020,8 @@ def self_test():
 #    row, and the load canary spent THREE live `claude -p` invokes on a typo.
 #    ⇒ the cost is not the wasted run — it is that the operator reads the output as the
 #      answer to the question they asked.
-KNOWN_FLAGS = ("--status", "--self-test", "--fire-drill", "--set-ceiling", "--by", "--quiet",)
+KNOWN_FLAGS = ("--status", "--self-test", "--fire-drill", "--set-ceiling",
+               "--require-current-total", "--by", "--quiet")
 
 
 def _refuse_unknown_flags():
@@ -1019,6 +1039,9 @@ def _refuse_unknown_flags():
 def main():
     if _refuse_unknown_flags():
         return 2
+    if "--require-current-total" in sys.argv and "--set-ceiling" not in sys.argv:
+        print("REFUSED: --require-current-total needs --set-ceiling.")
+        return 2
     if "--status" in sys.argv:
         try:
             st = load_state()
@@ -1031,6 +1054,17 @@ def main():
                           "guard": guard_check(dict(st or {}))},
                          indent=2, ensure_ascii=False))
         return 0
+
+    # Daily runs, drills and the setter can all persist state. Keep the original
+    # read and final save or readback in one transaction across CLI processes.
+    import fcntl
+    os.makedirs(os.path.dirname(STATE), exist_ok=True)
+    with open(STATE + ".lock", "a", encoding="utf-8") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        return run_command()
+
+
+def run_command():
     if "--self-test" in sys.argv:
         return self_test()
     if "--fire-drill" in sys.argv:
@@ -1060,7 +1094,8 @@ def main():
         if "--by" in sys.argv:
             j = sys.argv.index("--by")
             by = sys.argv[j + 1] if j + 1 < len(sys.argv) else ""
-        return set_ceiling(int(sys.argv[i + 1]), by)
+        return set_ceiling(int(sys.argv[i + 1]), by,
+                           require_current_total="--require-current-total" in sys.argv)
     return run(quiet="--quiet" in sys.argv)
 
 

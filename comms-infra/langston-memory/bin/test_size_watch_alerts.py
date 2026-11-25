@@ -25,6 +25,7 @@ import shutil
 import sys
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
@@ -661,7 +662,25 @@ def test_coltrane(tmp):
     check("C13 a stale measured ceiling is refused", m.cmd_set_ceiling(args), 2)
     check("C13 stale measurement leaves the old ceiling", m.load_state()["ceiling_bytes"], 1000)
 
-    # Pause the daily CLI after it has read the old state, then overlap a real setter CLI.
+    check_ceiling_writer_overlap("C14", m, COLTRANE_WATCH)
+
+
+def test_langston_ceiling_writer(tmp):
+    m, _store, _world, paths = langston_world(tmp)
+    sizes(paths, 400, 400, 100)
+    check_ceiling_writer_overlap("L11", m, SIZE_WATCH)
+
+
+def check_ceiling_writer_overlap(label, m, executable):
+    setter_flags = ["--set-ceiling", "900", "--require-current-total", "--by", "codex-infra"]
+    state_file = Path(m.STATE)
+    before = state_file.read_bytes()
+    stale_flags = ["--set-ceiling", "950", *setter_flags[2:]]
+    with patch.object(sys, "argv", [executable, "--quiet", *stale_flags]):
+        check(label + " refuses a stale requested ceiling", m.main(), 2)
+    check(label + " stale measurement leaves the exact state bytes unchanged", state_file.read_bytes(), before)
+
+    # Pause the daily CLI after it has read the old state, then overlap the setter CLI.
     # Both children use this scratch state's paths and their own copy of the fake alert store.
     ctx = multiprocessing.get_context("fork")
     watch_loaded = ctx.Event()
@@ -670,9 +689,9 @@ def test_coltrane(tmp):
     read_state = m.load_state
 
     def run_cli(is_setter):
-        sys.argv = [COLTRANE_WATCH, "--quiet"]
+        sys.argv = [executable, "--quiet"]
         if is_setter:
-            sys.argv.extend(["--set-ceiling", "900", "--require-current-total", "--by", "codex-infra"])
+            sys.argv.extend(setter_flags)
             setter_started.set()
         else:
             def pause_after_read():
@@ -694,7 +713,7 @@ def test_coltrane(tmp):
         if not setter_started.wait(5):
             raise TimeoutError("setter process did not start")
         setter.join(1)
-        check("C14 setter waits for the daily watch's state transaction", setter.exitcode, None)
+        check(label + " setter waits for the daily watch's state transaction", setter.exitcode, None)
     finally:
         release_watch.set()
         for process in (daily, setter):
@@ -704,16 +723,18 @@ def test_coltrane(tmp):
                     process.terminate()
                     process.join()
 
-    check("C14 both CLI writers complete", (daily.exitcode, setter.exitcode), (0, 0))
-    check("C14 the setter's lower ceiling and measured value survive the overlap",
+    check(label + " both CLI writers complete", (daily.exitcode, setter.exitcode), (0, 0))
+    check(label + " the setter's lower ceiling and measured value survive the overlap",
           (m.load_state()["ceiling_bytes"], m.load_state()["history"][-1].get("measured_total")),
           (900, 900))
-    check("C14 a later normal watch accepts the same ceiling", m.cmd_run(A()), 0)
-    check("C14 the later watch keeps the lower ceiling", m.load_state()["ceiling_bytes"], 900)
-    args.set_ceiling = 900
+    with patch.object(sys, "argv", [executable, "--quiet"]):
+        check(label + " a later normal watch accepts the same ceiling", m.main(), 0)
+    check(label + " the later watch keeps the lower ceiling and attributed history",
+          (m.load_state()["ceiling_bytes"], m.load_state()["history"][-1]["by"]), (900, "codex-infra"))
     before = state_file.read_bytes()
-    check("C14 setting the current measured ceiling again succeeds", m.cmd_set_ceiling(args), 0)
-    check("C14 equality leaves the exact state bytes unchanged", state_file.read_bytes(), before)
+    with patch.object(sys, "argv", [executable, "--quiet", *setter_flags]):
+        check(label + " setting the current measured ceiling again succeeds", m.main(), 0)
+    check(label + " equality leaves the exact state bytes unchanged", state_file.read_bytes(), before)
 
 
 def main():
@@ -723,10 +744,12 @@ def main():
         t2 = os.path.join(base, "coltrane"); os.makedirs(t2)
         t3 = os.path.join(base, "guard"); os.makedirs(t3)
         t4 = os.path.join(base, "state"); os.makedirs(t4)
+        t5 = os.path.join(base, "langston-ceiling"); os.makedirs(t5)
         test_langston(t1)
         test_guard(t3)
         test_state(t4)
         test_coltrane(t2)
+        test_langston_ceiling_writer(t5)
     finally:
         shutil.rmtree(base, ignore_errors=True)
     print("\n%d passed, %d failed" % (PASSES, len(FAILS)))
