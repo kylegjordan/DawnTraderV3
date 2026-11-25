@@ -5953,20 +5953,25 @@ export class ActiveExecutionEngine {
       return { opened: false, stage: 'GUARDRAIL_BLOCK', reason: riskCheck.reason || riskCheck.code || 'guardrail_block' };
     }
 
-    // ⛔ Row `8c` (amendment 5 (iv)) — CONDITION 1 AT THE FAR END. Every crypto signal born after the switch-on carries
-    // `levelGeometry: 'sided'`; a crypto signal arriving here without it either lost its metadata on a hop or was queued
-    // before the deploy, and every gate below would price it as mid. It is REFUSED, never priced on a guess — the
-    // fail-closed direction (a pre-deploy queue row is refused for the minutes it lives). xStock is not sided at birth.
+    // Row `8c`: active crypto must carry exact sided geometry before the EV gate can price it.
+    // Midpoint geometry remains valid for xStock, VTS and durable history.
     // The class is resolved as promotion resolves it (the stamp, else the symbol) — keying on the stamp alone would let an
     // unstamped crypto signal past this refusal into the EV gate priced as mid (fresh-reader finding, gap 15).
     const _cbOpenClass = asValidAssetClass(signal.metadata?.assetClass) ?? safeResolveAssetClass(signal.symbol, 'kraken');
-    // Switch condition (b) (Langston): this keys on the row's OWN birth stamp, never the live switch. Every crypto signal born
-    // after 8c deployed carries `levelGeometry` ('sided' or 'mid'); one without it lost its metadata on a hop or was queued
-    // before the deploy — either way it cannot be priced honestly, so it is refused.
-    if (_cbOpenClass === 'crypto_spot' && levelGeometryStampOf(signal.metadata) === null) {
-      console.error(`[8c][LEVEL_GEOMETRY_ABSENT][REFUSED:${this.mode}] ${signal.symbol} strategy=${signal.strategy} — a crypto signal without its birth geometry stamp reached the open; not opened`);
-      rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, 'LEVEL_GEOMETRY_ABSENT', 'crypto signal without a levelGeometry birth stamp at open');
-      return { opened: false, stage: 'LEVEL_GEOMETRY_ABSENT', reason: 'level_geometry_absent' };
+    if (_cbOpenClass === 'crypto_spot' && levelGeometryStampOf(signal.metadata) !== 'sided') {
+      const stamp = signal.metadata?.levelGeometry;
+      let observed = 'absent';
+      if (stamp !== undefined) {
+        try {
+          observed = JSON.stringify(stamp)?.slice(0, 160) ?? typeof stamp;
+        } catch {
+          observed = typeof stamp;
+        }
+      }
+      const detail = `active crypto requires levelGeometry=sided; observed=${observed}`;
+      console.error(`[8c][LEVEL_GEOMETRY_NOT_SIDED][REFUSED:${this.mode}] ${signal.symbol} strategy=${signal.strategy} — ${detail}`);
+      rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, 'LEVEL_GEOMETRY_NOT_SIDED', detail);
+      return { opened: false, stage: 'LEVEL_GEOMETRY_NOT_SIDED', reason: 'level_geometry_not_sided' };
     }
 
     // Directive 11.8B: Net Expectancy Gate

@@ -139,9 +139,9 @@ import { recordSideAgeAttempt, recordFeedAgreement } from '../core/calculations/
 // Row `8c` P1: D3's ladder replaces the direct book-only assessment. `buildLevelBasis` is no
 // longer imported here — `selectTouchPrice` calls it internally, once per rung.
 import { selectTouchPrice, recordTouchSelection, tickerLegFromCachedQuote, type TouchLegInput } from '../core/calculations/touch-price.js';
-// Row `8c` switch-on: the crypto level-build knobs (DB-governed, fail hard) and the birth re-base.
+// Row `8c`: the crypto level-build knobs (DB-governed, fail hard) and the sided birth re-base.
 import { readCryptoLevelBuildKnobs, type LevelBuildKnobs } from '../core/trading/level-build-config.js';
-import { baseCryptoLevelsAtBirth, levelGeometryOf, levelGeometryStampOf, makerEntryOf, sidedRewardToRisk } from '../core/trading/crypto-birth-levels.js';
+import { baseCryptoLevelsAtBirth, levelGeometryOf, makerEntryOf, sidedRewardToRisk } from '../core/trading/crypto-birth-levels.js';
 import { calculateEfficiencyRatio, calculateVolNoise, calculateTrendSlope, calculateDirectionalIntegrity } from '../utils/analysis-utils.js';
 // HF9: DSS import removed — DSS deleted (superseded by MCE regime filtering + detect functions)
 // Batch 19G VN HF: SYSTEM_GUARDS import removed — deprecated filter constants deleted.
@@ -619,7 +619,7 @@ export class SignalOrchestrator {
         ? sizingContext.assetClass : undefined;
     if (_fClass) recordActiveSignalsGenerated(sizingContext.mode, _fClass, 1);
 
-    // ══ ROW `8c` (SWITCH-ON) — CRYPTO LEVELS ON THE TRANSACTABLE SIDES, PER STAMPED FORM ═══════════════════════════════
+    // ══ ROW `8c` — CRYPTO LEVELS ON THE TRANSACTABLE SIDES, PER STAMPED FORM ═══════════════════════════════════════════
     // Plan: `B_PRICE_SIDE_BY_JOB_8C_AUDIT_AND_PLAN.md` §9 (amendment 4, ruled 2026-11-07). The strategy built its triple
     // on the smoothed mid; here, before the venue grid rounds it and before sizing, the SQE, the target gate and the
     // maker/taker decision judge it, the ENTRY moves to the ask and each stop/target leg is re-derived by its stamped form
@@ -637,19 +637,8 @@ export class SignalOrchestrator {
       };
       let _cbKnobs: LevelBuildKnobs;
       try { _cbKnobs = readCryptoLevelBuildKnobs(); } catch { return _cbRefuse('knobs_unreadable'); }
-      // ⛔ THE 8c SWITCH-ON (`level_basis.crypto_birth_sided_enabled`, seeded 0) — READ HERE AND ONLY HERE, once per built
-      // signal (Langston's switch condition (b)). The flip binds at BIRTH: the signal is stamped with the geometry it was
-      // built on — `'sided'` (ON, the block below) or `'mid'` (OFF, today's arithmetic) — and every later job (the four cost
-      // sites, the section-12 floor, the open refusal) keys off that stamp, never the live flag. A row stamped 'sided' keeps
-      // it for life (the ON branch is idempotent on it); OFF keeps any stamp a row already carries. ⚠️ The one asymmetry
-      // (Langston's Step-4 F2): with the switch ON, a HYBRID re-sizing a quant signal stamped 'mid' before the flip IS
-      // re-based and re-stamped 'sided' — prices and stamp always move together, and its mid triple is genuinely the plan,
-      // so no row is ever priced on a geometry its stamp does not name.
-      if (!_cbKnobs.sidedEnabled) {
-        if (levelGeometryStampOf(rawSignal.metadata) === null) {
-          rawSignal = { ...rawSignal, metadata: { ...(rawSignal.metadata ?? {}), levelGeometry: 'mid' } };
-        }
-      } else {
+      // A HYBRID carrying a historical mid stamp is rebased and restamped together. Re-sizing an already-sided
+      // triple keeps its original prices and birth basis.
       const _cbSym = normalizeToInternalSymbol(rawSignal.symbol) || rawSignal.symbol;
       const _cbNow = Date.now();
       const _cbLegs = cryptoTouchLegs(krakenWebSocketAdapter.getBookForFill(_cbSym), priceCache.getCachedPrice(_cbSym), _cbNow);
@@ -685,7 +674,6 @@ export class SignalOrchestrator {
         targetPrice: _cb.targetPrice,
         metadata: { ...(rawSignal.metadata ?? {}), ..._cb.stamp },
       };
-      }
     }
 
     // ⚠️ THE ORDERING HERE IS DELIBERATE AND WAS A DEFECT WHEN I FIRST WROTE IT. This block
@@ -2876,7 +2864,7 @@ export class SignalOrchestrator {
         // against a mid-reading trigger ship a MIXED POPULATION — bid-anchored for the handful of
         // symbols with a book, mid for the rest — and every resulting exit is unattributable.
         const _lbNow = Date.now();
-        // ⛔ `8c` switch-on: the ceilings are the DB-governed level-build knobs (the literals are deleted). This is still
+        // ⛔ `8c`: the ceilings are the DB-governed level-build knobs. This is still
         // the per-symbol SHADOW; the operative walk is in `buildSizedSignalForStrategy`, its own cell. An unreadable knob
         // skips this recording only — boot asserts the rows, and the operative seam REFUSES on the same failure.
         let _lbKnobs: LevelBuildKnobs | null = null;
