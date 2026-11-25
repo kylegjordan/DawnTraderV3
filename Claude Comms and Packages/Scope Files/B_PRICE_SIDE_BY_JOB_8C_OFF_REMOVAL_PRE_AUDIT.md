@@ -156,7 +156,7 @@ The verifier is a release gate, not a long-running helper. It is archived/delete
 
 ## 9. Exact fossil and literal policy
 
-At the pushed batch HEAD before this document (`0a8115cb81b60576b113d21a265b3185098aefb4`), the exact retired switch literal appears on 31 lines in 14 files. The origin code ref alone has 27 lines in 13 files; the four-line difference is the approved off-removal scope. Production capability is confined to two source files plus one switch-only test: `level-build-config.ts`, `signal-orchestrator.ts`, and `b8c-switch.test.ts`. Those production/test occurrences must disappear.
+At the pushed batch HEAD before this document (`0a8115cb81b60576b113d21a265b3185098aefb4`), the exact retired switch literal `crypto_birth_sided_enabled` appears on 31 lines in 14 files. The origin code ref alone has 27 lines in 13 files; the four-line difference is the approved off-removal scope. Production capability is confined to two source files plus one switch-only test: `level-build-config.ts`, `signal-orchestrator.ts`, and `b8c-switch.test.ts`. Those production/test occurrences must disappear.
 
 The final exact-literal allowlist is frozen to these non-executable records only:
 

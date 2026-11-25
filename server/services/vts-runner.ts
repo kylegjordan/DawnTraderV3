@@ -3,7 +3,7 @@ import { krakenWebSocketAdapter } from '../exchanges/kraken/kraken-websocket-ada
 // level-setting hand-off (census §9 W-1); wiring only the orchestrator would leave the
 // LEARNING population on the smoothed mid while every active-path check read as fixed.
 import { recordSideAgeAttempt } from '../core/calculations/level-basis.js';
-// Row `8c` switch-on: the level-build ceilings are DB-governed (`level_basis.level_build_*`); the literals are deleted.
+// Row `8c`: the level-build ceilings are DB-governed (`level_basis.level_build_*`).
 import { readCryptoLevelBuildKnobs } from '../core/trading/level-build-config.js';
 // Row `8c` P1: D3's ladder replaces the direct book-only assessment. `buildLevelBasis` is no
 // longer imported here — `selectTouchPrice` calls it internally, once per rung.
