@@ -33,9 +33,8 @@ export function levelGeometryOf(metadata: unknown): LevelGeometry {
 }
 
 /**
- * The geometry a crypto signal was STAMPED with at birth — `'sided'` or `'mid'` — or null when it carries no stamp (lost on a
- * hop, or queued before 8c deployed). The open refuses a crypto signal whose stamp is null (row `8c` switch condition (b):
- * the refusal keys on the row's own stamp, never on the live switch).
+ * Read the actual birth stamp. Null means absent or malformed. Active crypto admission requires exact `'sided'`;
+ * the decoder still recognizes historical `'mid'`.
  */
 export function levelGeometryStampOf(metadata: unknown): LevelGeometry | null {
   if (metadata === null || typeof metadata !== 'object') return null;

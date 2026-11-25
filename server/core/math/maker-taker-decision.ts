@@ -316,7 +316,7 @@ export function decideMakerTaker(
   // writes the legacy `trades` table, not the open gate). Only `#927` still fabricates on the active promotion path
   // (`active-execution-engine.ts`), and a signal through it is orchestrator-born — it loses a TARGET, not the stamp.
   // The required argument stays: the unstamped case is now refused where it would matter (row `8c`: the crypto open
-  // refuses a signal without the sided stamp, `LEVEL_GEOMETRY_ABSENT`).
+  // refuses a signal without the exact sided stamp, `LEVEL_GEOMETRY_NOT_SIDED`).
   if (levelGeometry !== 'mid' && levelGeometry !== 'sided') {
     throw new Error(
       `decideMakerTaker: levelGeometry must be 'mid' or 'sided', got ${String(levelGeometry)}`,

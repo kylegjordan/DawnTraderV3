@@ -168,10 +168,10 @@ describe('8c amendment 5 (iv)+(v) — the stamp survives every hop, and its abse
   });
   it('the open refuses a crypto signal without the sided stamp, BEFORE the open-gate EV prices it', () => {
     expect(E).toContain("const _cbOpenClass = asValidAssetClass(signal.metadata?.assetClass) ?? safeResolveAssetClass(signal.symbol, 'kraken');");
-    const refuse = uniq(E, "if (_cbOpenClass === 'crypto_spot' && levelGeometryStampOf(signal.metadata) === null) {");
+    const refuse = uniq(E, "if (_cbOpenClass === 'crypto_spot' && levelGeometryStampOf(signal.metadata) !== 'sided') {");
     expect(refuse).toBeGreaterThan(uniq(E, "return { opened: false, stage: 'GUARDRAIL_BLOCK', reason: riskCheck.reason || riskCheck.code || 'guardrail_block' };"));
     expect(refuse).toBeLessThan(uniq(E, 'const expectancyResult = evaluateTradeExpectancy(signal.symbol, {'));
-    expect(E).toContain("return { opened: false, stage: 'LEVEL_GEOMETRY_ABSENT', reason: 'level_geometry_absent' };");
+    expect(E).toContain("return { opened: false, stage: 'LEVEL_GEOMETRY_NOT_SIDED', reason: 'level_geometry_not_sided' };");
   });
 });
 

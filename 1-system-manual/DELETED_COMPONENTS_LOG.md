@@ -6,6 +6,12 @@
 
 ---
 
+## Crypto birth OFF switch — Phase A code removal (B-PRICE-SIDE-BY-JOB 8c-OFF-REMOVAL)
+
+The `crypto_birth_sided_enabled` reader, field, active birth OFF branch, switch-only boot field and switch tests supported the 8c dark launch. KD-91 enabled sided birth. The registered week was NO-RESULT with no stop trigger, and Coltrane discharged the hold at `34fec1121b8127fc987ab85c837cf31e366169e7`.
+
+Phase A changes all four consumers to the three retained controls and preserves P7 and the shared midpoint decoder. Phase B alone removes the row after exact Phase A is proven live. The reviewed release refs and proofs are recorded in `B_PRICE_SIDE_BY_JOB_8C_OFF_REMOVAL_CHANGE_LIST.md`. Recovery source: `_archive/deleted-code/b-price-side-by-job-8c-off-removal/crypto-birth-sided-switch-2026-11-24.md`, with exact originals at `40d06d3661da2690a58ea10e2a2e832555030d70`.
+
 ## `pm2-logrotate` — the PM2 log-rotation module on staging — UNINSTALLED 2026-11-20 (B-DISK-FILE-TIERING P9, CC-A)
 
 **What:** the `pm2-logrotate` 3.0.0 module (PM2 module id 2, user `deploy`), which rotated `/var/log/dawntrader/error.log` and `out.log`. Not code in the repo: a runtime module installed on the staging box, removed with `pm2 uninstall pm2-logrotate` at 2026-11-20T21:41Z, after the deploy of `4456f515d07a1e7b1310a767bd7e1d645f565411`.

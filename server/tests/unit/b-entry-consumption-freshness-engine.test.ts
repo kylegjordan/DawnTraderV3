@@ -302,8 +302,7 @@ function signal(chosenEntryMode: 'taker' | 'maker' = 'taker') {
     entryFillPolicy: 'maker_preferred' as const,
     chosenNetEv: 0.1,
     takerNetEv: 0.1,
-    // Row `8c`: a crypto signal born after the switch-on carries the sided stamp (an unstamped one is refused at the open,
-    // LEVEL_GEOMETRY_ABSENT). bid = the fixture entry, so the maker's resting limit stays at 100 as these tests assume.
+    // Row `8c`: active crypto requires exact sided geometry. Bid = the fixture entry so the maker limit stays at 100.
     metadata: { assetClass: 'crypto_spot', volume24h: 1_000_000, levelGeometry: 'sided', levelBasisAtBirth: { bid: 100, ask: 100, capturedAtMs: 0, ageMs: 0, producer: 'fixture' } },
   };
 }
@@ -354,6 +353,40 @@ beforeEach(() => {
 });
 
 afterEach(() => vi.restoreAllMocks());
+
+describe('8c OFF removal — active open geometry', () => {
+  it.each([
+    ['mid', '"mid"'],
+    [undefined, 'absent'],
+    ['SIDED', '"SIDED"'],
+    [null, 'null'],
+  ])('refuses active crypto with stamp %s before pricing, placement or persistence', async (stamp, observed) => {
+    const candidate = signal();
+    const { levelGeometry, ...metadata } = candidate.metadata;
+    const unstampedCandidate = { ...candidate, metadata: stamp === undefined ? metadata : { ...metadata, levelGeometry: stamp } };
+    const result = await execute(makeEngine(), unstampedCandidate as typeof candidate);
+
+    expect(result).toEqual({ opened: false, stage: 'LEVEL_GEOMETRY_NOT_SIDED', reason: 'level_geometry_not_sided' });
+    expect(h.recordOpenFailed).toHaveBeenCalledExactlyOnceWith(
+      'BTC/USD', 'test_strategy', 'LEVEL_GEOMETRY_NOT_SIDED', `active crypto requires levelGeometry=sided; observed=${observed}`,
+    );
+    expect(h.evaluateTradeExpectancy).not.toHaveBeenCalled();
+    expect(h.openOrder).not.toHaveBeenCalled();
+    expect(h.createActiveOpenPosition).not.toHaveBeenCalled();
+  });
+
+  it('admits exact sided crypto to the EV gate and lets xStock keep an explicit mid stamp', async () => {
+    await execute(makeEngine(), signal());
+    expect(h.evaluateTradeExpectancy).toHaveBeenCalledTimes(1);
+    h.evaluateTradeExpectancy.mockClear();
+    const candidate = signal();
+    const xstock = { ...candidate, symbol: 'AAPLX/USD', metadata: { ...candidate.metadata, assetClass: 'xstock_spot', levelGeometry: 'mid' } };
+    // Deliberately end the xStock control at the EV gate rather than rely on unrelated venue fixtures.
+    h.evaluateTradeExpectancy.mockReturnValueOnce({ isTradeable: false, netEV: -0.1, ev: -0.1, score: 0, rejectionReason: null });
+    await execute(makeEngine(), xstock);
+    expect(h.evaluateTradeExpectancy).toHaveBeenCalledTimes(1);
+  });
+});
 
 describe('B-ENTRY-CONSUMPTION-FRESHNESS — ActiveExecutionEngine production seam', () => {
   it.each([undefined, null, Number.NaN, Number.POSITIVE_INFINITY])(
