@@ -149,6 +149,13 @@ The parent may convert this file to `B_ENTRY_GATE_COMPLETION_REPORT.md` only aft
   - **Coltrane disposition and archive cross-check:** The fall in overall attempts is smaller than the 1,146 post-window drops. Each of the two strategies going to zero still warrants investigation. Separate read of `signal_eval_archive` across the same eight 14:30–21:00Z windows, `mode=paper_sim`, for the two strategies and the known-active `strong_bull_trend`: `signal-orchestrator/admitted` recorded 60 `inside_bar_reversal` and 29 `reverse_impulse` before (both `crypto_spot`, all on November 10), and zero rows of either strategy at any archived stage after. Pre-window `rtb-refresh` also recorded 16 and 5 price-shadow events for the two strategies. The control had 828 `signal-orchestrator/admitted` records before and 290 after, with records on every sampled day. At the November 13 deploy ref `77f6fd598`, the orchestrator submits the queue write asynchronously and independently records `admitted`. The insertion trace contains time, mode, symbol and strategy and lacks a shared evaluation ID. Candidate opportunities, upstream dispositions and durable queue outcomes joined to the same evaluations still require an instrument or a governed decision accepting that opportunity and deploy mix confound the two zeros.
 - **P7 seed and residual:** Langston approved 300,000 ms with overnight items 2–4 unscored. FE (7/13) and A (8/13) leaned against the proposed cost interpretation. A follow-up diagnostic read all 22 hourly xStock price-share buckets across November 23 21:00Z–November 24 08:00Z and November 24 21:00Z–November 25 08:00Z (11 crypto buckets also matched the same instrument). Nine of the 24 named symbols had at least 20 passes: NFLX 329, PLTR 655, COIN 457, MU 78, KMB 328, DUK 327, ROP 329, A 329 and T 328. The other 15 had zero recorded passes (the nine populated names are the positive control). The first overnight crossed the combined deploy and can lose a partial hour, so this read is a coverage check. CC-B will read the fixed November 24 21:00Z–December 1 08:00Z follow-up at `79f63a28-da7f-44fa-ba6e-57e686f962d4`. Keep #1224 open and manually mint the next dated alert if any of the 24 still falls short. Close only once the original predictions 2–4 can be scored unchanged, or Kyle explicitly retires or amends the residual.
 
+**Step 11 disposition — Coltrane, 2026-11-25T10:49:15Z, exact `944ced995`:** P7 has a surviving home and remains open under `#1224`. Historical P6 and P8 remain unproved. **B-ENTRY-GATE increment D**, owned by CC-B in the same pre-sprint item 2 and `#1224`, is the home for additional prospective evidence. Step 1 scopes observation only. Any instrumentation proceeds through reviewed scope and pre-audit, implementation, code review, CI, deploy, a fixed Step 7 window and independent Step 8 reproduction. Kyle must explicitly amend or retire a historical criterion before data is collected under a prospective criterion intended to replace it.
+
+- **P6 prospective plan to register:** Fix class, mode, whole-queue definition, window and all eligible cycles including zeros. Fix the denominator and the responses to insufficient coverage and failure. Dropping zero-cycle observations must fail verification.
+- **P8 prospective plan to register:** Use one evaluation ID across opportunity, gate decision, queue-write call and durable success or failure. Require a terminal outcome for every eligible `inside_bar_reversal`, `reverse_impulse` and positive-control evaluation. Fix the window and the response to insufficient opportunities before collection. Suppressing or misordering a write must fail verification.
+
+The declared-open governance exception remains `open` from its original timestamp. Both governance alerts remain active until actual Step-11 close. The next unrelated agreed work remains eligible while the P7 clock runs.
+
 `REVIEWER: pushed progress report + registered parent close criteria and cited evidence · what other states are consistent with the proposed close? · HIT: registered P6 investigation/size proxy, live P8 conservation gap, P7 residual, and paper/live distinction · re-derived y`
 
 `REVIEWER: claim-only · P8 retained-archive and RTB-write coverage · HIT: insertion trace precedes the upsert, and admitted archive emission is independent · re-derived y`
@@ -234,7 +241,7 @@ CHANGE-CLASS: architecture
 | T2 | `DELIVERY_BOARD_PROTOCOL.md` | N/A | No board field or rule changed. |
 | T2 | `CLAUDE_CODE_FEATURE_WATCH.md` | N/A | The daily check did not run in this turn. |
 
-## 11. Tier ledger — parent Step 10 (2026-11-24)
+## 11. Tier ledger — parent Step 10 (2026-11-24, corrected 2026-11-25)
 
 CHANGE-CLASS: architecture
 
@@ -242,18 +249,18 @@ CHANGE-CLASS: architecture
 |---|---|---|---|
 | T1 | `BATCH_CATALOG.md` | ✅ | Reconciled all three increments, the final evidence, and the Step-11-only remainder. |
 | T1 | `PHASE_HISTORY.md` | ✅ | Added the parent verification result and preserved Step 11 as the remaining close gate. |
-| T1 | active plan `SPRINT_TO_LIVE_PLAN.md` | ✅ | Updated both B-ENTRY-GATE plan representations to Step 10 complete with the final result and report link. |
+| T1 | active plan `SPRINT_TO_LIVE_PLAN.md` | ✅ | Records the deployed increments, open Step-11 evidence gates and increment D's place under the existing slot. |
 | T1 | `PHASE_19_PLAN.md` | N/A | B-ENTRY-GATE has no row in PHASE_19_PLAN; its authority is the active sprint plan. |
 | T1 | shared `MEMORY.md` + `MEMORY_CC_B.md` | ✅ | Added the settled entry contract to shared memory and advanced NEW's position to Step 11. |
 | T1 | batch `SCOPE` | ✅ | The existing architecture scope still defines the parent objectives graded in §6b. |
 | T1 | batch `PRE_AUDIT` | ✅ | The existing pre-audit still defines the split, registered observations, and reviewed safe dispositions. |
 | T1 | `COMPLETION_REPORT` | ✅ | Updated this progress report in place; Step 11 owns its required rename and final completion gate. |
-| T1 | Observation column | ✅ | Every registered increment window has data and a governed decision; no observation remains open. |
-| T1 | four session task lists | ✅ mine / N/A ×3 | Updated CC_B_SESSION_TASK_LIST.md; CC_A, CC_C and CC_INFRA lists are not mine. |
+| T1 | Observation column | ✅ | P6/P8 historical criteria remain unproved, increment D is placed for prospective evidence, and P7 is armed for December 1. See §7. |
+| T1 | four session task lists | ✅ mine / N/A ×3 | Updated CC_B_SESSION_TASK_LIST.md with Step-11 disposition and increment D; CC_A, CC_C and CC_INFRA lists are not mine. |
 | T1 | Coltrane memory store (reviewer-shift substitute for Langston `MEMORY.md`) | ✅ | Recorded the exact verified contract and the completion record a future review should use. |
 | T2 | `SYSTEM_MANUAL.md` | ✅ | Added increment C's class-specific birth enforcement, final promotion-age values, and verified boundary. |
 | T2 | `SYSTEM_IMPACT_MAP.md` | ✅ | Added increment C's resolver, per-class setting coupling, promotion ceiling, and final report pointer. |
-| T2 | `RUNNING_ISSUES.md` | ✅ | Closed the original #1224 symptom and recorded the three-increment verification with Step 11 remaining. |
+| T2 | `RUNNING_ISSUES.md` | ✅ | Updated open #1224 with the three deployed increments, the P7 check, and increment D's placed P6/P8 evidence work. |
 | T2 | `CHANGES_AND_FIXES.md` | ✅ | Added the class-coupling risk and increment-C fix that prevented an unread crypto arm from being switched live. |
 | T2 | `POST_AUDIT_ROADMAP.md` | N/A | The batch changes no phase-level order; its Kyle-locked sprint-plan position is unchanged. |
 | T2 | `ADJUSTMENT_FRAMEWORK.md` | ✅ | Updated the live birth-switch and promotion-age levers for both classes from the ten-row live population. |
@@ -267,7 +274,7 @@ CHANGE-CLASS: architecture
 | T2 | `_archive/CLAUDE_MD_RULE_HISTORY.md` | N/A | No CLAUDE.md rule was added or materially changed. |
 | T2 | `DELETED_COMPONENTS_LOG.md` | ✅ | Re-read the existing increment-A removal record; increments B and C remove no further component. |
 | T2 | `MISTAKE_PATTERNS.md` | N/A | No MISTAKE trailer was written and the weekly pass did not run in this governance turn. |
-| T2 | `GOVERNANCE_EXCEPTIONS.md` | ✅ | Retired the declared-open row after all observation data and decisions landed, before alert resolution. |
+| T2 | `GOVERNANCE_EXCEPTIONS.md` | ✅ | Restored the declared-open row at its original open-since time. Retire at Step-11 close and resolve both governance alerts with evidence. |
 | T2 | `ALERT_HANDLING_PROTOCOL.md` | N/A | Alert state changes follow the existing resolve-after-evidence contract and change no process. |
 | T2 | `DELIVERY_BOARD_PROTOCOL.md` | N/A | The card moved to an existing Governance column; no board field, column, or ownership rule changed. |
 | T2 | `CLAUDE_CODE_FEATURE_WATCH.md` | N/A | The daily model and feature check did not run in this governance turn. |
