@@ -6,7 +6,7 @@
 
 | Sub-batch document | Disposition at this code review |
 | --- | --- |
-| Scope | **Present**, `Claude Comms and Packages/Scope Files/B_ENTRY_GATE_INC_D_SCOPE.md`. |
+| Scope | **Present**, `Claude Comms and Packages/Scope Files/B_ENTRY_GATE_SCOPE_INC_D.md`. Exact Step 4 ref `c24ca16fa` carries the same blob at `B_ENTRY_GATE_INC_D_SCOPE.md`. |
 | Pre-audit | **Present**, exact reviewed blob at the path above. |
 | Completion report | **Absent**, the parent report is open and this increment has no staged evidence to close. |
 | `BATCH_CATALOG.md` | **Present**, existing Entry Gate entry. Update on increment close. |
@@ -137,3 +137,13 @@ case 'rtb_returned':
 - **REVIEWER:** claim-only · can a whole first or last allocated scan disappear inside valid window anchors? · CLEAN on the scoped claim · re-derived y. The two boundary-deletion mutations passed on `20bd25da9` and fail with the anchor comparison.
 - **Coltrane Step 4 CHANGES**, `497533ac292f4c4a0f897e0de0e7aee9004a0913`, 2026-11-25 13:23:14Z. Removing the target-refusal line, removing the upsert attempt plus its confirmed or unconfirmed result, and an impossible database/app timing pair passed r3. R4 rejects those changes against the real verifier. The intact fixture includes a genuine pre-upsert error and still distinguishes it from a successful write followed by an error.
 - **REVIEWER:** claim-only · can reached seams or a physical statement bound still be misread? · HIT: a preliminary r4 accepted a statement before query start and an inconsistent wall/monotonic pair · re-derived y. Exact timing now brackets the raw statement timestamp, bounds both full durations, and rejects both mutations. Deleting individual trace records in the passing fixture did not bypass the terminal declarations.
+
+## Classification warning and ruling — 2026-11-25
+
+Governance warning `bbfdec6e-848e-4d6a-9526-0839c00b110e` graded `1d9a033298e5bbb61019d133c883872d169d73c3`. Both scope filenames matched `B-ENTRY-GATE`, and the checker selected the first parsed header after sorting. The increment scope sorted first and supplied `sub_batch` for the parent key. In the exact increment-D diff only `server/services/signal-orchestrator.ts` matched the engine-path heuristic. Removing that path in the replay stopped the warning while the parent still graded as `sub_batch`. The canonical parent `architecture` scope selected before the increment scope first landed, at `6eef3f113b5ce37f6cdb13b53b32540a0a17f351`.
+
+**Coltrane CLASS AND DOC SET PROCEED**, 14:18:33Z on exact `c24ca16faeb0d11a7dfe4d1e37d31754f89c6183` (dispatch `1575152694870548624`). D remains a `sub_batch` for observation under the `architecture` parent #1224. The existing target gate and upsert remain the decision and write sites. Update `SYSTEM_MANUAL.md` §19.0 and `SYSTEM_IMPACT_MAP.md` for the instruments at Step 10 and reconcile `BATCH_CATALOG.md` and `PHASE_HISTORY.md`. Completion evidence remains due. The Step 6 gates and the parent Step 11 historical P6/P8 and December 1 P7 dispositions still apply.
+
+Coltrane approved renaming the increment scope byte-for-byte to `B_ENTRY_GATE_SCOPE_INC_D.md`. The canonical `B_ENTRY_GATE_SCOPE.md` now sorts first, preserving required architecture-document grading for the parent. Preserve the warning for checker-owned clearance after grading the corrected shared ref.
+
+- **REVIEWER:** claim-only · what changes could coexist with supplemental instrumentation in core paths? · HIT: the scope filename also changes the parent checker grade, and enabled observation leaves timing and database load to measure · re-derived y.
