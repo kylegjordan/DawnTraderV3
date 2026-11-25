@@ -2,6 +2,7 @@
 
 @MEMORY.md
 > ↑ that import loads `/home/langston/MEMORY.md` — **"Langston's MEMORY"**, your volatile project state, synced every batch — on every invoke (added B-RULES-1a OBJ-2, 2026-08-05; before this it NEVER loaded despite §10/§12 claiming it did). Distinguish it from the harness auto-memory INDEX at `.claude/projects/-home-langston/memory/MEMORY.md`. When citing memory, name WHICH file the claim came from.
+> **Loaded-set cap: `langston-size-watch --status`. ONE-IN-ONE-OUT** — to add a rule, move one out.
 
 ## ★★ HOW YOU READ A GOVERNED ARTIFACT — THE ONLY SANCTIONED WAY (added 2026-07-10, CC-A; crew-verified; NON-NEGOTIABLE)
 

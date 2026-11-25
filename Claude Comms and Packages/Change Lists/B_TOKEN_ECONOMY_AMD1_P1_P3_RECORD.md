@@ -1,6 +1,6 @@
 # B-TOKEN-ECONOMY amendment 1 — P1 to P3 implementation record (Langston's and Coltrane's always-loaded notes)
 
-**Owner:** Infra Claude (CC-INFRA) · **STEP: 3 of 11** · **NEXT STEP: 4 of 11** (P1+P2+P3 as one change list to Langston, after the 03:50Z trim; P2 item 3 built at the ref, install held for that review unless Langston clears it sooner)
+**Owner:** INFRA Codex (standing in for CC-INFRA) · **STEP: 3 of 11** · **NEXT STEP: 4 of 11** (combined P1–P3 independent review after the 03:50Z trim)
 **Plan rows:** `Claude Comms and Packages/Scope Files/B_TOKEN_ECONOMY_AMENDMENT_1_PRE_AUDIT.md`, rows P1, P2 and P3 (lines 334-336 at this commit's parent).
 **Requested by:** PM Claude, Discord `1573658836009619527` (P6 is in its 7-day read meanwhile).
 
@@ -169,4 +169,26 @@ Langston's memory content stays on Helsinki and is not copied here. Every figure
 - **Not installed.** It rides the combined Step-4 review. After that comes `install-index-guard.sh`, then the size-watch install. `875456c7` is then resolved by hand with `--by cc-infra --evidence`. It is never acked.
 - **DISPOSITION:** added to B-TOKEN-ECONOMY amd-1 P1–P3 (this record; the combined Step-4 change list carries it as its own section).
 
-## P3 — lower the ceiling to the measured post-trim total; Coltrane the same — not started
+## P3 — reviewer instruction ceilings and the combined review
+
+**Resume check, 2026-11-25 22:14Z.** Helsinki's scheduled Langston trim on 2026-11-22 at 03:50:34Z named five evictions, including the four tracked P1 sections and the P2 ledger section. The trim log records 73,360 → 68,693 B in the loaded `MEMORY.md`, with seven open sections retained. The net change since the pre-P1 measurement of 73,848 B was −5,155 B. The archive-placement evidence above covers the P1 blocks. The ledger check separately matched both P2 ledger moves in the captured files and all four P2 communications passages in Git, each byte-for-byte at one declared destination. The P1 archive proof covers placement only.
+
+| Reviewer | Helsinki measured total, 22:14Z | Existing ceiling | Proposed instruction-file bytes |
+|---|---:|---:|---:|
+| Langston, three loaded files | 139,096 B (57,049 rules + 68,896 memory + 13,151 index) | 143,856 B | 55,672 B, 1,377 B below the installed rules file |
+| Coltrane, AGENTS.md | 14,755 B | 15,000 B | 14,555 B, 200 B below the installed file |
+
+The two Helsinki reads reported all watched files present. Langston's installed rules hash is `36dbd2e9bb55ce18f1d2acc04796f996bf75fbb3c55413aac35418c8eaf6f791`. Coltrane's installed hash `fce4976f2fb46147cc799e134c253aeccf913a14e7371e0adfcaca91387d5362` matches the Git baseline. The amendment's A2 size-watch observation was historical. Helsinki already has Coltrane's size watch, and its state records the 15,000 B ceiling reapplied under KD-115 on November 22. The increment reuses the existing watch.
+
+- **P3 scope.** Both loaded rules now put one-in-one-out beside the live ceiling lookup. Coltrane's archived paragraph is a dated proof incident. The prohibition on inventing an answer and what to do when evidence is unavailable remain in his loaded rules. The pointer names this record and the exact heading below. The 413-byte paragraph (SHA-256 `4e505802a393dc6e22869cc41221d1f2fcfa48c95060c4a3fcfaf511f911144c`) occurs once in the baseline, zero times in the revised loaded rules and once unchanged under P3-C1. Changing one byte breaks the match.
+- **Combined review.** Grade this change list with Langston's P2 item 3 at `adbafcd34` and the folded guard fix at `a5a8739cc`. Langston's original hold in `1573672336627081260` requires the combined review before installation. Coltrane is the on-duty reviewer. His own loaded rules and ceiling require independently authorized review before that increment can install. Langston remains off for the Codex shift.
+- **Install gate and verification.** Confirm the approved window and install exact reviewed bytes with the existing governed install path. Confirm both installed hashes, then take fresh `--status` readings. For each reviewed ceiling change, require all watched files present and `measured_total` at or below the existing ceiling, then lower the ceiling to that measured total with an authorized actor in the same close. Use a second fresh status and record its actual total, ceiling, actor, timestamp and net change from baseline. Stop if content or state differs. The table is a pre-install reading. Any shortfall against the approved reduction returns to review with the measured gap and the next one-in-one-out candidate.
+- **Observation return points.** Token Watch P10 resumes after ANALYST reports the actual Phase A restart, to check publish freshness against that timestamp and disposition alert `6f9fa1d3-0aa6-4ac2-aa29-61fd3b5428aa`. Its seven-day read is armed for 2026-11-27 00:05Z under `88fc097f-b903-4a3e-9720-7f9c353dadbd`. Birth-cap OBJ-5 stays in observation through 2026-11-27 00:00Z. Protected staging windows and the Phase B restart hold stay in force.
+
+### P3-C1 — Coltrane's 2026-09-08 proof example
+
+★ **This is not hypothetical.** On 2026-09-08 an automated probe asked the reviewer for a
+value he could not reach. Instead of refusing, he produced a convincing token and a
+convincing file path — **neither of which existed anywhere on the machine** — and the
+checking tool scored it clean. **A fabricated answer is worse than a wrong one, because a
+wrong answer gets caught and a plausible one gets used.**
