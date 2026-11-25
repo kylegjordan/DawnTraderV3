@@ -920,7 +920,8 @@ class UnifiedPriceCache {
    * it states sides. A new caller must do the same; the object shape is what stops it from stating half a book.
    *
    * `lastSource: 'kraken_rest'` and `lastWsMessageAtMs` carried (a REST write is not a push), as before.
-   * `sides` is REQUIRED; `?? null` because a test file outside tsc can omit it.
+   * `sides` is REQUIRED; `?? null` because a test file outside tsc can omit it. The adapter's raw response key
+   * qualifies only the diagnostic attribution of newly stated sides.
    */
   updateFromRest(
     symbol: string,
@@ -928,6 +929,7 @@ class UnifiedPriceCache {
     markKind: CacheMarkKind | null,
     lastTradePrice: number | null,
     sides: StatedSides | null,
+    restResponseKey?: string,
   ): void {
     const now = Date.now();
     const existing = this.cache.get(symbol);
@@ -953,15 +955,21 @@ class UnifiedPriceCache {
       markKind: markKind ?? null,
       ...carryLastTrade(existing, lastTradePrice, now),
       lastUpdatedAt: now,
-    }, assignment);
+    }, assignment, undefined, restResponseKey);
   }
 
-  private storeRow(key: string, row: CachedPrice, assignment: SideAssignment, canonicalHint?: string): void {
+  private storeRow(
+    key: string,
+    row: CachedPrice,
+    assignment: SideAssignment,
+    canonicalHint?: string,
+    restResponseKey?: string,
+  ): void {
     const incumbent = assignment === 'stated' && row.lastSource === 'kraken_rest' ? this.cache.get(key) : undefined;
     if (assignment !== 'none') krakenPriceSourceDiagnostics.startIfReady();
     this.cache.set(key, row);
     if (assignment === 'none') return;
-    krakenPriceSourceDiagnostics.recordAssignment(key, row, assignment === 'stated', canonicalHint);
+    krakenPriceSourceDiagnostics.recordAssignment(key, row, assignment === 'stated', canonicalHint, restResponseKey);
     if (assignment === 'malformed') return;
 
     // #1146 compares two local receipt stamps on the actual key. A carried pair has no new receipt.

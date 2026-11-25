@@ -2,12 +2,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import axios from 'axios';
 import { readFileSync } from 'node:fs';
 import { priceCache } from '../../services/price-cache.js';
+import { livePricingAdapter } from '../../services/live-pricing-adapter.js';
 import { krakenAssetPairsService } from '../../markets/kraken-asset-pairs-service.js';
 import { normalizeToInternalSymbol } from '../../markets/kraken-symbol-resolver.js';
 import { getLevelBasisFunnel } from '../../core/calculations/level-basis.js';
 import { recordTouchSelection, selectTouchPrice, tickerLegFromCachedQuote } from '../../core/calculations/touch-price.js';
 import { selectCryptoTouch } from '../../core/trading/crypto-touch.js';
 import { buildFunnelSnapshotLine } from '../../services/level-basis-funnel-writer.js';
+import { restRateLimiter } from '../../services/market-data/rest-rate-limiter.js';
 import {
   captureLevelBasisDiagnostics, krakenPriceSourceDiagnostics, KrakenPriceSourceDiagnostics,
 } from '../../services/market-data/kraken-price-source-diagnostics.js';
@@ -37,7 +39,7 @@ function seedWs(key: string, localStamp: number, writer: 'ws_ticker' | 'ws_book'
 function writeRest(key: string, localStamp: number) {
   priceCache.updateFromRest(key, 100, 'mid', null, {
     bid: 98, ask: 102, capturedAtMs: localStamp, writer: 'rest_adapter', sizes: null,
-  });
+  }, krakenAssetPairsService.resolveByInternal(key)?.krakenPairKey);
 }
 
 afterEach(() => {
@@ -355,4 +357,58 @@ it('keeps the listed quote when an earlier unlisted response row cannot be parse
   expect(rows.get(listed)).toMatchObject({ bid: 98, ask: 102, sidesWriter: 'rest_batch' });
   expect(priceCache.get(listed)).toEqual(rows.get(listed));
   expect(priceCache.get('MALFORMED_UNLISTED')).toBeNull();
+});
+
+it('grades only the direct adapter response tied to the frozen pair while preserving both quote decisions', async () => {
+  vi.spyOn(console, 'log').mockImplementation(() => {});
+  vi.spyOn(axios, 'get').mockResolvedValue({ data: { error: [], result: {
+    XBTUSD: metadata('XBTUSD', 'OLD-WS', 'XXBT'),
+    XXBTZUSD: metadata('XXBTZUSD', 'XBT/USD', 'XXBT'),
+  } } });
+  await krakenAssetPairsService.refresh();
+  expect(krakenAssetPairsService.resolveByInternal(symbol)?.krakenPairKey).toBe('XXBTZUSD');
+  expect(krakenAssetPairsService.resolveByKrakenKey('XBTUSD')?.krakenPairKey).toBe('XBTUSD');
+
+  const diagnostics = new KrakenPriceSourceDiagnostics(krakenAssetPairsService);
+  diagnostics.bindCache(() => []);
+  diagnostics.startIfReady();
+  vi.spyOn(krakenPriceSourceDiagnostics, 'recordAssignment')
+    .mockImplementation((...args) => diagnostics.recordAssignment(...args));
+  vi.spyOn(krakenPriceSourceDiagnostics, 'recordWalkOutcomes')
+    .mockImplementation((...args) => diagnostics.recordWalkOutcomes(...args));
+  const fetchQuote = livePricingAdapter as unknown as { fetchFromKrakenRest(key: string): Promise<unknown> };
+  const fetchTicker = vi.spyOn(globalThis, 'fetch');
+
+  for (const [responseKey, bid, ask] of [['XXBTZUSD', 98, 102], ['XBTUSD', 100, 104]] as const) {
+    restRateLimiter.reset();
+    fetchTicker.mockResolvedValueOnce(new Response(JSON.stringify({ error: [], result: {
+      [responseKey]: { ...ticker, a: [String(ask), '1', '2'], b: [String(bid), '1', '3'] },
+    } }), { status: 200 }));
+    await expect(fetchQuote.fetchFromKrakenRest(symbol)).resolves.toMatchObject({ price: (bid + ask) / 2 });
+    const row = priceCache.get(symbol);
+    expect(row).toMatchObject({ bid, ask, sidesWriter: 'rest_adapter' });
+    const selected = selectTouchPrice({
+      book: null, bookEligible: true, bookTrusted: true,
+      ticker: tickerLegFromCachedQuote(row), tickerBasis: 'ticker_bbo',
+    }, Date.now(), { maxAgeMs: 15_000, maxSpreadFraction: 0.5 });
+    expect(selected.ok).toBe(true);
+    recordTouchSelection({ lane: 'active', stage: 'active_entry_fill', assetClass: 'crypto_spot' }, selected, symbol);
+  }
+
+  expect(fetchTicker).toHaveBeenCalledTimes(2);
+  const recorded = diagnostics.snapshot(Date.now(), []);
+  expect(recorded.coverage.symbols).toEqual([
+    { symbol, inherited: {}, assigned: { rest_adapter: 1 }, gaps: { identity_change: 1 } },
+  ]);
+  expect(recorded.tracked).toContainEqual({
+    key: 'active:crypto_spot:active_entry_fill:ladder',
+    symbol, attempted: 2, byAcceptedSource: { 'ticker_bbo:rest_adapter': 2 },
+  });
+
+  const inherited = new KrakenPriceSourceDiagnostics(krakenAssetPairsService);
+  inherited.bindCache(() => [[symbol, priceCache.get(symbol)!]]);
+  inherited.startIfReady();
+  expect(inherited.snapshot(Date.now(), []).coverage.symbols).toEqual([
+    { symbol, inherited: {}, assigned: {}, gaps: { missing_provenance: 1 } },
+  ]);
 });

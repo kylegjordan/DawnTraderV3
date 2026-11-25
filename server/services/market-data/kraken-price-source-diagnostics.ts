@@ -183,7 +183,9 @@ export class KrakenPriceSourceDiagnostics {
           continue;
         }
         this.keys.set(key.toUpperCase(), identity);
-        if (row.sidesWriter == null || row.sidesCapturedAtMs == null || !Number.isFinite(row.sidesCapturedAtMs) ||
+        // The inherited row does not retain the adapter's raw response key.
+        if (row.sidesWriter === 'rest_adapter' || row.sidesWriter == null ||
+            row.sidesCapturedAtMs == null || !Number.isFinite(row.sidesCapturedAtMs) ||
             pairwiseStatedSides(row.bid, row.ask) === null) {
           this.markGap('missing_provenance', identity);
           continue;
@@ -198,7 +200,13 @@ export class KrakenPriceSourceDiagnostics {
     }
   }
 
-  recordAssignment(key: string, row: StoredSides, validPair: boolean, canonicalHint?: string): void {
+  recordAssignment(
+    key: string,
+    row: StoredSides,
+    validPair: boolean,
+    canonicalHint?: string,
+    restResponseKey?: string,
+  ): void {
     if (this.startedAtMs === null) return;
     try {
       const frozen = this.keys.get(key.toUpperCase());
@@ -214,6 +222,15 @@ export class KrakenPriceSourceDiagnostics {
       if (!validPair || row.sidesWriter == null || row.sidesCapturedAtMs == null || !Number.isFinite(row.sidesCapturedAtMs)) {
         this.markGap('missing_provenance', current);
         return;
+      }
+      if (row.sidesWriter === 'rest_adapter') {
+        const frozenResponse = restResponseKey ? this.keys.get(restResponseKey.toUpperCase()) : undefined;
+        const exactResponse = restResponseKey ? this.exactIdentity(restResponseKey) : undefined;
+        if (!frozenResponse || !exactResponse ||
+            !sameIdentity(current, frozenResponse) || !sameIdentity(current, exactResponse)) {
+          this.markGap('identity_change', current);
+          return;
+        }
       }
       const coverage = this.symbols.get(current.symbol);
       if (coverage) increment(coverage.assigned, row.sidesWriter);
