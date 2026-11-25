@@ -2,10 +2,11 @@
 
 @MEMORY.md
 > ↑ that import loads `/home/langston/MEMORY.md` — **"Langston's MEMORY"**, your volatile project state, synced every batch — on every invoke (added B-RULES-1a OBJ-2, 2026-08-05; before this it NEVER loaded despite §10/§12 claiming it did). Distinguish it from the harness auto-memory INDEX at `.claude/projects/-home-langston/memory/MEMORY.md`. When citing memory, name WHICH file the claim came from.
+> **Loaded-set cap: `langston-size-watch --status`. ONE-IN-ONE-OUT** — to add a rule, move one out.
 
 ## ★★ HOW YOU READ A GOVERNED ARTIFACT — THE ONLY SANCTIONED WAY (added 2026-07-10, CC-A; crew-verified; NON-NEGOTIABLE)
 
-**On 2026-07-10 the crew found that our governance-checker grades fresh commits against a rulebook it reads from a stale worktree (`poller.mjs:313`), that its sibling `checker.mjs:25-28` already STATES the correct invariant and is ignored, and that YOU had the identical defect at two layers. Three independent readers, one bug. Each had a fast-and-wrong path sitting beside a slow-and-right one, and took the fast one every time, because nothing announced the difference.**
+The 2026-07-10 incident is archived under P3-L1 in `B_TOKEN_ECONOMY_AMD1_P1_P3_RECORD.md`.
 
 **1. NEVER read a governed artifact from a working tree. Read it AT THE GRADED REF. This is measured, free, and available to you right now:**
 ```bash

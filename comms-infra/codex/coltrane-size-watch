@@ -95,7 +95,7 @@ def measure():
 def load_state():
     try:
         with open(STATE, encoding="utf-8") as fh:
-            return json.load(fh)
+            state = json.load(fh)
     except FileNotFoundError:
         return {}
     except Exception as e:
@@ -105,6 +105,20 @@ def load_state():
         print("REFUSED: %s is unreadable (%s: %s). Not seeding, not measuring against a "
               "guess. Fix or delete it deliberately." % (STATE, type(e).__name__, e))
         raise SystemExit(2)
+    if not isinstance(state, dict):
+        print("REFUSED: %s does not contain a state object." % STATE)
+        raise SystemExit(2)
+    # A missing-file run can record alerts and heartbeat before the first ceiling exists.
+    if not {"ceiling_bytes", "history", "set_at", "set_by"}.intersection(state):
+        return state
+    ceiling = state.get("ceiling_bytes")
+    history = state.get("history")
+    latest = history[-1] if isinstance(history, list) and history else None
+    if (type(ceiling) is not int or ceiling < 0 or not isinstance(latest, dict)
+            or type(latest.get("ceiling")) is not int or latest["ceiling"] != ceiling):
+        print("REFUSED: %s ceiling disagrees with its latest history entry." % STATE)
+        raise SystemExit(2)
+    return state
 
 
 def save_state(st):
@@ -260,6 +274,16 @@ def cmd_set_ceiling(a):
         print("REFUSED: cannot set a ceiling while files are missing: %s" % ", ".join(missing))
         return 2
     old = st.get("ceiling_bytes")
+    if getattr(a, "require_current_total", False) and a.set_ceiling != total:
+        print("REFUSED: requested ceiling %d B differs from the current total %d B."
+              % (a.set_ceiling, total))
+        return 2
+    if a.set_ceiling < 0:
+        print("REFUSED: the ceiling must be nonnegative.")
+        return 2
+    if a.set_ceiling == old:
+        print("ceiling already %d B; state unchanged" % old)
+        return 0
     if old is not None and a.set_ceiling > old:
         # ⛔⛔ THE RATCHET. A raise is the failure this tool exists to prevent, so it is
         #    refused outright rather than warned about — a warning is something a session in
@@ -269,12 +293,18 @@ def cmd_set_ceiling(a):
         print("  If the instructions genuinely need to be bigger, that is a decision to")
         print("  argue for and record — not a number to raise quietly.")
         return 3
-    st.setdefault("history", []).append(
-        {"ts": utc(), "ceiling": a.set_ceiling, "by": a.by, "previous": old})
+    now = utc()
+    entry = {"ts": now, "ceiling": a.set_ceiling, "by": a.by, "previous": old,
+             "measured_total": total}
+    st.setdefault("history", []).append(entry)
     st["ceiling_bytes"] = a.set_ceiling
-    st["set_at"] = utc()
+    st["set_at"] = now
     st["set_by"] = a.by
     save_state(st)
+    readback = load_state()
+    if readback.get("ceiling_bytes") != a.set_ceiling or readback["history"][-1] != entry:
+        print("REFUSED: the saved ceiling and history did not match the requested change.")
+        return 2
     print("ceiling set to %d by %s (was %s)" % (a.set_ceiling, a.by, old))
     return 0
 
@@ -426,22 +456,33 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split(NL)[0])
     ap.add_argument("--status", action="store_true", help="print state and exit; records nothing")
     ap.add_argument("--set-ceiling", type=int, help="lower the ceiling (a RAISE is refused)")
+    ap.add_argument("--require-current-total", action="store_true",
+                    help="require --set-ceiling to match the fresh measured total")
     ap.add_argument("--by", default="", help="canonical actor, required with --set-ceiling")
     ap.add_argument("--self-test", action="store_true", help="prove the alarm CAN fire")
     ap.add_argument("--quiet", action="store_true", help="never post to Discord")
     a = ap.parse_args()
 
+    if a.require_current_total and a.set_ceiling is None:
+        ap.error("--require-current-total needs --set-ceiling")
     if a.status:
         return cmd_status(a)
     if a.self_test:
         return cmd_self_test(a)
-    if a.set_ceiling is not None:
-        if not a.by:
-            print("REFUSED: --set-ceiling requires --by <actor>. A ceiling change with no "
-                  "name on it is a change nobody can ask about.")
-            return 2
-        return cmd_set_ceiling(a)
-    return cmd_run(a)
+    if a.set_ceiling is not None and not a.by:
+        print("REFUSED: --set-ceiling requires --by <actor>. A ceiling change with no "
+              "name on it is a change nobody can ask about.")
+        return 2
+
+    # Both writers hold the same lock from the initial read through the final write
+    # or readback. Status uses the atomic state snapshot and stays read-only.
+    import fcntl
+    os.makedirs(os.path.dirname(STATE), exist_ok=True)
+    with open(STATE + ".lock", "a", encoding="utf-8") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if a.set_ceiling is not None:
+            return cmd_set_ceiling(a)
+        return cmd_run(a)
 
 
 if __name__ == "__main__":

@@ -4,6 +4,7 @@
 > `comms-infra/codex/AGENTS.md` is authoritative; edit here, then deploy.
 > Codex concatenates instruction files root-to-cwd, so a repo-level `AGENTS.md` can add
 > to this — it cannot silently replace it.
+> **Cap: `coltrane-size-watch --status`. ONE-IN-ONE-OUT** — to add a rule, move one out.
 
 ---
 
@@ -116,12 +117,9 @@ is.** They were each bought with a real failure.
 
 ✅ **"I DON'T KNOW" IS A GOOD ANSWER. INVENTING A PLAUSIBLE ONE IS THE WORST THING YOU CAN
 DO.**
-★ **This is not hypothetical.** On 2026-09-08 an automated probe asked the reviewer for a
-value he could not reach. Instead of refusing, he produced a convincing token and a
-convincing file path — **neither of which existed anywhere on the machine** — and the
-checking tool scored it clean. **A fabricated answer is worse than a wrong one, because a
-wrong answer gets caught and a plausible one gets used.**
 ⇒ **If you do not have something, say that. Do not supply the shape of an answer.**
+The 2026-09-08 example is in `B_TOKEN_ECONOMY_AMD1_P1_P3_RECORD.md` under P3-C1
+(`coltrane-review ls` locates the record).
 
 ---
 
