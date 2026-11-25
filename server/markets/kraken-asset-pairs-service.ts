@@ -172,6 +172,17 @@ class KrakenAssetPairsService {
     this.priceSourceMappingObserver = observer;
   }
 
+  // The read-only diagnostic includes aliases retained only in the exact lookup indexes.
+  getExactMappingKeys(): ReadonlySet<string> {
+    return new Set([
+      ...this.autoMap.keys(),
+      ...this.byRestPair.keys(),
+      ...this.byWsPair.keys(),
+      ...this.byKrakenKey.keys(),
+      ...this.compactSymbolMap.keys(),
+    ]);
+  }
+
   /**
    * Normalize a Kraken asset to canonical internal format
    */

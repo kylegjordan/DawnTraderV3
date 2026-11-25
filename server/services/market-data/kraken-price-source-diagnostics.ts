@@ -10,7 +10,7 @@ import type { CachedPrice, SidesWriter } from '../price-cache.js';
 import { pairwiseStatedSides } from './stated-sides.js';
 
 type VenueMap = Pick<typeof krakenAssetPairsService,
-  'isReady' | 'getAllMappings' | 'resolveByInternal' | 'resolveByWsPair' |
+  'isReady' | 'getAllMappings' | 'getExactMappingKeys' | 'resolveByInternal' | 'resolveByWsPair' |
   'resolveByRestPair' | 'resolveByKrakenKey' | 'resolveByCompactSymbol'>;
 type StoredSides = Pick<CachedPrice, 'sidesWriter' | 'sidesCapturedAtMs' | 'symbol' | 'bid' | 'ask'>;
 type CoverageGap = 'inherited_identity' | 'missing_provenance' | 'identity_change' | 'ambiguous_identity' |
@@ -98,11 +98,13 @@ export class KrakenPriceSourceDiagnostics {
     try {
       // Record changes at publication, even if nobody reads or writes a quote before the next refresh.
       const claims = indexMappingClaims(this.venue.getAllMappings());
-      for (const key of new Set([...this.keys.keys(), ...claims.keys()])) {
+      for (const key of new Set([...this.keys.keys(), ...claims.keys(), ...this.venue.getExactMappingKeys()])) {
         const frozen = this.keys.get(key);
-        const candidates = this.identitiesForPublication(key, claims.get(key));
+        const indexed = this.lookupClaims(key);
+        const candidates = this.identitiesForPublication(indexed, claims.get(key));
         if (candidates.length > 1) this.markGap('ambiguous_identity', frozen, ...candidates);
-        else if (frozen && (!candidates[0] || !sameIdentity(frozen, candidates[0]))) {
+        // A declaration can survive even when its exact lookup has disappeared.
+        else if (frozen && (!indexed[0] || !sameIdentity(frozen, identityOf(indexed[0])))) {
           this.markGap('identity_change', frozen, candidates[0]);
         }
       }
@@ -121,10 +123,10 @@ export class KrakenPriceSourceDiagnostics {
     ].filter((entry): entry is AutoMappingEntry => entry !== undefined);
   }
 
-  private identitiesForPublication(key: string, declared: AutoMappingEntry[] = []): Identity[] {
+  private identitiesForPublication(indexed: AutoMappingEntry[], declared: AutoMappingEntry[] = []): Identity[] {
     // The exact indexes can each retain just one owner for a spelling. Retain declared claimants too.
     const distinct = new Map<string, Identity>();
-    for (const entry of [...this.lookupClaims(key), ...declared]) {
+    for (const entry of [...indexed, ...declared]) {
       const identity = identityOf(entry);
       distinct.set(JSON.stringify([identity.symbol, identity.venueKey]), identity);
     }
@@ -159,10 +161,16 @@ export class KrakenPriceSourceDiagnostics {
       for (const entry of mappings) {
         this.symbols.set(entry.internalSymbol, { inherited: {}, assigned: {}, gaps: {} });
       }
-      for (const [key, declared] of indexMappingClaims(mappings)) {
-        const candidates = this.identitiesForPublication(key, declared);
+      const claims = indexMappingClaims(mappings);
+      for (const key of new Set([...claims.keys(), ...this.venue.getExactMappingKeys()])) {
+        const indexed = this.lookupClaims(key);
+        const candidates = this.identitiesForPublication(indexed, claims.get(key));
         if (candidates.length > 1) this.markGap('ambiguous_identity', ...candidates);
-        else if (candidates[0]) this.keys.set(key, candidates[0]);
+        else if (indexed[0]) {
+          const identity = identityOf(indexed[0]);
+          const canonical = this.venue.resolveByInternal(identity.symbol);
+          if (canonical && sameIdentity(identity, identityOf(canonical))) this.keys.set(key, identity);
+        }
       }
       // Iterate actual cache keys, including aliases that do not appear in the row values.
       for (const [key, row] of this.cacheEntries()) {

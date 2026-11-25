@@ -16,6 +16,8 @@ const symbol = 'BTC/USD';
 const alias = 'btc/usd';
 const pair = { internalSymbol: symbol, krakenRestPair: 'XBTUSD' };
 const ticker = { a: ['102', '1', '2'], b: ['98', '1', '3'], c: ['100'] };
+const metadata = (altname: string, wsname: string, base: string) =>
+  ({ altname, wsname, base, quote: 'ZUSD', status: 'online', aclass_base: 'currency', aclass_quote: 'currency' });
 const fakeVenue = { resolveByKrakenKey: (key: string) => key === 'XXBTZUSD' ? pair : undefined };
 const cache = priceCache as unknown as {
   venue: unknown;
@@ -117,8 +119,6 @@ it('reconciles both sources from an inherited alias and freezes the whole opt-in
     }, now, { maxAgeMs: 15_000, maxSpreadFraction: 0.5 });
     for (const [lane, stage] of stages) recordTouchSelection({ lane, stage, assetClass: 'crypto_spot' }, selection, key);
   };
-  const metadata = (altname: string, wsname: string, base: string) =>
-    ({ altname, wsname, base, quote: 'ZUSD', status: 'online', aclass_base: 'currency', aclass_quote: 'currency' });
   const pairs = {
     XXBTZUSD: metadata('XBTUSD', 'XBT/USD', 'XXBT'),
     XETHZUSD: metadata('ETHUSD', 'ETH/USD', 'XETH'),
@@ -249,6 +249,91 @@ it('reconciles both sources from an inherited alias and freezes the whole opt-in
   expect(afterUnresolved.coverage.globalGaps).toMatchObject({ unresolved_walk: 1 });
   expect(afterUnresolved.untracked).toContainEqual({
     key: ladderKey, reason: 'unresolved', attempted: 1, byAcceptedSource: {},
+  });
+});
+
+describe('exact mapping publication coverage', () => {
+  const canonical = {
+    XXBTZUSD: metadata('XXBTZUSD', 'XBT/USD', 'XXBT'),
+    XETHZUSD: metadata('XETHZUSD', 'ETH/USD', 'XETH'),
+  };
+  const indexOnlyConflict = {
+    LOWBTC: metadata('INDEX-ONLY', 'OLD-BTC', 'XXBT'),
+    LOWETH: metadata('OLD-ETH', 'INDEX-ONLY', 'XETH'),
+    ...canonical,
+  };
+  const lostWsLookup = {
+    LOWBTC: metadata('OLD-REST', 'OLD-WS', 'XXBT'),
+    ...canonical,
+  };
+  const cases = [
+    {
+      name: 'a transient conflict visible only in the live indexes',
+      changed: indexOnlyConflict,
+      checkLookup: () => {
+        expect(krakenAssetPairsService.resolveByRestPair('INDEX-ONLY')?.internalSymbol).toBe('BTC/USD');
+        expect(krakenAssetPairsService.resolveByWsPair('INDEX-ONLY')?.internalSymbol).toBe('ETH/USD');
+      },
+      gap: 'ambiguous_identity',
+      affected: ['BTC/USD', 'ETH/USD'],
+    },
+    {
+      name: 'a lost frozen lookup whose declaration survives',
+      changed: lostWsLookup,
+      checkLookup: () => {
+        expect(krakenAssetPairsService.resolveByInternal('BTC/USD')?.krakenWsPair).toBe('XBT/USD');
+        expect(krakenAssetPairsService.resolveByWsPair('XBT/USD')).toBeUndefined();
+      },
+      gap: 'identity_change',
+      affected: ['BTC/USD'],
+    },
+  ] as const;
+
+  it.each(cases)('keeps a gap after $name is restored', async ({ changed, checkLookup, gap, affected }) => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    const getAssetPairs = vi.spyOn(axios, 'get')
+      .mockResolvedValue({ data: { error: [], result: canonical } });
+    await krakenAssetPairsService.refresh();
+    const diagnostics = new KrakenPriceSourceDiagnostics(krakenAssetPairsService);
+    diagnostics.bindCache(() => []);
+    diagnostics.startIfReady();
+    expect(diagnostics.snapshot(5100, []).coverage.symbols.map(row => [row.symbol, row.gaps]))
+      .toEqual([['BTC/USD', {}], ['ETH/USD', {}]]);
+    expect(krakenAssetPairsService.resolveByWsPair('XBT/USD')?.internalSymbol).toBe('BTC/USD');
+
+    getAssetPairs.mockResolvedValueOnce({ data: { error: [], result: changed } });
+    await krakenAssetPairsService.refresh();
+    checkLookup();
+    diagnostics.observeMappingPublication();
+    await krakenAssetPairsService.refresh();
+    diagnostics.observeMappingPublication();
+
+    expect(krakenAssetPairsService.resolveByWsPair('XBT/USD')?.internalSymbol).toBe('BTC/USD');
+    for (const symbol of affected) {
+      expect(diagnostics.snapshot(5100, []).coverage.symbols.find(row => row.symbol === symbol)?.gaps[gap])
+        .toBeGreaterThan(0);
+    }
+  });
+
+  it('flags both claimants when the index-only conflict already exists at startup', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(axios, 'get').mockResolvedValue({ data: { error: [], result: indexOnlyConflict } });
+    await krakenAssetPairsService.refresh();
+    const diagnostics = new KrakenPriceSourceDiagnostics(krakenAssetPairsService);
+    diagnostics.bindCache(() => []);
+    diagnostics.startIfReady();
+
+    expect(diagnostics.snapshot(5100, []).coverage.symbols).toEqual(expect.arrayContaining([
+      expect.objectContaining({ symbol: 'BTC/USD', gaps: { ambiguous_identity: expect.any(Number) } }),
+      expect.objectContaining({ symbol: 'ETH/USD', gaps: { ambiguous_identity: expect.any(Number) } }),
+    ]));
+    expect(krakenAssetPairsService.resolveByKrakenKey('LOWBTC')?.internalSymbol).toBe('BTC/USD');
+    diagnostics.recordAssignment('LOWBTC', {
+      symbol: 'BTC/USD', bid: 99, ask: 101, sidesWriter: 'rest_adapter', sidesCapturedAtMs: 5000,
+    }, true);
+    expect(diagnostics.snapshot(5100, []).coverage.symbols.find(row => row.symbol === 'BTC/USD'))
+      .toMatchObject({ gaps: { identity_change: 1 } });
+    expect(diagnostics.snapshot(5100, []).coverage.symbols.find(row => row.symbol === 'BTC/USD')?.assigned).toEqual({});
   });
 });
 
