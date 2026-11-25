@@ -287,6 +287,12 @@
       }
     },
     {
+      "path": "scripts/dt-deploy.sh",
+      "markers": {
+        "dt_sql": 1
+      }
+    },
+    {
       "path": "scripts/measure-gate/test-guard-result-shape.mjs",
       "markers": {
         "direct_psql": 4

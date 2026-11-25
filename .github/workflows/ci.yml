@@ -137,6 +137,9 @@ jobs:
         env:
           DATABASE_URL: postgresql://test:test@localhost:5432/test
 
+      - name: Verify locked staging deploy prerequisites in a sandbox
+        run: python3 scripts/test-dt-deploy-windows.py
+
       - name: Run tests
         run: npx vitest run --reporter=verbose
         env:

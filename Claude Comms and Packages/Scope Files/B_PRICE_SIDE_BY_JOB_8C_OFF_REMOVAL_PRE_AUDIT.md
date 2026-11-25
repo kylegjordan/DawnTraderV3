@@ -262,11 +262,15 @@ The two code-reference runs emitted the same unresolved-surface warning: `raw SQ
 
 **Falls out of:** §§7.1, 8, and the fresh-reader hit.
 
-- Migration precondition: exactly four total `level_basis/crypto_spot` rows; exact names/values/dimensions; switch exactly `1`; no extra rows under other dimensions.
+- Both migration cases require exactly four total `level_basis/crypto_spot` rows with the exact names, values and dimensions. Live staging still requires switch `1` in the census immediately after the exact live Phase A verifier, and again before the Phase B deploy.
+- **Step 4 correction:** Coltrane approved exact A and held B until the prerequisite runs inside the same deploy lock. The installed deployer must inspect the target for this forward migration. Before changing the checkout, it must read the migration ledger and row census through the governed reader and verify exact Phase A when the migration is pending. A completed migration has one ledger row and the exact three retained settings. Require the reviewed deployer bytes installed on staging before promoting or deploying a target containing the forward migration.
+- **Step 2 correction, Coltrane ACCEPT at 2026-11-25T09:49:44Z:** the immutable seed writes switch `0` and CI applies the full manifest to empty PostgreSQL. For fresh replay only, SQL also accepts `0` when all four rows have the original `b-price-side-8c` updater and one identical, non-null seed timestamp. Reject every other `0`, including drift in any companion row's write provenance. This exception cannot satisfy the live staging gate.
 - Delete only the exact switch row.
 - Migration postcondition: exactly three total rows; each retained name/value/dimension exactly once; switch absent; no extra rows.
 - Runtime boot contract independently asserts the same exact-three set after prefetch; it must detect a fourth unexpected row, a wrong dimension/value, or the retired row.
+- Exercise both allowed cases against disposable PostgreSQL. Refuse tampered `0`, wrong, missing, misdimensioned or extra rows, unequal/null seed provenance, and a live census with any `0`.
 - Recovery returns to Phase A, not to OFF: restore Phase-A code before reinserting the exact switch-on row. The procedure must state the restart implications and be mutation-tested.
+- The runner records the migration in `_migrations` after the SQL transaction commits. If deployment fails at that boundary, record the live process, exact remaining rows and ledger before retrying. Phase A can still run with either rowset. A three-row state without the ledger needs a reviewed recovery to four rows before a normal retry. If the ledger exists and an intentional rollback restores the row, reapplying B requires a separately reviewed ledger reconciliation. Do not silently accept an already-three-row state in the forward SQL.
 
 ### P8 — Phase-B deployment and immediate proof
 

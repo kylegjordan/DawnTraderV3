@@ -16,18 +16,16 @@
  * ⛔ Read SYNCHRONOUSLY at signal birth (active) and at the VTS level-build shadow, so the module is in `b72-warmup.ts`
  * `PREFETCH_MODULES` and asserted at boot — an unreadable row is a deploy-time failure, never a quiet lane.
  */
-import { getCachedNumberRequired } from '../../services/module-constants-service.js';
+import { getCachedModuleRowsForAssetClass, getCachedNumberRequired } from '../../services/module-constants-service.js';
 
 export const LEVEL_BASIS_MODULE = 'level_basis';
 const CRYPTO_KEY = { exchange: '*', assetClass: 'crypto_spot' as const, strategy: '*', regime: '*' };
 
-/** Open bounds. Age: ≤ 0 refuses everything, > 10 min is not a quote. Spread: ≤ 0 refuses everything, ≥ 1 admits a bid at
- *  or below zero. Drift: ≤ 0 makes every `f` zero, ≥ 10 % is not a one-minute drift. */
-export const LEVEL_BUILD_BOUNDS = {
-  maxAgeMs: { gt: 0, le: 600_000 },
-  maxSpreadFraction: { gt: 0, lt: 1 },
-  driftRef60s: { gt: 0, lt: 0.10 },
-} as const;
+const REQUIRED_BOOT_ROWS = new Map([
+  ['level_build_max_age_ms', 60_000],
+  ['level_build_max_spread_fraction', 0.5],
+  ['level_build_drift_ref_60s', 0.00429],
+]);
 
 export interface LevelBuildKnobs {
   maxAgeMs: number;
@@ -44,27 +42,25 @@ export function readCryptoLevelBuildKnobs(): LevelBuildKnobs {
   };
 }
 
-/** Boot assertion: every row exists, is reachable from a sync reader, and is inside its bounds. */
+/** Boot assertion after Phase B: verify the complete physical crypto row set. */
 export function assertLevelBuildKnobsAtBoot(): LevelBuildKnobs {
-  let k: LevelBuildKnobs;
   try {
-    k = readCryptoLevelBuildKnobs();
+    const rows = getCachedModuleRowsForAssetClass(LEVEL_BASIS_MODULE, CRYPTO_KEY.assetClass);
+    if (rows.length !== REQUIRED_BOOT_ROWS.size) {
+      throw new Error(`expected exactly ${REQUIRED_BOOT_ROWS.size} crypto_spot rows, found ${rows.length}`);
+    }
+    const remaining = new Map(REQUIRED_BOOT_ROWS);
+    for (const { constantName, value, exchange, strategy, regime } of rows) {
+      if (!remaining.has(constantName) || value !== remaining.get(constantName)
+        || exchange !== CRYPTO_KEY.exchange || strategy !== CRYPTO_KEY.strategy || regime !== CRYPTO_KEY.regime) {
+        throw new Error(`unexpected name, dimensions or value for ${constantName}`);
+      }
+      remaining.delete(constantName);
+    }
+    return readCryptoLevelBuildKnobs();
   } catch (err) {
     throw new Error(
-      `[8c][warmup] ${LEVEL_BASIS_MODULE}.level_build_* for asset_class='crypto_spot' is unreadable — either migration `
-      + `drizzle/migrations/2026-11-08-b-price-side-8c-level-build-knobs.sql has not been applied, or the module is missing `
-      + `from PREFETCH_MODULES. Without it no crypto signal can be born. (${(err as Error).message})`,
+      `[8c][warmup] ${LEVEL_BASIS_MODULE} crypto_spot contract failed — refusing to start. (${(err as Error).message})`,
     );
   }
-  const B = LEVEL_BUILD_BOUNDS;
-  if (!(k.maxAgeMs > B.maxAgeMs.gt && k.maxAgeMs <= B.maxAgeMs.le)) {
-    throw new Error(`[8c][warmup] level_build_max_age_ms=${k.maxAgeMs} outside (${B.maxAgeMs.gt}, ${B.maxAgeMs.le}] — refusing to start.`);
-  }
-  if (!(k.maxSpreadFraction > B.maxSpreadFraction.gt && k.maxSpreadFraction < B.maxSpreadFraction.lt)) {
-    throw new Error(`[8c][warmup] level_build_max_spread_fraction=${k.maxSpreadFraction} outside (0, 1) — refusing to start.`);
-  }
-  if (!(k.driftRef60s > B.driftRef60s.gt && k.driftRef60s < B.driftRef60s.lt)) {
-    throw new Error(`[8c][warmup] level_build_drift_ref_60s=${k.driftRef60s} outside (0, 0.10) — refusing to start.`);
-  }
-  return k;
 }

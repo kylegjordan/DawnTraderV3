@@ -122,7 +122,7 @@ describe('8a-P4c inc 3 — the mark-staleness knobs have ONE reader (swept)', ()
 // (`orb.ts` `strategy_gates`, `strong-bull-trend.ts` `strategy_dbs_routing_guards`), which a per-line scan cannot see.
 // Comments are blanked first (newlines kept, so every `:line` still points at the call).
 // ════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
-const SYNC_READER = /\b(getCachedConstant|getCachedNumbersForModule|getCachedNumberRequired|getCachedStringRequired)\s*(?:<[^>()]*>)?\(\s*([^,\s)]+)/g;
+const SYNC_READER = /\b(getCachedConstant|getCachedNumbersForModule|getCachedNumberRequired|getCachedStringRequired|getCachedModuleRowsForAssetClass)\s*(?:<[^>()]*>)?\(\s*([^,\s)]+)/g;
 const LITERAL = /^(['"])([^'"]*)\1$/;
 
 /** Blanks block and line comments, keeping every newline so offsets map to the same line. */

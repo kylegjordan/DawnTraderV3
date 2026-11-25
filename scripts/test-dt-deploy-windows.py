@@ -59,6 +59,7 @@ GIT = ["git", "-c", "user.email=t@t", "-c", "user.name=t"]
 work, bare, app = T + "/work", T + "/origin.git", T + "/app"
 os.makedirs(work + "/1-system-manual")
 sh("git", "init", "-q", "-b", "migration/aws-supabase", work)
+open(work + "/.gitignore", "w").write("dist/\n")
 H = '{"schema":"deploy-windows/1"}'
 
 
@@ -86,16 +87,38 @@ sh("git", "clone", "-q", "--bare", work, bare)
 sh("git", "clone", "-q", "-b", "migration/aws-supabase", bare, app)
 fake = T + "/bin"
 os.makedirs(fake)
-open(fake + "/npm", "w").write("#!/bin/sh\necho \"npm $*\" >> %s/npm.log\ncase \"$*\" in *system-alerts*) [ -z \"$FAKE_NPM_SLEEP\" ] || sleep \"$FAKE_NPM_SLEEP\" ;; esac\nexit ${FAKE_NPM_RC:-1}\n" % T)
+open(fake + "/npm", "w").write("""#!/bin/sh
+echo "npm $*" >> "%s/npm.log"
+case "$*" in *system-alerts*) [ -z "$FAKE_NPM_SLEEP" ] || sleep "$FAKE_NPM_SLEEP" ;; esac
+if [ "${FAKE_CUTOVER:-0}" = 1 ] && [ "$*" = "run build" ]; then
+  mkdir -p dist
+  git rev-parse HEAD > dist/BUILD_SHA
+  exit 0
+fi
+exit ${FAKE_NPM_RC:-1}
+""" % T)
 open(fake + "/pm2", "w").write("#!/bin/sh\nexit 1\n")
-for f in ("npm", "pm2"):
+open(fake + "/reader", "w").write("""#!/bin/sh
+sql=$(cat)
+[ "$(cat "%s/lock/sha")" = "$FAKE_TARGET" ] || exit 21
+case "$sql" in *locked-gate-fixture*) ;; *) exit 22 ;; esac
+echo "reader under lock" >> "%s/guard.log"
+[ "${FAKE_READER_FAIL:-0}" = 0 ] || exit 23
+echo "$FAKE_DB_GATE"
+""" % (T, T))
+open(fake + "/node", "w").write("""#!/bin/sh
+[ "$(cat "%s/lock/sha")" = "$FAKE_TARGET" ] || exit 24
+echo "identity under lock" >> "%s/guard.log"
+[ "$1" = scripts/b8c-off-removal-verify-a.mjs ] && [ "$2" = "$FAKE_LIVE_SHA" ]
+""" % (T, T))
+for f in ("npm", "pm2", "reader", "node"):
     os.chmod(fake + "/" + f, 0o755)
 obs = T + "/dt-obs-windows"
 shutil.copyfile(A.obs_windows, obs)
 os.chmod(obs, 0o755)
 consts = {"APP_DIR": app, "LOCK_DIR": T + "/lock", "RECORD": T + "/record", "BRANCH": "origin/migration/aws-supabase",
           "REGISTER_PATH": "1-system-manual/DEPLOY_WINDOWS.jsonl", "OBS_WINDOWS": obs, "NOTICE": T + "/notice",
-          "MINT_TIMEOUT_S": "1"}
+          "MINT_TIMEOUT_S": "1", "STAGING_DB_READER": fake + "/reader", "B8C_PHASE_A": BASE}
 shipped = [ln.split("=", 1)[0] for ln in src[a:b].splitlines() if "=" in ln and not ln.startswith("#")]
 check("the harness sets exactly the shipped constants", set(shipped) == set(consts), shipped)
 tested = T + "/dt-deploy"
@@ -114,9 +137,11 @@ def notice_lines():
         return []
 
 
-def deploy(sha, *extra, npm_rc="1", npm_sleep=""):
+def deploy(sha, *extra, npm_rc="1", npm_sleep="", gate_env=None):
     env = dict(os.environ, PATH=fake + ":" + os.environ["PATH"], FAKE_NPM_RC=npm_rc,
                FAKE_NPM_SLEEP=npm_sleep)
+    if gate_env:
+        env.update(gate_env)
     r = subprocess.run(["bash", tested, sha, "--by", "cc-infra"] + list(extra), capture_output=True, text=True, env=env,
                        timeout=120)
     return r.returncode, r.stdout + r.stderr
@@ -249,6 +274,45 @@ check("C-21: a mint that hangs 30 s is cut off (timeout 1 s here) -> notice-only
 os.rename(obs, obs + ".gone")
 case("the parser not installed -> exit 4", H + "\n", [], 4, "is not installed")
 os.rename(obs + ".gone", obs)
+
+# The target owns the new migration. The earlier fixture variants are controls for ordinary targets.
+os.makedirs(work + "/drizzle/migrations", exist_ok=True)
+os.makedirs(work + "/scripts", exist_ok=True)
+open(work + "/drizzle/migrations/2026-11-25-b-price-side-8c-off-removal.sql", "w").write("SELECT 1;\n")
+open(work + "/scripts/b8c-off-removal-stage-a-census.sql", "w").write("SELECT 'locked-gate-fixture';\n")
+target = push(H + "\n", "8c Phase B target")
+
+
+def cutover_case(label, db_gate, live_sha, want_message, want_calls, reaches_migration=False,
+                 reader_fail=False):
+    sh("git", "reset", "-q", "--hard", BASE, cwd=app)
+    for name in ("guard.log", "npm.log"):
+        filename = T + "/" + name
+        if os.path.exists(filename):
+            os.unlink(filename)
+    env = {"FAKE_CUTOVER": "1", "FAKE_TARGET": target, "FAKE_DB_GATE": db_gate, "FAKE_LIVE_SHA": live_sha,
+           "FAKE_READER_FAIL": "1" if reader_fail else "0"}
+    rc, out = deploy(target, gate_env=env)
+    guard_calls = open(T + "/guard.log").read().splitlines() if os.path.exists(T + "/guard.log") else []
+    npm_calls = open(T + "/npm.log").read().splitlines() if os.path.exists(T + "/npm.log") else []
+    expected_head = target if reaches_migration else BASE
+    expected_npm = ["npm run build", "npm run db:migrate"] if reaches_migration else []
+    check(label, rc == 1 and want_message in out and head() == expected_head and guard_calls == want_calls
+          and npm_calls == expected_npm and not os.path.exists(T + "/lock"),
+          "rc=%s head=%s guard=%s npm=%s\n%s" % (rc, head(), guard_calls, npm_calls, out))
+
+
+cutover_case("8c pending ON and exact A reach migration under the real deploy lock", "PENDING_ON", BASE,
+             "four-row switch ON gate passed", ["reader under lock", "identity under lock"], True)
+cutover_case("8c older running SHA with A on disk refuses before any reset or migration", "PENDING_ON", "0" * 40,
+             "running-process proof failed", ["reader under lock", "identity under lock"])
+cutover_case("8c switch OFF refuses before any reset or migration", "REFUSE", BASE,
+             "database prerequisite refused", ["reader under lock"])
+cutover_case("8c missing database evidence refuses before any reset or migration", "", BASE,
+             "cannot read the 8c database prerequisite", ["reader under lock"], reader_fail=True)
+cutover_case("8c applied ledger and three exact rows allow routine deployments", "APPLIED", "0" * 40,
+             "already recorded with the exact three retained rows", ["reader under lock"], True)
+
 shutil.rmtree(T)
 print("dt-deploy windows sandbox: %d passed, %d failed" % (PASS, FAIL))
 sys.exit(1 if FAIL else 0)
