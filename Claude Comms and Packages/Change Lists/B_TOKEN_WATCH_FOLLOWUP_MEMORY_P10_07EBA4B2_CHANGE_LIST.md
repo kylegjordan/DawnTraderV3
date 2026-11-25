@@ -76,3 +76,8 @@ identically at HEAD with this change stashed (Windows file locks, box-only paths
 Install `follow_up.py` + `summary.py` on staging; read `summary.json` mtime − `generated_at` across a day — expect
 ~60 min → seconds, today's 62m42s as the positive control; quote one :12 skip line with a fresh age; then resolve
 07eba4b2 with that evidence (never acked).
+
+## P10 alert disposition — 2026-11-25
+
+- **Follow-up `11d7e194-c665-48f7-bae5-1cae25fe9804` resolved.** The staging journal recorded five failed sweeps ending 2026-11-24 19:06:37 UTC through 2026-11-25 02:20:20 UTC. All eight checkpoint errors were requeued and none were abandoned. Seven subsequent sweeps ended successfully between 03:29:54 and 10:02:37 UTC with no checkpoint or stage errors. Read back the resolved row at 10:12:48 UTC under `codex-infra`.
+- **Summary `6f9fa1d3-0aa6-4ac2-aa29-61fd3b5428aa` remains active.** Both installed Python files match `9ff39a260`; the 2026-11-24 21:12 UTC check saw a genuinely old publish (2 h 05 min 34 s) while the sweep that started at 19:06:37 UTC held the lock through 21:19 UTC. This exercises the long-run residual above. The next 13 hourly checks through 2026-11-25 10:12 UTC all skipped with a fresh file, with the latest age 9 min 33 s. At that check, the published stamp was 10:02:26.823 UTC, about 11 s before file mtime, and the checkpoint lag was 3,746 s. Keep the row open for the existing P10 observation to determine whether publish cadence has settled. Journal sources are `token-watch-followup.service` and `token-watch-summary.service` on staging.
