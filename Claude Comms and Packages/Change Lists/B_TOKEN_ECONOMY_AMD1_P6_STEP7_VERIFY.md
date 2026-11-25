@@ -274,3 +274,15 @@ exit 0. Window `[2026-11-21T00:13:33, 2026-11-24T11:14:57)`.
 **Reading:** day 3 is **NOT RUN**, not PASS or FAIL, because Langston and his bridge are off for the Codex shift and
 there is no population to grade. The empty row remains in the record so the seven-day criterion cannot silently turn
 an off-shift absence into agreement.
+
+## Daily read — day 4 catch-up (INFRA Codex, run 2026-11-25T09:43:57Z)
+
+Helsinki reported `Timezone=Etc/UTC`. The existing reader ran from mirror ref
+`674967db81f6ea5810f6d760c31ba4af69a2b8f7` (owner table blob `ff139a890447`) against the bridge journal and
+the whole 3,634-line staging alert stream. All 27 reader self-tests passed. The same full observation read still
+found 17 of 17 agreeing markers on November 22, a live positive control for the marker reader.
+
+The complete November 24 UTC day had zero lane markers, escalations, or lane journal batches to grade. Day 4 is
+**NOT RUN**. The partial November 25 day through 09:43:57Z is also empty and ungraded. The bridge was inactive at
+the read. There was no new ownership churn. The installed bridge, lane and owner-route files matched the pinned
+ref, and the read found 25 due staging alerts across all owners.
