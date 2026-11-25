@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { verifyPhaseA } from '../../../scripts/b8c-off-removal-verify-a.mjs';
 import { levelGeometryOf, levelGeometryStampOf } from '../../core/trading/crypto-birth-levels.js';
-import { assertLevelBuildKnobsAtBoot, readCryptoLevelBuildKnobs } from '../../core/trading/level-build-config.js';
+import { readCryptoLevelBuildKnobs } from '../../core/trading/level-build-config.js';
 
 const getRequired = vi.hoisted(() => vi.fn());
 vi.mock('../../services/module-constants-service.js', () => ({ getCachedNumberRequired: getRequired }));
@@ -70,7 +70,7 @@ describe('8c OFF removal', () => {
       'level_basis', key, { exchange: '*', assetClass: 'crypto_spot', strategy: '*', regime: '*' },
     ]));
     getRequired.mockImplementationOnce(() => { throw new Error('missing'); });
-    expect(() => assertLevelBuildKnobsAtBoot()).toThrow(/unreadable/);
+    expect(() => readCryptoLevelBuildKnobs()).toThrow(/missing/);
   });
 
   it('finds every present fossil and rejects a hit outside the exact allowlist', () => {

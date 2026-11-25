@@ -365,6 +365,21 @@ export async function prefetchModule(moduleName: string): Promise<number> {
   return rows.length;
 }
 
+/** Exact cached rows for boot verification, before wildcard or numeric resolution. */
+export function getCachedModuleRowsForAssetClass(
+  moduleName: string,
+  assetClass: string,
+): ReadonlyArray<Readonly<ModuleConstant>> {
+  const cached = cache.get(moduleName);
+  if (!cached) {
+    throw new Error(
+      `module_constants: module '${moduleName}' is not warm. Call prefetchModule('${moduleName}') at server startup before sync reads.`,
+    );
+  }
+  maybeWarnStaleServe(moduleName, cached);
+  return cached.rows.filter(row => row.assetClass === assetClass);
+}
+
 /**
  * Sync resolver against the in-memory cache. Returns the value of the most-
  * specific matching row, or undefined if no row matches.
