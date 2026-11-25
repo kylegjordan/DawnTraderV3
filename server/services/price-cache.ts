@@ -191,6 +191,8 @@ interface RestReceiptOrderingCounts {
   strictInversions: number;
 }
 
+type SideAssignment = 'none' | 'stated' | 'malformed';
+
 /** The REST ticker fields the cache's own REST sites read (structural; `KrakenTicker` is not exported). */
 type RestTickerFields = { a?: string[]; b?: string[]; c?: string[]; v?: string[]; h?: string[]; l?: string[] };
 
@@ -265,6 +267,7 @@ class UnifiedPriceCache {
   constructor() {
     this.krakenService = new KrakenService();
     krakenPriceSourceDiagnostics.bindCache(() => this.cache.entries());
+    krakenAssetPairsService.bindPriceSourceMappingObserver(() => krakenPriceSourceDiagnostics.observeMappingPublication());
   }
 
   initialize(): void {
@@ -454,7 +457,7 @@ class UnifiedPriceCache {
       for (const key of keys) {
         // `3n.l` increment 2 (P8, P9 ii): one row builder for the REST ticker sites, built PER KEY WRITTEN.
         const row = this.restTickerRow(key, internal, ticker, writer, now, sides);
-        this.storeRow(key, row, sides !== null, internal);
+        this.storeRow(key, row, sides ? 'stated' : 'none', internal);
         onRow?.(key, row);
       }
       writes.push({ responseKey: pair, writtenKeys: keys });
@@ -892,7 +895,7 @@ class UnifiedPriceCache {
       markKind: markKind ?? null,
       ...carryLastTrade(existing, lastTradePrice, now),
       lastUpdatedAt: now,
-    }, _stated !== null);
+    }, _stated ? 'stated' : 'none');
   }
 
   /**
@@ -923,6 +926,8 @@ class UnifiedPriceCache {
     const now = Date.now();
     const existing = this.cache.get(symbol);
     const stated = sides ?? null;
+    const assignment: SideAssignment = !stated ? 'none' :
+      pairwiseStatedSides(stated.bid, stated.ask) ? 'stated' : 'malformed';
     this.storeRow(symbol, {
       symbol,
       price,
@@ -942,15 +947,16 @@ class UnifiedPriceCache {
       markKind: markKind ?? null,
       ...carryLastTrade(existing, lastTradePrice, now),
       lastUpdatedAt: now,
-    }, stated !== null && pairwiseStatedSides(stated.bid, stated.ask) !== null);
+    }, assignment);
   }
 
-  private storeRow(key: string, row: CachedPrice, stated: boolean, canonicalHint?: string): void {
-    const incumbent = stated && row.lastSource === 'kraken_rest' ? this.cache.get(key) : undefined;
-    if (stated) krakenPriceSourceDiagnostics.startIfReady();
+  private storeRow(key: string, row: CachedPrice, assignment: SideAssignment, canonicalHint?: string): void {
+    const incumbent = assignment === 'stated' && row.lastSource === 'kraken_rest' ? this.cache.get(key) : undefined;
+    if (assignment !== 'none') krakenPriceSourceDiagnostics.startIfReady();
     this.cache.set(key, row);
-    if (!stated) return;
-    krakenPriceSourceDiagnostics.recordAssignment(key, row, canonicalHint);
+    if (assignment === 'none') return;
+    krakenPriceSourceDiagnostics.recordAssignment(key, row, assignment === 'stated', canonicalHint);
+    if (assignment === 'malformed') return;
 
     // #1146 compares two local receipt stamps on the actual key. A carried pair has no new receipt.
     const previousStamp = incumbent?.sidesCapturedAtMs;

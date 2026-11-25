@@ -3,8 +3,10 @@ import axios from 'axios';
 import { readFileSync } from 'node:fs';
 import { priceCache } from '../../services/price-cache.js';
 import { krakenAssetPairsService } from '../../markets/kraken-asset-pairs-service.js';
+import { normalizeToInternalSymbol } from '../../markets/kraken-symbol-resolver.js';
 import { getLevelBasisFunnel } from '../../core/calculations/level-basis.js';
 import { recordTouchSelection, selectTouchPrice, tickerLegFromCachedQuote } from '../../core/calculations/touch-price.js';
+import { selectCryptoTouch } from '../../core/trading/crypto-touch.js';
 import { buildFunnelSnapshotLine } from '../../services/level-basis-funnel-writer.js';
 import {
   captureLevelBasisDiagnostics, krakenPriceSourceDiagnostics, KrakenPriceSourceDiagnostics,
@@ -85,9 +87,9 @@ describe('Kraken REST replacement receipt order (#1146)', () => {
 
 it('keeps all seven real decision hooks connected to their quote or position identity', () => {
   const sites = {
-    'active-execution-engine': { active_entry_fill: 'position.symbol', exit_trigger: '_lsSym' },
+    'active-execution-engine': { active_entry_fill: '_ft.internalSymbol', exit_trigger: '_lsSym' },
     'signal-orchestrator': { active_level_build: '_cbSym', active_signal_birth: 'symbol' },
-    'vts-runner': { vts_signal_birth: 'symbol', vts_entry_fill: 'trade.symbol', vts_exit_trigger: 'trade.symbol' },
+    'vts-runner': { vts_signal_birth: 'symbol', vts_entry_fill: '_pt.internalSymbol', vts_exit_trigger: '_et.internalSymbol' },
   };
   for (const [file, expected] of Object.entries(sites)) {
     const source = readFileSync(new URL(`../../services/${file}.ts`, import.meta.url), 'utf8');
@@ -116,10 +118,12 @@ it('reconciles both sources from an inherited alias and freezes the whole opt-in
   };
   const metadata = (altname: string, wsname: string, base: string) =>
     ({ altname, wsname, base, quote: 'ZUSD', status: 'online', aclass_base: 'currency', aclass_quote: 'currency' });
-  vi.spyOn(axios, 'get').mockResolvedValue({ data: { error: [], result: {
+  const pairs = {
     XXBTZUSD: metadata('XBTUSD', 'XBT/USD', 'XXBT'),
     XETHZUSD: metadata('ETHUSD', 'ETH/USD', 'XETH'),
-  } } });
+    XETHZCAD: { ...metadata('ETHCAD', 'ETH/CAD', 'XETH'), quote: 'ZCAD' },
+  };
+  const getAssetPairs = vi.spyOn(axios, 'get').mockResolvedValue({ data: { error: [], result: pairs } });
 
   seedWs(alias, 5000);
   walkAllStages(alias);
@@ -173,8 +177,20 @@ it('reconciles both sources from an inherited alias and freezes the whole opt-in
     .toContainEqual({ symbol: 'ETH/USD', inherited: {}, assigned: { rest_adapter: 1 }, gaps: {} });
   expect(getLevelBasisFunnel().find(row => row.key === ladderKey)?.attempted).toBe(5);
 
+  // Existing REST cache behavior accepts a typed pair object even if a caller supplies invalid values.
+  // It must remain observable after a later adapter pair restores an otherwise adapter-only cache.
+  priceCache.updateFromRest('ETH/USD', 101, 'last', 101, {
+    bid: 0, ask: 102, capturedAtMs: 5070, writer: 'rest_engine', sizes: null,
+  });
+  expect(priceCache.get('ETH/USD')).toMatchObject({ bid: 0, sidesWriter: 'rest_engine' });
+  writeRest('ETH/USD', 5080);
+  expect(captureLevelBasisDiagnostics(priceCache.getRestReceiptOrdering()).krakenPriceSourceBySymbol?.coverage.symbols)
+    .toContainEqual({ symbol: 'ETH/USD', inherited: {}, assigned: { rest_adapter: 2 }, gaps: { missing_provenance: 1 } });
+
   const unknownKey = new KrakenPriceSourceDiagnostics(krakenAssetPairsService);
-  unknownKey.bindCache(() => [['UNKNOWN-ALIAS', { symbol, sidesWriter: 'ws_ticker', sidesCapturedAtMs: 5000 }]]);
+  unknownKey.bindCache(() => [['UNKNOWN-ALIAS', {
+    symbol, bid: 99, ask: 101, sidesWriter: 'ws_ticker', sidesCapturedAtMs: 5000,
+  }]]);
   unknownKey.startIfReady();
   expect(unknownKey.snapshot(now, []).coverage.globalGaps).toEqual({ inherited_identity: 1 });
   unknownKey.recordDroppedAssignment('XXBTZUSD');
@@ -187,5 +203,36 @@ it('reconciles both sources from an inherited alias and freezes the whole opt-in
       expect.objectContaining({ symbol, gaps: { dropped_write: 1, identity_change: 1 } }),
       expect.objectContaining({ symbol: eth.internalSymbol, gaps: { identity_change: 1 } }),
     ]),
+  });
+
+  // An away-and-back primary-key change with no covered quote or read between the publications.
+  getAssetPairs.mockResolvedValueOnce({ data: { error: [], result: {
+    XXBTZUSD: pairs.XXBTZUSD, ETHUSD: pairs.XETHZUSD, XETHZCAD: pairs.XETHZCAD,
+  } } });
+  await krakenAssetPairsService.refresh();
+  expect(krakenAssetPairsService.resolveByInternal('ETH/USD')?.krakenPairKey).toBe('ETHUSD');
+  await krakenAssetPairsService.refresh();
+  expect(krakenAssetPairsService.resolveByInternal('ETH/USD')?.krakenPairKey).toBe('XETHZUSD');
+  const afterRemap = captureLevelBasisDiagnostics(priceCache.getRestReceiptOrdering()).krakenPriceSourceBySymbol!;
+  expect(afterRemap.coverage.symbols).toContainEqual(expect.objectContaining({
+    symbol: 'ETH/USD', gaps: { missing_provenance: 1, identity_change: expect.any(Number) },
+  }));
+  expect(afterRemap.coverage.symbols.find(row => row.symbol === 'ETH/USD')?.gaps.identity_change).toBeGreaterThan(0);
+
+  const rawPrimary = 'XETHZCAD';
+  expect(krakenAssetPairsService.resolveByKrakenKey(rawPrimary)?.internalSymbol).toBe('ETH/CAD');
+  writeRest('ETH/CAD', 5090);
+  const walk = selectCryptoTouch(rawPrimary, {
+    normalize: normalizeToInternalSymbol, getBook: () => null, isBookTrusted: () => true,
+    getCached: key => priceCache.get(key),
+  }, now, { maxAgeMs: 15_000, maxSpreadFraction: 0.5 });
+  expect(walk.internalSymbol).toBe('XETHZ/CAD');
+  expect(walk.selection.ok).toBe(false);
+  recordTouchSelection({ lane: 'active', stage: 'active_entry_fill', assetClass: 'crypto_spot' },
+    walk.selection, walk.internalSymbol);
+  const afterUnresolved = captureLevelBasisDiagnostics(priceCache.getRestReceiptOrdering()).krakenPriceSourceBySymbol!;
+  expect(afterUnresolved.coverage.globalGaps).toMatchObject({ unresolved_walk: 1 });
+  expect(afterUnresolved.untracked).toContainEqual({
+    key: ladderKey, reason: 'unresolved', attempted: 1, byAcceptedSource: {},
   });
 });

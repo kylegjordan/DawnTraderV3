@@ -165,7 +165,12 @@ class KrakenAssetPairsService {
   private initPromise: Promise<void> | null = null;
   
   private refreshMutex = false;
+  private priceSourceMappingObserver: (() => void) | undefined;
   private dynamicQuotes: Set<string> = new Set(VALID_QUOTES);
+
+  bindPriceSourceMappingObserver(observer: () => void): void {
+    this.priceSourceMappingObserver = observer;
+  }
 
   /**
    * Normalize a Kraken asset to canonical internal format
@@ -452,6 +457,7 @@ class KrakenAssetPairsService {
 
       this.lastRefresh = new Date();
       this.isInitialized = true;
+      this.priceSourceMappingObserver?.();
 
       const summary = this.getSummary();
       console.log(`${LOG_PREFIX}[STARTUP] Auto-map built successfully`);

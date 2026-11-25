@@ -1894,7 +1894,7 @@ export class ActiveExecutionEngine {
         else this._entryFillRefusedSteady++;
       }
       try {
-        recordTouchSelection({ lane: 'active', assetClass: 'crypto_spot', stage: 'active_entry_fill' }, _ft.selection, position.symbol);
+        recordTouchSelection({ lane: 'active', assetClass: 'crypto_spot', stage: 'active_entry_fill' }, _ft.selection, _ft.internalSymbol);
       } catch (err) {
         // A recorder may never break the fill path.
         console.error(`[8a-P3][ENTRY_FILL_RECORD_FAILED:${this.mode}] ${position.symbol}:`, err instanceof Error ? err.message : err);

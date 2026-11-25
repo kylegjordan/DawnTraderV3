@@ -62,7 +62,7 @@ describe('P-7k — every writer states the kind, and the last trade rides beside
     expect((src.match(/markKind: 'last',\s*\.\.\.carryLastTrade\(existing, price, now\)/g) ?? []).length).toBe(1);
     // B-PRICE-FEED-TRUTH I2: the REST sites file through `fileRestResponse`, which calls the builder once with the writer
     // its caller names; `getPrice` (`rest_fetch`) is deleted. So: one builder call, and each remaining site names its tag.
-    expect((src.match(/this\.restTickerRow\(key, internal, ticker, writer, now\)/g) ?? []).length).toBe(1);
+    expect((src.match(/this\.restTickerRow\(key, internal, ticker, writer, now, sides\)/g) ?? []).length).toBe(1);
     for (const site of ['rest_poller', 'rest_batch']) {
       expect((src.match(new RegExp(`this\\.fileRestResponse\\([^)]*'${site}', now`, 'g')) ?? []).length).toBeGreaterThanOrEqual(1);
     }

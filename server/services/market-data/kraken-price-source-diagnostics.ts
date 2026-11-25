@@ -7,11 +7,12 @@ import {
 } from '../../core/calculations/level-basis.js';
 import { krakenAssetPairsService, type AutoMappingEntry } from '../../markets/kraken-asset-pairs-service.js';
 import type { CachedPrice, SidesWriter } from '../price-cache.js';
+import { pairwiseStatedSides } from './stated-sides.js';
 
 type VenueMap = Pick<typeof krakenAssetPairsService,
   'isReady' | 'getAllMappings' | 'resolveByInternal' | 'resolveByWsPair' |
   'resolveByRestPair' | 'resolveByKrakenKey' | 'resolveByCompactSymbol'>;
-type StoredSides = Pick<CachedPrice, 'sidesWriter' | 'sidesCapturedAtMs' | 'symbol'>;
+type StoredSides = Pick<CachedPrice, 'sidesWriter' | 'sidesCapturedAtMs' | 'symbol' | 'bid' | 'ask'>;
 type CoverageGap = 'inherited_identity' | 'missing_provenance' | 'identity_change' |
   'unresolved_write' | 'dropped_write' | 'unresolved_walk' | 'observer_error';
 type UntrackedReason = 'pre_ready' | 'outside_cohort' | 'outside_class' | 'unresolved' | 'identity_change';
@@ -72,6 +73,22 @@ export class KrakenPriceSourceDiagnostics {
     this.cacheEntries = entries;
   }
 
+  observeMappingPublication(): void {
+    if (this.startedAtMs === null) {
+      this.startIfReady();
+      return;
+    }
+    try {
+      // Record changes at publication, even if nobody reads or writes a quote before the next refresh.
+      for (const [key, frozen] of this.keys) {
+        const current = this.exactIdentity(key);
+        if (!current || !sameIdentity(frozen, current)) this.markGap('identity_change', frozen, current);
+      }
+    } catch {
+      this.markGap('observer_error');
+    }
+  }
+
   private exactIdentity(key: string, canonicalHint?: string): Identity | undefined {
     // The writer/selection supplied an actual key. Guessed suffix identities cannot prove coverage.
     const matches = [
@@ -121,7 +138,8 @@ export class KrakenPriceSourceDiagnostics {
           continue;
         }
         this.keys.set(key.toUpperCase(), identity);
-        if (row.sidesWriter == null || row.sidesCapturedAtMs == null || !Number.isFinite(row.sidesCapturedAtMs)) {
+        if (row.sidesWriter == null || row.sidesCapturedAtMs == null || !Number.isFinite(row.sidesCapturedAtMs) ||
+            pairwiseStatedSides(row.bid, row.ask) === null) {
           this.markGap('missing_provenance', identity);
           continue;
         }
@@ -135,7 +153,7 @@ export class KrakenPriceSourceDiagnostics {
     }
   }
 
-  recordAssignment(key: string, row: StoredSides, canonicalHint?: string): void {
+  recordAssignment(key: string, row: StoredSides, validPair: boolean, canonicalHint?: string): void {
     if (this.startedAtMs === null) return;
     try {
       const frozen = this.keys.get(key.toUpperCase());
@@ -148,7 +166,7 @@ export class KrakenPriceSourceDiagnostics {
         this.markGap('identity_change', frozen, current);
         return;
       }
-      if (row.sidesWriter == null || row.sidesCapturedAtMs == null || !Number.isFinite(row.sidesCapturedAtMs)) {
+      if (!validPair || row.sidesWriter == null || row.sidesCapturedAtMs == null || !Number.isFinite(row.sidesCapturedAtMs)) {
         this.markGap('missing_provenance', current);
         return;
       }
