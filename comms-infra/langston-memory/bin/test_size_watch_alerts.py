@@ -19,10 +19,12 @@ mutation runner can point this at a mutated copy."""
 import importlib.machinery
 import importlib.util
 import json
+import multiprocessing
 import os
 import shutil
 import sys
 import tempfile
+from pathlib import Path
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
@@ -632,6 +634,86 @@ def test_coltrane(tmp):
     calls_before = len(store.calls)
     check("CS the self-test passes", m.cmd_self_test(A()), 0)
     check("CS the self-test wrote nothing to the alert store", len(store.calls), calls_before)
+
+    state_file = Path(m.STATE)
+    original = m.load_state()
+    mismatched = {**original, "ceiling_bytes": 1100}
+    m.save_state(mismatched)
+    calls_before = len(store.calls)
+    before = state_file.read_bytes()
+    for name, entry in (("status", m.cmd_status), ("watch", m.cmd_run), ("setter", m.cmd_set_ceiling)):
+        args = A()
+        args.set_ceiling = 900
+        try:
+            result = entry(args)
+        except SystemExit as exc:
+            result = exc.code
+        check("C12 %s refuses a ceiling different from the latest history" % name, result, 2)
+        check("C12 %s leaves the inconsistent state unchanged" % name,
+              state_file.read_bytes(), before)
+    check("C12 the invalid state triggered no alert or heartbeat mutations", len(store.calls), calls_before)
+    m.save_state(original)
+    check("C12 matching history is accepted by the status reader", m.cmd_status(A()), 0)
+
+    args = A()
+    args.require_current_total = True
+    args.set_ceiling = 950
+    check("C13 a stale measured ceiling is refused", m.cmd_set_ceiling(args), 2)
+    check("C13 stale measurement leaves the old ceiling", m.load_state()["ceiling_bytes"], 1000)
+
+    # Pause the daily CLI after it has read the old state, then overlap a real setter CLI.
+    # Both children use this scratch state's paths and their own copy of the fake alert store.
+    ctx = multiprocessing.get_context("fork")
+    watch_loaded = ctx.Event()
+    release_watch = ctx.Event()
+    setter_started = ctx.Event()
+    read_state = m.load_state
+
+    def run_cli(is_setter):
+        sys.argv = [COLTRANE_WATCH, "--quiet"]
+        if is_setter:
+            sys.argv.extend(["--set-ceiling", "900", "--require-current-total", "--by", "codex-infra"])
+            setter_started.set()
+        else:
+            def pause_after_read():
+                state = read_state()
+                watch_loaded.set()
+                if not release_watch.wait(10):
+                    raise TimeoutError("test did not release the daily watch")
+                return state
+            m.load_state = pause_after_read
+        raise SystemExit(m.main())
+
+    daily = ctx.Process(target=run_cli, args=(False,))
+    setter = ctx.Process(target=run_cli, args=(True,))
+    daily.start()
+    try:
+        if not watch_loaded.wait(5):
+            raise TimeoutError("daily watch did not reach its state read")
+        setter.start()
+        if not setter_started.wait(5):
+            raise TimeoutError("setter process did not start")
+        setter.join(1)
+        check("C14 setter waits for the daily watch's state transaction", setter.exitcode, None)
+    finally:
+        release_watch.set()
+        for process in (daily, setter):
+            if process.pid is not None:
+                process.join(5)
+                if process.is_alive():
+                    process.terminate()
+                    process.join()
+
+    check("C14 both CLI writers complete", (daily.exitcode, setter.exitcode), (0, 0))
+    check("C14 the setter's lower ceiling and measured value survive the overlap",
+          (m.load_state()["ceiling_bytes"], m.load_state()["history"][-1].get("measured_total")),
+          (900, 900))
+    check("C14 a later normal watch accepts the same ceiling", m.cmd_run(A()), 0)
+    check("C14 the later watch keeps the lower ceiling", m.load_state()["ceiling_bytes"], 900)
+    args.set_ceiling = 900
+    before = state_file.read_bytes()
+    check("C14 setting the current measured ceiling again succeeds", m.cmd_set_ceiling(args), 0)
+    check("C14 equality leaves the exact state bytes unchanged", state_file.read_bytes(), before)
 
 
 def main():

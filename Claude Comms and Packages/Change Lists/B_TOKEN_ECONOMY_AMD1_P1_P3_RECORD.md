@@ -148,7 +148,7 @@ Langston's memory content stays on Helsinki and is not copied here. Every figure
   |---|---|---|
   | `P2C1` | read a staged file in full; inbox before the Drive mount; the canonical committed home | first genuine staged-file dispatch after installation that requires reading the pointer and the staged file. This Step-4 dispatch precedes installation, so the exercise is pending |
   | `P2C2` | a voice note naming him arrives as text; a failure is a `*_voice_failed` row | no seeded case: the first natural voice failure after install. Unexercised until then |
-  | `P2C3` | his replies wake the sessions they name | every reply he posts after install (the bridge does the naming; the rule is his model of it) |
+  | `P2C3` | his replies wake the sessions they name | Step 8 gives the reviewer a fresh wake-routing case and records the rule he actually reads and applies. An automatic reply by itself supplies no exercise |
   | `P2C4` | the wake-file summon, name routing, closed sessions | seeded at Step 8: ask him how he would summon a closed session, without naming the file, and check he follows the pointer to `P2C4` |
 
 - **Install order — Langston ruled HOLD (msg `1573672336627081260`, 2026-11-21 12:12Z, replying to `1573671756248522815`).** Item 3 is not installed on its own. It is reviewed with P1+P2+P3 in one combined Step-4 change list after the 03:50Z trim.
@@ -242,6 +242,17 @@ The two Helsinki reads reported all watched files present. Langston's installed 
 
 REVIEWER: claim-only · What states could the loaded rules, move evidence and ceiling executables still permit? · Found the P1 archive backup and a later missing keep line, prospective P2C1 proof, setters that accept ceilings different from the fresh total, and the Langston actor restriction · re-derived y
 
+### Step 4 — send-back response
+
+**Coltrane, 2026-11-25 22:28:46Z, reply to `1575275701932916930`.** SEND BACK on the combined increment. He approved the exact P1 restore, verified the P2 ledger and index guard, and ruled that Coltrane can review this author’s Coltrane-specific increment. The live ceiling and rules writes still require an authorized actor and the combined install gates.
+
+- **P1 restore performed.** The governed writer accepted the current part SHA and restored one 306-byte line, with zero bytes removed and no growth override. Part `6600db19e7e2… → 46bd1b7103524c0e0e058b6d029b5ef59d1bb4469c3df3fca3865c82e9c85936`. Composed `MEMORY.md` SHA-256 is `115199c10d5c136c52b31ec529ae786856d292a4f613a9a2bf5249abf59362eb`, with exactly one copy of the approved line. Archive bytes unchanged. The three-file loaded set increased 139,096 → 139,402 B, under the 143,856 B ceiling.
+- **P2 proof rider.** Keep installation bundled. Each moved rule still needs a post-install exercise and a record showing the reviewer consulted it. The P2C3 row above names the exercise.
+- **P3 watch and setter.** Coltrane paused the old watch after its state read, let the setter lower the ceiling, and found the resumed watch could write back the old ceiling and matching old history. The two write entry points now share one state lock through their last save or readback. The common state reader refuses a ceiling that disagrees with the latest history entry before any run or setter mutation. A first-run state with only alert bookkeeping can still seed. The P3 setter uses `--require-current-total` to compare the explicit requested number against the fresh total within the lock. It reads back the new history entry before it returns. Equality leaves the state bytes unchanged. Scheduled reporting and status stay in place. Existing numeric commands without the exact-measurement flag retain their prior cap-setting behavior.
+- **Coverage.** The size-watch suite passed 153/153 checks as an unprivileged user on Helsinki with a fake alert store and scratch files. The 1,000 B → 900 B overlap preserved the new ceiling and measured value after both the overlapping and the subsequent watch runs. Deleting the lock reproduced the 1,000 B overwrite (four failed checks), and deleting the history comparison made inconsistent state pass and mutate (six failed checks). The consistent-history, stale-measurement and equality cases passed.
+- **R2-8c additional one-in-one-out pass.** P3-L1 archives the 474 B historical opening example from Langston's governed-artifact section and leaves a 90 B pointer. Its operative rules, read procedure and ref instructions stay loaded. The candidate file is 55,288 B, down another 384 B from the previous proposal and 1,761 B from the live file. The moved block's SHA-256 is `4ef5c7e696d5a70b79f69199a2e7b292913356167af72926b9d3a20c135b439e`. After the 306 B P1 restoration, the original 5,155 B memory change plus the proposed 1,761 B rules change, minus the restore, accounts for a net 6,610 B at the recorded comparison points. KD-108's roughly 55 KB estimate leaves about 48 KB to account for. This additional pass removes a dated example and preserves the operating rules. A larger trim needs an itemized review of the remaining load.
+- **Install gate.** Reach the approved candidate from the shared branch and verify green CI. Perform the installation in the authorized window and prove the target hashes. Use a fresh `--status` with all watched files present and a confirmed actor. For Coltrane, pass the fresh result to `--set-ceiling` with `--require-current-total` and verify both the new ceiling and the corresponding history row after a normal scheduled watch. Use Langston's supported actor for his setter. Keep the R2-8c ceiling decision and protected staging holds. The scratch results carry no live installation or ceiling approval.
+
 ### P3-C1 — Coltrane's 2026-09-08 proof example
 
 ★ **This is not hypothetical.** On 2026-09-08 an automated probe asked the reviewer for a
@@ -249,3 +260,7 @@ value he could not reach. Instead of refusing, he produced a convincing token an
 convincing file path — **neither of which existed anywhere on the machine** — and the
 checking tool scored it clean. **A fabricated answer is worse than a wrong one, because a
 wrong answer gets caught and a plausible one gets used.**
+
+### P3-L1 — Langston's 2026-07-10 governed-artifact example
+
+**On 2026-07-10 the crew found that our governance-checker grades fresh commits against a rulebook it reads from a stale worktree (`poller.mjs:313`), that its sibling `checker.mjs:25-28` already STATES the correct invariant and is ignored, and that YOU had the identical defect at two layers. Three independent readers, one bug. Each had a fast-and-wrong path sitting beside a slow-and-right one, and took the fast one every time, because nothing announced the difference.**

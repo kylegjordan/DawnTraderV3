@@ -6,7 +6,7 @@
 
 ## ★★ HOW YOU READ A GOVERNED ARTIFACT — THE ONLY SANCTIONED WAY (added 2026-07-10, CC-A; crew-verified; NON-NEGOTIABLE)
 
-**On 2026-07-10 the crew found that our governance-checker grades fresh commits against a rulebook it reads from a stale worktree (`poller.mjs:313`), that its sibling `checker.mjs:25-28` already STATES the correct invariant and is ignored, and that YOU had the identical defect at two layers. Three independent readers, one bug. Each had a fast-and-wrong path sitting beside a slow-and-right one, and took the fast one every time, because nothing announced the difference.**
+The 2026-07-10 incident is archived under P3-L1 in `B_TOKEN_ECONOMY_AMD1_P1_P3_RECORD.md`.
 
 **1. NEVER read a governed artifact from a working tree. Read it AT THE GRADED REF. This is measured, free, and available to you right now:**
 ```bash
