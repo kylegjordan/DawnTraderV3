@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import {
-  EXPECTED_OLD, isVtsFeedIncidentAlert, VTS_COMMON_XSTOCK_INCIDENT_COHORT, VTS_FEED_INCIDENT_KEY_PREFIX,
+  EXPECTED_OLD, isVtsFeedIncidentAlert, memberField, railKey, railRowTradeId,
+  VTS_COMMON_XSTOCK_INCIDENT_COHORT, VTS_FEED_INCIDENT_KEY_PREFIX, VTS_STANDING_KEY,
   VTS_RAIL_ACTOR, VTS_RAIL_REF,
 } from '../core/trading/vts-rail.js';
 import { isProvedVtsRefusalCrossing, vtsRefusalReceiptField } from '../core/trading/vts-refusal-evidence.js';
@@ -17,6 +18,8 @@ interface IncidentMember {
   observedAtMs: number;
   reason: string;
   fallbackAlertId?: string;
+  fallbackReason?: string;
+  fallbackObservedAtMs?: number;
   decidedAtMs?: number;
   closeObservedAtMs?: number;
 }
@@ -84,8 +87,10 @@ export function joinVtsFeedIncident(draft: AlertStoreDraft, c: Crossing, nowMs: 
     || cut.qualified < Math.max(10, Math.ceil(cut.subscribed * 0.8)) || cut.qualified > cut.subscribed) return null;
 
   const prior = openVtsFeedIncidents(draft.rows).find(row => row.metadata.vtsFeedIncidentCohort === evidence.key);
+  // A slow crossing can be newer than the end marker while its entire observation predates recovery.
+  const coverageStartedAtMs = nowMs - (cut.cutMs - cut.startMs);
   if (draft.rows.some(row => isVtsFeedIncidentAlert(row) && row.metadata.vtsFeedIncidentCohort === evidence.key
-    && typeof row.metadata.vtsIncidentEndedAtMs === 'number' && row.metadata.vtsIncidentEndedAtMs >= nowMs)) return null;
+    && typeof row.metadata.vtsIncidentEndedAtMs === 'number' && row.metadata.vtsIncidentEndedAtMs >= coverageStartedAtMs)) return null;
   const field = vtsRefusalReceiptField(c.streakId, c.pageSinceMs);
   const metadata = {
     [field]: c.tradeId,
@@ -133,4 +138,64 @@ export function closeVtsIncidentMembers(draft: AlertStoreDraft, row: IncidentRow
   }
   if (Object.keys(patch).length) draft.mergeMetadata(row.id, patch);
   return false;
+}
+
+/** Publish successors and retire the incident in one store edit after the exact close look. */
+export function handBackVtsIncidentMembers(
+  draft: AlertStoreDraft, row: IncidentRow, lookedUp: ReadonlySet<string>, nowMs: number,
+  joinExpected: (crossing: Pick<Crossing, 'tradeId' | 'symbol' | 'lastReason' | 'pageSinceMs'>) => SystemAlert | null,
+): number | null {
+  const recovery = row.metadata.vtsIncidentRecovery as (VtsIncidentRecoveryProof & { recordedAtMs: number }) | undefined;
+  const members = incidentMembers(row);
+  if (!recovery || nowMs < recovery.recordedAtMs || !members.length
+    || members.length !== Object.keys(row.metadata).filter(field => field.startsWith(MEMBER_PREFIX)).length) return null;
+  const outstanding = members.filter(([, member]) => member.decidedAtMs === undefined && member.closeObservedAtMs === undefined);
+  // A join during the close lookup has to participate in the next lookup before being handed back.
+  if (outstanding.some(([, member]) => !lookedUp.has(member.tradeId))) return null;
+
+  const standing = draft.rows.find(candidate => candidate.state !== 'resolved' && candidate.dedupe_key === VTS_STANDING_KEY);
+  const liveRows = new Map(draft.rows.filter(candidate => candidate.state !== 'resolved').map(candidate => [candidate.dedupe_key, candidate]));
+  const trades = new Map<string, typeof outstanding>();
+  for (const entry of outstanding) {
+    const tradeId = entry[1].tradeId;
+    const prior = trades.get(tradeId);
+    if (prior) prior.push(entry);
+    else trades.set(tradeId, [entry]);
+  }
+  let minted = 0;
+  const patch: Record<string, unknown> = { vtsIncidentEndedAtMs: nowMs };
+  for (const [tradeId, entries] of trades) {
+    const newestAtMs = (origin: IncidentMember) => origin.fallbackObservedAtMs ?? origin.observedAtMs;
+    const member = entries.reduce((latest, [, origin]) => newestAtMs(origin) > newestAtMs(latest) ? origin : latest, entries[0][1]);
+    const reason = member.fallbackReason ?? member.reason;
+    const firstAtMs = Math.min(...entries.map(([, origin]) => origin.firstAtMs));
+    const key = railKey(member.symbol, tradeId);
+    let successor = liveRows.get(key);
+    if (successor && railRowTradeId(successor) !== tradeId) throw new Error('VTS recovery handback found a conflicting warning key');
+    if (!successor && standing?.metadata[memberField(tradeId)]) successor = standing;
+    if (!successor) {
+      successor = joinExpected({
+        tradeId, symbol: member.symbol, lastReason: reason, pageSinceMs: member.pageSinceMs,
+      }) ?? undefined;
+    }
+    if (!successor) {
+      successor = draft.add({
+        triggers_at: new Date(nowMs), category: 'breakage', severity: 'warning', dedupe_key: key,
+        title: `VTS exit decisions unavailable — ${member.symbol} still blocked after feed recovery`,
+        body: `Open virtual trade ${tradeId} in ${member.symbol} has been waiting since ${new Date(firstAtMs).toISOString()}. `
+          + `Its last recorded refusal was ${reason}. The feed recovered for the wider group, while this trade still has no exit `
+          + 'decision or close. This warning clears when that trade decides or closes.',
+        metadata: { tradeId, vtsWarningObservedAtMs: newestAtMs(member) },
+      });
+      minted++;
+    }
+    // Keep the original crossing receipt on the group and link it to the continuing warning.
+    draft.mergeMetadata(successor.id, {
+      [`vtsIncidentHandback:${row.id}:${tradeId}`]: { source: row.id, firstAtMs, handedBackAtMs: nowMs, members: entries.map(([, origin]) => origin) },
+    });
+    for (const [field, origin] of entries) patch[field] = { ...origin, fallbackAlertId: successor.id, handedBackAtMs: nowMs };
+  }
+  draft.mergeMetadata(row.id, patch);
+  draft.resolve(row.id, VTS_RAIL_ACTOR, `FEED-INCIDENT-RECOVERED-HANDBACK ${VTS_RAIL_REF}`, 'engine');
+  return minted;
 }

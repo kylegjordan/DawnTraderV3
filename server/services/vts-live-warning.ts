@@ -1,14 +1,15 @@
 import {
   clearEvidence, easternDate, memberField, railKey, railRowClear, railRowTradeId, stepMemberClock,
   MEMBER_ESCALATE_AFTER_MS, RAIL_KEY_PREFIX, STUCK_SWEEP_FAILURES, VTS_RAIL_ACTOR, VTS_RAIL_REF,
-  VTS_STANDING_KEY, VTS_STUCK_KEY, type MemberClock,
+  VTS_STANDING_KEY, VTS_STUCK_KEY, vtsXstockJoinsStandingRecord, type MemberClock,
 } from '../core/trading/vts-rail.js';
 import { vtsRefusalReceiptField } from '../core/trading/vts-refusal-evidence.js';
 import type { VtsFeedIncidentEvidence } from './vts-feed-incident-windows.js';
 import type { VtsIncidentRecoveryCandidate } from './vts-feed-incident-recovery.js';
 import type { AddAlertOptions, AlertStoreDraft, SystemAlert } from './system-alerts.js';
+import type { ClassVerdict } from './venue-quiet-alerting.js';
 import {
-  closeVtsIncidentMembers, joinVtsFeedIncident, markVtsIncidentDecision, openVtsFeedIncidents,
+  closeVtsIncidentMembers, handBackVtsIncidentMembers, joinVtsFeedIncident, markVtsIncidentDecision, openVtsFeedIncidents,
   outstandingVtsIncidentTrades, vtsIncidentReasonExits, vtsIncidentRecoveryCandidate,
 } from './vts-feed-incident-members.js';
 
@@ -32,7 +33,7 @@ export interface Crossing {
   streakId?: string;
 }
 
-function receipt(c: Crossing): Record<string, string> {
+function receipt(c: Pick<Crossing, 'tradeId' | 'streakId' | 'pageSinceMs'>): Record<string, string> {
   return c.streakId ? { [vtsRefusalReceiptField(c.streakId, c.pageSinceMs)]: c.tradeId } : {};
 }
 
@@ -65,7 +66,10 @@ export function standingWarning(nowMs: number): AddAlertOptions {
   };
 }
 
-export function standingJoin(c: Crossing, nowMs: number, metadata: Record<string, unknown>) {
+export function standingJoin(
+  c: Pick<Crossing, 'tradeId' | 'symbol' | 'lastReason' | 'pageSinceMs' | 'streakId'>,
+  nowMs: number, metadata: Record<string, unknown>,
+) {
   const saved = metadata[memberField(c.tradeId)] as RailMember | null | undefined;
   const decidedAt = metadata[decidedField(c.tradeId)];
   // A re-crossing after a decision starts a new clock. A restart during the same refusal keeps its exposure.
@@ -120,7 +124,7 @@ export function writeLiveWarning(draft: AlertStoreDraft, { crossing: c, nowMs, a
     // Keep the first incident's receipt on that incident. The standing row takes over the continuing exposure.
     draft.mergeMetadata(row.id, current => standingJoin({ ...c, pageSinceMs, streakId: undefined }, nowMs, current));
     for (const { rowId, field, member: origin } of reasonExits) {
-      draft.mergeMetadata(rowId, { [field]: { ...origin, fallbackAlertId: row.id } });
+      draft.mergeMetadata(rowId, { [field]: { ...origin, fallbackAlertId: row.id, fallbackReason: c.lastReason, fallbackObservedAtMs: nowMs } });
     }
     return { alertId: row.id, route: 'joined', minted: !standing };
   }
@@ -155,7 +159,7 @@ export function writeLiveWarning(draft: AlertStoreDraft, { crossing: c, nowMs, a
   if (reasonExits.length) {
     const sources: Record<string, unknown> = {};
     for (const { rowId, field, member: origin } of reasonExits) {
-      draft.mergeMetadata(rowId, { [field]: { ...origin, fallbackAlertId: row.id } });
+      draft.mergeMetadata(rowId, { [field]: { ...origin, fallbackAlertId: row.id, fallbackReason: c.lastReason, fallbackObservedAtMs: nowMs } });
       sources[field] = { incidentAlertId: rowId, ...origin, nextReason: c.lastReason };
     }
     draft.mergeMetadata(row.id, current => ({ vtsIncidentReasonExits: {
@@ -230,7 +234,7 @@ export function stuckWarning(why: string, nowMs: number): AddAlertOptions {
   };
 }
 
-export type LiveRailSweep = { regular: boolean; precedingFailures: number };
+export type LiveRailSweep = { regular: boolean; precedingFailures: number; xstockVerdict?: ClassVerdict | null };
 export interface LiveRailSweepResult {
   rowIds: [tradeId: string, alertId: string][];
   memberIds: [tradeId: string, alertId: string][];
@@ -241,22 +245,20 @@ export interface LiveRailSweepResult {
   resolved: number;
   escalated: number;
   minted: number;
+  handbackWarnings: number;
 }
 
 /** Re-read members under the lock so a late join is included before closing the standing row. */
 export function sweepLiveWarnings(
-  draft: AlertStoreDraft, closed: ReadonlySet<string> | null, nowMs: number, sweep: LiveRailSweep,
+  draft: AlertStoreDraft, closed: ReadonlySet<string> | null, lookedUp: ReadonlySet<string>, nowMs: number, sweep: LiveRailSweep,
 ): LiveRailSweepResult {
   const { warnings, standing } = openVtsRail(draft.rows);
   const members = standingMembers(standing);
   const result: LiveRailSweepResult = {
     rowIds: [], memberIds: [], incidentTradeIds: [], recoveryCandidates: [], openWarnings: warnings.length, members: members.length,
-    resolved: 0, escalated: 0, minted: 0,
+    resolved: 0, escalated: 0, minted: 0, handbackWarnings: 0,
   };
   if (closed) {
-    for (const incident of openVtsFeedIncidents(draft.rows)) {
-      if (closeVtsIncidentMembers(draft, incident, closed, nowMs)) result.resolved++;
-    }
     for (const row of warnings) {
       const tradeId = railRowTradeId(row);
       if (!tradeId) continue;
@@ -292,6 +294,22 @@ export function sweepLiveWarnings(
       }
       if (Object.keys(patches).length) draft.mergeMetadata(standing.id, patches);
       if (remaining === 0) draft.resolve(standing.id, VTS_RAIL_ACTOR, `STANDING-RECORD-EMPTY ${VTS_RAIL_REF}`, 'engine');
+    }
+    for (const incident of openVtsFeedIncidents(draft.rows)) {
+      if (closeVtsIncidentMembers(draft, incident, closed, nowMs)) {
+        result.resolved++;
+      } else if (sweep.regular) {
+        const minted = handBackVtsIncidentMembers(draft, incident, lookedUp, nowMs, crossing => {
+          if (!vtsXstockJoinsStandingRecord(crossing.lastReason, sweep.xstockVerdict ?? null)) return null;
+          const record = draft.add(standingWarning(nowMs));
+          const pageSinceMs = easternDate(crossing.pageSinceMs) === easternDate(nowMs) ? crossing.pageSinceMs : nowMs;
+          return draft.mergeMetadata(record.id, current => standingJoin({ ...crossing, pageSinceMs }, nowMs, current));
+        });
+        if (minted !== null) {
+          result.resolved++;
+          result.handbackWarnings += minted;
+        }
+      }
     }
     const stuck = draft.rows.find(row => row.state !== 'resolved' && row.dedupe_key === VTS_STUCK_KEY);
     if (stuck) draft.resolve(stuck.id, VTS_RAIL_ACTOR, `SWEEP-CLEAN ${VTS_RAIL_REF}`, 'engine');

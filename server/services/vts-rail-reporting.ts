@@ -338,8 +338,8 @@ export async function runVtsRailSweep(nowMs: number, deps: VtsRailDeps): Promise
       vtsIncidentRecoveryWindows.snapshot(rail.recoveryCandidates, performance.now());
       state.loaded = true;
       railCounts.escalations += rail.escalated;
-      railCounts.pagesAttempted += rail.escalated;
-      railCounts.minted += rail.minted;
+      railCounts.pagesAttempted += rail.escalated + rail.handbackWarnings;
+      railCounts.minted += rail.minted + rail.handbackWarnings;
       railCounts.dedupeHits += rail.escalated - rail.minted;
       logRailSweep(rail.openWarnings, rail.resolved, rail.members, rail.escalated, deps);
       return;
@@ -527,8 +527,13 @@ export async function productionVtsRailDeps(): Promise<VtsRailDeps> {
     isRailPagingTime: (nowMs) => isXstockRailPagingTime(new Date(nowMs)),
     alertFileBytes: () => { try { return fs.statSync(alerts.ALERTS_FILE).size; } catch { return null; } },
   };
-  deps.sweepLive = (nowMs, precedingFailures) => alertWrites.sweepRail(nowMs, refusalRunId, deps.closedTradeIds, {
-    regular: deps.isRailPagingTime(nowMs), precedingFailures,
-  });
+  deps.sweepLive = (nowMs, precedingFailures) => {
+    const regular = deps.isRailPagingTime(nowMs);
+    let xstockVerdict: ClassVerdict | null = null;
+    if (regular && (!state.loaded || state.incidentTrades.size)) {
+      try { xstockVerdict = deps.xstockVerdict(nowMs); } catch { xstockVerdict = null; }
+    }
+    return alertWrites.sweepRail(nowMs, refusalRunId, deps.closedTradeIds, { regular, precedingFailures, xstockVerdict });
+  };
   return deps;
 }

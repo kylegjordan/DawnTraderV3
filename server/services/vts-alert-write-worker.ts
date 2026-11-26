@@ -75,7 +75,7 @@ port.on('message', async (request: VtsAlertWorkerRequest) => {
         }) !== null;
       });
       if (recovery && closed && snapshot.length) reconcileVtsRefusals(draft, snapshot, closed, recovery.nowMs);
-      const rail = recovery?.rail ? sweepLiveWarnings(draft, closed, recovery.nowMs, recovery.rail) : undefined;
+      const rail = recovery?.rail ? sweepLiveWarnings(draft, closed, requestedIds, recovery.nowMs, recovery.rail) : undefined;
       return { value: { written, rail } };
     }) : { written: [], rail: undefined };
     port.postMessage({ ...result, reconciled: recovery ? closed !== null : undefined } satisfies VtsAlertWorkerMessage);

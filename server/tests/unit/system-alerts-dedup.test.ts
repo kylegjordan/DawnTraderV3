@@ -15,7 +15,10 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import type { VtsRefusalEvent } from '../../core/trading/vts-refusal-evidence.js';
 import { vtsRefusalReceiptField } from '../../core/trading/vts-refusal-evidence.js';
-import { EXPECTED_OLD, EXPECTED_WIDE, isVtsFeedIncidentAlert, memberField, railKey, VTS_COMMON_XSTOCK_INCIDENT_COHORT, VTS_STANDING_KEY } from '../../core/trading/vts-rail.js';
+import {
+  EXPECTED_OLD, EXPECTED_WIDE, isVtsFeedIncidentAlert, memberField, railKey, unpricedCloseKey,
+  VTS_COMMON_XSTOCK_INCIDENT_COHORT, VTS_STANDING_KEY,
+} from '../../core/trading/vts-rail.js';
 import { decidedField, type Crossing } from '../../services/vts-live-warning.js';
 import { VtsIncidentRecoveryWindows } from '../../services/vts-feed-incident-recovery.js';
 
@@ -237,7 +240,7 @@ describe('#1191 alert store edits', () => {
 
   it('keeps 450 correlated trades under one durable warning with separate fallback and terminal evidence', async () => {
     const { VtsAlertWriteQueue } = await import('../../services/vts-alert-write-queue.js');
-    const { readAllAlerts, readVtsRefusalEvidence } = await load();
+    const { addAlert, fireDue, processResurface, processVtsFeedIncidentNotices, readAllAlerts, readVtsRefusalEvidence } = await load();
     const queue = new VtsAlertWriteQueue();
     const nowMs = Date.parse('2026-11-27T15:00:00Z');
     const pageSinceMs = nowMs - 600_000;
@@ -273,6 +276,19 @@ describe('#1191 alert store edits', () => {
     const groupedTradeIds = new Set(crossings.slice(0, 450).map(crossing => crossing.tradeId));
     expect(readVtsRefusalEvidence().filter(item => groupedTradeIds.has(item.tradeId)).map(item => item.crossings[0].disposition))
       .toEqual(Array(450).fill({ alertId: group.id, route: 'incident' }));
+    const unpricedClose = await addAlert({
+      triggers_at: new Date(nowMs), category: 'breakage', severity: 'warning', dedupe_key: unpricedCloseKey('pdd-twin'),
+      title: 'VTS trade closed with no price — PDD/USD', body: 'PDD/USD unpriced max hold (independent control).',
+    });
+    // Exercise the dispatcher with the actual rows the worker just persisted, including ordinary resurface.
+    const promoted = await fireDue(nowMs);
+    expect(promoted.filter(row => !isVtsFeedIncidentAlert(row)).map(row => row.id)).toEqual([messages[450]?.alertId, unpricedClose.id]);
+    const delivered = vi.fn(async () => true);
+    await processVtsFeedIncidentNotices(delivered, () => nowMs);
+    await processVtsFeedIncidentNotices(delivered, () => nowMs + 1000);
+    expect(delivered).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ id: group.id }), expect.any(AbortSignal));
+    const resurfaced = await processResurface(nowMs + 12 * 60 * 60_000, async () => true);
+    expect(resurfaced.filter(row => row.delivered).map(row => row.id)).toEqual([messages[450]?.alertId, unpricedClose.id]);
 
     const afterRestart = new VtsAlertWriteQueue();
     const changed = crossings[0];
@@ -297,7 +313,7 @@ describe('#1191 alert store edits', () => {
     expect(firstSweep?.rail.incidentTradeIds).toContain(changed.tradeId);
     expect(firstSweep?.rail.incidentTradeIds).not.toContain(crossings[1].tradeId);
     expect(firstSweep?.rail.incidentTradeIds).not.toContain(crossings[2].tradeId);
-    expect(readAllAlerts().find(row => row.id === group.id)?.state).toBe('scheduled');
+    expect(readAllAlerts().find(row => row.id === group.id)?.state).toBe('active');
 
     const recovery = new VtsIncidentRecoveryWindows();
     recovery.snapshot(firstSweep!.rail.recoveryCandidates, 1);
@@ -314,21 +330,74 @@ describe('#1191 alert store edits', () => {
     expect(await afterRestart.recordIncidentRecovery({ ...proof, common: proof.common.slice(1) }, nowMs + 121_000)).toBe(false);
     expect(await afterRestart.recordIncidentRecovery(proof, nowMs + 121_001)).toBe(true);
     expect(readAllAlerts().find(row => row.id === group.id)).toMatchObject({
-      state: 'scheduled', metadata: { vtsIncidentRecovery: { ...proof, recordedAtMs: nowMs + 121_001 } },
+      state: 'active', metadata: { vtsIncidentRecovery: { ...proof, recordedAtMs: nowMs + 121_001 } },
     });
 
-    const lastSweep = await afterRestart.sweepRail(nowMs + 121_002, 'second-read', async ids => new Set(ids), {
+    const stillOpen = [changed, crossings[3], crossings[10], crossings[11]];
+    const openIds = new Set(stillOpen.map(crossing => crossing.tradeId));
+    const lookupExceptOpen = async (ids: readonly string[]) => new Set(ids.filter(id => !openIds.has(id)));
+    const afterRecoveryRestart = new VtsAlertWriteQueue();
+    const unavailable = await afterRecoveryRestart.sweepRail(nowMs + 121_002, 'close-lookup-failed', async () => {
+      throw new Error('test close lookup failed');
+    }, {
+      regular: true, precedingFailures: 0,
+    });
+    expect(unavailable?.rail.incidentTradeIds).toHaveLength(448);
+    const offHours = await afterRecoveryRestart.sweepRail(nowMs + 121_003, 'off-hours', lookupExceptOpen, {
+      regular: false, precedingFailures: 0,
+    });
+    expect(offHours?.rail.incidentTradeIds.sort()).toEqual([...openIds].sort());
+    expect(offHours?.rail.handbackWarnings).toBe(0);
+    const lateJoin = { ...crossings[12], tradeId: 'concurrent-trade', streakId: 'concurrent-streak' };
+    const incomplete = await afterRecoveryRestart.sweepRail(nowMs + 121_004, 'new-member-during-close-lookup', async ids => {
+      expect(ids).not.toContain(lateJoin.tradeId);
+      expect(await queueCrossing(lateJoin, nowMs + 121_005)).toMatchObject({ alertId: group.id, route: 'incident' });
+      return lookupExceptOpen(ids);
+    }, { regular: true, precedingFailures: 0 });
+    expect(incomplete?.rail.incidentTradeIds.sort()).toEqual([...openIds, lateJoin.tradeId].sort());
+    expect(incomplete?.rail.handbackWarnings).toBe(0);
+    openIds.add(lateJoin.tradeId);
+    stillOpen.push(lateJoin);
+    const handbackMs = nowMs + 121_006;
+    const lastSweep = await afterRecoveryRestart.sweepRail(handbackMs, 'second-read', lookupExceptOpen, {
       regular: true, precedingFailures: 0,
     });
     expect(lastSweep?.rail.incidentTradeIds).toEqual([]);
-    expect(readAllAlerts().find(row => row.id === group.id)).toMatchObject({
-      state: 'resolved', resolution_evidence: expect.stringContaining('FEED-INCIDENT-MEMBERS-DECIDED-OR-CLOSED'),
+    expect(lastSweep?.rail.handbackWarnings).toBe(3);
+    const afterHandback = readAllAlerts();
+    const recoveredGroup = afterHandback.find(row => row.id === group.id)!;
+    expect(recoveredGroup).toMatchObject({ state: 'resolved', resolution_evidence: expect.stringContaining('FEED-INCIDENT-RECOVERED-HANDBACK') });
+    for (const crossing of stillOpen) {
+      const field = `vtsIncidentMember:${vtsRefusalReceiptField(crossing.streakId!, pageSinceMs)}`;
+      const successor = afterHandback.find(row => row.id === (recoveredGroup.metadata[field] as { fallbackAlertId: string }).fallbackAlertId);
+      expect(successor).toMatchObject({ metadata: { [`vtsIncidentHandback:${group.id}:${crossing.tradeId}`]: {
+        firstAtMs: pageSinceMs - 1, handedBackAtMs: handbackMs, members: [expect.objectContaining({ tradeId: crossing.tradeId })],
+      } } });
+      if (crossing === changed) expect(successor?.id).toBe(fallback!.alertId);
+      if (crossing === crossings[3]) expect(successor?.id).toBe(wide!.alertId);
+    }
+    expect(lastSweep?.rail.rowIds.map(([tradeId]) => tradeId)).toEqual([
+      changed.tradeId, crossings[10].tradeId, crossings[11].tradeId, lateJoin.tradeId,
+    ]);
+    expect(lastSweep?.rail.memberIds).toEqual([[crossings[3].tradeId, wide!.alertId]]);
+    expect(proof.common).toContain(crossings[10].symbol);
+    expect(await afterRecoveryRestart.markLiveDecision(crossings[10].tradeId, handbackMs + 1)).toBe(true);
+    const cleared = await afterRecoveryRestart.sweepRail(handbackMs + 2, 'recovered-sibling-decision', lookupExceptOpen, {
+      regular: true, precedingFailures: 0,
     });
+    expect(cleared?.rail.rowIds.map(([tradeId]) => tradeId)).not.toContain(crossings[10].tradeId);
     const late = { ...crossings[0], tradeId: 'late-trade', streakId: 'late-streak' };
-    expect(await queueCrossing(late, nowMs + 3)).toMatchObject({ route: 'individual', minted: true });
+    expect(await queueCrossing(late, handbackMs + 1)).toMatchObject({ route: 'individual', minted: true });
     const next = { ...crossings[0], tradeId: 'next-trade', streakId: 'next-streak', pageSinceMs: nowMs };
     expect(await queueCrossing(next, nowMs + 600_000)).toMatchObject({ route: 'incident', minted: true });
     expect(readAllAlerts().filter(isVtsFeedIncidentAlert)).toHaveLength(2);
+    const endRecurrence = await afterRecoveryRestart.sweepRail(nowMs + 600_001, 'terminal-recurrence', async ids => new Set(ids), {
+      regular: true, precedingFailures: 0,
+    });
+    expect(endRecurrence?.rail.incidentTradeIds).toEqual([]);
+    expect(readAllAlerts().filter(isVtsFeedIncidentAlert)[1]).toMatchObject({
+      state: 'resolved', resolution_evidence: expect.stringContaining('FEED-INCIDENT-MEMBERS-DECIDED-OR-CLOSED'),
+    });
   }, 10_000);
 
   it('keeps first refusal, the actual crossing and an exact hold through the worker and later alert writes', async () => {
