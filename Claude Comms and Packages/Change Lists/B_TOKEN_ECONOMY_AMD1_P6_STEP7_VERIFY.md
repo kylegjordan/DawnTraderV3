@@ -286,3 +286,16 @@ The complete November 24 UTC day had zero lane markers, escalations, or lane jou
 **NOT RUN**. The partial November 25 day through 09:43:57Z is also empty and ungraded. The bridge was inactive at
 the read. There was no new ownership churn. The installed bridge, lane and owner-route files matched the pinned
 ref, and the read found 25 due staging alerts across all owners.
+
+## Daily read — day 5 (INFRA Codex, 2026-11-26T00:14:03Z)
+
+Helsinki reported `Timezone=Etc/UTC`; the Langston bridge was inactive during the Codex shift. The reader used mirror
+ref `2dbc2b568f5747dd347155f8bfbc844b72ed9af5`, owner table blob `ff139a890447`, the bridge journal from T', and
+the whole staging alert stream (3,656 lines at both ends). It passed all 27 self-tests and again found 17 of 17
+agreeing markers on November 22 as the live positive control.
+
+November 25 UTC had zero lane markers, escalations, or journal batches to grade. Day 5 is **NOT RUN**. The new
+partial UTC day through 00:14:03Z was empty and remains ungraded. The one earlier ownership change remains the
+day-1 event named above. All three installed lane files matched the ref. The due queue held 24 alerts across all
+owners. The last staging deploy record remained `e3a96a8126f0280a9568bb1823b9210783f0afe0` at
+`2026-11-24T00:03:08Z`, claimed by `codex-b`. Day 6 remains scheduled.
