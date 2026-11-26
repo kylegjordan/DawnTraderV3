@@ -39,6 +39,26 @@ api_curl() {
     curl -q -sS --noproxy '*' --header @- "$@"
 }
 
+# Check that the API accepts the bearer before any alert operation.
+if ! actor_choices=$(
+  set -o pipefail
+  api_curl --fail --write-out '\n%{http_code}' http://localhost:5000/api/system-alerts |
+    python3 -c 'import json, re, sys
+body, _, status = sys.stdin.read().rpartition("\n")
+if not re.fullmatch(r"2[0-9]{2}", status):
+    sys.exit(1)
+try:
+    actors = json.loads(body)["actors"]
+    if not isinstance(actors, list):
+        sys.exit(1)
+    print([actor["value"] + ":" + actor["tag"] for actor in actors])
+except (ValueError, KeyError, TypeError):
+    sys.exit(1)'
+); then
+  echo "P987 could not read the actor list with the configured sign-in." >&2
+  exit 1
+fi
+
 CLI="npm run -s system-alerts --"
 TS=$(date -u -d '-2 minutes' +%Y-%m-%dT%H:%M:%SZ)
 mk() { $CLI add --triggers-at "$TS" --category one_off --severity info --title "$1" --body "B-ALERT-ACTOR-ALLOWLIST #987 Step-7 live check; delete-safe" 2>&1 | grep -oE '"id": "[0-9a-f-]{36}"' | head -1 | grep -oE '[0-9a-f-]{36}'; }
@@ -62,8 +82,7 @@ echo "== POS 3: repeat resolve as governance-checker (the checker's pattern) sti
 $CLI resolve "$A" --by governance-checker --evidence "server/services/system-alerts.ts:268" 2>&1 | grep -E '"(state|resolved_by_claimed)"'
 echo "== API"
 echo "-- GET actors:"
-api_curl http://localhost:5000/api/system-alerts |
-  python3 -c "import json,sys; d=json.load(sys.stdin); print([a['value']+':'+a['tag'] for a in d.get('actors',[])])"
+printf '%s\n' "$actor_choices"
 
 echo "-- POST ack B with retired form (expect 400 + actors):"
 api_curl --write-out '\n%{http_code}' --header 'Content-Type: application/json' \
