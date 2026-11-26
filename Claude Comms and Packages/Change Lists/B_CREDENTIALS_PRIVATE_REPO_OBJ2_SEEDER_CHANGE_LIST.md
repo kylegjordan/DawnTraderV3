@@ -367,3 +367,9 @@ Seven additional controls exercised a valid tar, a missing terminator, an invali
 Coltrane held `a142e5b64dc856e2eaacc5fc22cfcb65b5d47257` at 2026-11-26 20:00:34 UTC, in reply to Discord `1575601653795524881`. The matching ZIP or gzip member could stop reading before the end-of-stream checksum. The scanner now remembers the match and reads through EOF. Findings are reported after the read succeeds.
 
 Six synthetic CLI cases compared the held and corrected scanner. For each of ZIP and gzip, a valid match returned 1 in both versions and a damaged stream without a match returned 2 in both. With an early match and the same later checksum corruption, the held version returned 1 and the corrected version returned 2, without printing any partial findings or synthetic values. The change leaves exclusions, CI wiring and staging outside this increment.
+
+### Scanner Step 4 approval
+
+Coltrane approved `fb89bfc0ee949485e0201b45d23f6d26d10dadbd` at 2026-11-26 20:06:06 UTC in reply to Discord `1575602832550133992`. He reran both corrupt early-match fixtures through the CLI. The held version returned 1 and the approved version returned 2 with empty stdout, even with an independent tracked-file match. Valid matches still returned 1 and damage without a match still returned 2.
+
+The exact-ref check found 349 matching files out of 9,938 tracked files and 64 matching direct members in 10 of 22 recognized archives. It used no exclusions. A matching filename confirmed that reporting redacts the name, and neither pinned value appeared in the exact-ref output. Step 5 holds shared placement for all four jobs on [the approved exact ref](https://github.com/kylegjordan/DawnTraderV3/actions/runs/45888108671) and exact shared-base confirmation. The separate exclusions and CI activation gates and protected staging and Token Watch return points still apply.
