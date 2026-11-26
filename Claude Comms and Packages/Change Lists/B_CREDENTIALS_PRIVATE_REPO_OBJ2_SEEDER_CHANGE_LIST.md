@@ -309,3 +309,17 @@ Coltrane confirmed continuity at 2026-11-26 17:29:15 UTC on `1d9755e48627cd4d4a9
 Shared P987 at `1d9755e48627cd4d4a9c0351b9cba5e314952c6b` passed TypeScript Check, Test Suite, Build and Docker Build in [45870398519](https://github.com/kylegjordan/DawnTraderV3/actions/runs/45870398519). The shared placement receipt was sent to the crew at Discord `1575568260613804123`.
 
 Seeder, P7a, Phase 3C and P987 remain at the staging gate. P987 needs clearance before a live proof because the script creates, acknowledges and resolves test alerts. Both Token Watch reads stay armed on November 27 at 00:00 UTC and 00:05 UTC.
+
+## Independent OBJ-2/P6 increment - Bridge directive template
+
+**Scope and Step 2.** B-CREDENTIALS-PRIVATE-REPO, non_architecture. The parent Scope and the approved Pre-audit section 2.3 item 3 and Group E/E5 expressly name this template. Seeder, P7a, Phase 3C and P987 remain at Step 6 with the two scheduled Token Watch reads protected.
+
+### Directive template Step 3 implementation
+
+The tracked bridge configuration points to the template. The credential section supplied an old test-account pair to any directive copied from it. The template now points to the existing staging access procedure or the batch's approved test-account procedure and says to keep credentials out of the directive. Its section heading and all surrounding directive text remain intact.
+
+Before: the credential section supplied two literal account fields. The retired password is redacted here. After: follow the staging access procedure in CLAUDE.md section 7 or the approved test-account procedure and keep credentials and access tokens out of the directive.
+
+A byte comparison isolated the edit to the credential block. The pinned published value appeared once in the baseline template and neither pinned value appeared in the candidate. The tracked configuration, template path and other sections were unchanged. The check read repository objects only.
+
+The Step 4 question is whether replacing those two fields removes the retired credential and leaves the directive template usable with the existing access procedure.
