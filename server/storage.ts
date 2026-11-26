@@ -187,6 +187,7 @@ import {
 } from "@shared/schema";
 import { db } from "./db";
 import { PaperEntryDrainIncomplete, paperEntryPublication } from './services/paper-entry-publication.js';
+import type { PaperMakerRefusalEvidence } from './core/trading/paper-maker-refusal-evidence.js';
 import { eq, desc, asc, and, gte, gt, lte, inArray, sql, isNotNull, isNull } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { NON_OUTCOME_CLOSE_REASONS, BOOKED_CLOSE_REASONS } from "./services/trade-close-reason";
@@ -241,15 +242,98 @@ function paperXstockPositionKey(position: PaperXstockPositionKey, tradeId: strin
   );
 }
 
-type PaperXstockPendingMakerTransition =
+type PaperXstockPendingMakerTransition = (
   | {
       kind: 'fill';
       currentPrice: string;
       proof: Extract<PaperXstockEntryFill, { method: 'maker' }>;
       stamp: Pick<ClosedTrade, 'entryPriceProducer' | 'entryPriceSource' | 'entryObservedAtMs' | 'entryDecisionPrice' | 'entryBookAgeMs'>;
       observedAgeMs: number | null;
+      side: 'buy' | 'sell';
     }
-  | { kind: 'cancel'; reason: string };
+  | { kind: 'cancel'; reason: string; evaluatedAtMs?: number }
+) & { refusalEvidence?: PaperMakerRefusalEvidence };
+
+type PaperCryptoPendingMakerTransition = (
+  | (Pick<Extract<PaperXstockPendingMakerTransition, { kind: 'fill' }>, 'kind' | 'currentPrice' | 'stamp' | 'observedAgeMs'> & {
+      tradeId: string;
+      evaluatedAtMs: number;
+      quoteArrivedAtMs: number | null;
+      side: 'buy' | 'sell';
+    })
+  | { kind: 'cancel'; reason: string; evaluatedAtMs?: number }
+) & { refusalEvidence?: PaperMakerRefusalEvidence };
+
+type PaperCryptoPendingMakerResult =
+  | { status: 'committed'; tradeId: string }
+  | { status: 'not_pending' }
+  | { status: 'unresolved'; reason: string };
+
+type PaperCryptoPendingMakerPosition = Pick<ActiveOpenPosition, 'id' | 'symbol' | 'quantity' | 'metadata'>;
+type PaperMakerPlacementPosition = Pick<ActiveOpenPosition,
+  'id' | 'symbol' | 'quantity' | 'mode' | 'assetClass' | 'state' | 'makerPlacedAt' | 'makerDeadline' | 'makerLimitPrice'>;
+
+const paperMakerTerminalPosition = {
+  id: activeOpenPositions.id, makerPlacedAt: activeOpenPositions.makerPlacedAt,
+  makerDeadline: activeOpenPositions.makerDeadline,
+};
+
+function positionTradeId(metadata: ActiveOpenPosition['metadata']): string | null {
+  const id = (metadata as Record<string, unknown> | null)?.tradeId;
+  return typeof id === 'string' && id.length > 0 ? id : null;
+}
+
+function makerAuditTime(value: number | null | undefined): number | null {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : null;
+}
+
+function linkedMakerTerminal(
+  positionId: string,
+  outcome: 'fill' | 'cancel',
+  evaluatedAt: number | undefined,
+  crossing?: { quoteArrivedAtMs: number | null; side: 'buy' | 'sell' },
+  refusalEvidence?: PaperMakerRefusalEvidence,
+) {
+  const evaluatedAtMs = makerAuditTime(evaluatedAt);
+  const quoteArrivedAtMs = makerAuditTime(crossing?.quoteArrivedAtMs);
+  const hasTiming = evaluatedAtMs !== null && (outcome === 'cancel' || quoteArrivedAtMs !== null);
+  return {
+    version: 1, positionId, outcome, link: 'linked', evaluatedAtMs,
+    ...(crossing ? { quoteArrivedAtMs, quoteSide: crossing.side === 'buy' ? 'ask' : 'bid' } : {}),
+    ...(hasTiming ? {} : { timing: 'unknown' }),
+    ...(refusalEvidence ? { refusalEvidence } : {}),
+  };
+}
+
+function terminalMakerRefusal(
+  pending: Pick<ActiveOpenPosition, 'id' | 'makerPlacedAt' | 'makerDeadline'>,
+  metadata: ClosedTrade['metadata'],
+  evidence?: PaperMakerRefusalEvidence,
+): PaperMakerRefusalEvidence | undefined {
+  if (!evidence || pending.makerPlacedAt?.getTime() !== evidence.placedAtMs
+    || pending.makerDeadline?.getTime() !== evidence.deadlineAtMs) return;
+  const prior = (metadata as { paperMakerRefusal?: PaperMakerRefusalEvidence & { positionId: string } } | null)?.paperMakerRefusal;
+  if (!prior) return evidence.recovered ? undefined : evidence;
+  if (prior.positionId !== pending.id) return;
+  if (prior.epochId === evidence.epochId) {
+    if (!Number.isSafeInteger(prior.sample?.slot) || prior.sample.slot >= evidence.sample.slot) return;
+    const allowance = Math.min(1_000, evidence.periodMs / 4);
+    if (evidence.recovered) {
+      const last = prior.refusing?.last;
+      if (!last || prior.refusing?.first?.slot !== evidence.recovered.first.slot
+        || !Number.isSafeInteger(last.slot) || last.slot > evidence.recovered.last.slot
+        || !Number.isFinite(last.wallAtMs) || last.wallAtMs <= evidence.deadlineAtMs + allowance) return;
+    }
+    return evidence;
+  }
+  // An older epoch cannot supply the committed boundary for a recovered span.
+  if (!evidence.recovered && prior.epochAnchorAtMs < evidence.epochAnchorAtMs) return evidence;
+}
+
+async function lockOpenTradeRecord(executor: Pick<typeof db, 'execute'>, mode: TradingMode, symbol: string, assetClass: string) {
+  await executor.execute(sql`SELECT pg_advisory_xact_lock_shared(hashtext(${`engine-reset:${mode}`}))`);
+  await executor.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`open-record:${mode}:${symbol}:${assetClass}`}))`);
+}
 
 // B-CLOSE-WRITER-COSTS P-15 (C-4, C-10, C-13): the "not a trade outcome" rule, ONE source. Every SQL reader that
 // excluded `never_filled` by a hand-written literal now binds the list DERIVED from `TRADE_CLOSE_REASON_CLASS`, so
@@ -609,6 +693,12 @@ export interface IStorage {
     tradeId: string,
     change: PaperXstockPendingMakerTransition,
   ): Promise<boolean>;
+  transitionPaperCryptoPendingMaker(
+    position: PaperCryptoPendingMakerPosition,
+    change: PaperCryptoPendingMakerTransition,
+  ): Promise<PaperCryptoPendingMakerResult>;
+  recordPaperMakerPlacement(position: PaperMakerPlacementPosition, tradeId: string): Promise<boolean>;
+  recordPaperMakerRefusal(position: PaperMakerPlacementPosition, tradeId: string, evidence: PaperMakerRefusalEvidence): Promise<boolean>;
   closePaperXstockTrade(
     trade: PaperXstockTradeKey,
     position: PaperXstockPositionKey | null,
@@ -3255,6 +3345,13 @@ export class DatabaseStorage implements IStorage {
     // callers, all passing a correct mode; B-CLOSE-WRITER-COSTS P-12 added the second,
     // `restoreOpenTradeRecordForPosition`, the atomic restore, which also stamps `mode`).
     const normalizedTrade = { ...trade, symbol: canonicalSymbol, mode };
+    if (mode === 'paper' && trade.assetClass === 'crypto_spot' && trade.closedAt == null) {
+      return db.transaction(async (tx) => {
+        await lockOpenTradeRecord(tx, mode, canonicalSymbol, trade.assetClass);
+        const [result] = await tx.insert(closedTradesTable).values(normalizedTrade).returning();
+        return result;
+      });
+    }
     const [result] = await db.insert(closedTradesTable).values(normalizedTrade).returning();
     return result;
   }
@@ -3279,7 +3376,7 @@ export class DatabaseStorage implements IStorage {
         eq(closedTradesTable.chosenEntryMode, 'maker'),
         isNull(closedTradesTable.closedAt),
       );
-      const [trade] = await tx.select({ id: closedTradesTable.id })
+      const [trade] = await tx.select({ id: closedTradesTable.id, metadata: closedTradesTable.metadata })
         .from(closedTradesTable).where(tradeKey).for('update');
       if (!trade) return false;
       const positionKey = and(
@@ -3290,16 +3387,23 @@ export class DatabaseStorage implements IStorage {
       const [changed] = change.kind === 'fill'
         ? await tx.update(activeOpenPositions)
             .set({ state: 'open', currentPrice: change.currentPrice, lastUpdated: now })
-            .where(positionKey).returning({ id: activeOpenPositions.id })
-        : await tx.delete(activeOpenPositions).where(positionKey).returning({ id: activeOpenPositions.id });
+            .where(positionKey).returning(paperMakerTerminalPosition)
+        : await tx.delete(activeOpenPositions).where(positionKey).returning(paperMakerTerminalPosition);
       if (!changed) return false;
 
+      const refusal = terminalMakerRefusal(changed, trade.metadata, change.refusalEvidence);
       const patch = change.kind === 'fill'
         ? {
             paperXstockEntryFill: change.proof,
+            paperMakerTerminal: linkedMakerTerminal(position.id, 'fill', change.proof.filledAtMs, {
+              quoteArrivedAtMs: change.proof.quoteArrivedAtMs, side: change.side,
+            }, refusal),
             ...(change.observedAgeMs === null ? {} : { entryObservedAgeMs: change.observedAgeMs }),
           }
-        : { neverFilledReason: change.reason };
+        : {
+            neverFilledReason: change.reason,
+            paperMakerTerminal: linkedMakerTerminal(position.id, 'cancel', change.evaluatedAtMs, undefined, refusal),
+          };
       const update: ClosedTradeWrite<Partial<ClosedTrade>> = change.kind === 'fill'
         ? change.stamp
         : {
@@ -3313,6 +3417,153 @@ export class DatabaseStorage implements IStorage {
       }).where(tradeKey).returning({ id: closedTradesTable.id });
       if (!written) throw new Error(`Pending maker trade ${tradeId} changed during its position transition`);
       return true;
+    });
+  }
+
+  async recordPaperMakerPlacement(position: PaperMakerPlacementPosition, tradeId: string): Promise<boolean> {
+    const { assetClass, id: positionId, quantity } = position;
+    if (position.mode !== 'paper' || position.state !== 'pending'
+      || (assetClass !== 'crypto_spot' && assetClass !== 'xstock_spot')) return false;
+
+    const symbol = normalizeToInternalSymbol(position.symbol);
+    const { makerLimitPrice } = position;
+    const limit = Number(makerLimitPrice);
+    const patch = { paperMakerPlacement: {
+      version: 1, tradeId, positionId, mode: 'paper', assetClass, symbol,
+      makerPlacedAtMs: makerAuditTime(position.makerPlacedAt?.getTime()),
+      makerDeadlineAtMs: makerAuditTime(position.makerDeadline?.getTime()),
+      limitPrice: Number.isFinite(limit) && limit > 0 ? makerLimitPrice : null,
+    } };
+    const pending = db.select({ id: activeOpenPositions.id }).from(activeOpenPositions).where(and(
+      eq(activeOpenPositions.id, positionId), eq(activeOpenPositions.mode, 'paper'), eq(activeOpenPositions.assetClass, assetClass),
+      eq(activeOpenPositions.symbol, symbol), eq(activeOpenPositions.quantity, quantity), eq(activeOpenPositions.state, 'pending'),
+      sql`${activeOpenPositions.metadata}->>'tradeId' = ${tradeId}`,
+    ));
+    const [written] = await db.update(closedTradesTable).set({
+      metadata: sql`COALESCE(${closedTradesTable.metadata}, '{}'::jsonb) || ${JSON.stringify(patch)}::jsonb`,
+    }).where(and(
+      eq(closedTradesTable.id, tradeId), eq(closedTradesTable.mode, 'paper'), eq(closedTradesTable.assetClass, assetClass),
+      eq(closedTradesTable.symbol, symbol), eq(closedTradesTable.quantity, quantity),
+      eq(closedTradesTable.chosenEntryMode, 'maker'), isNull(closedTradesTable.closedAt),
+      sql`NOT (COALESCE(${closedTradesTable.metadata}, '{}'::jsonb) ? 'paperMakerPlacement')`,
+      // A queued update rechecks this trade row even if its pending-position snapshot is stale.
+      sql`NOT (COALESCE(${closedTradesTable.metadata}, '{}'::jsonb) ? 'paperMakerTerminal')`,
+      sql`EXISTS (${pending})`,
+    )).returning({ id: closedTradesTable.id });
+    return Boolean(written);
+  }
+
+  async recordPaperMakerRefusal(
+    position: PaperMakerPlacementPosition,
+    tradeId: string,
+    evidence: PaperMakerRefusalEvidence,
+  ): Promise<boolean> {
+    const { assetClass, id: positionId, quantity } = position;
+    if (position.mode !== 'paper' || position.state !== 'pending'
+      || (assetClass !== 'crypto_spot' && assetClass !== 'xstock_spot')) return false;
+    if (makerAuditTime(position.makerPlacedAt?.getTime()) !== evidence.placedAtMs
+      || makerAuditTime(position.makerDeadline?.getTime()) !== evidence.deadlineAtMs) return false;
+
+    const symbol = normalizeToInternalSymbol(position.symbol);
+    const pending = db.select({ id: activeOpenPositions.id }).from(activeOpenPositions).where(and(
+      eq(activeOpenPositions.id, positionId), eq(activeOpenPositions.mode, 'paper'), eq(activeOpenPositions.assetClass, assetClass),
+      eq(activeOpenPositions.symbol, symbol), eq(activeOpenPositions.quantity, quantity), eq(activeOpenPositions.state, 'pending'),
+      eq(activeOpenPositions.makerPlacedAt, new Date(evidence.placedAtMs)),
+      eq(activeOpenPositions.makerDeadline, new Date(evidence.deadlineAtMs)),
+      sql`${activeOpenPositions.metadata}->>'tradeId' = ${tradeId}`,
+    ));
+    const oldEvidence = sql`(${closedTradesTable.metadata}->'paperMakerRefusal')`;
+    const patch = { paperMakerRefusal: { ...evidence, positionId, tradeId } };
+    const [written] = await db.update(closedTradesTable).set({
+      metadata: sql`COALESCE(${closedTradesTable.metadata}, '{}'::jsonb) || ${JSON.stringify(patch)}::jsonb`,
+    }).where(and(
+      eq(closedTradesTable.id, tradeId), eq(closedTradesTable.mode, 'paper'), eq(closedTradesTable.assetClass, assetClass),
+      eq(closedTradesTable.symbol, symbol), eq(closedTradesTable.quantity, quantity),
+      eq(closedTradesTable.chosenEntryMode, 'maker'), isNull(closedTradesTable.closedAt),
+      sql`NOT (COALESCE(${closedTradesTable.metadata}, '{}'::jsonb) ? 'paperMakerTerminal')`,
+      sql`(${oldEvidence} IS NULL OR (
+        ${oldEvidence}->>'positionId' = ${positionId} AND (
+          (${oldEvidence}->>'epochId' = ${evidence.epochId}
+            AND jsonb_typeof(${oldEvidence}#>'{sample,slot}') = 'number'
+            AND ${oldEvidence}#>'{sample,slot}' < to_jsonb(${evidence.sample.slot}::bigint))
+          OR (${oldEvidence}->>'epochId' <> ${evidence.epochId}
+            AND jsonb_typeof(${oldEvidence}->'epochAnchorAtMs') = 'number'
+            AND ${oldEvidence}->'epochAnchorAtMs' < to_jsonb(${evidence.epochAnchorAtMs}::bigint))
+        )
+      ))`,
+      sql`EXISTS (${pending})`,
+    )).returning({ id: closedTradesTable.id });
+    return Boolean(written);
+  }
+
+  async transitionPaperCryptoPendingMaker(
+    position: PaperCryptoPendingMakerPosition,
+    change: PaperCryptoPendingMakerTransition,
+  ): Promise<PaperCryptoPendingMakerResult> {
+    const symbol = normalizeToInternalSymbol(position.symbol);
+    const pendingKey = and(
+      eq(activeOpenPositions.id, position.id), eq(activeOpenPositions.mode, 'paper'),
+      eq(activeOpenPositions.assetClass, 'crypto_spot'), eq(activeOpenPositions.symbol, position.symbol),
+      eq(activeOpenPositions.quantity, position.quantity), eq(activeOpenPositions.state, 'pending'),
+    );
+
+    return db.transaction(async (tx) => {
+      // The restore and ordinary insert use the same reset/key lock order. The locked position owns the current link.
+      await lockOpenTradeRecord(tx, 'paper', symbol, 'crypto_spot');
+      const [pending] = await tx.select({ metadata: activeOpenPositions.metadata })
+        .from(activeOpenPositions).where(pendingKey).for('update');
+      if (!pending) return { status: 'not_pending' };
+
+      const linkedId = positionTradeId(pending.metadata);
+      const expectedId = change.kind === 'fill' ? change.tradeId : positionTradeId(position.metadata);
+      if (expectedId !== null && expectedId !== linkedId) {
+        return { status: 'unresolved', reason: 'its expected trade link no longer matches the pending position' };
+      }
+      const tradeKey = and(
+        eq(closedTradesTable.mode, 'paper'), eq(closedTradesTable.assetClass, 'crypto_spot'),
+        eq(closedTradesTable.symbol, symbol), isNull(closedTradesTable.closedAt),
+        linkedId === null ? undefined : and(eq(closedTradesTable.id, linkedId), eq(closedTradesTable.quantity, position.quantity)),
+      );
+      const candidates = await tx.select({ id: closedTradesTable.id, metadata: closedTradesTable.metadata }).from(closedTradesTable)
+        .where(tradeKey).limit(2).for('update');
+      if (candidates.length !== 1) {
+        return { status: 'unresolved', reason: candidates.length === 0 ? 'its open trade does not match the pending position'
+          : 'more than one open trade matches its symbol, mode and asset class' };
+      }
+      const tradeId = candidates[0].id;
+      const now = new Date();
+      const [changed] = change.kind === 'fill'
+        ? await tx.update(activeOpenPositions).set({ state: 'open', currentPrice: change.currentPrice, lastUpdated: now })
+            .where(pendingKey).returning(paperMakerTerminalPosition)
+        : await tx.delete(activeOpenPositions).where(pendingKey).returning(paperMakerTerminalPosition);
+      if (!changed) return { status: 'not_pending' };
+
+      const evidence = linkedId === null ? {
+        version: 1, positionId: position.id, outcome: 'cancel', timing: 'unknown', refusal: 'unknown', link: 'legacy_unique',
+      } : linkedMakerTerminal(position.id, change.kind, change.evaluatedAtMs, change.kind === 'fill' ? change : undefined,
+        terminalMakerRefusal(changed, candidates[0].metadata, change.refusalEvidence));
+      const pendingMetadata = pending.metadata as Record<string, unknown> | null;
+      const patch = change.kind === 'fill'
+        ? { paperMakerTerminal: evidence, ...(change.observedAgeMs === null ? {} : { entryObservedAgeMs: change.observedAgeMs }) }
+        : {
+            ...Object.fromEntries(['highWaterMark', 'expectancyScore', 'expectancyEV', 'atr_at_open', 'di_at_open',
+              'vol_noise_at_open', 'regimeAtOpen'].filter((key) => Object.hasOwn(pendingMetadata ?? {}, key))
+              .map((key) => [key, pendingMetadata?.[key]])),
+            tradeId, neverFilledReason: change.reason, paperMakerTerminal: evidence,
+          };
+      const update: ClosedTradeWrite<Partial<ClosedTrade>> = change.kind === 'fill'
+        ? change.stamp
+        : {
+            closedAt: now, closeReason: 'never_filled', exitPrice: null,
+            fees: '0', slippage: '0', entryFee: '0', exitFee: '0', totalFee: '0', entrySlippage: '0', exitSlippage: '0',
+            totalCost: '0', grossPnl: '0', netPnl: '0', netPnlPercent: '0',
+          };
+      const [written] = await tx.update(closedTradesTable).set({
+        ...update,
+        metadata: sql`COALESCE(${closedTradesTable.metadata}, '{}'::jsonb) || ${JSON.stringify(patch)}::jsonb`,
+      }).where(and(tradeKey, eq(closedTradesTable.id, tradeId))).returning({ id: closedTradesTable.id });
+      if (!written) throw new Error(`Pending crypto maker trade ${tradeId} changed during its position transition`);
+      return { status: 'committed', tradeId };
     });
   }
 
@@ -3882,8 +4133,7 @@ export class DatabaseStorage implements IStorage {
     );
     return await db.transaction(async (tx) => {
       // Take the mode lock before the per-symbol and row locks. A reset must see either the complete link or no restore.
-      await tx.execute(sql`SELECT pg_advisory_xact_lock_shared(hashtext(${`engine-reset:${mode}`}))`);
-      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`open-record:${mode}:${canonicalSymbol}:${assetClass}`}))`);
+      await lockOpenTradeRecord(tx, mode, canonicalSymbol, assetClass);
       const [current] = await tx.select().from(activeOpenPositions).where(positionKey).for('update');
       if (!current) return { status: 'position_missing' as const };
       const open = await tx.select({ id: closedTradesTable.id })

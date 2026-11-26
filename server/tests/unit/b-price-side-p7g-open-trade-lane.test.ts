@@ -71,7 +71,7 @@ describe('P-7g — bucket membership is the union of independent reasons', () =>
 describe('P-7g — the engine reconciles openTrade from the symbols it holds (source fence)', () => {
   it('6. checkOpenPositions reconciles openTrade per mode, crypto only, right after reading open positions', () => {
     const src = readFileSync(resolve(__dirname, '../../services/active-execution-engine.ts'), 'utf-8');
-    const start = src.indexOf('private async checkOpenPositions(): Promise<void> {');
+    const start = src.indexOf('private async checkOpenPositions(');
     expect(start).toBeGreaterThan(-1);
     const body = src.slice(start, start + 4000);
     const readAt = body.indexOf('await storage.getActiveOpenPositions(this.mode)');

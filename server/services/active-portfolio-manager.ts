@@ -10,6 +10,7 @@ import type { StrategySignal } from './strategy-engine';
 import { i1TradeLifecycleDiagnostics } from './i1-trade-lifecycle-diagnostics.js';
 import { livePricingAdapter, type PriceProducer } from './live-pricing-adapter.js';
 import type { FlattenCloseType } from './active-execution-engine';
+import { normalizeToInternalSymbol } from '../markets/kraken-symbol-resolver.js';
 
 type FlattenPosition = Pick<ActiveOpenPosition, 'id' | 'symbol' | 'quantity' | 'assetClass' | 'state' | 'metadata'>;
 type FlattenOutcome = {
@@ -399,6 +400,20 @@ export class ActivePortfolioManager {
         return dropped.success
           ? { status: 'closed', committed: true, closeReason: 'never_filled', reason: 'pending maker cancelled unfilled' }
           : this.readPaperXstockFlattenOutcome(position, `pending maker not dropped: ${dropped.error}`);
+      }
+      if (this.mode === 'paper' && position.assetClass === 'crypto_spot') {
+        if (dropped.success) {
+          return { status: 'closed', committed: true, closeReason: 'never_filled', reason: 'pending maker cancelled unfilled' };
+        }
+        const remaining = await storage.getActiveOpenPosition('paper', position.id);
+        const tradeId = (position.metadata as { tradeId?: string } | null)?.tradeId;
+        const trade = !remaining && typeof tradeId === 'string' && tradeId
+          ? await storage.getClosedTrade('paper', tradeId) : undefined;
+        if (trade?.closedAt && trade.mode === 'paper' && trade.assetClass === 'crypto_spot'
+          && trade.symbol === normalizeToInternalSymbol(position.symbol) && trade.quantity === position.quantity) {
+          return { status: 'closed', committed: false, closeReason: trade.closeReason, reason: trade.closeReason ?? 'already closed' };
+        }
+        return { status: 'left_open', committed: false, reason: `pending maker not dropped: ${dropped.error}` };
       }
       if (!dropped.success) return { status: 'failed', reason: `pending maker not dropped: ${dropped.error}` };
       const stillThere = await storage.getActiveOpenPosition(this.mode, position.id);
