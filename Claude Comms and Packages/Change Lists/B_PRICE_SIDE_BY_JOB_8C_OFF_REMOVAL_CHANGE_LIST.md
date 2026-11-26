@@ -162,3 +162,19 @@ Coordination in Discord on November 25. OLD `1575113736723898369`, NEW `15751137
 - Governed deploy started at 02:31:43.859 UTC. It applied exactly the two pending migrations above in 951 ms. Actual process restart was **02:32:06.222 UTC**, PID 235604, restart 716. The successful deploy record at **02:32:16 UTC** names exact A `5ecd7ee24fb7a741e8e015e0e6a262a464e7d016`, actor claim `codex-c`, and engine resumed. The contiguous health-check failure window was 13 seconds.
 - The committed identity verifier passed with exact A and refused the deliberately wrong e3 SHA. Staging checkout was clean. The reviewed B census returned `PENDING_ON`, proving the exact four crypto rows including the ON switch and zero Phase B migration ledger entries. This is the Phase A cutover proof.
 - Sent the deploy, actual restart time and exact pre-counts to OLD, NEW, INFRA and PM via `1575338499127640085`. NEW owns its post-readback. OLD owns the natural 03:00 UTC refresh and the explicit release before any second restart. Phase B awaits that release and its separate staging and shared CI gates. The ongoing xStock incident remains an event wait. At 02:33:07 UTC the first sampled new-generation minute contained 469 snapshot frames and zero update frames, so Phase A supplies no evidence of exit-pricing recovery.
+
+### Original NEW preflight capture and retention limit
+
+Original stdout from the November 26 immediate preflight (execution chunk `1e1bfc`, exit 0):
+
+```jsonl
+{"phase": "immediate", "read_utc": "2026-11-26T02:31:30.293057+00:00", "manifest": 226, "ledger": 227, "pending": ["2026-11-22-b-alert-orphan-rows.sql", "2026-11-22-b-universe-refresh-acts.sql"]}
+{"phase": "immediate", "c2_tracked": 12, "c2_live": 12, "c2_match": true}
+{"phase": "immediate", "total": 5936, "orphans": 12, "users": 3, "post_expected_total": 5924, "at_utc": "2026-11-26T02:31:33.848808+00:00"}
+```
+
+On exact A `5ecd7ee24fb7a741e8e015e0e6a262a464e7d016`, C-2 read the generator from the header of `drizzle/migrations/2026-11-22-b-alert-orphan-rows-rollback.sql`, blob `eca6c17dec44a63df2687a57872971e9ef0dc5b3`. Through `dt-sql --csv` it checked the `format` header and one field per row, normalized CRLF to LF, and compared the ordered returned statements to the twelve checked-in inserts in that blob. The aggregate read checked the `total,orphans,users` CSV shape and required that the orphan count equal the tracked statement count, with linked alerts and users present.
+
+The three lines are the complete retained output. The original SQL responses were consumed in the preflight process and discarded on exit. The tracked rollback blob supplies the expected generator and inserts for comparison. The original twelve live generator rows and the raw aggregate CSV are unavailable. This is the evidence supplied to NEW for Coltrane's 03:07:48 UTC Step 8 ruling.
+
+At 03:11:33 UTC Coltrane retained the restart fence on the serving Phase A process, restart 716. OLD owns the remaining exact symbol-set and subscription transition proof, and must explicitly release the fence. Phase B still awaits that release.
