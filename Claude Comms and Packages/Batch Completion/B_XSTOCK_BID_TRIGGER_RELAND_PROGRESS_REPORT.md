@@ -308,6 +308,32 @@ Four overnight forced reconnects occurred from 01:30:38 through 02:09:39 UTC. Th
 
 **02:33 UTC check after the Phase A restart:** all eleven escalation IDs, reconnect `186e8711` and venue-quiet `e80d1129` were still active and unacknowledged. The last observed forced reconnect in the old process was at 02:22:39 UTC. The new process's 02:33:07 UTC sample recorded 469 snapshot frames and zero update frames in one minute. The event-wait disposition still applies.
 
+### 03:41 UTC queue follow-up
+
+The relay named fourteen in its summary and supplied fifteen distinct warning IDs. The exact alert-ledger read at 03:43:31 UTC found all fifteen active and unacknowledged, each fired at 03:12:11.486 UTC. The exact-position join at 03:43:47 UTC found all fifteen still open long in paper mode. Each last stored monitor price predates its warning. The distances below use each position's own stop as the denominator and refer to historical monitor prices.
+
+| xStock | Current warning | Last stored monitor price vs stop |
+|---|---|---:|
+| PGR/USD | `ec23424d-aa0f-403e-88cf-d2918e13e414` | +0.40% |
+| UL/USD | `486c8c63-a85d-4f09-8876-79cf0d00f20f` | +1.43% |
+| PPL/USD | `149a79cc-ae05-4baf-b944-5d09e11cc638` | +0.62% |
+| MGM/USD | `6ae46eeb-2d82-41e6-8337-f7043a13c1e5` | +4.20% |
+| HPQ/USD | `56abe9db-7137-4cfb-a5c7-f17184ac8af6` | +8.57% |
+| TGT/USD | `10f63ba7-ac48-42a0-ae7e-4627e7ef3348` | +7.97% |
+| EWL/USD | `19cb1ad4-2a5c-4985-975f-f2aa867ac1ed` | +1.60% |
+| CME/USD | `e6aff68c-d7bc-43e0-9c14-803a3c98de3d` | +0.81% |
+| PCG/USD | `aeef117d-e114-4c42-95f0-78c23a5d9e0a` | +1.54% |
+| AZN/USD | `1ccb364b-ea31-4150-8263-678ec1638020` | +1.33% |
+| BAX/USD | `449be4e3-0b09-4d1f-b3dd-1ee1a9adb46a` | +2.86% |
+| CARR/USD | `342c7eab-4725-4215-999b-577fadede52e` | +5.07% |
+| NVO/USD | `a1f038be-0111-4604-aa94-9b6e34b94b86` | +3.47% |
+| XBI/USD | `ad01c6db-7e73-4dec-93a7-07e0c6da5923` | +3.97% |
+| TJX/USD | `ea444ec9-b43f-4d7f-ae03-c4978464d29c` | +7.60% |
+
+The exit monitor resolved the earlier eleven warnings at 03:02:23–28 UTC as `SUPERSEDED-BY-DURATION-PAGE`. Each of those eleven position IDs also appears in this generation. The other four are MGM, HPQ, NVO and XBI. The supersession marker records replacement of the warning. The paper exit still awaits a usable price or closure for each named position.
+
+The staging equity recorder saw a silent stall at 03:37:07 UTC, reconnected at 03:37:08, and replayed 469 snapshots with zero update frames in its 03:38:07 sample. At 03:43:07 it still counted zero symbols with updates in the prior 60 seconds, compared with 467 in the same feed counter at 20:01:04 UTC the prior day. Both the reconnect alert `186e8711` and the venue-quiet alert `e80d1129` remain active and unacknowledged. Keep all fifteen warnings visible for the exit monitor to clear and preserve the existing price-freshness rules. This read leaves the Phase B restart fence in effect. At the check the serving process still identified exact A, PID 235604 and restart 716.
+
 ## 4. PRE-REGISTERED close criteria (written before the data)
 **(4a), objective 11 — WINDOW: the first three full weekday US regular sessions after the deploy (2026-10-19, 10-20, 10-21).** Quoted from the pre-audit (r5e, Langston's reading): *"crossings conserved against A3 · joins taking the too_wide/quiet share · pagesAttempted falling · `dedupeHits == 0` as a SEPARATE tripwire, never a term (non-zero = FAIL)."* Also PASS requires `markMissedRowMarks` near zero and zero `no-trigger-vts-*` rows resolved by `cli`. **FAIL:** any `no_usable_mark` or isolated-staleness crossing that joins instead of paging; minted down with `dedupeHits` up; or `alertFileBytes` growing faster than ~1 MB/day. Source: the `[VTS_RAIL][SWEEP]` lines (cumulative since start).
 **Objective 6 — S6 (the stop-hold cost) — QUANTITY WINDOW: the first `spread_blown` refused tick with the bid at or below the stop.** PASS: `spreadBlownFirstStopRefusedBid` and `spreadBlownStopHeldMs` are populated for that position and its release or close records the bid against the stop. Until then S6 is **UNEXERCISED** and no silence may be cited as a pass (Langston, Step 8).
