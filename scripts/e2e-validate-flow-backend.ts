@@ -21,6 +21,15 @@ import { db } from '../server/db';
 import { eq, sql } from 'drizzle-orm';
 import { guardrailsV2, portfolioState, trades, telemetryLineage } from '../shared/schema';
 
+const login = {
+  username: process.env.TEST_USER_EMAIL,
+  password: process.env.TEST_USER_PASSWORD,
+};
+
+if (!login.username || !login.password) {
+  throw new Error('Set TEST_USER_EMAIL and TEST_USER_PASSWORD for an existing test account before running backend validation.');
+}
+
 const BASE_URL = process.env.BASE_URL || 'http://localhost:5000';
 const REPORT_DIR = resolve(process.cwd(), 'diagnostic-reports');
 const LINEAGE_PATH = resolve(REPORT_DIR, 'phase-41F-L.E2E-VALIDATE-FLOW.ndjson');
@@ -108,6 +117,7 @@ class E2EValidator {
     try {
       // Phase 1: Authentication
       await this.validateAuthentication();
+      if (!this.jwtToken) return this.result;
       
       // Phase 2: Mode-Level Configuration
       await this.validateModeConfiguration();
@@ -145,11 +155,7 @@ class E2EValidator {
     const startTime = Date.now();
 
     try {
-      // Test login with credentials
-      const loginResponse = await this.client.post('/api/auth/login', {
-        username: process.env.TEST_USER_EMAIL || 'testuser123',
-        password: process.env.TEST_USER_PASSWORD || 'SecurePass123!'
-      });
+      const loginResponse = await this.client.post('/api/auth/login', login);
 
       if (loginResponse.status === 200 && loginResponse.data?.token) {
         // Extract JWT token
@@ -158,7 +164,7 @@ class E2EValidator {
         this.client.defaults.headers.common['x-app-mode'] = 'paper';
 
         this.recordSuccess('Authentication successful');
-        this.result.metrics.username = loginResponse.data.user?.username || 'testuser123';
+        this.result.metrics.username = loginResponse.data.user?.username ?? login.username;
         this.logLineage({
           phase: 'AUTH',
           operation: 'login',

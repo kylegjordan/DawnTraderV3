@@ -14,7 +14,7 @@ export async function seedTestUser(): Promise<void> {
   }
 
   const testEmail = process.env.TEST_USER_EMAIL || "testuser@example.com";
-  const testPassword = process.env.TEST_USER_PASSWORD || "TestPass123!";
+  const testPassword = process.env.TEST_USER_PASSWORD /* historical fallback redacted */;
 
   try {
     // Check if test user already exists

@@ -5,7 +5,7 @@ import { test, expect } from '@playwright/test';
  * 
  * NOTE: These tests require:
  * 1. A running application (npm run dev)
- * 2. Admin credentials in environment or defaults
+ * 2. An existing admin test account, with TEST_USER_EMAIL and TEST_USER_PASSWORD configured
  * 3. Database with test data
  * 
  * Run with: npx playwright test e2e/config-snapshot.spec.ts
@@ -13,10 +13,15 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Config Snapshot Viewer - Phase 27.G E2E Tests', () => {
   test.beforeEach(async ({ page }) => {
+    const { TEST_USER_EMAIL: username, TEST_USER_PASSWORD: password } = process.env;
+    if (!username || !password) {
+      throw new Error('Set TEST_USER_EMAIL and TEST_USER_PASSWORD for an existing admin test account.');
+    }
+
     // Login as admin to access Developer tab
     await page.goto('/login');
-    await page.getByTestId('input-username').fill(process.env.TEST_USER_EMAIL || 'admin');
-    await page.getByTestId('input-password').fill(process.env.TEST_USER_PASSWORD || 'admin123');
+    await page.getByTestId('input-username').fill(username);
+    await page.getByTestId('input-password').fill(password);
     await page.getByTestId('button-login').click();
     
     // Wait for dashboard to load

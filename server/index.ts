@@ -533,10 +533,6 @@ app.use((req, res, next) => {
   const { resetRateLimiter } = await import('./startup/rate-limiter-reset');
   await resetRateLimiter();
 
-  // Seed test user for automated testing (non-production only)
-  const { seedTestUser } = await import('./startup/test-user-seeder');
-  await seedTestUser();
-
   // Phase 27.3: Initialize Permission Cache
   const { permissionCache } = await import('./services/permission-cache');
   await permissionCache.initialize();
