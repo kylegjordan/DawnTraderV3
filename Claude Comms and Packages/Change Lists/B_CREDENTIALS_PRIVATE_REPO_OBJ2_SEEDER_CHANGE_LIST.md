@@ -170,3 +170,49 @@ An equally bounded documentation-only advance may carry the same approval follow
 ### P7a Step 5 shared CI
 
 The exact confirmed P7a placement `ac8afdd5a20f69fa7d2b1c97f134ba6540af8572` landed from base `28036b4f997cc371fc25f5a7b5155a103aec2c53` after base run `45823250551` passed all four jobs and the complete placement diff matched the approved paths, modes and blobs. [Shared CI run 45825696290](https://github.com/kylegjordan/DawnTraderV3/actions/runs/45825696290) then passed TypeScript Check, Test Suite, Build and Docker Build at the exact placement. Return to the held P6 Step 6 staging boundary at clearance. The two November 27 Token Watch reads remain scheduled.
+
+## Independent OBJ-2/P6 increment - Phase 3C API benchmark
+
+**Scope and Step 2.** B-CREDENTIALS-PRIVATE-REPO, non_architecture. The same Scope, Pre-audit, Batch Catalog and Phase History rows above apply. The completion report is due at parent close. The approved Pre-audit section 2.3 item 3 and Appendix A Group E/E5 name this benchmark in the live credential cleanup. The preceding AMR audit is already governed by the B-DB-HELPER-RETIRE change at `40d06d366`.
+
+**Implementation.** The benchmark keeps its existing `USERNAME` and `PASSWORD` inputs and requires both before any HTTP request. Its sign-in route accepts a username or email. The benchmark accepts both existing token response fields and preserves their original preference. The trading-status and portfolio-overview reads use authenticated handlers. The benchmark keeps the same ten requests, order, CSV columns and 120 ms average threshold. Authentication failures leave any previous CSV intact and print a short error. The sign-in JSON and authorization header go to curl on stdin. The benchmark discards response bodies because its output uses only timing and status.
+
+Before, with the two historical fallback values omitted from the review record:
+
+```bash
+BASE_URL="${BASE_URL:-http://localhost:5000}"
+USERNAME="${USERNAME:-[omitted]}"
+PASSWORD="${PASSWORD:-[omitted]}"
+OUTPUT_FILE="logs/phase3c-api-latency.csv"
+
+# Clear previous results
+> "$OUTPUT_FILE"
+echo "endpoint,time_total_ms,http_code" >> "$OUTPUT_FILE"
+```
+
+After:
+
+```bash
+set -e -o pipefail
+
+: "${USERNAME:?Set USERNAME for the benchmark account}"
+: "${PASSWORD:?Set PASSWORD for the benchmark account}"
+
+# ...
+
+if ! TOKEN=$(
+  jq -cn '{username: env.USERNAME, password: env.PASSWORD}' |
+    curl -fsS --header 'Content-Type: application/json' --data-binary @- "$BASE_URL/api/auth/login" |
+    jq -ers 'select(length == 1) | .[0] | (.accessToken // .token) | strings |
+             select(length > 0 and (test("[\r\n]") | not))' 2>/dev/null
+); then
+  echo "❌ Authentication failed" >&2
+  exit 1
+fi
+```
+
+**Local verification.** Bash syntax passed. A local HTTP fixture drove the script with real curl and jq and a synthetic password containing quotes, a backslash and a line break. Each of the three success cases received the exact sign-in JSON and all ten benchmark requests in order, each with the correct authorization header. The cases were token only, accessToken only and both fields with distinct values. All ten CSV rows per case retained their HTTP status and timing, including the planted HTTP 503 on the last read. Both missing-setting cases made zero requests and preserved the previous CSV. All nine rejected sign-in cases stopped after one attempt and preserved the previous CSV. The controls were HTTP 401, HTTP 503 with an otherwise valid token, invalid JSON, missing token, null token, empty token, numeric token, a line break in the token and duplicate JSON responses. The curl-argument guard and captured output kept the synthetic sign-in values and response body out of both surfaces. The baseline fallbacks are absent from the candidate script.
+
+REVIEWER: claim-only · supplied caller sign-in and benchmark contract · HIT — the initial candidate lost the accessToken-only response · re-derived y, both previous names and their priority preserved.
+
+**Step 4 question.** Check the caller contract, the sign-in boundary and the unchanged benchmark result contract at the exact ref. The review scope is the Phase 3C source and its record. P6/P7a Step 6 waits for staging clearance. Both November 27 Token Watch reads stay armed.
