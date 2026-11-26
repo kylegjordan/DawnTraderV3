@@ -41,6 +41,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as crypto from 'node:crypto';
+import { applyVtsRefusalEvidence, type VtsRefusalEvent, type VtsRefusalEvidence } from '../core/trading/vts-refusal-evidence.js';
 
 // B-NEW-51: env-overridable for unit tests (defaults to the staging path —
 // SYSTEM_ALERTS_FILE is never set in staging/prod, so behavior is unchanged).
@@ -462,26 +463,39 @@ function ensureFileExists(): void {
   }
 }
 
-/**
- * Read all alerts from the file. Malformed lines are SKIPPED with a warning,
- * not aborted. If the file doesn't exist returns []. Used by readers (CLI list,
- * API GET, per-turn AI check).
- */
-export function readAllAlerts(): SystemAlert[] {
-  if (!fs.existsSync(ALERTS_FILE)) return [];
+const VTS_REFUSAL_RECORD = 'vts-refusal-evidence-v1';
+
+interface VtsRefusalStoreRecord extends SystemAlert {
+  recordType: typeof VTS_REFUSAL_RECORD;
+  refusals: VtsRefusalEvidence[];
+}
+
+interface AlertStore {
+  alerts: SystemAlert[];
+  vtsRefusals: Map<string, VtsRefusalEvidence>;
+  refusalRecord?: VtsRefusalStoreRecord;
+}
+
+function readAlertStore(): AlertStore {
+  const store: AlertStore = { alerts: [], vtsRefusals: new Map() };
+  if (!fs.existsSync(ALERTS_FILE)) return store;
   const raw = fs.readFileSync(ALERTS_FILE, 'utf-8');
   const lines = raw.split('\n').filter((l) => l.trim().length > 0);
-  const result: SystemAlert[] = [];
   let skipped = 0;
   for (const [idx, line] of lines.entries()) {
     try {
-      const entry = JSON.parse(line) as SystemAlert;
+      const entry = JSON.parse(line) as SystemAlert | VtsRefusalStoreRecord;
+      if ('recordType' in entry && entry.recordType === VTS_REFUSAL_RECORD) {
+        store.refusalRecord = entry;
+        for (const evidence of entry.refusals) store.vtsRefusals.set(evidence.streakId, evidence);
+        continue;
+      }
       // Minimal shape validation — skip if required fields missing
       if (!entry.id || !entry.state || !entry.triggers_at) {
         skipped++;
         continue;
       }
-      result.push(entry);
+      store.alerts.push(entry);
     } catch (_err) {
       skipped++;
       // Don't spam if many lines bad; one warning is enough
@@ -490,7 +504,16 @@ export function readAllAlerts(): SystemAlert[] {
       }
     }
   }
-  return result;
+  return store;
+}
+
+/** Alert readers exclude the internal evidence record. */
+export function readAllAlerts(): SystemAlert[] {
+  return readAlertStore().alerts;
+}
+
+export function readVtsRefusalEvidence(): VtsRefusalEvidence[] {
+  return [...readAlertStore().vtsRefusals.values()];
 }
 
 export type AlertDedupeState = 'absent' | 'nonterminal' | 'resolved';
@@ -510,9 +533,22 @@ export function getAlertDedupeState(dedupeKey: string): AlertDedupeState {
 /**
  * Atomic whole-file rewrite via tmpfile-rename. Always called inside withLock().
  */
-function writeAllAlertsAtomic(alerts: SystemAlert[]): void {
+function writeAllAlertsAtomic(store: AlertStore): void {
   const tmp = `${ALERTS_FILE}.tmp.${process.pid}.${Date.now()}`;
-  const content = alerts.map((a) => JSON.stringify(a)).join('\n') + (alerts.length > 0 ? '\n' : '');
+  const records = store.alerts.map((alert) => JSON.stringify(alert));
+  if (store.vtsRefusals.size) {
+    // The terminal envelope also survives an older dispatcher or rollback rewriting the JSONL.
+    const envelope = store.refusalRecord ?? {
+      ...createAlertEntry({
+        triggers_at: new Date(), category: 'health_check', severity: 'info',
+        title: 'VTS refusal evidence', body: 'Internal VTS observations retained for restart.',
+      }),
+      state: 'resolved',
+      recordType: VTS_REFUSAL_RECORD,
+    };
+    records.push(JSON.stringify({ ...envelope, refusals: [...store.vtsRefusals.values()] }));
+  }
+  const content = records.length ? records.join('\n') + '\n' : '';
   fs.writeFileSync(tmp, content, { mode: 0o644 });
   fs.renameSync(tmp, ALERTS_FILE);
 }
@@ -545,13 +581,15 @@ interface AlertStoreDraft {
   readonly rows: readonly Readonly<SystemAlert>[];
   add(opts: AddAlertOptions): SystemAlert;
   mergeMetadata(id: string, patch: AlertMetadataPatch): SystemAlert | null;
+  recordVtsRefusal(event: VtsRefusalEvent): boolean;
 }
 
 /** A synchronous edit of the latest rows under the shared store lock. An exception commits nothing. */
 export async function editAlertStore<T>(edit: (draft: AlertStoreDraft) => { value: T }): Promise<T> {
   ensureFileExists();
   return withLock(() => {
-    const rows = readAllAlerts();
+    const store = readAlertStore();
+    const rows = store.alerts;
     let changed = false;
     const draft: AlertStoreDraft = {
       rows,
@@ -577,9 +615,17 @@ export async function editAlertStore<T>(edit: (draft: AlertStoreDraft) => { valu
         }
         return { ...row };
       },
+      recordVtsRefusal(event) {
+        const previous = store.vtsRefusals.get(event.streakId);
+        const next = applyVtsRefusalEvidence(previous, event);
+        if (!next || next === previous) return false;
+        store.vtsRefusals.set(event.streakId, next);
+        changed = true;
+        return true;
+      },
     };
     const { value } = edit(draft);
-    if (changed) writeAllAlertsAtomic(rows);
+    if (changed) writeAllAlertsAtomic(store);
     return value;
   });
 }
@@ -636,10 +682,10 @@ export async function fireDue(nowMs: number = Date.now()): Promise<SystemAlert[]
   ensureFileExists();
   const promoted: SystemAlert[] = [];
   await withLock(() => {
-    const all = readAllAlerts();
+    const store = readAlertStore();
     const nowISO = new Date(nowMs).toISOString();
     let mutated = false;
-    for (const entry of all) {
+    for (const entry of store.alerts) {
       if (entry.state === 'scheduled' && entry.triggers_at <= nowISO) {
         entry.state = 'active';
         entry.fired_at = nowISO;
@@ -648,7 +694,7 @@ export async function fireDue(nowMs: number = Date.now()): Promise<SystemAlert[]
       }
     }
     if (mutated) {
-      writeAllAlertsAtomic(all);
+      writeAllAlertsAtomic(store);
     }
   });
   return promoted;
@@ -664,15 +710,15 @@ export async function ackAlert(id: string, by: string): Promise<SystemAlert | nu
   ensureFileExists();
   let result: SystemAlert | null = null;
   await withLock(() => {
-    const all = readAllAlerts();
-    const found = all.find((a) => a.id === id);
+    const store = readAlertStore();
+    const found = store.alerts.find((a) => a.id === id);
     if (!found) return;
     if (found.state === 'active') {
       found.state = 'acknowledged';
       found.acknowledged_at = new Date().toISOString();
       found.acknowledged_by = actor;
       result = { ...found };
-      writeAllAlertsAtomic(all);
+      writeAllAlertsAtomic(store);
     } else {
       // Idempotent — if already acknowledged or resolved, return current state
       result = { ...found };
@@ -714,8 +760,8 @@ export async function resolveAlert(
   ensureFileExists();
   let result: SystemAlert | null = null;
   await withLock(() => {
-    const all = readAllAlerts();
-    const found = all.find((a) => a.id === id);
+    const store = readAlertStore();
+    const found = store.alerts.find((a) => a.id === id);
     if (!found) return;
     const now = new Date().toISOString();
     found.state = 'resolved';
@@ -728,7 +774,7 @@ export async function resolveAlert(
       found.acknowledged_by = actor;
     }
     result = { ...found };
-    writeAllAlertsAtomic(all);
+    writeAllAlertsAtomic(store);
   });
   return result;
 }
@@ -752,8 +798,8 @@ export async function __backfillResolveProvenance__(
   ensureFileExists();
   let backfilled = 0;
   await withLock(() => {
-    const all = readAllAlerts();
-    for (const a of all) {
+    const store = readAlertStore();
+    for (const a of store.alerts) {
       if (a.state !== 'resolved') continue;
       const hasProvenance =
         a.resolved_at != null || a.resolved_by_claimed != null ||
@@ -765,7 +811,7 @@ export async function __backfillResolveProvenance__(
       a.resolution_evidence = opts.evidence;           // sanctioned sentinel
       backfilled++;
     }
-    if (backfilled > 0) writeAllAlertsAtomic(all);
+    if (backfilled > 0) writeAllAlertsAtomic(store);
   });
   return { backfilled };
 }
@@ -842,8 +888,8 @@ export async function markResurfaced(id: string, nowMs: number = Date.now()): Pr
   ensureFileExists();
   let result: SystemAlert | null = null;
   await withLock(() => {
-    const all = readAllAlerts();
-    const found = all.find((a) => a.id === id);
+    const store = readAlertStore();
+    const found = store.alerts.find((a) => a.id === id);
     if (!found || found.state === 'resolved') return; // resolved between compute+mark → don't re-stamp
     const count = typeof found.metadata?.resurface_count === 'number' ? (found.metadata.resurface_count as number) : 0;
     found.metadata = {
@@ -852,7 +898,7 @@ export async function markResurfaced(id: string, nowMs: number = Date.now()): Pr
       last_resurfaced_at: new Date(nowMs).toISOString(),
     };
     result = { ...found };
-    writeAllAlertsAtomic(all);
+    writeAllAlertsAtomic(store);
   });
   return result;
 }

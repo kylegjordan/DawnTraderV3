@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { krakenWebSocketAdapter } from '../exchanges/kraken/kraken-websocket-adapter.js';
 // B-PRICE-SIDE-BY-JOB (plan row 3n) — the level basis, SHADOW arm. This is the SECOND
 // level-setting hand-off (census §9 W-1); wiring only the orchestrator would leave the
@@ -104,10 +105,10 @@ import { readXstockSigmaCacheConfig } from '../asset_classes/xstock_spot/mark-st
 import { selectExitTrigger, exitTriggerClass, type ExitTriggerRefusal } from '../core/trading/exit-trigger.js';
 import { selectVtsXstockExitBid, selectVtsXstockEntryAsk, vtsXstockSideSize } from '../asset_classes/xstock_spot/vts-xs-select.js';
 import { ensureSigmaFresh } from '../asset_classes/xstock_spot/sigma-rate-cache.js';
-import { markDecided, onCrossing, onMemberReason, isStandingMember, ensureVtsRailIndex, runVtsRailSweep, onUnpricedClose, onShadowUnpriced, productionVtsRailDeps, type VtsRailDeps } from './vts-rail-reporting.js';
+import { markDecided, onCrossing, onMemberReason, isStandingMember, ensureVtsRailIndex, runVtsRailSweep, onUnpricedClose, onShadowUnpriced, productionVtsRailDeps, recordVtsRefusal, type VtsRailDeps } from './vts-rail-reporting.js';
 import { EXPECTED_OLD } from '../core/trading/vts-rail.js';
 import { getEquityTickerFeedEvidence } from './passive-archive/equity-spot-archiver.js';
-import { vtsEquityIncidentCohort, VtsFeedIncidentWindows, VTS_FEED_INCIDENT_SAMPLE_MS } from './vts-feed-incident-windows.js';
+import { vtsEquityIncidentCohort, VtsFeedIncidentWindows, VTS_FEED_INCIDENT_SAMPLE_MS, type VtsFeedIncidentEvidence } from './vts-feed-incident-windows.js';
 import { isInXstockWeekendClose, isXstockVenueTransitionPause, isXstockRailPagingTime } from '../asset_classes/xstock_spot/market-hours.js';
 
 /**
@@ -232,7 +233,7 @@ const VTS_NO_TRIGGER_ALERT_AFTER_MS = 10 * 60_000;
 // `no_usable_mark` (the evaluator's could-not-look arms). The harm is identical for both (no HWM, no latch, no rung, then a
 // timeout at the mark), and clearing on the other reason let a feed that flaps between them reset the clock forever.
 // It clears ONLY on a real decision (`noDecisionReason === undefined`). The last reason rides into the alert body.
-const _vtsNoTriggerStreak = new Map<string, NoTriggerStreak>();
+const _vtsNoTriggerStreak = new Map<string, NoTriggerStreak & { streakId: string }>();
 // Row 2 increment (4a), objective 12 (Coltrane Step 4 BLOCKER-3): the most recent refusal reason per open trade, per lane.
 // Kept apart from the streak, which a decision clears — an unpriced max-hold close is itself a decision, so the streak no
 // longer holds the reason at the close. Pruned with the streak; deleted at the close that reads it.
@@ -4096,12 +4097,24 @@ async function resolveOpenVirtualTrades(): Promise<{
       const _ntNow = Date.now();
       const _ntReason = decision.noDecisionReason === 'no_transactable_side' && _vtsExitRefusal !== null
         ? `no_transactable_side (${_vtsExitRefusal})` : decision.noDecisionReason;
-      const _ntStep = stepNoTriggerStreak(_vtsNoTriggerStreak.get(tradeId), _ntReason, _ntPages, _ntNow,
-        VTS_NO_TRIGGER_ALERT_AFTER_MS);
+      const priorStreak = _vtsNoTriggerStreak.get(tradeId);
+      const _ntStep = stepNoTriggerStreak(priorStreak, _ntReason, _ntPages, _ntNow, VTS_NO_TRIGGER_ALERT_AFTER_MS);
       const incidentLook = trade.assetClass === 'xstock_spot' && _ntReason === EXPECTED_OLD;
       if (incidentLook) feedIncidentWindows.observeStale(trade.symbol, performance.now());
-      if (_ntStep.next) _vtsNoTriggerStreak.set(tradeId, _ntStep.next);
-      else _vtsNoTriggerStreak.delete(tradeId);
+      const streak = _ntStep.next && { ..._ntStep.next, streakId: priorStreak?.streakId ?? randomUUID() };
+      if (streak) {
+        _vtsNoTriggerStreak.set(tradeId, streak);
+        if (!priorStreak) recordVtsRefusal({
+          kind: 'first', streakId: streak.streakId, tradeId, symbol: trade.symbol, assetClass: trade.assetClass,
+          firstAtMs: streak.sinceMs, firstReason: streak.lastReason, thresholdMs: VTS_NO_TRIGGER_ALERT_AFTER_MS,
+        });
+        if (streak.pageSinceMs !== null && streak.pageSinceMs !== priorStreak?.pageSinceMs) {
+          recordVtsRefusal({ kind: 'paging', streakId: streak.streakId, tradeId, pageSinceMs: streak.pageSinceMs });
+        }
+      } else {
+        _vtsNoTriggerStreak.delete(tradeId);
+        if (priorStreak) recordVtsRefusal({ kind: 'decided', streakId: priorStreak.streakId, tradeId, atMs: _ntNow });
+      }
       if (_ntReason !== undefined) _vtsLastRefusal.set(tradeId, _ntReason);
       // Row 2 increment (4a) P3 (Coltrane Step 4 BLOCKER-2): a standing-record MEMBER whose refusal reason turns
       // non-expected leaves the record and pages on its own key NOW — its streak latch fired at the join, so the crossing
@@ -4127,19 +4140,36 @@ async function resolveOpenVirtualTrades(): Promise<{
         console.warn(`[8a-P4c][VTS_NO_TRIGGER_END] ${trade.symbol} trade ${tradeId} class=${trade.assetClass} `
           + `streakMs=${_ntNow - _ntStep.ended.sinceMs} lastReason=${_ntStep.ended.lastReason} paged=${_ntStep.ended.alerted}`);
       }
-      if (_ntStep.page && _ntStep.next !== null && _ntStep.next.pageSinceMs !== null) {
-        const _nt = _ntStep.next;
-        const _ntMins = Math.round((_ntNow - _ntStep.next.pageSinceMs) / 60_000);
+      if (_ntStep.page && streak !== null && streak.pageSinceMs !== null) {
+        const _nt = streak;
+        const _ntMins = Math.round((_ntNow - streak.pageSinceMs) / 60_000);
         const _ntTotalMins = Math.round((_ntNow - _nt.sinceMs) / 60_000);
         console.error(`[8a-P3][VTS_NO_TRIGGER_ESCALATION] ${trade.symbol} trade ${tradeId}: no exit decision for ${_ntMins} min in paging time (${_ntTotalMins} min in all) (last reason ${_nt.lastReason}) — raising system alert`);
+        let feedIncident: VtsFeedIncidentEvidence | null = null;
+        const cutMs = performance.now();
+        if (incidentLook) {
+          try {
+            const cohort = currentVtsFeedIncidentCohort(_ntNow);
+            if (cohort) feedIncident = feedIncidentWindows.evidenceAtCrossing(
+              trade.symbol, cohort, getEquityTickerFeedEvidence(cohort.symbols), cutMs);
+          } catch (error) {
+            console.error('[VTS_RAIL][CROSSING_EVIDENCE_FAILED]', error);
+          }
+        }
+        recordVtsRefusal({
+          kind: 'crossing', tradeId, streakId: streak.streakId, pageSinceMs: streak.pageSinceMs,
+          observedAtMs: _ntNow, reason: streak.lastReason,
+          feedCoverage: feedIncident && {
+            key: feedIncident.key, generation: feedIncident.generation,
+            startMs: feedIncident.startMs, endMs: feedIncident.endMs, cutMs,
+            subscribed: feedIncident.subscribed, qualified: feedIncident.qualified.length,
+          },
+        });
         try {
           // Row 2 increment (4a) P2/P3: an expected wide/quiet xStock book joins ONE standing record; everything else pages
           // on its own key as before (`vts-rail-reporting.ts`; the rules are pure in `core/trading/vts-rail.ts`).
           const _rd = await vtsRailDeps();
           if (!_rd) throw new Error('rail deps unavailable');
-          const cohort = incidentLook ? currentVtsFeedIncidentCohort(Date.now()) : null;
-          const feedIncident = cohort ? feedIncidentWindows.evidenceAtCrossing(
-            trade.symbol, cohort, getEquityTickerFeedEvidence(cohort.symbols), performance.now()) : null;
           await onCrossing({
             tradeId, symbol: trade.symbol, assetClass: trade.assetClass, lastReason: _nt.lastReason, pageSinceMs: _nt.pageSinceMs ?? _ntNow,
             feedIncident,

@@ -1,7 +1,8 @@
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { Worker } from 'node:worker_threads';
-import type { VtsAlertWriteResult, VtsIndividualDecision } from './vts-alert-write-worker.js';
+import type { VtsRefusalEvent } from '../core/trading/vts-refusal-evidence.js';
+import type { VtsAlertWrite, VtsAlertWriteResult } from './vts-alert-write-worker.js';
 
 const COALESCE_MS = 10;
 const RETRY_MS = 1_000;
@@ -16,23 +17,34 @@ function startWorker(): Worker {
   return new Worker(new URL(`data:text/javascript,${encodeURIComponent(source)}`), { execArgv: [] });
 }
 
-interface PendingDecision {
-  mark: VtsIndividualDecision;
+interface PendingWrite {
+  key: string;
+  write: VtsAlertWrite;
   finish: (written: boolean) => void;
 }
 
-/** Keep an exact individual alert's first observed decision until the store responds. */
+/** Keep exact refusal and decision observations until the same store writer responds. */
 export class VtsAlertWriteQueue {
   private worker?: Worker;
   private scheduled?: NodeJS.Timeout;
-  private inFlight?: PendingDecision[];
-  private readonly pending = new Map<string, PendingDecision>();
+  private inFlight?: PendingWrite[];
+  private readonly pending = new Map<string, PendingWrite>();
 
   markDecision(rowId: string, atMs: number): Promise<boolean> | undefined {
-    // An existing entry already owns its completion. Repeated decisions must not add more waiters during a failed write.
-    if (this.pending.has(rowId)) return;
+    return this.enqueue(`alert:${rowId}`, { kind: 'individual-decision', rowId, atMs });
+  }
+
+  recordRefusal(event: VtsRefusalEvent): Promise<boolean> | undefined {
+    const run = 'pageSinceMs' in event ? event.pageSinceMs : null;
+    const key = JSON.stringify([event.streakId, event.tradeId, event.kind, run]);
+    return this.enqueue(key, { kind: 'refusal', event });
+  }
+
+  private enqueue(key: string, write: VtsAlertWrite): Promise<boolean> | undefined {
+    // An existing entry already owns its completion. Repeats add no waiters during a failed write.
+    if (this.pending.has(key)) return;
     return new Promise<boolean>((finish) => {
-      this.pending.set(rowId, { mark: { rowId, atMs }, finish });
+      this.pending.set(key, { key, write, finish });
       this.schedule(COALESCE_MS);
     });
   }
@@ -50,7 +62,7 @@ export class VtsAlertWriteQueue {
     try {
       const worker = this.worker ?? this.attach(startWorker());
       this.inFlight = [...this.pending.values()];
-      worker.postMessage(this.inFlight.map(({ mark }) => mark));
+      worker.postMessage(this.inFlight.map(({ write }) => write));
     } catch (error) {
       this.retry(error);
     }
@@ -66,12 +78,12 @@ export class VtsAlertWriteQueue {
         return;
       }
       if (result.written.length !== batch.length) {
-        this.retry('worker returned an incomplete decision batch');
+        this.retry('worker returned an incomplete alert batch');
         return;
       }
       this.inFlight = undefined;
       for (const [index, entry] of batch.entries()) {
-        this.pending.delete(entry.mark.rowId);
+        this.pending.delete(entry.key);
         entry.finish(result.written[index]);
       }
       this.schedule(COALESCE_MS);

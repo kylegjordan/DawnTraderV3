@@ -19,8 +19,15 @@ import {
 } from '../core/trading/vts-rail.js';
 import type { ClassVerdict } from './venue-quiet-alerting.js';
 import type { VtsFeedIncidentEvidence } from './vts-feed-incident-windows.js';
+import type { VtsRefusalEvent } from '../core/trading/vts-refusal-evidence.js';
 import { VtsAlertWriteQueue } from './vts-alert-write-queue.js';
 import fs from 'node:fs';
+
+const alertWrites = new VtsAlertWriteQueue();
+
+export function recordVtsRefusal(event: VtsRefusalEvent): void {
+  void alertWrites.recordRefusal(event);
+}
 
 /** `decided_<tradeId>` on the standing record: a member decided at this time (single-key merge, never a map rewrite). */
 export const decidedField = (tradeId: string) => `decided_${tradeId}`;
@@ -449,11 +456,10 @@ export async function productionVtsRailDeps(): Promise<VtsRailDeps> {
   const { isInXstockWeekendClose, isXstockRailPagingTime } = await import('../asset_classes/xstock_spot/market-hours.js');
   const { db } = await import('../db.js');
   const { sql } = await import('drizzle-orm');
-  const decisionWrites = new VtsAlertWriteQueue();
   return {
     addAlert: alerts.addAlert as unknown as VtsRailDeps['addAlert'],
     mergeAlertMetadata: alerts.mergeAlertMetadata as unknown as VtsRailDeps['mergeAlertMetadata'],
-    markIndividualDecision: (id, atMs) => decisionWrites.markDecision(id, atMs),
+    markIndividualDecision: (id, atMs) => alertWrites.markDecision(id, atMs),
     resolveAlert: alerts.resolveAlert as unknown as VtsRailDeps['resolveAlert'],
     readAllAlerts: alerts.readAllAlerts as unknown as VtsRailDeps['readAllAlerts'],
     closedTradeIds: async (ids) => {

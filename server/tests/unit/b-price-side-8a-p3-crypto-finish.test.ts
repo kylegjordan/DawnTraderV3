@@ -188,7 +188,7 @@ describe('8a-P3 Step-4 r2 — the refusal rail and the per-event rest record', (
     // `8a-P4c` increment 3 (Langston Step-4 FINDING-1): the streak step is the pure `stepNoTriggerStreak` (behaviour-tested
     // in b-price-side-8a-p4c-inc3-guard.test.ts); here, only that the runner routes every trade through it, keyed by id.
     // `3n.q3` P8: the streak's reason is the evaluator's, with the selector's own refusal appended when it has one.
-    expect(VTS).toMatch(/stepNoTriggerStreak\(_vtsNoTriggerStreak\.get\(tradeId\), _ntReason, _ntPages, _ntNow,/);
+    expect(VTS).toMatch(/const priorStreak = _vtsNoTriggerStreak\.get\(tradeId\);\s*const _ntStep = stepNoTriggerStreak\(priorStreak, _ntReason, _ntPages, _ntNow,/);
     expect(VTS).toMatch(/const _ntReason = decision\.noDecisionReason === 'no_transactable_side' && _vtsExitRefusal !== null/);
     // Row 2 increment (4a) r4: the page goes through the rail's `onCrossing`, on the PER-TRADE key `no-trigger-vts-<SYMBOL>-<tradeId>`
     // (`railKey`, behaviour-tested in b-xstock-bid-trigger-reland-inc4a.test.ts) — still keyed by trade id here.
@@ -198,7 +198,8 @@ describe('8a-P3 Step-4 r2 — the refusal rail and the per-event rest record', (
     // Row 2 increment (4c) P1 (re-pointed, same subject — the xStock PAGE is gated to paging time, the weekend close and every
     // non-regular session included): paging time now starts 15 min after the open (`isXstockRailPagingTime`, market-hours.ts).
     expect(VTS).toMatch(/const _ntXsOffHours = trade\.assetClass === 'xstock_spot' && !isXstockRailPagingTime\(new Date\(\)\);/);
-    expect(VTS).toMatch(/if \(_ntStep\.next\) _vtsNoTriggerStreak\.set\(tradeId, _ntStep\.next\);\s*else _vtsNoTriggerStreak\.delete\(tradeId\);/);
+    expect(VTS).toMatch(/const streak = _ntStep\.next && \{ \.\.\._ntStep\.next, streakId: priorStreak\?\.streakId \?\? randomUUID\(\) \};\s*if \(streak\) \{\s*_vtsNoTriggerStreak\.set\(tradeId, streak\);/);
+    expect(VTS).toMatch(/\} else \{\s*_vtsNoTriggerStreak\.delete\(tradeId\);\s*if \(priorStreak\) recordVtsRefusal\(\{ kind: 'decided', streakId: priorStreak\.streakId, tradeId,/);
     expect(VTS).not.toMatch(/if \(decision\.noDecisionReason === 'no_transactable_side'\) \{\s*_vtsTouch\.exitNoTransactableSide\+\+;\s*const _ntNow/);
     expect(VTS).not.toMatch(/_vtsNoTriggerStreak\.get\(trade\.symbol\)/);
   });

@@ -13,6 +13,7 @@ import { describe, it, expect, beforeEach, afterAll, vi } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import type { VtsRefusalEvent } from '../../core/trading/vts-refusal-evidence.js';
 
 const TMP = path.join(os.tmpdir(), `sa-dedup-test-${process.pid}.jsonl`);
 process.env.SYSTEM_ALERTS_FILE = TMP;
@@ -156,4 +157,91 @@ describe('#1191 alert store edits', () => {
       if (fs.existsSync(TMP) && fs.statSync(TMP).isDirectory()) fs.rmdirSync(TMP);
     }
   }, 8_000);
+
+  it('keeps first refusal, the actual crossing and an exact hold through the worker and later alert writes', async () => {
+    const { VtsAlertWriteQueue } = await import('../../services/vts-alert-write-queue.js');
+    const { addAlert, fireDue, ackAlert, resolveAlert, readAllAlerts, readVtsRefusalEvidence } = await load();
+    const id = { tradeId: 'trade-one', streakId: 'streak-one' };
+    const first = {
+      ...id, kind: 'first', symbol: 'NVO/USD', assetClass: 'xstock_spot',
+      firstAtMs: 1_000, firstReason: 'no_usable_mark', thresholdMs: 600_000,
+    } satisfies VtsRefusalEvent;
+    const paging = { ...id, kind: 'paging', pageSinceMs: 5_000 } satisfies VtsRefusalEvent;
+    const crossing = {
+      ...id, kind: 'crossing', pageSinceMs: 5_000, observedAtMs: 605_000,
+      reason: 'no_transactable_side (too_old)', feedCoverage: {
+        key: 'kraken-equities/ticker/common-session', generation: 3,
+        startMs: 10, endMs: 120_010, cutMs: 120_015, subscribed: 20, qualified: 18,
+      },
+    } satisfies VtsRefusalEvent;
+    const queue = new VtsAlertWriteQueue();
+    expect(await Promise.all([queue.recordRefusal(first), queue.recordRefusal(paging)])).toEqual([true, true]);
+    const row = await addAlert(base);
+    const before = fs.readFileSync(TMP);
+
+    fs.unlinkSync(TMP);
+    fs.mkdirSync(TMP);
+    const error = vi.spyOn(console, 'error');
+    try {
+      const crossingWrite = queue.recordRefusal(crossing);
+      const holdWrite = queue.recordRefusal({ ...id, kind: 'decided', atMs: 605_001 });
+      await vi.waitFor(() => expect(error).toHaveBeenCalledWith('[VTS_RAIL][DECISION_BATCH_FAILED]', expect.anything()));
+      fs.rmdirSync(TMP);
+      fs.writeFileSync(TMP, before);
+      expect(readVtsRefusalEvidence()).toMatchObject([{ ...id, decidedAtMs: null, crossings: [] }]);
+      expect(await Promise.all([crossingWrite, holdWrite])).toEqual([true, true]);
+
+      expect((await fireDue()).map(({ id }) => id)).toEqual([row.id]);
+      await ackAlert(row.id, 'cc-b');
+      await resolveAlert(row.id, 'cc-b', 'NO-EVIDENCE-GIVEN', 'cli');
+      expect(readAllAlerts().map(({ id, state }) => ({ id, state }))).toEqual([{ id: row.id, state: 'resolved' }]);
+      const { kind: _, tradeId: _trade, streakId: _streak, ...crossingFields } = crossing;
+      expect(readVtsRefusalEvidence()).toMatchObject([{
+        ...id, firstAtMs: 1_000, firstReason: 'no_usable_mark', thresholdMs: 600_000,
+        pagingStarts: [5_000], crossings: [crossingFields], decidedAtMs: 605_001,
+      }]);
+
+      // The old reader's shape gate keeps the inert envelope during a whole-store rewrite.
+      const oldRows = fs.readFileSync(TMP, 'utf8').trim().split('\n').map(line => JSON.parse(line))
+        .filter(candidate => candidate.id && candidate.state && candidate.triggers_at);
+      expect(oldRows).toHaveLength(2);
+      expect(oldRows.every(candidate => candidate.state === 'resolved')).toBe(true);
+      fs.writeFileSync(TMP, oldRows.map(candidate => JSON.stringify(candidate)).join('\n') + '\n');
+      expect(readVtsRefusalEvidence()).toMatchObject([{ ...id, crossings: [crossingFields] }]);
+    } finally {
+      error.mockRestore();
+      if (fs.existsSync(TMP) && fs.statSync(TMP).isDirectory()) fs.rmdirSync(TMP);
+    }
+  }, 8_000);
+
+  it('keeps two streaks on the same trade distinct and credits a crossing only at its confirmed paging boundary', async () => {
+    const { editAlertStore, readVtsRefusalEvidence } = await load();
+    const id = { tradeId: 'trade-one', streakId: 'first-streak' };
+    const write = (event: VtsRefusalEvent) => editAlertStore((draft) => ({ value: draft.recordVtsRefusal(event) }));
+    const first = {
+      ...id, kind: 'first', symbol: 'NVO/USD', assetClass: 'xstock_spot',
+      firstAtMs: 1_000, firstReason: 'no_usable_mark', thresholdMs: 600_000,
+    } satisfies VtsRefusalEvent;
+    const crossing = {
+      ...id, kind: 'crossing', pageSinceMs: 2_000, observedAtMs: 602_000,
+      reason: 'no_usable_mark', feedCoverage: null,
+    } satisfies VtsRefusalEvent;
+
+    expect(await write(first)).toBe(true);
+    expect(await write(crossing)).toBe(false);
+    expect(await write({ ...id, kind: 'paging', pageSinceMs: 2_000 })).toBe(true);
+    expect(await write({ ...crossing, observedAtMs: 601_999 })).toBe(false);
+    expect(await write({ ...crossing, tradeId: 'other-trade' })).toBe(false);
+    expect(await write(crossing)).toBe(true);
+    const saved = fs.readFileSync(TMP, 'utf8');
+    expect(await write({ ...crossing, observedAtMs: 603_000 })).toBe(false);
+    expect(fs.readFileSync(TMP, 'utf8')).toBe(saved);
+
+    expect(await write({ ...first, streakId: 'second-streak', firstAtMs: 610_000 })).toBe(true);
+    expect(await write({ ...id, streakId: 'second-streak', kind: 'decided', atMs: 610_001 })).toBe(true);
+    expect(readVtsRefusalEvidence()).toMatchObject([
+      { ...id, crossings: [{ observedAtMs: 602_000 }], decidedAtMs: null },
+      { ...id, streakId: 'second-streak', crossings: [], decidedAtMs: 610_001 },
+    ]);
+  });
 });
