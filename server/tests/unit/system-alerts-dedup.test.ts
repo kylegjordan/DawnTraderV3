@@ -139,7 +139,7 @@ describe('#1191 alert store edits', () => {
     const queue = new VtsAlertWriteQueue();
     try {
       const first = queue.markDecision(rows[0].id, 1000);
-      expect(queue.markDecision(rows[0].id, 2000)).toBe(first);
+      expect(queue.markDecision(rows[0].id, 2000)).toBeUndefined();
       const pending = [first, ...rows.slice(1).map(({ id }) => queue.markDecision(id, 1000))];
       const resolved = queue.markDecision(terminal.id, 1000);
       await vi.waitFor(() => expect(error).toHaveBeenCalledWith('[VTS_RAIL][DECISION_BATCH_FAILED]', expect.anything()));

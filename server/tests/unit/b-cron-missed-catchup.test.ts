@@ -1350,6 +1350,55 @@ describe('B-CRON-MISSED-CATCHUP source and registration fences', () => {
     expect(source).not.toMatch(/runQdProbeOnce\(context\.scheduledFor, config\)/);
   });
 
+  const cronScanOptions = { noResolve: true, noLib: true, types: [], target: ts.ScriptTarget.Latest };
+
+  function cronRegistrationMethod(callee: ts.Expression, checker: ts.TypeChecker): 'schedule' | 'createTask' | undefined {
+    let name: string | undefined;
+    let clause: ts.ImportClause | undefined;
+    if (ts.isIdentifier(callee)) {
+      const declaration = checker.getSymbolAtLocation(callee)?.declarations?.[0];
+      if (declaration && ts.isImportSpecifier(declaration) && !declaration.isTypeOnly) {
+        name = (declaration.propertyName ?? declaration.name).text;
+        clause = declaration.parent.parent;
+      }
+    } else if (ts.isPropertyAccessExpression(callee) || ts.isElementAccessExpression(callee)) {
+      name = ts.isPropertyAccessExpression(callee) ? callee.name.text
+        : ts.isStringLiteral(callee.argumentExpression) ? callee.argumentExpression.text : undefined;
+      if (name !== 'schedule' && name !== 'createTask') return;
+      const declaration = checker.getSymbolAtLocation(callee.expression)?.declarations?.[0];
+      if (declaration && ts.isImportClause(declaration)) clause = declaration;
+      else if (declaration && ts.isNamespaceImport(declaration)) clause = declaration.parent;
+    }
+    if (name !== 'schedule' && name !== 'createTask') return;
+    const module = clause?.parent.moduleSpecifier;
+    if (clause && !clause.isTypeOnly && module && ts.isStringLiteral(module) && module.text === 'node-cron') return name;
+  }
+
+  it('counts actual node-cron imports and excludes one-shot queue scheduling methods', () => {
+    const path = resolve('cron-control.ts').replaceAll('\\', '/');
+    const tree = ts.createSourceFile(path, `
+      import defaultCron from 'node-cron';
+      import * as cron from 'node-cron';
+      import { schedule as register } from 'node-cron';
+      queue.schedule();
+      queue.createTask();
+      function locallyShadowed(cron) { cron.schedule(); }
+      defaultCron.createTask();
+      cron['createTask']();
+      register();
+    `, ts.ScriptTarget.Latest, true);
+    const host = ts.createCompilerHost(cronScanOptions);
+    host.getSourceFile = (file) => file === path ? tree : undefined;
+    const checker = ts.createProgram([path], cronScanOptions, host).getTypeChecker();
+    const matches: Array<string | undefined> = [];
+    const visit = (node: ts.Node) => {
+      if (ts.isCallExpression(node)) matches.push(cronRegistrationMethod(node.expression, checker));
+      ts.forEachChild(node, visit);
+    };
+    visit(tree);
+    expect(matches).toEqual([undefined, undefined, undefined, 'createTask', 'createTask', 'schedule']);
+  });
+
   // B-UNIVERSE-REFRESH-ACTS (#1018) adds the seventh: crypto_universe_refresh_cron, in its own module.
   it('finds exactly seven dormant production schedules, each reconciled before start', () => {
     const productionTypescript = (dir: string): string[] => readdirSync(dir, { withFileTypes: true })
@@ -1359,6 +1408,8 @@ describe('B-CRON-MISSED-CATCHUP source and registration fences', () => {
         return entry.isFile() && entry.name.endsWith('.ts') ? [path] : [];
       });
     const files = productionTypescript(resolve('server'));
+    const program = ts.createProgram(files, cronScanOptions);
+    const checker = program.getTypeChecker();
     let scheduleCalls = 0;
     let dormantTaskCalls = 0;
     let recoveryProperties = 0;
@@ -1374,14 +1425,15 @@ describe('B-CRON-MISSED-CATCHUP source and registration fences', () => {
       let fileStartCalls = 0;
       const preparationPositions: number[] = [];
       const startPositions: number[] = [];
-      const source = readFileSync(resolve(file), 'utf8');
-      const tree = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+      const tree = program.getSourceFile(file);
+      if (!tree) throw new Error(`Production source missing from cron scan: ${file}`);
       const visit = (node: ts.Node): void => {
+        if (ts.isCallExpression(node)) {
+          const method = cronRegistrationMethod(node.expression, checker);
+          if (method) fileScheduleCalls += 1;
+          if (method === 'createTask') fileDormantTaskCalls += 1;
+        }
         if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
-          if (node.expression.name.text === 'schedule' || node.expression.name.text === 'createTask') {
-            fileScheduleCalls += 1;
-          }
-          if (node.expression.name.text === 'createTask') fileDormantTaskCalls += 1;
           if (node.expression.name.text === 'prepareJob') {
             filePreparationCalls += 1;
             preparationPositions.push(node.getStart(tree));

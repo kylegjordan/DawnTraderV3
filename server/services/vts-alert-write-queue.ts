@@ -18,7 +18,6 @@ function startWorker(): Worker {
 
 interface PendingDecision {
   mark: VtsIndividualDecision;
-  committed: Promise<boolean>;
   finish: (written: boolean) => void;
 }
 
@@ -29,14 +28,13 @@ export class VtsAlertWriteQueue {
   private inFlight?: PendingDecision[];
   private readonly pending = new Map<string, PendingDecision>();
 
-  markDecision(rowId: string, atMs: number): Promise<boolean> {
-    const existing = this.pending.get(rowId);
-    if (existing) return existing.committed;
-    let finish!: PendingDecision['finish'];
-    const committed = new Promise<boolean>((resolve) => { finish = resolve; });
-    this.pending.set(rowId, { mark: { rowId, atMs }, committed, finish });
-    this.schedule(COALESCE_MS);
-    return committed;
+  markDecision(rowId: string, atMs: number): Promise<boolean> | undefined {
+    // An existing entry already owns its completion. Repeated decisions must not add more waiters during a failed write.
+    if (this.pending.has(rowId)) return;
+    return new Promise<boolean>((finish) => {
+      this.pending.set(rowId, { mark: { rowId, atMs }, finish });
+      this.schedule(COALESCE_MS);
+    });
   }
 
   private schedule(delayMs: number): void {

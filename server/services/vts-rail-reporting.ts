@@ -43,7 +43,7 @@ export interface RailMember extends MemberClock {
 export interface VtsRailDeps {
   addAlert: (a: Record<string, unknown>) => Promise<RailAlertRow>;
   mergeAlertMetadata: (id: string, patch: Record<string, unknown>) => Promise<RailAlertRow | null>;
-  markIndividualDecision?: (id: string, atMs: number) => Promise<boolean>;
+  markIndividualDecision?: (id: string, atMs: number) => Promise<boolean> | undefined;
   resolveAlert: (id: string, by: string, evidence: string, transport: 'engine') => Promise<unknown>;
   readAllAlerts: () => RailAlertRow[];
   /** Of these VTS trade ids, which are CLOSED in durable state — a PRESENT `vts_open_trades` row with `closed`/`closed_at`
@@ -138,6 +138,7 @@ export function markDecided(
     const written = deps.markIndividualDecision
       ? deps.markIndividualDecision(rowId, nowMs)
       : deps.mergeAlertMetadata(rowId, { decidedAtMs: nowMs }).then((row) => row !== null);
+    if (!written) continue; // A prior queue entry will update the index after the write.
     written.then((stored) => {
       if (!stored) railCounts.markMisses++;
       const set = state.rowByTrade.get(tradeId);
