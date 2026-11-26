@@ -16,6 +16,7 @@ import { xstockTransactableSides } from './transactable-sides.js';
 import { getXstockSession, type XstockSession } from './time-of-day.js';
 import { isInXstockWeekendClose } from './market-hours.js';
 import type { XsGuardReason } from './vts-xs-guard.js';
+import type { SelectedXstockUpdate } from './vts-xs-selected-update.js';
 
 /** `8a-P4c` increment 3 (Langston Step-4 BLOCKER-2): what the LIVE guard decided on a look — its own reason, never a
  *  re-derivation. `knobs_unavailable` = the guard could not run (no ceiling applied); it is counted, never dropped. */
@@ -184,6 +185,8 @@ export class XsVtsInstrument {
   private passSession: XsPassSession = 'overnight';
   private symbols = new Map<string, SymbolCounters>();
   private hour: number | null = null;
+  private readonly linkedSymbols = new Set<string>();
+  private linkedSample: { symbol: string; witness: SelectedXstockUpdate } | null = null;
 
   constructor(
     private readonly lane: XsLane,
@@ -195,13 +198,19 @@ export class XsVtsInstrument {
     if (this.hour !== null && h !== this.hour) this.flushSymbols();
     this.hour = h;
     this.pass = emptyPass();
+    this.linkedSymbols.clear();
+    this.linkedSample = null;
     this.passSession = isInXstockWeekendClose(new Date(nowMs)) ? 'weekend' : getXstockSession(nowMs);
   }
 
   /** `appliedCeilingMs` — the age ceiling the decision ACTUALLY used for this look (S1); `null` before increment 3's guard
    *  or when no ceiling could be derived. */
   recordLook(symbol: string, row: XsQuoteRow | null, nowMs: number, stop: number | null, target: number | null,
-    live: XsLiveJudgement | null = null): void {
+    live: XsLiveJudgement | null = null, linkedUpdate: SelectedXstockUpdate | null = null): void {
+    if (linkedUpdate && live?.reason === 'ok') {
+      this.linkedSymbols.add(symbol);
+      this.linkedSample ??= { symbol, witness: linkedUpdate };
+    }
     const l = classifyXstockVtsLook(row, nowMs, stop, target);
     // S1 (plan §C3.7-§C3.8), from the LIVE guard's own reason (Langston BLOCKER-2): `applied` = a ceiling was applied;
     // `refusedLive` = refused on AGE by the guard. Every reason is also counted in `live`, so a spread or side refusal,
@@ -260,6 +269,9 @@ export class XsVtsInstrument {
       + `pendingLooks=${p.pendingLooks} pendingNoRow=${p.pendingNoRow} pendingAskAtOrBelow=${p.pendingAskAtOrBelow} `
       + `pendingLastAtOrBelow=${p.pendingLastAtOrBelow} appliedLooks=${p.appliedLooks} refusedLive=${p.refusedLive} live=${list(p.live)}`,
     );
+    if (this.linkedSample) {
+      this.emit(`[#1191][VTS_XS_SELECTED_UPDATE] linkedSymbols=${this.linkedSymbols.size} sample=${JSON.stringify(this.linkedSample)}`);
+    }
   }
 
   /** Emits one roll-up line per (session, symbol) for the hour just ended, then clears. */

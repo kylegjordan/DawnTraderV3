@@ -24,11 +24,13 @@ vi.mock('../../services/passive-archive/ticker-batch-writer.js', () => ({
 }));
 
 import {
-  getEquityTickerFeedEvidence, getEquityTickerSubscriptionReceipt, getLatestEquityTick, isCurrentEquityTickerFrame,
+  getEquityTickerFeedEvidence, getEquityTickerSourceIdentity, getEquityTickerSubscriptionReceipt,
+  getLatestEquityTick, isCurrentEquityTickerFrame,
   startEquitySpotArchiver, stopEquitySpotArchiver,
 } from '../../services/passive-archive/equity-spot-archiver.js';
 import { gradePaperXstockExitQuote } from '../../services/execution/paper-xstock-exit-quote.js';
 import { bufferTickerSnap } from '../../services/passive-archive/ticker-batch-writer.js';
+import { linkSelectedXstockUpdate } from '../../asset_classes/xstock_spot/vts-xs-selected-update.js';
 
 const symbol = 'RTLY/USD';
 function deliver(socket: EventEmitter, type: string, bid: number, fields: Record<string, unknown> = {}) {
@@ -125,23 +127,38 @@ describe('#1191 — exact xStock ticker subscription evidence', () => {
     const wall = vi.spyOn(Date, 'now').mockReturnValue(1_701_000_000_000);
     const monotonic = vi.spyOn(performance, 'now').mockReturnValue(100);
     try {
+      socket.emit('open');
+      const reqId = JSON.parse(socket.send.mock.calls[1][0]).req_id;
+      expect(getEquityTickerSourceIdentity(symbol)).toBeNull();
+      deliverAck(socket, reqId, { channel: 'ticker', symbol });
       const data = [symbol, other].map(pair => ({ symbol: pair, bid: 90, ask: 91, last: 90.5 }));
       socket.emit('message', Buffer.from(JSON.stringify({ channel: 'ticker', type: 'update', data })));
       deliver(socket, 'snapshot', 90, { last: 90.5, bid_qty: null });
       const [update, sibling, replay] = archive.mock.calls.slice(-3).map(([, row]) => row);
       const origin = (row: typeof update) => (row.metadata as {
-        equityTickerSource: { bootId: string; generation: number; frameOrdinal: number; rowOrdinal: number; role: string };
+        equityTickerSource: {
+          bootId: string; generation: number; frameOrdinal: number; rowOrdinal: number; role: string; verifiedUpdate: boolean;
+        };
       }).equityTickerSource;
       const first = origin(update);
       expect(update.metadata).toMatchObject({
         schema_version: 1,
-        equityTickerSource: { bootId: expect.any(String), generation: expect.any(Number), rowOrdinal: 0, role: 'update', receivedMonotonicMs: 100 },
+        equityTickerSource: {
+          bootId: expect.any(String), generation: expect.any(Number), rowOrdinal: 0, role: 'update',
+          receivedMonotonicMs: 100, verifiedUpdate: true,
+        },
       });
-      expect(origin(sibling)).toMatchObject({ ...first, rowOrdinal: 1 });
+      expect(origin(sibling)).toMatchObject({ ...first, rowOrdinal: 1, verifiedUpdate: false });
       expect(origin(replay)).toMatchObject({
-        bootId: first.bootId, generation: first.generation, frameOrdinal: first.frameOrdinal + 1, rowOrdinal: 0, role: 'snapshot',
+        bootId: first.bootId, generation: first.generation, frameOrdinal: first.frameOrdinal + 1, rowOrdinal: 0,
+        role: 'snapshot', verifiedUpdate: false,
       });
       expect([replay.symbol, replay.bid, replay.ask, replay.last]).toEqual([update.symbol, update.bid, update.ask, update.last]);
+      const subscription = getEquityTickerSourceIdentity(symbol);
+      expect(linkSelectedXstockUpdate({ rowId: '1001', metadata: replay.metadata, selectedAtMs: 101 }, subscription, 102)).toBeNull();
+      expect(linkSelectedXstockUpdate({ rowId: '1000', metadata: update.metadata, selectedAtMs: 101 }, subscription, 102))
+        .toMatchObject({ rowId: '1000', bootId: first.bootId, generation: first.generation, frameOrdinal: first.frameOrdinal });
+      expect(getEquityTickerSourceIdentity(other)).toBeNull();
     } finally {
       wall.mockRestore();
       monotonic.mockRestore();

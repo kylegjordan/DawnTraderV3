@@ -101,13 +101,14 @@ import { stepNoTriggerStreak, type NoTriggerStreak } from '../core/trading/vts-n
 import { refuseTakerBooking, bookedQuantity } from '../core/trading/entry-booking.js';
 import { entryWindowRefusalAt } from '../core/trading/entry-window.js'; // B-ENTRY-GATE (#1224) P3v
 import { XsVtsInstrument, parseQuoteNumber, type XsQuoteRow } from '../asset_classes/xstock_spot/vts-xs-instrument.js';
+import { linkSelectedXstockUpdate, type SelectedXstockTickerRow } from '../asset_classes/xstock_spot/vts-xs-selected-update.js';
 import { readXstockSigmaCacheConfig } from '../asset_classes/xstock_spot/mark-staleness-config.js';
 import { selectExitTrigger, exitTriggerClass, type ExitTriggerRefusal } from '../core/trading/exit-trigger.js';
 import { selectVtsXstockExitBid, selectVtsXstockEntryAsk, vtsXstockSideSize } from '../asset_classes/xstock_spot/vts-xs-select.js';
 import { ensureSigmaFresh } from '../asset_classes/xstock_spot/sigma-rate-cache.js';
 import { markDecided, onCrossing, onMemberReason, shouldCheckMemberReason, ensureVtsRailIndex, runVtsRailSweep, onUnpricedClose, onShadowUnpriced, productionVtsRailDeps, recordVtsRefusal, type VtsRailDeps } from './vts-rail-reporting.js';
 import { EXPECTED_OLD } from '../core/trading/vts-rail.js';
-import { getEquityTickerFeedEvidence } from './passive-archive/equity-spot-archiver.js';
+import { getEquityTickerFeedEvidence, getEquityTickerSourceIdentity } from './passive-archive/equity-spot-archiver.js';
 import { vtsEquityIncidentCohort, VtsFeedIncidentWindows, VTS_FEED_INCIDENT_SAMPLE_MS, type VtsFeedIncidentEvidence } from './vts-feed-incident-windows.js';
 import { isInXstockWeekendClose, isXstockVenueTransitionPause, isXstockRailPagingTime } from '../asset_classes/xstock_spot/market-hours.js';
 
@@ -3714,6 +3715,7 @@ async function resolveOpenVirtualTrades(): Promise<{
   // clears. Nothing read them, so they are deleted rather than retyped (plan §C2, Langston C3). A side is read from
   // `rawQuote`, where a missing side is `null`, never zero.
   const xstockPriceMap = new Map<string, { price: number; rawQuote: XsQuoteRow }>();
+  const selectedXstockTicker = new Map<string, SelectedXstockTickerRow>();
   if (xstockSymbols.size > 0) {
     try {
       const xstockSymbolListSql = Array.from(xstockSymbols)
@@ -3727,15 +3729,21 @@ async function resolveOpenVirtualTrades(): Promise<{
           ask::text AS ask,
           bid_qty::text AS bid_qty,
           ask_qty::text AS ask_qty,
-          (EXTRACT(EPOCH FROM captured_at) * 1000)::text AS at_ms
+          (EXTRACT(EPOCH FROM captured_at) * 1000)::text AS at_ms,
+          id::text AS row_id,
+          metadata
         FROM xstock_spot_ticker_snap
         WHERE captured_at > NOW() - INTERVAL '5 minutes'
           AND symbol IN (${xstockSymbolListSql})
         ORDER BY symbol, captured_at DESC
       `));
+      const selectedAtMs = performance.now();
       const rows = (result as any).rows ?? result;
       if (Array.isArray(rows)) {
-        for (const r of rows as Array<{ symbol: string; price: string; bid: string; ask: string; bid_qty: string | null; ask_qty: string | null; at_ms: string }>) {
+        for (const r of rows as Array<{
+          symbol: string; price: string; bid: string; ask: string; bid_qty: string | null; ask_qty: string | null;
+          at_ms: string; row_id: string; metadata: unknown;
+        }>) {
           const price = parseFloat(r.price);
           if (Number.isFinite(price) && price > 0) {
             xstockPriceMap.set(r.symbol, {
@@ -3743,6 +3751,7 @@ async function resolveOpenVirtualTrades(): Promise<{
               rawQuote: { last: price, bid: parseQuoteNumber(r.bid), ask: parseQuoteNumber(r.ask), atMs: parseQuoteNumber(r.at_ms),
                 bidQty: parseQuoteNumber(r.bid_qty), askQty: parseQuoteNumber(r.ask_qty) },
             });
+            if (r.metadata) selectedXstockTicker.set(r.symbol, { rowId: r.row_id, metadata: r.metadata, selectedAtMs });
           }
         }
       }
@@ -4001,7 +4010,10 @@ async function resolveOpenVirtualTrades(): Promise<{
       const _xsRow = xstockPriceMap.get(trade.symbol)?.rawQuote ?? null;
       _xsExitRow = _xsRow;
       const _xsExit = selectVtsXstockExitBid(trade.symbol, _xsRow, trade.stopLoss ?? null, Date.now());
-      _xsVtsInstrument.recordLook(trade.symbol, _xsRow, Date.now(), trade.stopLoss ?? null, trade.takeProfit ?? null, _xsExit);
+      const selected = selectedXstockTicker.get(trade.symbol);
+      const linkedUpdate = _xsExit.bid !== null && selected
+        ? linkSelectedXstockUpdate(selected, getEquityTickerSourceIdentity(trade.symbol), performance.now()) : null;
+      _xsVtsInstrument.recordLook(trade.symbol, _xsRow, Date.now(), trade.stopLoss ?? null, trade.takeProfit ?? null, _xsExit, linkedUpdate);
       _vtsExitBid = _xsExit.bid;
       _vtsExitRefusal = _xsExit.bid === null ? _xsExit.reason : null;
       _vtsExitByClass.xstock_spot.exitLooks++;

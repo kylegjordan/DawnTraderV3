@@ -100,6 +100,7 @@ interface TickerSourceReceipt {
   monotonicMs: number;
   frameOrdinal: number;
   rowOrdinal: number;
+  verifiedUpdate: boolean;
 }
 
 interface EquityTickerSubscriptionReceipt {
@@ -132,6 +133,14 @@ function currentTickerSubscription(): EquityTickerSubscription | null {
 /** A receipt attests symbol membership on the current socket. Freshness and venue hours require separate evidence. */
 export function getEquityTickerSubscriptionReceipt(symbol: string): EquityTickerSubscriptionReceipt | null {
   return currentTickerSubscription()?.receipts.get(symbol) ?? null;
+}
+
+/** Bind a selected ticker row to the current verified subscription for its exact symbol. */
+export function getEquityTickerSourceIdentity(symbol: string) {
+  const receipt = getEquityTickerSubscriptionReceipt(symbol);
+  return receipt && {
+    bootId: tickerSourceBootId, generation: receipt.generation, acknowledgedAtMs: receipt.receivedMonotonicMs,
+  };
 }
 
 /** A snapshot of transport and genuine-update evidence for one socket generation. */
@@ -451,6 +460,7 @@ function parseTickerSnap(data: any, frameType?: string, receipt?: TickerSourceRe
         rowOrdinal: receipt.rowOrdinal,
         role: frameType === 'update' || frameType === 'snapshot' ? frameType : 'other',
         receivedMonotonicMs: receipt.monotonicMs,
+        verifiedUpdate: receipt.verifiedUpdate,
       },
     } } : {}),
   });
@@ -554,18 +564,22 @@ function handleMessage(raw: WebSocket.RawData, generation?: number): void {
     const subscription = tickerSubscription;
     const frameOrdinal = ++tickerSourceFrameOrdinal;
     for (const [rowOrdinal, snap] of msg.data.entries()) {
+      let verifiedUpdate = false;
       if (subscription && receipt && subscription.generation === receipt.generation
         && (msg.type === 'update' || msg.type === 'snapshot') && subscription.receipts.get(snap?.symbol)) {
         if (Number.isFinite(snap.bid) || Number.isFinite(snap.ask) || Number.isFinite(snap.last)) {
           recordTickerTransport(subscription, receipt.monotonicMs);
-          if (msg.type === 'update') subscription.lastUpdates.set(snap.symbol, receipt.monotonicMs);
+          if (msg.type === 'update') {
+            subscription.lastUpdates.set(snap.symbol, receipt.monotonicMs);
+            verifiedUpdate = true;
+          }
         } else {
           // A malformed quote from a proven member cannot establish an observed period of silence.
           subscription.continuousFromMs = null;
           subscription.lastTransportMs = null;
         }
       }
-      parseTickerSnap(snap, msg.type, receipt && { ...receipt, frameOrdinal, rowOrdinal });
+      parseTickerSnap(snap, msg.type, receipt && { ...receipt, frameOrdinal, rowOrdinal, verifiedUpdate });
     }
   } else {
     if (receipt) {

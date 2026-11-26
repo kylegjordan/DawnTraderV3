@@ -390,7 +390,7 @@ describe('8a-P4c inc 3 — BLOCKER-2: the instrument counts the LIVE guard by it
   });
 
   it('both lanes hand the guard verdict itself to the instrument (never a re-derived proxy)', () => {
-    expect(VTS).toMatch(/_xsVtsInstrument\.recordLook\(trade\.symbol, _xsRow, Date\.now\(\), trade\.stopLoss \?\? null, trade\.takeProfit \?\? null, _xsExit\);/);
+    expect(VTS).toMatch(/_xsVtsInstrument\.recordLook\(trade\.symbol, _xsRow, Date\.now\(\), trade\.stopLoss \?\? null, trade\.takeProfit \?\? null, _xsExit, linkedUpdate\);/);
     expect(VTS).toMatch(/_xsShadowInstrument\.recordLook\(trade\.symbol, _sxRow, Date\.now\(\), trade\.stopLoss \?\? null, trade\.takeProfit \?\? null, _sx\);/);
     expect(SEL).toMatch(/\[8a-P4c\]\[VTS_XS_KNOBS_UNAVAILABLE\]/); // and the outage logs (from the shared selector)
   });
