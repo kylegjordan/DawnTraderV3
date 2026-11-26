@@ -1,6 +1,6 @@
 # B-CREDENTIALS-PRIVATE-REPO OBJ-2 / P6 — startup seeder retirement
 
-**Scope:** `#1023`, OBJ-2, approved pre-audit §2.3 items 3–4 and Group E/E8–E9. This increment retires the startup seeder and updates the two credentialed test entry points that could rely on its configured account. The other OBJ-2 live files, scan and legacy-script/archive decisions stay open.
+**Scope:** `#1023`, OBJ-2, approved pre-audit §2.3 items 3–4 and Group E/E8–E9. This increment retires the startup seeder and changes the backend validator and both active Playwright specs to use an existing configured test account. The other OBJ-2 live files, scan and legacy-script/archive decisions stay open.
 
 **Declared change-class:** `non_architecture`.
 
@@ -69,5 +69,20 @@ if (!login.username || !login.password) {
 The browser test applies the equivalent guard before navigation, with the existing admin requirement.
 
 **Review focus:** inspect the source ancestry and sole-caller removal, compare the production bundle inputs against the neighboring startup positive control, and verify the redacted archival copy without printing the historical fallback. The wider OBJ-2 credential scan is a separate acceptance condition.
+
+## Step 4 — Coltrane's send-back and the correction
+
+Coltrane sent back `9169bcd1a84dcb2547ef6258616337504e099f49` at 2026-11-26 11:07:43 UTC. He independently confirmed the startup removal, archive redaction and eight isolated checks. His login comparison identified the Phase 41F-L browser spec as a remaining caller because it still sent the previous pair. The pre-audit Group E allows this spec to be made environment-required.
+
+**MODIFIED `e2e/phase-41F-L-e2e-validate-flow.spec.ts`.** Replaced the fixed login pair with the existing-account requirement before browser navigation. The lineage label now uses the configured identity, and the stale credential comment was removed.
+
+```ts
+    const { TEST_USER_EMAIL: username, TEST_USER_PASSWORD: password } = process.env;
+    if (!username || !password) {
+      throw new Error('Set TEST_USER_EMAIL and TEST_USER_PASSWORD for an existing test account.');
+    }
+```
+
+Four isolated Phase 41F-L cases passed. Each missing-input case stopped before navigation. The supplied synthetic pair reached the two login fields and submit action. The test harness stopped at the end of login, before the remaining stages. No browser or server was accessed. The full increment has 12 isolated cases across its three test entry points.
 
 **Staging:** this increment is a source review only. Apply the existing staging windows and release gates when a later install is approved. System Manual references belong to the OBJ-2 governance step.

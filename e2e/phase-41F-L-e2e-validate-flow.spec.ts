@@ -8,9 +8,7 @@ import * as path from 'path';
  * End-to-end validation of the complete trading pipeline:
  * Kraken → filters → signals → trades → portfolio → dashboard
  * 
- * Test credentials:
- *  username: testuser123
- *  password: SecurePass123!
+ * Requires an existing test account configured through TEST_USER_EMAIL and TEST_USER_PASSWORD.
  */
 
 interface ValidationResult {
@@ -164,6 +162,11 @@ test.describe('Phase 41F-L.E2E-VALIDATE-FLOW - Complete Pipeline Validation', ()
   });
 
   test('Complete end-to-end flow validation', async ({ page, context }) => {
+    const { TEST_USER_EMAIL: username, TEST_USER_PASSWORD: password } = process.env;
+    if (!username || !password) {
+      throw new Error('Set TEST_USER_EMAIL and TEST_USER_PASSWORD for an existing test account.');
+    }
+
     // Enable video recording
     test.setTimeout(300000); // 5 minutes
     
@@ -173,13 +176,13 @@ test.describe('Phase 41F-L.E2E-VALIDATE-FLOW - Complete Pipeline Validation', ()
     console.log('\n📝 STAGE 1: Login');
     await page.goto('http://localhost:5000/login');
     
-    await page.getByTestId('input-username').fill('testuser123');
-    await page.getByTestId('input-password').fill('SecurePass123!');
+    await page.getByTestId('input-username').fill(username);
+    await page.getByTestId('input-password').fill(password);
     await page.getByTestId('button-login').click();
     
     await expect(page).toHaveURL(/.*dashboard/, { timeout: 10000 });
     recordResult('Login', true, { url: page.url() });
-    recordLineage('user_login', { username: 'testuser123' });
+    recordLineage('user_login', { username });
     
     console.log('✅ Login successful');
     
