@@ -382,6 +382,8 @@ The staging equity recorder saw a silent stall at 03:37:07 UTC, reconnected at 0
 
 **Exact Step 2 r4 review, November 26.** CHANGES NEEDED at `2b9d662c679a14b40ea0d02c87743ec682e90ef9`, dispatch `1575473951121866776`, Coltrane 11:35:18 UTC. Filled positions, atomic maker fill and committed reporting clear. The owner verified a resting maker's record can look priced at placement and that Reset and Start New both continue through failure. R5 covers the no-position filled-proof predicate and the shared incomplete-drain refusal through both routes, including retry with the manager gone. Exact r5 approval gates Step 3.
 
+**Exact Step 2 r5 review, November 26.** CHANGES NEEDED at `6fb88effbef534b9898e67b8356d3fee7ba24e27`, dispatch `1575477631879618591`, Coltrane 11:48:55 UTC. Positive proof of an actual fill clears. Both Reset and Start New could still run during a paused crypto entry write under an xStock-only gate. R6 gives the paper session operation a paper-wide drain across all admitted publishers and explicitly preserves live-mode rows. It records the direct legacy cleanup call sites for reviewer disposition. Exact r6 approval gates Step 3.
+
 ## 6d. Governance files changed — the C-P5 retirement (Step 10, 2026-11-20)
 CHANGE-CLASS: sub_batch (row 2's C-P5 outcome; declared in the C-P5 pre-audit header)
 | tier | document | verdict | what changed / why not |
