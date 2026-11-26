@@ -49,6 +49,8 @@ import {
   resolveAlertsByDedupeKey,
   AlertActorError,
   processResurface,
+  isVtsFeedIncidentAlert,
+  processVtsFeedIncidentNotices,
   shouldDeliverToDiscord,
   ALERTS_FILE,
   type SystemAlert,
@@ -103,13 +105,15 @@ function formatAlertTextDiscord(alert: SystemAlert): string {
   return text.length > 1900 ? text.slice(0, 1900) + '…' : text;
 }
 
-async function discordWebhookSend(webhookUrl: string, content: string): Promise<boolean> {
+async function discordWebhookSend(webhookUrl: string, content: string, signal?: AbortSignal): Promise<boolean> {
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
+      signal?.throwIfAborted();
       const res = await fetch(webhookUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content }),
+        signal,
       });
       if (res.status === 429) {
         const data = (await res.json().catch(() => ({}))) as { retry_after?: number };
@@ -133,7 +137,7 @@ async function discordWebhookSend(webhookUrl: string, content: string): Promise<
 
 // Returns true iff the Discord alerts webhook actually delivered (false when unprovisioned
 // or info-severity) — feeds the re-surface delivery gate (B-ALERT-PROTOCOL #340).
-async function pushToDiscord(alert: SystemAlert): Promise<boolean> {
+async function pushToDiscord(alert: SystemAlert, signal?: AbortSignal): Promise<boolean> {
   // Resolve the secret webhook URL: prefer an explicit env var, else a secrets file.
   let webhookUrl = process.env.ALERTS_DISCORD_WEBHOOK_URL || null;
   if (!webhookUrl) {
@@ -152,7 +156,7 @@ async function pushToDiscord(alert: SystemAlert): Promise<boolean> {
   // routine info still skips. Replaces the old inline warning/critical-only gate
   // (B-NEW-43 #135) that silenced 117 info alerts including governance gaps.
   if (shouldDeliverToDiscord(alert)) {
-    const ok = await discordWebhookSend(webhookUrl, formatAlertTextDiscord(alert));
+    const ok = await discordWebhookSend(webhookUrl, formatAlertTextDiscord(alert), signal);
     if (ok) console.log(`[fire-due] Discord alert posted for ${alert.id} (${alert.severity}/${alert.category})`);
     return ok;
   }
@@ -226,8 +230,14 @@ async function cmdFireDue(): Promise<void> {
       // Langston's bridge (webhook_id), which performs the §10.5 triage +
       // owner-routing. The §10.5 per-turn pull of the queue file remains the
       // push-independent backstop.
-      await pushToDiscord(alert);
+      if (!isVtsFeedIncidentAlert(alert)) await pushToDiscord(alert);
     }
+  }
+
+  try {
+    await processVtsFeedIncidentNotices(pushToDiscord);
+  } catch (error) {
+    console.warn('[fire-due] VTS incident first delivery will be retried:', error instanceof Error ? error.message : error);
   }
 
   // B-ALERT-PROTOCOL (#340): no-silent-drop closure guarantee. Runs EVERY dispatch tick

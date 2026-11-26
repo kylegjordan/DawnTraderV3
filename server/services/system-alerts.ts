@@ -717,6 +717,66 @@ export async function fireDue(nowMs: number = Date.now()): Promise<SystemAlert[]
   return promoted;
 }
 
+export const VTS_FEED_INCIDENT_KEY_PREFIX = 'vts-xstock-feed-incident:';
+const VTS_FEED_NOTICE_SEND_MS = 45_000;
+const VTS_FEED_NOTICE_LEASE_MS = 60_000;
+
+export function isVtsFeedIncidentAlert(alert: Readonly<SystemAlert>): boolean {
+  return alert.dedupe_key?.startsWith(VTS_FEED_INCIDENT_KEY_PREFIX) === true
+    && alert.metadata?.vtsFeedIncidentVersion === 1;
+}
+
+function vtsIncidentNoticeOwed(alert: Readonly<SystemAlert>, nowMs: number): boolean {
+  return isVtsFeedIncidentAlert(alert) && alert.severity === 'warning' && alert.category === 'breakage'
+    && alert.state !== 'scheduled' && Date.parse(alert.triggers_at) <= nowMs
+    && typeof alert.metadata.vtsFeedNoticeDeliveredAt !== 'string';
+}
+
+/** First delivery belongs to this alert ID for its whole lifetime, including after resolution. */
+export async function processVtsFeedIncidentNotices(
+  deliver: (alert: SystemAlert, signal: AbortSignal) => Promise<boolean>,
+  now: () => number = Date.now,
+): Promise<void> {
+  const cut = now();
+  for (const candidate of readAllAlerts().filter(alert => vtsIncidentNoticeOwed(alert, cut))) {
+    const token = crypto.randomUUID();
+    const claim = await withLock(() => {
+      const store = readAlertStore();
+      const row = store.alerts.find(alert => alert.id === candidate.id);
+      const startedAt = now();
+      if (!row || !vtsIncidentNoticeOwed(row, startedAt)) return null;
+      const priorLease = row.metadata.vtsFeedNoticeLeaseUntil;
+      if (typeof priorLease === 'number' && startedAt < priorLease) return null;
+      row.metadata = {
+        ...row.metadata,
+        vtsFeedNoticeClaim: token,
+        vtsFeedNoticeLeaseUntil: startedAt + VTS_FEED_NOTICE_LEASE_MS,
+      };
+      writeAllAlertsAtomic(store);
+      return { alert: row, deadline: startedAt + VTS_FEED_NOTICE_SEND_MS };
+    });
+    if (!claim) continue;
+
+    let delivered = false;
+    try {
+      const remaining = Math.floor(claim.deadline - now());
+      if (remaining > 0) delivered = await deliver(claim.alert, AbortSignal.timeout(remaining));
+    } finally {
+      await withLock(() => {
+        const store = readAlertStore();
+        const row = store.alerts.find(alert => alert.id === candidate.id);
+        if (!row || row.metadata?.vtsFeedNoticeClaim !== token) return;
+        const metadata = { ...row.metadata };
+        delete metadata.vtsFeedNoticeClaim;
+        delete metadata.vtsFeedNoticeLeaseUntil;
+        if (delivered) metadata.vtsFeedNoticeDeliveredAt = new Date(now()).toISOString();
+        row.metadata = metadata;
+        writeAllAlertsAtomic(store);
+      });
+    }
+  }
+}
+
 /**
  * Mark an alert as acknowledged. `by` must normalise into ALERT_ACTORS (#987) —
  * refused before any file or lock is touched; the CANONICAL value is written.
@@ -888,6 +948,7 @@ export function computeResurfaceStale(alerts: SystemAlert[], nowMs: number = Dat
   const out: ResurfaceDecision[] = [];
   for (const a of alerts) {
     if (a.state !== 'active' && a.state !== 'acknowledged') continue; // scheduled/resolved never re-surface
+    if (isVtsFeedIncidentAlert(a)) continue; // first delivery, even a retry, uses the one durable claim
     if (a.severity === 'info') continue; // info never pushes
     const baseTtl = RESURFACE_TTL_MS[a.state][a.severity];
     const firedMs = a.fired_at ? Date.parse(a.fired_at) : Date.parse(a.created_at);

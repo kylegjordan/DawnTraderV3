@@ -168,3 +168,80 @@ describe('B-ALERT-PROTOCOL markResurfaced', () => {
     expect(await markResurfaced(a.id, NOW)).toBeNull(); // resolved → not re-stamped
   });
 });
+
+describe('#1191 VTS incident first delivery', () => {
+  async function incident(mod: Awaited<ReturnType<typeof load>>, kind: 'warning' | 'info' = 'warning') {
+    return mod.addAlert({
+      triggers_at: new Date(NOW - 7 * H),
+      category: kind === 'warning' ? 'breakage' : 'health_check',
+      severity: kind, title: 'VTS incident', body: 'test notice',
+      dedupe_key: mod.VTS_FEED_INCIDENT_KEY_PREFIX + kind,
+      metadata: { vtsFeedIncidentVersion: 1 },
+    });
+  }
+
+  it('prevents overlapping first delivery and ordinary resurface, while passing independent warnings', async () => {
+    const mod = await load();
+    const row = await incident(mod);
+    await incident(mod, 'info');
+    const outside = await mod.addAlert({
+      triggers_at: new Date(NOW - 7 * H), category: 'breakage', severity: 'warning', title: 'independent', body: 'test',
+    });
+    await mod.fireDue(NOW - 7 * H);
+    let begin!: () => void;
+    let finish!: (delivered: boolean) => void;
+    const started = new Promise<void>(resolve => { begin = resolve; });
+    const inFlight = new Promise<boolean>(resolve => { finish = resolve; });
+    const posted: string[] = [];
+    const delivery = mod.processVtsFeedIncidentNotices(async (alert, signal) => {
+      expect(signal.aborted).toBe(false);
+      posted.push(alert.id);
+      begin();
+      return inFlight;
+    }, () => NOW);
+    await started;
+    await mod.processVtsFeedIncidentNotices(async (alert) => Boolean(posted.push(alert.id)), () => NOW + 1000);
+    await mod.processResurface(NOW + 1000, async (alert) => Boolean(posted.push(alert.id)));
+    finish(true);
+    await delivery;
+    await mod.processVtsFeedIncidentNotices(async (alert) => Boolean(posted.push(alert.id)), () => NOW + H);
+    expect(posted).toEqual([row.id, outside.id]);
+    expect(mod.readAllAlerts().find(alert => alert.id === row.id)?.metadata.vtsFeedNoticeDeliveredAt)
+      .toBe(new Date(NOW).toISOString());
+  });
+
+  it('retains a resolved warning obligation and retries the same alert ID after failure', async () => {
+    const mod = await load();
+    const row = await incident(mod);
+    await mod.resolveAlert(row.id, 'codex-c', 'NO-EVIDENCE-GIVEN', 'cli');
+    const posted: string[] = [];
+    await mod.processVtsFeedIncidentNotices(async (alert) => { posted.push(alert.id); return false; }, () => NOW);
+    await mod.processVtsFeedIncidentNotices(async (alert) => Boolean(posted.push(alert.id)), () => NOW + H);
+    const closed = mod.readAllAlerts().find(alert => alert.id === row.id);
+    expect(posted).toEqual([row.id, row.id]);
+    expect(closed?.state).toBe('resolved');
+    expect(closed?.metadata.vtsFeedNoticeDeliveredAt).toBe(new Date(NOW + H).toISOString());
+    expect(closed?.metadata.vtsFeedNoticeClaim).toBeUndefined();
+  });
+
+  it('reclaims an abandoned lease only at expiry and rejects the old claimant receipt', async () => {
+    const mod = await load();
+    const row = await incident(mod);
+    await mod.fireDue(NOW - 7 * H);
+    let begin!: () => void;
+    let finish!: (delivered: boolean) => void;
+    const started = new Promise<void>(resolve => { begin = resolve; });
+    const inFlight = new Promise<boolean>(resolve => { finish = resolve; });
+    const delivery = mod.processVtsFeedIncidentNotices(async () => { begin(); return inFlight; }, () => NOW);
+    await started;
+    const posted: string[] = [];
+    await mod.processVtsFeedIncidentNotices(async (alert) => Boolean(posted.push(alert.id)), () => NOW + 59_999);
+    expect(posted).toEqual([]);
+    await mod.processVtsFeedIncidentNotices(async (alert) => Boolean(posted.push(alert.id)), () => NOW + 60_000);
+    finish(true);
+    await delivery;
+    expect(posted).toEqual([row.id]);
+    expect(mod.readAllAlerts().find(alert => alert.id === row.id)?.metadata.vtsFeedNoticeDeliveredAt)
+      .toBe(new Date(NOW + 60_000).toISOString());
+  });
+});
