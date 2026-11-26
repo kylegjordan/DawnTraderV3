@@ -644,3 +644,52 @@ Coltrane cleared the row 8a audit and plan at `792a51f8743dd77dd95fa48f78010ad8f
 Coltrane's 2026-11-26 13:41:11 UTC review of `3f8388121843fa26c6b7e7b68296f4db5f3f9417` reproduced the 51 prior controls, all four boundary mutations, and independent two-lane source/rollup controls. CHANGES NEEDED: a damaged selected gzip's DEFLATE layer raised `zlib.error`, exiting 1 with a traceback and no archive/window diagnostic.
 
 The existing log reader now normalizes that exception into the same exit-2 unreadable-input path as filesystem and truncated archive failures. Boundary files identify their required UTC opening-hour interval; other required reads identify the report interval. The fixture retains the exact same valid gzip and changes only the first DEFLATE block type in the negative arm. Intact yields 2/2 VTS cells, equal counts. Corrupt, before the catch, yielded exit 1 and empty stdout. Corrupt, with the catch, yields exit 2, zero stdout bytes, and names `error__2026-01-07_00-00-03.log.gz` and `[2026-01-06T00:00:00+00:00, 2026-01-06T01:00:00+00:00)`. All 52 synthetic assertions pass. Original r5 source predicates, approval boundary, and controlled-read gate remain. No report grade, writer change or restart.
+
+### #1250 controlled midnight END read — Step 7
+
+The controlled read uses the exact shared extractor at `59bfa6d49cbc83ed2b9988311d200ae04ae8ebcf`, whose blob `04adf09391e48ecf6a98f226798d61eada4d7a64` matches Coltrane's 14:07:28 UTC Step 4 PROCEED on `b3154025a84d19e9f06e6a097e8c1bb78050c9b0`. Candidate CI `45832844198` and exact shared CI `45836659933` both passed TypeScript Check, Test Suite, Build and Docker Build individually. The change is a command-line reader of retained error output and restart evidence. It writes JSON to stdout and has no UI, app writer, database writer or deploy dependency.
+
+**Object and source reach.** The two-hour UTC sample is [2026-11-25T22:00:00Z, 2026-11-26T00:00:00Z). It has one observed `after` session per lane. The retained `error__2026-11-26_00-00-05.log` begins 2026-11-25T00:01:46Z and ends 2026-11-26T00:00:07Z. Its decoded SHA-256 is `ccee3c2368be87108c9e9479d1d89459d4964f88e9909073602aecbdd3917d8b`. Live `error.log` begins 00:00:08Z and was read beyond 01:00Z, proving the entire opening-hour source interval. It may become the Nov 27 archive before a re-read. The seven-second delay before the archive ends leaves the final rollups in that predecessor. The PM2 restart log starts March 30 and supplied 756 positive start records overall. No restart was recorded in [22:00Z, 01:00Z), the sample and its attribution interval. The same staging build `5ecd7ee24fb7a741e8e015e0e6a262a464e7d016`, restart 716, PID 235604 and uptime epoch 1795660326222 were read before and after.
+
+| Lane | In-window TOUCH looks | 22Z SYM, stamped in window | 23Z SYM, stamped after midnight | Hour-cut SYM total | 21Z SYM, stamped after START | Stamp-cut SYM total | Net stamp gap |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| shadow | 23,617 | 11,769 | 11,848 | 23,617 | 7,524 | 19,293 | 4,324 |
+| vts | 52,371 | 25,880 | 26,491 | 52,371 | 16,559 | 42,439 | 9,932 |
+
+Hour cut has two fully covered, matching hourly cells per lane, four total. The stamp cut intentionally keeps the same internal per-hour comparison. It changes window totals, admitting the preceding 21Z flush after START and losing the true final 23Z flush after END. The reported gap is net of the two boundary effects. The raw structured TOUCH and SYM records independently reproduce all table quantities. Neither run grades live freshness or a regular-hours policy. This real sample exercises the delayed rotation with final flush in its predecessor. The next-day gzip, missing source and corrupted stream are the separately controlled synthetic cases in the Change List and selftest.
+
+```bash
+ref=59bfa6d49cbc83ed2b9988311d200ae04ae8ebcf
+for cut in hour stamp
+do
+  git show "$ref:scripts/analysis/p4c-window-extract.py" |
+    ssh deploy@188.245.193.8 "nice -n 12 python3 - --start 2026-11-25T22:00:00Z --end 2026-11-26T00:00:00Z --sym-cut $cut"
+done
+```
+
+Independent raw recount on staging reads the immutable archive once, by labels rather than by report output. The first command measures the stable log contents after either plain or delayed gzip rotation. The second groups the looks by type, lane, session and the hour encoded in SYM, with membership set independently by the line timestamp. The successor is needed to prove coverage even though all report-window lines counted here were in the predecessor.
+
+```bash
+cd /var/log/dawntrader
+archive=error__2026-11-26_00-00-05.log
+if [ -r "$archive" ]; then cat "$archive"; else gzip -cd "$archive.gz"; fi | sha256sum
+if [ -r "$archive" ]; then cat "$archive"; else gzip -cd "$archive.gz"; fi |
+  awk '
+    /^2026-11-25 (22|23):|^2026-11-26 00:/ {
+      if ($0 !~ /\[8a-P4c\]\[VTS_XS_(TOUCH|SYM)\]/) next
+      lane=session=hour=looks=""
+      for (i=1; i<=NF; i++) {
+        if ($i ~ /^lane=/) lane=substr($i,6)
+        if ($i ~ /^session=/) session=substr($i,9)
+        if ($i ~ /^hour=/) hour=substr($i,6)
+        if ($i ~ /^looks=/) looks=substr($i,7)
+      }
+      cut=($1=="2026-11-25" ? "inside" : "after")
+      type=($0 ~ /\[VTS_XS_TOUCH\]/ ? "TOUCH" : "SYM")
+      count[type,lane,session,hour,cut]+=looks
+    }
+    END { for (key in count) { looks=count[key]; gsub(SUBSEP," ",key); print key,looks } }
+  ' | sort
+```
+
+**REVIEWER:** exact two output objects plus extractor claim · what else could give apparent agreement? · the stamp gap could hide opposite boundary effects and the shared per-hour counters cannot validate stamp membership · re-derived from the immutable archive above, isolating the 21Z gain and 23Z loss by lane. The complete sample supports using the reviewed extractor for this class of report, subject to its normal refusal rules. Coltrane's independent Step 8 controlled read is next.
