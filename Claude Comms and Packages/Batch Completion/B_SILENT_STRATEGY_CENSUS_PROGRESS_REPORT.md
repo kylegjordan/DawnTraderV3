@@ -289,6 +289,14 @@ The six bounded witnesses `342004755`, `342026512`, `342036118`, `342045027`, `3
 
 **Evidence review.** Coltrane confirmed **UNDERPOWERED on both fee arms** at 14:36:08 UTC on November 26 for exact `abbed15016c717ccf6f983d114bc2d4ef6586081` (dispatch `1575519812720009327`). He verified the unchanged preregistration, table arithmetic and both recorded digest mismatches. At serving ref `e3a96a812`, his settled-bar mutation changed the digest and his final-bar mutation changed only the separately captured bar. His quote control reproduced identical archived inputs for an observed update and a replayed snapshot with the same payload and timestamp. The staging population and raw witnesses remain **NOT RE-READ** in that review. Support Bounce remains disabled, 4.1 ATR is ungraded and row 52 stays open.
 
+### 3b.8 — Adaptive Flow × xStock, row 59a reconciliation (2026-11-26)
+
+**HOLD under KD-57.** Langston confirmed the row 59a completion at `97c396aaf016bc2b3662cd7111a49aa6bc1b0122`. The registered xStock rule (b) failed (10 would-refuse out of 195 graded opens) and rule (a) was insufficient (the one qualifying cell covered 90 of 195 graded opens). The completed study kept the fill-time check in shadow. Calibration of the reward-to-risk floors remains with `#372`, sprint row 131. The study's close supplies the outcome of the dependency. Adaptive Flow still requires a passing O3 feasibility result under KD-57, including stops and trading costs, before its separately registered switch-on.
+
+**Current control.** A bounded, read-only staging settings snapshot at 16:19:04.845203 UTC returned Adaptive Flow disabled for xStock, the inherited xStock floor of 2.0, and the wildcard stop and target multipliers of 1.5 and 3.0. The query enumerated all exchange and regime variants for wildcard and matching class/strategy rows. VWAP Pullback's 1.96 xStock override and Adaptive Flow's enabled crypto row were positive controls. With the wider of the ATR and pattern stops chosen by the detector (`5ecd7ee24:server/strategies/adaptive-flow.ts:173–182`), 2:1 is the gross ceiling under these multipliers. For a 100 entry and 2 ATR, pattern stops at 98 and 95 produce chosen stops at 97 and 95 and gross ratios of 2.0 and 1.2. This bounds the original §3b shorthand. The strategy remains disabled and row 52 stays open.
+
+`REVIEWER: claim-only · what separates a completed study from a cleared feasibility gate? · HIT: resolve the live scoped rows and test both pattern/ATR stop branches before interpreting 2:1 · re-derived y at the row 59a close, KD-57, serving detector and staging settings snapshot`
+
 ## 4. Unproven, stated as unproven
 - Whether strong_bull_trend fires on xStock at all inside 21 days (it was feasible only after the 09-20 seed; first-week opens not yet read).
 - D.1 cannot rank strategies (`#596`); the table says "losing at this n", not "worse than".
