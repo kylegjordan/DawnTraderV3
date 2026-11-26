@@ -344,6 +344,39 @@ describe('OBJ-2 — a shed at the cap raises the writer\'s own alert', () => {
     await stopTickerWriter();
   });
 
+  it('retains the exact xStock source receipt through a transient writer retry', async () => {
+    const capture = {
+      ...snap(81_002),
+      assetClass: 'xstock_spot',
+      exchange: 'kraken-equities',
+      metadata: {
+        schema_version: 1,
+        equityTickerSource: {
+          bootId: 'boot-fixture', generation: 7, frameOrdinal: 12, rowOrdinal: 1,
+          role: 'update', receivedMonotonicMs: 1350,
+        },
+      },
+    };
+    const attempts = vi.fn();
+    _dbState.onInsert = attempts;
+    _dbState.throwWith = new Error('connect ECONNREFUSED 127.0.0.1:5432');
+    try {
+      expect(bufferTickerSnap('xstock_spot', capture)).toBe(true);
+      await stopTickerWriter();
+      expect(attempts).toHaveBeenCalled();
+      expect(_dbState.inserted.flat().find(row => row.symbol === capture.symbol)).toBeUndefined();
+      expect(getTickerResidueBefore(Date.now()).xstock_spot).toBeGreaterThan(0);
+
+      _dbState.throwWith = null;
+      await stopTickerWriter();
+      expect(_dbState.inserted.flat().filter(row => row.symbol === capture.symbol)).toEqual([capture]);
+    } finally {
+      _dbState.throwWith = null;
+      _dbState.onInsert = null;
+      await stopTickerWriter();
+    }
+  });
+
   // ⛔ THE DETERMINISTIC FENCE ON `<=` (Langston): the live-intake CONTROL kills 'spin removed' only when a late row lands
   // inside the mark's millisecond, i.e. PROBABILISTICALLY (it failed only inside the full file). This pins the semantics
   // directly: a row stamped exactly at the mark is residue, one stamped a millisecond later is not.

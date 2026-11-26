@@ -20,6 +20,7 @@
  */
 
 import WebSocket from 'ws';
+import { randomUUID } from 'node:crypto';
 import { loadEquitySpotUniverse } from './universe-loader.js';
 import { bufferOhlcBar } from './ohlc-batch-writer.js';
 import { bufferTickerSnap } from './ticker-batch-writer.js';
@@ -91,6 +92,15 @@ const state: ArchiverState = {
 };
 let equitySocketGeneration = 0;
 let rawTickerFrameId = 0;
+const tickerSourceBootId = randomUUID();
+let tickerSourceFrameOrdinal = 0;
+
+interface TickerSourceReceipt {
+  generation: number;
+  monotonicMs: number;
+  frameOrdinal: number;
+  rowOrdinal: number;
+}
 
 interface EquityTickerSubscriptionReceipt {
   readonly generation: number;
@@ -335,7 +345,7 @@ export function _getTickerSnapsByTypeForTests(): { update: number; snapshot: num
   return { ...state.tickerSnapsByType60s };
 }
 
-function parseTickerSnap(data: any, frameType?: string, receipt?: { generation: number; monotonicMs: number }): void {
+function parseTickerSnap(data: any, frameType?: string, receipt?: TickerSourceReceipt): void {
   // *scanned* counts every snap RECEIVED, so it is bumped before the guard (#1029). Nothing else here changes.
   state.cumulativeTickerSnaps++;
   if (frameType === 'update') state.tickerSnapsByType60s.update++;
@@ -432,7 +442,18 @@ function parseTickerSnap(data: any, frameType?: string, receipt?: { generation: 
     isExtendedHours: data.is_extended_hours ?? null,
     openInterest: data.open_interest != null ? String(data.open_interest) : null,
     fundingRate: null, // n/a for spot
-  } as any);
+    ...(receipt ? { metadata: {
+      schema_version: 1,
+      equityTickerSource: {
+        bootId: tickerSourceBootId,
+        generation: receipt.generation,
+        frameOrdinal: receipt.frameOrdinal,
+        rowOrdinal: receipt.rowOrdinal,
+        role: frameType === 'update' || frameType === 'snapshot' ? frameType : 'other',
+        receivedMonotonicMs: receipt.monotonicMs,
+      },
+    } } : {}),
+  });
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -531,7 +552,8 @@ function handleMessage(raw: WebSocket.RawData, generation?: number): void {
     }
   } else if (msg.channel === 'ticker' && Array.isArray(msg.data)) {
     const subscription = tickerSubscription;
-    for (const snap of msg.data) {
+    const frameOrdinal = ++tickerSourceFrameOrdinal;
+    for (const [rowOrdinal, snap] of msg.data.entries()) {
       if (subscription && receipt && subscription.generation === receipt.generation
         && (msg.type === 'update' || msg.type === 'snapshot') && subscription.receipts.get(snap?.symbol)) {
         if (Number.isFinite(snap.bid) || Number.isFinite(snap.ask) || Number.isFinite(snap.last)) {
@@ -543,7 +565,7 @@ function handleMessage(raw: WebSocket.RawData, generation?: number): void {
           subscription.lastTransportMs = null;
         }
       }
-      parseTickerSnap(snap, msg.type, receipt);
+      parseTickerSnap(snap, msg.type, receipt && { ...receipt, frameOrdinal, rowOrdinal });
     }
   } else {
     if (receipt) {

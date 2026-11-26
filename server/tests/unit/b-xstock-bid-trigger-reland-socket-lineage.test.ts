@@ -28,6 +28,7 @@ import {
   startEquitySpotArchiver, stopEquitySpotArchiver,
 } from '../../services/passive-archive/equity-spot-archiver.js';
 import { gradePaperXstockExitQuote } from '../../services/execution/paper-xstock-exit-quote.js';
+import { bufferTickerSnap } from '../../services/passive-archive/ticker-batch-writer.js';
 
 const symbol = 'RTLY/USD';
 function deliver(socket: EventEmitter, type: string, bid: number, fields: Record<string, unknown> = {}) {
@@ -116,6 +117,36 @@ describe('#961 — immutable xStock raw quote lineage', () => {
 
 describe('#1191 — exact xStock ticker subscription evidence', () => {
   const other = 'PGR/USD';
+
+  it('preserves distinct source identities when an archived update and replay have identical prices', async () => {
+    await startEquitySpotArchiver();
+    const socket = sockets.instances[0];
+    const archive = vi.mocked(bufferTickerSnap);
+    const wall = vi.spyOn(Date, 'now').mockReturnValue(1_701_000_000_000);
+    const monotonic = vi.spyOn(performance, 'now').mockReturnValue(100);
+    try {
+      const data = [symbol, other].map(pair => ({ symbol: pair, bid: 90, ask: 91, last: 90.5 }));
+      socket.emit('message', Buffer.from(JSON.stringify({ channel: 'ticker', type: 'update', data })));
+      deliver(socket, 'snapshot', 90, { last: 90.5, bid_qty: null });
+      const [update, sibling, replay] = archive.mock.calls.slice(-3).map(([, row]) => row);
+      const origin = (row: typeof update) => (row.metadata as {
+        equityTickerSource: { bootId: string; generation: number; frameOrdinal: number; rowOrdinal: number; role: string };
+      }).equityTickerSource;
+      const first = origin(update);
+      expect(update.metadata).toMatchObject({
+        schema_version: 1,
+        equityTickerSource: { bootId: expect.any(String), generation: expect.any(Number), rowOrdinal: 0, role: 'update', receivedMonotonicMs: 100 },
+      });
+      expect(origin(sibling)).toMatchObject({ ...first, rowOrdinal: 1 });
+      expect(origin(replay)).toMatchObject({
+        bootId: first.bootId, generation: first.generation, frameOrdinal: first.frameOrdinal + 1, rowOrdinal: 0, role: 'snapshot',
+      });
+      expect([replay.symbol, replay.bid, replay.ask, replay.last]).toEqual([update.symbol, update.bid, update.ask, update.last]);
+    } finally {
+      wall.mockRestore();
+      monotonic.mockRestore();
+    }
+  });
 
   function deliverAck(socket: EventEmitter, reqId: number, result: unknown, success = true, method = 'subscribe') {
     socket.emit('message', Buffer.from(JSON.stringify({ method, req_id: reqId, success, result })));
