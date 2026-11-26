@@ -316,7 +316,12 @@ export async function runCryptoUniverseRefresh(
   let droppedApplied: string[] = [];
   let untrackedOverflowAdds: string[] = [];
   if (decision && (decision.add.length || decision.drop.length)) {
-    const r = await archiver.applyCryptoUniverseChange({ add: decision.add, drop: decision.drop, occurrenceId });
+    const r = await archiver.applyCryptoUniverseChange({
+      add: decision.add, drop: decision.drop, occurrenceId,
+      ...(triggerSource === 'cron' && decision.add.length > 0 && decision.drop.length > 0
+        ? { proof: { computed, pins, bounded: outcome === 'applied_confirmed' } }
+        : {}),
+    });
     added = r.added;
     droppedApplied = r.dropped;
     untrackedOverflowAdds = r.untrackedOverflowAdds;
