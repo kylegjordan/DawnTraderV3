@@ -383,6 +383,36 @@ All 29 minute samples from 12:20:08 through 12:48:08 UTC showed zero genuine tic
 
 The alert explicitly calls for hand resolution after reading this per-trade record. `codex-c` resolved it at 13:51:26.070Z citing #1144 and the exact archive observation, then re-read the persisted row. This records the occurrence and the existing follow-up. The separate shadow running count `9798d24f-d34b-414d-b885-b97f7513fe1b` was still active and unacknowledged on the same readback. Its close condition remains reviewed #1144 evidence.
 
+### 3k.5. Refreshed Thanksgiving paper exit-mark warnings (2026-11-26)
+
+At 14:49:58 UTC the full staging alert ledger found all 17 requested rows active and unacknowledged, fired at 14:42:25.562 UTC. The separately resolved PDD VTS row is the state control. At 14:50:00 UTC the position read matched each alert's position ID to an open paper xStock long, all 17 open longs in that class and mode. The last stored mark was from 12:01:00 UTC for 15 of 17 and 11:18:20 UTC for AMD and CME. The last stored mark's distance to each stop is shown below. It is historical and provides no currently usable exit price.
+
+| xStock | Refreshed warning | Open paper position | Stored mark vs stop |
+|---|---|---|---:|
+| AMD/USD | `47b69409-8bfd-44fb-bbb2-385f937164c1` | `ca3a395b-53e1-4ce0-9399-4d92b95b8643` | +0.80% |
+| AZN/USD | `03c8113b-03e7-4a6c-afbb-68b66436906f` | `c23046b2-547f-4b90-9fad-281de01f7b96` | +1.33% |
+| BAX/USD | `88e4f234-a46d-476b-8d43-4ea3698bb817` | `50b0f8be-c5b0-45c0-acc5-3900367092ee` | +2.86% |
+| CARR/USD | `eb1f09a2-5626-435a-a7da-6076d1902b5d` | `19b7cb45-db69-40dc-b224-8652bd7a82ff` | +5.07% |
+| CME/USD | `9633945c-5196-44b7-bf5e-e65b70356b88` | `a09e0fc4-66b5-4ab3-abc2-e7c403c7e725` | +0.81% |
+| EWL/USD | `2b1b27ba-f835-4e77-82a9-ba7660820312` | `0ffec77f-065d-48ca-8414-03b4e532ed20` | +1.60% |
+| HPQ/USD | `f084f926-18c1-4313-9852-667af39f7504` | `63e1da6b-b56b-4407-8dfe-db93ae405dad` | +8.57% |
+| MGM/USD | `aa86723b-1b4d-4673-aa6c-369e70c2db18` | `ab4d5642-fb4c-48a9-9ec5-0d1506e47a0c` | +4.20% |
+| NKE/USD | `35f3550f-937c-46ac-8bd9-20e889eeeeb3` | `2f674348-58a1-424b-90d2-a580548233fa` | +6.53% |
+| NVO/USD | `5cb9c550-8466-4f04-8e46-08b78efb9d77` | `f0ed25da-6ea2-4d4f-806e-f4a25356f6c9` | +3.47% |
+| PCG/USD | `ba20f70f-cbdd-4208-bd06-2d2717ee2e4d` | `6ec5d5d2-e159-4f61-be0e-e30fa2410a01` | +1.54% |
+| PGR/USD | `a43d6067-a08c-4633-8a05-26e14a04ac12` | `9ce526ee-de05-4317-996a-126355ee8055` | +0.40% |
+| PPL/USD | `0236a192-7daf-440a-a9b2-55f74ba1a15d` | `a22fec59-2d46-4d6d-a890-2b20f2d60eee` | +0.62% |
+| TGT/USD | `599dbf80-346e-4f00-86f0-696c1baff359` | `1e97abe5-f5e1-408f-87b1-010a18fd33c2` | +7.97% |
+| TJX/USD | `deebd41c-f87b-4813-8ac3-ce9ac5f638cc` | `620cd7cc-203a-4ea6-b206-278e6bc5bdbf` | +7.60% |
+| UL/USD | `fb3f3698-72cf-4ce8-941f-842d4376755c` | `846a97bc-e110-4625-8705-68f0877b1a41` | +1.43% |
+| XBI/USD | `57bddef0-ae2e-423c-8b57-4a6d8d3d31f8` | `6e2982b0-9c33-454e-a7e1-1167c29b18f6` | +3.97% |
+
+Ten minute feed samples from 14:42:08 through 14:51:08 UTC recorded zero ticker updates. The same counter recorded 302 at 12:01:08 UTC. Seven forced reconnects from 14:42:11 through 14:51:11 crossed the 75-second weekday threshold. Six of the ten samples each showed 469 replay snapshots after reconnects. Eight complete exit sweeps from 14:42:44 through 14:49:44 showed a thin feed, zero updating symbols and 15 members still held in the standing record. The reconnect and venue-quiet events remained active and unacknowledged. Phase A was still 5ecd7ee24fb7a741e8e015e0e6a262a464e7d016, PID 235604, restart 716.
+
+Holiday context: each of these 17 names is outside Kraken's published 24/7 exceptions. Thanksgiving is on the NYSE holiday calendar. The socket continued to deliver heartbeats and replay snapshots. Its weekday-only liquid window still selected the short timeout, an explicitly deferred calendar limitation from B79.0c and the existing #392 / #994 provenance. This sample is consistent with holiday closure and shows no usable price recovery for the held names. It cannot independently certify the feed during the next actual eligible session. Sources: [NYSE holiday calendar](https://www.nyse.com/trade/hours-calendars), [Kraken xStock market hours](https://support.kraken.com/articles/market-hours-explained).
+
+Disposition. Leave all 17 warnings and 186e8711/e80d1129 active and unacknowledged, for the writer to clear under the existing pricing, close or actual session handback rules. Reconnect closure still requires sustained genuine updates and verified pricing. No settings, trades, staging gates or #392 placement changed. Return to #961 Step 5 exact shared CI 45842708142, #1250 Step 10 and #1073 Step 2.
+
 ## 4. PRE-REGISTERED close criteria (written before the data)
 **(4a), objective 11 — WINDOW: the first three full weekday US regular sessions after the deploy (2026-10-19, 10-20, 10-21).** Quoted from the pre-audit (r5e, Langston's reading): *"crossings conserved against A3 · joins taking the too_wide/quiet share · pagesAttempted falling · `dedupeHits == 0` as a SEPARATE tripwire, never a term (non-zero = FAIL)."* Also PASS requires `markMissedRowMarks` near zero and zero `no-trigger-vts-*` rows resolved by `cli`. **FAIL:** any `no_usable_mark` or isolated-staleness crossing that joins instead of paging; minted down with `dedupeHits` up; or `alertFileBytes` growing faster than ~1 MB/day. Source: the `[VTS_RAIL][SWEEP]` lines (cumulative since start).
 **Objective 6 — S6 (the stop-hold cost) — QUANTITY WINDOW: the first `spread_blown` refused tick with the bid at or below the stop.** PASS: `spreadBlownFirstStopRefusedBid` and `spreadBlownStopHeldMs` are populated for that position and its release or close records the bid against the stop. Until then S6 is **UNEXERCISED** and no silence may be cited as a pass (Langston, Step 8).
