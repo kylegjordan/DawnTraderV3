@@ -26,7 +26,7 @@ if ! TOKEN=$(
     jq -eRrs '
       select(.[-4:-3] == "\n" and (.[-3:] | test("^2[0-9]{2}$")))
       | .[:-4] | fromjson | (.accessToken // .token) | strings
-      | select(length > 0 and . != "null" and (test("[[:cntrl:]]") | not))
+      | select(length > 0 and . != "null" and (test("[[:cntrl:][:space:]]") | not))
     ' 2>/dev/null
 ); then
   echo "❌ Authentication failed" >&2
