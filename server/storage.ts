@@ -248,8 +248,9 @@ type PaperXstockPendingMakerTransition =
       proof: Extract<PaperXstockEntryFill, { method: 'maker' }>;
       stamp: Pick<ClosedTrade, 'entryPriceProducer' | 'entryPriceSource' | 'entryObservedAtMs' | 'entryDecisionPrice' | 'entryBookAgeMs'>;
       observedAgeMs: number | null;
+      side: 'buy' | 'sell';
     }
-  | { kind: 'cancel'; reason: string };
+  | { kind: 'cancel'; reason: string; evaluatedAtMs?: number };
 
 type PaperCryptoPendingMakerTransition =
   | (Pick<Extract<PaperXstockPendingMakerTransition, { kind: 'fill' }>, 'kind' | 'currentPrice' | 'stamp' | 'observedAgeMs'> & {
@@ -270,6 +271,26 @@ type PaperCryptoPendingMakerPosition = Pick<ActiveOpenPosition, 'id' | 'symbol' 
 function positionTradeId(metadata: ActiveOpenPosition['metadata']): string | null {
   const id = (metadata as Record<string, unknown> | null)?.tradeId;
   return typeof id === 'string' && id.length > 0 ? id : null;
+}
+
+function makerAuditTime(value: number | null | undefined): number | null {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : null;
+}
+
+function linkedMakerTerminal(
+  positionId: string,
+  outcome: 'fill' | 'cancel',
+  evaluatedAt: number | undefined,
+  crossing?: { quoteArrivedAtMs: number | null; side: 'buy' | 'sell' },
+) {
+  const evaluatedAtMs = makerAuditTime(evaluatedAt);
+  const quoteArrivedAtMs = makerAuditTime(crossing?.quoteArrivedAtMs);
+  const hasTiming = evaluatedAtMs !== null && (outcome === 'cancel' || quoteArrivedAtMs !== null);
+  return {
+    version: 1, positionId, outcome, link: 'linked', evaluatedAtMs,
+    ...(crossing ? { quoteArrivedAtMs, quoteSide: crossing.side === 'buy' ? 'ask' : 'bid' } : {}),
+    ...(hasTiming ? {} : { timing: 'unknown' }),
+  };
 }
 
 async function lockOpenTradeRecord(executor: Pick<typeof db, 'execute'>, mode: TradingMode, symbol: string, assetClass: string) {
@@ -3334,9 +3355,15 @@ export class DatabaseStorage implements IStorage {
       const patch = change.kind === 'fill'
         ? {
             paperXstockEntryFill: change.proof,
+            paperMakerTerminal: linkedMakerTerminal(position.id, 'fill', change.proof.filledAtMs, {
+              quoteArrivedAtMs: change.proof.quoteArrivedAtMs, side: change.side,
+            }),
             ...(change.observedAgeMs === null ? {} : { entryObservedAgeMs: change.observedAgeMs }),
           }
-        : { neverFilledReason: change.reason };
+        : {
+            neverFilledReason: change.reason,
+            paperMakerTerminal: linkedMakerTerminal(position.id, 'cancel', change.evaluatedAtMs),
+          };
       const update: ClosedTradeWrite<Partial<ClosedTrade>> = change.kind === 'fill'
         ? change.stamp
         : {
@@ -3395,18 +3422,9 @@ export class DatabaseStorage implements IStorage {
         : await tx.delete(activeOpenPositions).where(pendingKey).returning({ id: activeOpenPositions.id });
       if (!changed) return { status: 'not_pending' };
 
-      const evaluatedAtMs = change.evaluatedAtMs;
       const evidence = linkedId === null ? {
         version: 1, positionId: position.id, outcome: 'cancel', timing: 'unknown', refusal: 'unknown', link: 'legacy_unique',
-      } : {
-        version: 1, positionId: position.id, outcome: change.kind, link: 'linked',
-        evaluatedAtMs: typeof evaluatedAtMs === 'number' && Number.isSafeInteger(evaluatedAtMs) && evaluatedAtMs > 0 ? evaluatedAtMs : null,
-        ...(change.kind === 'fill' ? {
-          quoteArrivedAtMs: change.quoteArrivedAtMs !== null && Number.isSafeInteger(change.quoteArrivedAtMs) && change.quoteArrivedAtMs > 0
-            ? change.quoteArrivedAtMs : null,
-          side: change.side,
-        } : {}),
-      };
+      } : linkedMakerTerminal(position.id, change.kind, change.evaluatedAtMs, change.kind === 'fill' ? change : undefined);
       const pendingMetadata = pending.metadata as Record<string, unknown> | null;
       const patch = change.kind === 'fill'
         ? { paperMakerTerminal: evidence, ...(change.observedAgeMs === null ? {} : { entryObservedAgeMs: change.observedAgeMs }) }

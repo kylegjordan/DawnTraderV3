@@ -11,6 +11,7 @@ const filledAtMs = 1_701_000_000_000;
 const fill = {
   kind: 'fill' as const,
   currentPrice: '99',
+  side: 'buy' as const,
   proof: { method: 'maker' as const, filledAtMs, quoteArrivedAtMs: filledAtMs - 37 },
   stamp: {
     entryPriceProducer: 'kraken-equities-ws', entryPriceSource: 'kraken_equities_ws:raw_ask',
@@ -72,7 +73,13 @@ describe('#961 paper xStock trade transitions on Postgres', () => {
       expect(await storage.getPaperXstockTrade(trade)).toMatchObject({
         closedAt: null,
         entryPriceSource: fill.stamp.entryPriceSource,
-        metadata: { entryPlan: 'preserve', paperXstockEntryFill: fill.proof, entryObservedAgeMs: 43 },
+        metadata: {
+          entryPlan: 'preserve', paperXstockEntryFill: fill.proof, entryObservedAgeMs: 43,
+          paperMakerTerminal: {
+            version: 1, positionId: position.id, outcome: 'fill', link: 'linked', quoteSide: 'ask',
+            evaluatedAtMs: filledAtMs, quoteArrivedAtMs: filledAtMs - 37,
+          },
+        },
       });
     });
   });
@@ -84,7 +91,13 @@ describe('#961 paper xStock trade transitions on Postgres', () => {
       expect(await storage.transitionPaperXstockPendingMaker(position, trade.id, fill)).toBe(false);
       expect(await storage.getActiveOpenPosition('paper', position.id)).toBeUndefined();
       const actual = await storage.getPaperXstockTrade(trade);
-      expect(actual).toMatchObject({ closeReason: 'never_filled', exitPrice: null, metadata: { neverFilledReason: cancel.reason, entryPlan: 'preserve' } });
+      expect(actual).toMatchObject({
+        closeReason: 'never_filled', exitPrice: null,
+        metadata: {
+          neverFilledReason: cancel.reason, entryPlan: 'preserve',
+          paperMakerTerminal: { positionId: position.id, outcome: 'cancel', evaluatedAtMs: null, timing: 'unknown' },
+        },
+      });
       expect(Number(actual?.fees)).toBe(0);
       expect(actual && hasPaperXstockEntryFill(actual)).toBe(false);
     });

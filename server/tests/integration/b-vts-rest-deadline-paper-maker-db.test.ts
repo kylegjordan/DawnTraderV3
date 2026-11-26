@@ -125,7 +125,7 @@ describe('#1073 paper crypto pending maker pair on Postgres', () => {
       if (first.status === 'committed') {
         expect(current).toMatchObject({ state: 'open' });
         expect(trade).toMatchObject({ closedAt: null, metadata: { tradeOnlyEvidence: 'retain', paperMakerTerminal: {
-          outcome: 'fill', positionId: position.id, evaluatedAtMs, quoteArrivedAtMs: evaluatedAtMs - 35, side: 'buy',
+          outcome: 'fill', positionId: position.id, evaluatedAtMs, quoteArrivedAtMs: evaluatedAtMs - 35, quoteSide: 'ask',
         } } });
       } else {
         expect(current).toBeUndefined();

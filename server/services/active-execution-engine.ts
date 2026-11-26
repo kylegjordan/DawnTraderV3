@@ -2008,6 +2008,7 @@ export class ActiveExecutionEngine {
           currentPrice: currentPrice.toString(),
           proof: { method: 'maker', filledAtMs: makerEvaluatedAtMs, quoteArrivedAtMs: _quoteArrivedAtMs },
           stamp: entryStamp,
+          side,
           observedAgeMs: typeof provenance.observedAtMs === 'number' && Number.isFinite(provenance.observedAtMs)
             ? Math.max(0, Math.round(makerEvaluatedAtMs - provenance.observedAtMs)) : null,
         });
@@ -2342,7 +2343,7 @@ export class ActiveExecutionEngine {
         await this._refuseUnresolvedRecord(position, 'its durable trade link is missing', action);
         return false;
       }
-      const cancelled = await storage.transitionPaperXstockPendingMaker(position, tradeId, { kind: 'cancel', reason: why });
+      const cancelled = await storage.transitionPaperXstockPendingMaker(position, tradeId, { kind: 'cancel', reason: why, evaluatedAtMs });
       if (!cancelled) {
         await this._reportUnmatchedPaperXstockPendingMaker(position, action);
         return false;
