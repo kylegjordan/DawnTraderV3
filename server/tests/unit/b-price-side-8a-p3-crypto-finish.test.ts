@@ -192,7 +192,7 @@ describe('8a-P3 Step-4 r2 — the refusal rail and the per-event rest record', (
     expect(VTS).toMatch(/const _ntReason = decision\.noDecisionReason === 'no_transactable_side' && _vtsExitRefusal !== null/);
     // Row 2 increment (4a) r4: the page goes through the rail's `onCrossing`, on the PER-TRADE key `no-trigger-vts-<SYMBOL>-<tradeId>`
     // (`railKey`, behaviour-tested in b-xstock-bid-trigger-reland-inc4a.test.ts) — still keyed by trade id here.
-    expect(VTS).toMatch(/await onCrossing\(\{\s*tradeId, symbol: trade\.symbol, assetClass: trade\.assetClass, lastReason: _nt\.lastReason,/);
+    expect(VTS).toMatch(/void onCrossing\(\{\s*tradeId, symbol: trade\.symbol, assetClass: trade\.assetClass, lastReason: _nt\.lastReason,/);
     // r3 + P10: the streak runs over EVERY no-decision reason, BOTH classes, every session; only the PAGE is session-gated.
     expect(VTS).toMatch(/const _ntPages = trade\.assetClass === 'crypto_spot' \|\| \(trade\.assetClass === 'xstock_spot' && !_ntXsOffHours\);/);
     // Row 2 increment (4c) P1 (re-pointed, same subject — the xStock PAGE is gated to paging time, the weekend close and every

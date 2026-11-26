@@ -2,7 +2,8 @@ import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { Worker } from 'node:worker_threads';
 import type { VtsRefusalEvent } from '../core/trading/vts-refusal-evidence.js';
-import type { VtsAlertWrite, VtsAlertWorkerMessage, VtsAlertWorkerRequest } from './vts-alert-write-worker.js';
+import type { VtsAlertWrite, VtsAlertWriteResult, VtsAlertWorkerMessage, VtsAlertWorkerRequest } from './vts-alert-write-worker.js';
+import type { LiveRailSweep, LiveRailSweepResult, LiveWarning, LiveWarningResult } from './vts-live-warning.js';
 
 const COALESCE_MS = 10;
 const RETRY_MS = 1_000;
@@ -20,14 +21,15 @@ function startWorker(): Worker {
 interface PendingWrite {
   key: string;
   write: VtsAlertWrite;
-  finish: (written: boolean) => void;
+  finish: (written: VtsAlertWriteResult) => void;
 }
 
 interface PendingReconciliation {
   nowMs: number;
   runId: string;
   closedTradeIds: (ids: string[]) => Promise<Set<string>>;
-  finish: (reconciled: boolean) => void;
+  rail?: LiveRailSweep;
+  finish: (reconciled: boolean, rail?: LiveRailSweepResult) => void;
 }
 
 /** Keep exact refusal and decision observations until the same store writer responds. */
@@ -39,13 +41,24 @@ export class VtsAlertWriteQueue {
   private readonly pending = new Map<string, PendingWrite>();
 
   markDecision(rowId: string, atMs: number): Promise<boolean> | undefined {
-    return this.enqueue(`alert:${rowId}`, { kind: 'individual-decision', rowId, atMs });
+    return this.enqueue(`alert:${rowId}`, { kind: 'individual-decision', rowId, atMs })?.then(result => result === true);
+  }
+
+  markLiveDecision(tradeId: string, atMs: number): Promise<boolean> | undefined {
+    return this.enqueue(JSON.stringify(['live-decision', tradeId, atMs]), { kind: 'live-decision', tradeId, atMs })
+      ?.then(result => result === true);
+  }
+
+  writeLiveWarning(warning: LiveWarning): Promise<LiveWarningResult | null> | undefined {
+    const { crossing, action, nowMs } = warning;
+    const key = JSON.stringify(['live-warning', action, crossing.tradeId, crossing.streakId, crossing.pageSinceMs, nowMs]);
+    return this.enqueue(key, { ...warning, kind: 'live-warning' })?.then(result => typeof result === 'object' ? result : null);
   }
 
   recordRefusal(event: VtsRefusalEvent): Promise<boolean> | undefined {
     const run = 'pageSinceMs' in event ? event.pageSinceMs : null;
     const key = JSON.stringify([event.streakId, event.tradeId, event.kind, run]);
-    return this.enqueue(key, { kind: 'refusal', event });
+    return this.enqueue(key, { kind: 'refusal', event })?.then(result => result === true);
   }
 
   reconcileRefusals(
@@ -58,10 +71,23 @@ export class VtsAlertWriteQueue {
     });
   }
 
-  private enqueue(key: string, write: VtsAlertWrite): Promise<boolean> | undefined {
+  sweepRail(
+    nowMs: number, runId: string, closedTradeIds: (ids: string[]) => Promise<Set<string>>, rail: LiveRailSweep,
+  ): Promise<{ reconciled: boolean; rail: LiveRailSweepResult } | null> | undefined {
+    if (this.reconciliation) return;
+    return new Promise((finish) => {
+      this.reconciliation = {
+        nowMs, runId, closedTradeIds, rail,
+        finish: (reconciled, result) => finish(result ? { reconciled, rail: result } : null),
+      };
+      this.schedule(COALESCE_MS);
+    });
+  }
+
+  private enqueue(key: string, write: VtsAlertWrite): Promise<VtsAlertWriteResult> | undefined {
     // An existing entry already owns its completion. Repeats add no waiters during a failed write.
     if (this.pending.has(key)) return;
-    return new Promise<boolean>((finish) => {
+    return new Promise<VtsAlertWriteResult>((finish) => {
       this.pending.set(key, { key, write, finish });
       this.schedule(COALESCE_MS);
     });
@@ -83,7 +109,7 @@ export class VtsAlertWriteQueue {
       this.inFlight = { writes: [...this.pending.values()], reconciliation };
       const writes = this.inFlight.writes.map(({ write }) => write);
       const request: VtsAlertWorkerRequest = reconciliation
-        ? { kind: 'reconcile', writes, nowMs: reconciliation.nowMs, runId: reconciliation.runId }
+        ? { kind: 'reconcile', writes, nowMs: reconciliation.nowMs, runId: reconciliation.runId, rail: reconciliation.rail }
         : writes;
       worker.postMessage(request);
     } catch (error) {
@@ -133,7 +159,7 @@ export class VtsAlertWriteQueue {
       }
       if (batch.reconciliation) {
         this.reconciliation = undefined;
-        batch.reconciliation.finish(result.reconciled === true);
+        batch.reconciliation.finish(result.reconciled === true, result.rail);
       }
       this.schedule(COALESCE_MS);
     });

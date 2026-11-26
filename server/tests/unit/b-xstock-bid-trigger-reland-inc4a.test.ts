@@ -515,8 +515,8 @@ describe('Coltrane Step 4 BLOCKER-2/3 — the runner wiring (source fence; the b
   it('a refusing member is checked on every paging pass; the closes carry hold and the last refusal', async () => {
     const { readFileSync } = await import('node:fs');
     const src = readFileSync('server/services/vts-runner.ts', 'utf8');
-    expect(src).toMatch(/if \(_ntReason !== undefined && _ntPages && !_ntStep\.page && _ntStep\.next !== null && isStandingMember\(tradeId\)\)/);
-    expect(src).toContain('await onMemberReason({');
+    expect(src).toMatch(/if \(_ntReason !== undefined && _ntPages && !_ntStep\.page && _ntStep\.next !== null && shouldCheckMemberReason\(tradeId\)\)/);
+    expect(src).toContain('void onMemberReason({');
     expect(src).toContain("lastRefusal: _lastRefusal }, now, d))");
     expect(src).toContain('hold: _sHold, lastRefusal: _sLastRefusal }, now, d))');
     expect(src).toContain('if (_ntReason !== undefined) _vtsLastRefusal.set(tradeId, _ntReason);');

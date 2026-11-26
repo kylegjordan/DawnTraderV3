@@ -105,7 +105,7 @@ import { readXstockSigmaCacheConfig } from '../asset_classes/xstock_spot/mark-st
 import { selectExitTrigger, exitTriggerClass, type ExitTriggerRefusal } from '../core/trading/exit-trigger.js';
 import { selectVtsXstockExitBid, selectVtsXstockEntryAsk, vtsXstockSideSize } from '../asset_classes/xstock_spot/vts-xs-select.js';
 import { ensureSigmaFresh } from '../asset_classes/xstock_spot/sigma-rate-cache.js';
-import { markDecided, onCrossing, onMemberReason, isStandingMember, ensureVtsRailIndex, runVtsRailSweep, onUnpricedClose, onShadowUnpriced, productionVtsRailDeps, recordVtsRefusal, type VtsRailDeps } from './vts-rail-reporting.js';
+import { markDecided, onCrossing, onMemberReason, shouldCheckMemberReason, ensureVtsRailIndex, runVtsRailSweep, onUnpricedClose, onShadowUnpriced, productionVtsRailDeps, recordVtsRefusal, type VtsRailDeps } from './vts-rail-reporting.js';
 import { EXPECTED_OLD } from '../core/trading/vts-rail.js';
 import { getEquityTickerFeedEvidence } from './passive-archive/equity-spot-archiver.js';
 import { vtsEquityIncidentCohort, VtsFeedIncidentWindows, VTS_FEED_INCIDENT_SAMPLE_MS, type VtsFeedIncidentEvidence } from './vts-feed-incident-windows.js';
@@ -4119,16 +4119,19 @@ async function resolveOpenVirtualTrades(): Promise<{
       // Row 2 increment (4a) P3 (Coltrane Step 4 BLOCKER-2): a standing-record MEMBER whose refusal reason turns
       // non-expected leaves the record and pages on its own key NOW — its streak latch fired at the join, so the crossing
       // path below would never run for it again. Paging session only, as for every rail page.
-      if (_ntReason !== undefined && _ntPages && !_ntStep.page && _ntStep.next !== null && isStandingMember(tradeId)) {
+      if (_ntReason !== undefined && _ntPages && !_ntStep.page && _ntStep.next !== null && shouldCheckMemberReason(tradeId)) {
         try {
           const _rd = await vtsRailDeps();
-          if (_rd) await onMemberReason({
+          if (_rd) void onMemberReason({
             tradeId, symbol: trade.symbol, assetClass: trade.assetClass, lastReason: _ntReason, pageSinceMs: _ntStep.next.pageSinceMs ?? _ntNow,
+            streakId: streak?.streakId,
             title: `VTS exit decisions unavailable — ${trade.symbol} left the wide-book list (now: ${_ntReason})`,
             body: `Open virtual trade ${tradeId} in ${trade.symbol} was waiting on the standing record for an EXPECTED wide or quiet `
               + `book, and its exit is now refused for a reason that is NOT expected (most recent reason: ${_ntReason}), so it pages `
               + `on its own key at once (row 2 increment (4a), P3). This row clears itself when the trade decides or closes.`,
-          }, _ntNow, _rd);
+          }, _ntNow, _rd).catch((err) => {
+            console.error(`[VTS_RAIL][MEMBER_REASON_FAILED] trade=${tradeId}:`, err);
+          });
         } catch (err) {
           console.error(`[VTS_RAIL][MEMBER_REASON_FAILED] trade=${tradeId}:`, err instanceof Error ? err.message : err);
         }
@@ -4170,7 +4173,7 @@ async function resolveOpenVirtualTrades(): Promise<{
           // on its own key as before (`vts-rail-reporting.ts`; the rules are pure in `core/trading/vts-rail.ts`).
           const _rd = await vtsRailDeps();
           if (!_rd) throw new Error('rail deps unavailable');
-          await onCrossing({
+          void onCrossing({
             tradeId, symbol: trade.symbol, assetClass: trade.assetClass, lastReason: _nt.lastReason, pageSinceMs: _nt.pageSinceMs ?? _ntNow,
             streakId: streak.streakId,
             feedIncident,
@@ -4188,7 +4191,9 @@ async function resolveOpenVirtualTrades(): Promise<{
               + `\`crossed_book\` or a one-sided book cannot be fixed by any ceiling. Read the symbol's cached sides first (a bid `
               + `equal to the ask means the cache never received real sides) before touching either ceiling. `
               + `This row CLEARS ITSELF when the trade decides or closes (row 2 increment (4a)); if you resolve it by hand, never ACK it — an ack silences the dedupe key permanently.`,
-          }, _ntNow, _rd);
+          }, _ntNow, _rd).catch((err) => {
+            console.error(`[VTS_RAIL][CROSSING_WRITE_FAILED] trade=${tradeId}:`, err);
+          });
         } catch (alertErr) {
           console.error(`[8a-P3][VTS_NO_TRIGGER_ESCALATION] addAlert failed for ${trade.symbol}:`, alertErr);
         }

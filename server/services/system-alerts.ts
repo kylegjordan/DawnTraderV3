@@ -516,6 +516,12 @@ export function readVtsRefusalEvidence(): VtsRefusalEvidence[] {
   return [...readAlertStore().vtsRefusals.values()];
 }
 
+/** The VTS worker plans against one snapshot of both records before its unlocked close lookup. */
+export function readVtsAlertSnapshot(): { rows: SystemAlert[]; refusals: VtsRefusalEvidence[] } {
+  const store = readAlertStore();
+  return { rows: store.alerts, refusals: [...store.vtsRefusals.values()] };
+}
+
 export type AlertDedupeState = 'absent' | 'nonterminal' | 'resolved';
 
 /**
@@ -582,6 +588,7 @@ export interface AlertStoreDraft {
   readonly vtsRefusals: ReadonlyMap<string, VtsRefusalEvidence>;
   add(opts: AddAlertOptions): SystemAlert;
   mergeMetadata(id: string, patch: AlertMetadataPatch): SystemAlert | null;
+  resolve(id: string, by: string, evidence: string, transport: ResolveTransport): SystemAlert | null;
   recordVtsRefusal(event: VtsRefusalEvent): boolean;
 }
 
@@ -615,6 +622,14 @@ export async function editAlertStore<T>(edit: (draft: AlertStoreDraft) => { valu
           row.metadata = { ...current, ...delta };
           changed = true;
         }
+        return { ...row };
+      },
+      resolve(id, by, evidence, transport) {
+        const actor = assertResolution(by, evidence);
+        const row = rows.find(candidate => candidate.id === id);
+        if (!row) return null;
+        stampResolution(row, actor, evidence, transport);
+        changed = true;
         return { ...row };
       },
       recordVtsRefusal(event) {
@@ -739,6 +754,19 @@ export async function resolveAlert(
   evidence: string,
   transport: ResolveTransport,
 ): Promise<SystemAlert | null> {
+  const actor = assertResolution(by, evidence);
+  ensureFileExists();
+  return withLock(() => {
+    const store = readAlertStore();
+    const found = store.alerts.find((alert) => alert.id === id);
+    if (!found) return null;
+    stampResolution(found, actor, evidence, transport);
+    writeAllAlertsAtomic(store);
+    return { ...found };
+  });
+}
+
+function assertResolution(by: string, evidence: string): ReturnType<typeof assertAlertActor> {
   // B-ALERT-ACTOR-ALLOWLIST (#987): identity is gated first, before any file or
   // lock — a repeat resolve (the checker re-resolves by design) is bound too.
   const actor = assertAlertActor(by);
@@ -759,26 +787,20 @@ export async function resolveAlert(
       `(${RESOLUTION_EVIDENCE_SENTINELS.join(' | ')}). Got ${evidenceLength} chars (not echoed).`,
     );
   }
-  ensureFileExists();
-  let result: SystemAlert | null = null;
-  await withLock(() => {
-    const store = readAlertStore();
-    const found = store.alerts.find((a) => a.id === id);
-    if (!found) return;
-    const now = new Date().toISOString();
-    found.state = 'resolved';
-    found.resolved_at = now;
-    found.resolved_by_claimed = actor;       // the caller's claim, canonicalised (#987)
-    found.resolved_by_transport = transport; // the code-stamped, verifiable channel
-    found.resolution_evidence = evidence.trim();
-    if (!found.acknowledged_at) {
-      found.acknowledged_at = now;
-      found.acknowledged_by = actor;
-    }
-    result = { ...found };
-    writeAllAlertsAtomic(store);
-  });
-  return result;
+  return actor;
+}
+
+function stampResolution(row: SystemAlert, actor: ReturnType<typeof assertAlertActor>, evidence: string, transport: ResolveTransport): void {
+  const now = new Date().toISOString();
+  row.state = 'resolved';
+  row.resolved_at = now;
+  row.resolved_by_claimed = actor;
+  row.resolved_by_transport = transport;
+  row.resolution_evidence = evidence.trim();
+  if (!row.acknowledged_at) {
+    row.acknowledged_at = now;
+    row.acknowledged_by = actor;
+  }
 }
 
 /**

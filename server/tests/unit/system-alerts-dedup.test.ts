@@ -15,6 +15,8 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import type { VtsRefusalEvent } from '../../core/trading/vts-refusal-evidence.js';
 import { vtsRefusalReceiptField } from '../../core/trading/vts-refusal-evidence.js';
+import { EXPECTED_WIDE, memberField, railKey, VTS_STANDING_KEY } from '../../core/trading/vts-rail.js';
+import { decidedField, type Crossing } from '../../services/vts-live-warning.js';
 
 const TMP = path.join(os.tmpdir(), `sa-dedup-test-${process.pid}.jsonl`);
 process.env.SYSTEM_ALERTS_FILE = TMP;
@@ -158,6 +160,79 @@ describe('#1191 alert store edits', () => {
       if (fs.existsSync(TMP) && fs.statSync(TMP).isDirectory()) fs.rmdirSync(TMP);
     }
   }, 8_000);
+
+  it('retries 450 live warnings with their exact receipts and preserves decision and reason-exit order', async () => {
+    const { VtsAlertWriteQueue } = await import('../../services/vts-alert-write-queue.js');
+    const { addAlert, readAllAlerts, readVtsRefusalEvidence } = await load();
+    const neighbor = await addAlert({ ...base, dedupe_key: 'other-service' });
+    const closedTrade = await addAlert({
+      ...base, dedupe_key: railKey('AZN/USD', 'proven-close'), metadata: { tradeId: 'proven-close' },
+    });
+    const initial = fs.readFileSync(TMP);
+    fs.unlinkSync(TMP);
+    fs.mkdirSync(TMP);
+    const error = vi.spyOn(console, 'error');
+    const queue = new VtsAlertWriteQueue();
+    const nowMs = Date.parse('2026-11-26T15:00:00Z');
+    const pageSinceMs = nowMs - 600_000;
+    const crossings = Array.from({ length: 450 }, (_, index): Crossing => ({
+      tradeId: `live-trade-${index}`, streakId: `live-streak-${index}`,
+      symbol: 'AZN/USD', assetClass: 'xstock_spot', pageSinceMs, title: 'VTS warning', body: 'exact trade',
+      lastReason: index < 225 ? EXPECTED_WIDE : 'no_usable_mark',
+    }));
+    try {
+      const pending = crossings.map((crossing, index) => {
+        const id = { tradeId: crossing.tradeId, streakId: crossing.streakId! };
+        void queue.recordRefusal({
+          ...id, kind: 'first', firstAtMs: pageSinceMs, firstReason: crossing.lastReason,
+          symbol: crossing.symbol, assetClass: crossing.assetClass, thresholdMs: 600_000,
+        });
+        void queue.recordRefusal({ ...id, kind: 'paging', pageSinceMs });
+        void queue.recordRefusal({ ...id, kind: 'crossing', pageSinceMs, observedAtMs: nowMs, reason: crossing.lastReason, feedCoverage: null });
+        return queue.writeLiveWarning({ crossing, nowMs, action: index < 225 ? 'join' : 'page' });
+      });
+      const leave = queue.writeLiveWarning({
+        crossing: { ...crossings[0], lastReason: 'no_usable_mark' }, nowMs: nowMs + 1, action: 'leave',
+      });
+      const decidedStanding = queue.markLiveDecision(crossings[1].tradeId, nowMs + 1);
+      const decidedIndividual = queue.markLiveDecision(crossings[225].tradeId, nowMs + 1);
+      const closeLookup = vi.fn(async () => new Set(['proven-close', crossings[226].tradeId]));
+      const sweep = queue.sweepRail(nowMs + 2, 'live-run', closeLookup, { regular: true, precedingFailures: 0 });
+      await vi.waitFor(() => expect(error).toHaveBeenCalledWith('[VTS_RAIL][DECISION_BATCH_FAILED]', expect.anything()));
+      fs.rmdirSync(TMP);
+      fs.writeFileSync(TMP, initial);
+
+      const receipts = await Promise.all(pending);
+      expect(receipts.filter(result => result?.route === 'joined')).toHaveLength(225);
+      expect(receipts.filter(result => result?.route === 'individual')).toHaveLength(225);
+      expect(await leave).toMatchObject({ route: 'individual', minted: true });
+      expect(await Promise.all([decidedStanding, decidedIndividual])).toEqual([true, true]);
+      expect(await sweep).toMatchObject({ reconciled: true, rail: { resolved: 2, escalated: 0 } });
+      expect(closeLookup).toHaveBeenCalledExactlyOnceWith(['proven-close']);
+      const rows = readAllAlerts();
+      const standing = rows.find(row => row.dedupe_key === VTS_STANDING_KEY)!;
+      expect(rows.filter(row => row.dedupe_key === VTS_STANDING_KEY)).toHaveLength(1);
+      expect(standing.metadata[memberField(crossings[0].tradeId)]).toBeNull();
+      expect(standing.metadata[memberField(crossings[1].tradeId)]).toBeNull();
+      expect(standing.metadata[decidedField(crossings[1].tradeId)]).toBeNull();
+      const individual = rows.find(row => row.dedupe_key === railKey(crossings[225].symbol, crossings[225].tradeId))!;
+      expect(individual.metadata.decidedAtMs).toBe(nowMs + 1);
+      expect(individual).toMatchObject({ state: 'resolved', resolution_evidence: expect.stringContaining('DECIDED-AFTER-MINT') });
+      expect(rows.find(row => row.id === closedTrade.id)).toMatchObject({
+        state: 'resolved', resolution_evidence: expect.stringContaining('TRADE-CLOSED'),
+      });
+      expect(rows.find(row => row.dedupe_key === railKey(crossings[226].symbol, crossings[226].tradeId))?.state).toBe('scheduled');
+      expect(rows.find(row => row.id === neighbor.id)).toEqual(neighbor);
+      expect(readVtsRefusalEvidence().map(item => item.crossings[0].disposition))
+        .toEqual(receipts.map(result => ({ alertId: result!.alertId, route: result!.route })));
+      const replay = await queue.writeLiveWarning({ crossing: crossings[2], nowMs, action: 'join' });
+      expect(replay).toMatchObject({ alertId: standing.id, route: 'joined', minted: false });
+      expect(readAllAlerts().find(row => row.id === standing.id)?.metadata.suppressedPages).toBe(225);
+    } finally {
+      error.mockRestore();
+      if (fs.existsSync(TMP) && fs.statSync(TMP).isDirectory()) fs.rmdirSync(TMP);
+    }
+  }, 10_000);
 
   it('keeps first refusal, the actual crossing and an exact hold through the worker and later alert writes', async () => {
     const { VtsAlertWriteQueue } = await import('../../services/vts-alert-write-queue.js');

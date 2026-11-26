@@ -14,13 +14,16 @@
  */
 import {
   vtsXstockJoinsStandingRecord, stepMemberClock, railRowClear, clearEvidence, railRowTradeId, easternDate,
-  railKey, memberField, RAIL_KEY_PREFIX, VTS_STANDING_KEY, VTS_RAIL_ACTOR, VTS_RAIL_REF, MEMBER_ESCALATE_AFTER_MS,
-  unpricedCloseKey, shadowUnpricedKey, VTS_STUCK_KEY, STUCK_SWEEP_FAILURES, STUCK_CLOSED_MEMBER_SWEEPS, EXPECTED_WIDE, EXPECTED_OLD, type MemberClock,
+  memberField, RAIL_KEY_PREFIX, VTS_STANDING_KEY, VTS_RAIL_ACTOR, VTS_RAIL_REF, MEMBER_ESCALATE_AFTER_MS,
+  unpricedCloseKey, shadowUnpricedKey, VTS_STUCK_KEY, STUCK_SWEEP_FAILURES, STUCK_CLOSED_MEMBER_SWEEPS, EXPECTED_WIDE, EXPECTED_OLD,
 } from '../core/trading/vts-rail.js';
 import type { ClassVerdict } from './venue-quiet-alerting.js';
-import type { VtsFeedIncidentEvidence } from './vts-feed-incident-windows.js';
 import { vtsRefusalReceiptField, type VtsRefusalEvent } from '../core/trading/vts-refusal-evidence.js';
 import { VtsAlertWriteQueue } from './vts-alert-write-queue.js';
+import {
+  decidedField, memberEscalation, ownWarning, standingJoin, standingWarning, stuckWarning,
+  type Crossing, type LiveRailSweepResult, type LiveWarning, type LiveWarningResult, type RailMember,
+} from './vts-live-warning.js';
 import fs from 'node:fs';
 import { randomUUID } from 'node:crypto';
 
@@ -31,8 +34,7 @@ export function recordVtsRefusal(event: VtsRefusalEvent): void {
   void alertWrites.recordRefusal(event.kind === 'first' ? { ...event, runId: refusalRunId } : event);
 }
 
-/** `decided_<tradeId>` on the standing record: a member decided at this time (single-key merge, never a map rewrite). */
-export const decidedField = (tradeId: string) => `decided_${tradeId}`;
+export { decidedField, type Crossing, type RailMember } from './vts-live-warning.js';
 
 export interface RailAlertRow {
   id: string;
@@ -43,22 +45,19 @@ export interface RailAlertRow {
   metadata?: Record<string, unknown> | null;
 }
 
-export interface RailMember extends MemberClock {
-  symbol: string;
-  reason: string;
-  joinedAtMs: number;
-}
-
 export interface VtsRailDeps {
   addAlert: (a: Record<string, unknown>) => Promise<RailAlertRow>;
   mergeAlertMetadata: (id: string, patch: Record<string, unknown>) => Promise<RailAlertRow | null>;
   markIndividualDecision?: (id: string, atMs: number) => Promise<boolean> | undefined;
+  markLiveDecision?: (tradeId: string, atMs: number) => Promise<boolean> | undefined;
+  writeLiveWarning?: (warning: LiveWarning) => Promise<LiveWarningResult | null> | undefined;
   resolveAlert: (id: string, by: string, evidence: string, transport: 'engine') => Promise<unknown>;
   readAllAlerts: () => RailAlertRow[];
   /** Of these VTS trade ids, which are CLOSED in durable state — a PRESENT `vts_open_trades` row with `closed`/`closed_at`
    *  set. An id with no row is NOT closed (it is left for a human), so an empty result can never resolve everything. */
   closedTradeIds: (ids: string[]) => Promise<Set<string>>;
   reconcileRefusals?: (nowMs: number, closedTradeIds: VtsRailDeps['closedTradeIds']) => Promise<boolean> | undefined;
+  sweepLive?: (nowMs: number, precedingFailures: number) => Promise<{ reconciled: boolean; rail: LiveRailSweepResult } | null> | undefined;
   /** The paper cohort verdict for xStock (`venue-quiet-alerting.ts`); `null` when unreadable. */
   xstockVerdict: (nowMs: number) => ClassVerdict | null;
   /** Is `nowMs` inside the US regular session on a trading day? The session LABEL (an unpriced close's `session`). */
@@ -82,6 +81,7 @@ const state = {
   rowByTrade: new Map<string, Set<string>>(),
   /** tradeId of each standing-record member → the record's id. */
   memberRecord: new Map<string, string>(),
+  pendingCrossings: new Map<string, number>(),
   loaded: false,
   sweepInFlight: false,
   lastSweepMs: 0,
@@ -92,7 +92,7 @@ const state = {
 
 /** Test seam only. */
 export function _resetVtsRailState(): void {
-  state.rowByTrade.clear(); state.memberRecord.clear();
+  state.rowByTrade.clear(); state.memberRecord.clear(); state.pendingCrossings.clear();
   state.loaded = false; state.sweepInFlight = false; state.lastSweepMs = 0; state.sweepFailures = 0; state.closedMemberSweeps.clear();
   for (const k of Object.keys(railCounts) as Array<keyof typeof railCounts>) railCounts[k] = 0;
 }
@@ -125,8 +125,12 @@ export function loadVtsRailIndex(deps: Pick<VtsRailDeps, 'readAllAlerts'>): void
   state.loaded = true;
 }
 
-export function ensureVtsRailIndex(deps: Pick<VtsRailDeps, 'readAllAlerts'>): void {
+export function ensureVtsRailIndex(deps: VtsRailDeps): void {
   if (!state.loaded) {
+    if (deps.sweepLive) {
+      void runVtsRailSweep(Date.now(), deps);
+      return;
+    }
     try { loadVtsRailIndex(deps); } catch (err) { console.error('[VTS_RAIL][INDEX_LOAD_FAILED]', err instanceof Error ? err.message : err); }
   }
 }
@@ -136,9 +140,13 @@ export function ensureVtsRailIndex(deps: Pick<VtsRailDeps, 'readAllAlerts'>): vo
  * decision time onto the DURABLE row now (fire-and-forget; a failed write keeps the index entry so the next decision retries).
  */
 export function markDecided(
-  tradeId: string, nowMs: number, deps: Pick<VtsRailDeps, 'mergeAlertMetadata' | 'markIndividualDecision'>,
+  tradeId: string, nowMs: number, deps: Pick<VtsRailDeps, 'mergeAlertMetadata' | 'markIndividualDecision' | 'markLiveDecision'>,
 ): void {
   const rowIds = [...(state.rowByTrade.get(tradeId) ?? [])];
+  if (deps.markLiveDecision) {
+    if (!state.loaded || rowIds.length || isStandingMember(tradeId)) void deps.markLiveDecision(tradeId, nowMs);
+    return;
+  }
   // r5 (Langston condition 3): `mergeAlertMetadata` RETURNS null (it does not throw) when the row is missing or already
   // resolved, so an unwritten mark is counted (`markMisses`, the seventh count) rather than assumed. Either way the index
   // entry goes, and that is deliberate (Langston r5 condition 2, the markDecided half): null means the row is already
@@ -164,38 +172,11 @@ export function markDecided(
   }
 }
 
-export interface Crossing {
-  tradeId: string;
-  symbol: string;
-  assetClass: string;
-  lastReason: string;
-  /** When this streak's current run of paging (regular-session) time began — the member clock starts here. */
-  pageSinceMs: number;
-  title: string;
-  body: string;
-  feedIncident?: VtsFeedIncidentEvidence | null;
-  streakId?: string;
-}
-
 /** Page on the symbol's own key, counting minted vs suppressed, and index the row at the mint. */
 async function pageOwnKey(c: Crossing, nowMs: number, deps: VtsRailDeps): Promise<void> {
   railCounts.pagesAttempted++;
-  const evidence = c.feedIncident;
   const field = c.streakId ? vtsRefusalReceiptField(c.streakId, c.pageSinceMs) : undefined;
-  const row = await deps.addAlert({
-    triggers_at: new Date(nowMs), category: 'breakage', severity: 'warning',
-    title: c.title, body: c.body, dedupe_key: railKey(c.symbol, c.tradeId),
-    metadata: {
-      tradeId: c.tradeId,
-      ...(field ? { [field]: c.tradeId } : {}),
-      ...(evidence ? { feedIncident: {
-        key: evidence.key, generation: evidence.generation,
-        windowStartMonotonicMs: evidence.startMs, windowEndMonotonicMs: evidence.endMs,
-        subscribedSymbols: evidence.subscribed, qualifyingSymbols: evidence.qualified.length,
-        missingReceipts: evidence.missing.length,
-      } } : {}),
-    },
-  });
+  const row = await deps.addAlert({ ...ownWarning(c, nowMs) });
   // A fresh row is created at or after the pre-call stamp; an existing (deduped) one before it (`system-alerts.ts:539-545`).
   const mintedNow = Date.parse(row.created_at) >= nowMs;
   if (mintedNow) railCounts.minted++; else railCounts.dedupeHits++;
@@ -213,55 +194,58 @@ export async function onCrossing(c: Crossing, nowMs: number, deps: VtsRailDeps):
   if (c.assetClass === 'xstock_spot' && c.lastReason.startsWith('no_transactable_side (too_old')) {
     try { verdict = deps.xstockVerdict(nowMs); } catch { verdict = null; } // unreadable ⇒ page
   }
-  if (c.assetClass === 'xstock_spot' && vtsXstockJoinsStandingRecord(c.lastReason, verdict)) {
-    const rec = await deps.addAlert({
-      triggers_at: new Date(nowMs), category: 'health_check', severity: 'info',
-      title: 'VTS xStock exits waiting on wide or quiet books',
-      body: 'Open VTS xStock trades whose exit cannot be decided because the book is too wide (or the market is quiet). '
-        + 'This is EXPECTED at the US open and overnight and pages nobody (Kyle #994; row 2 objective 9). Each member, its '
-        + 'reason and its session clock are in metadata; a member still stuck after 30 min of regular-session time pages on '
-        + 'its own key; a member leaves when its trade decides or closes; the record resolves itself when empty.',
-      metadata: {}, dedupe_key: VTS_STANDING_KEY,
-    });
-    const stored = rec.metadata?.[memberField(c.tradeId)] as RailMember | null | undefined;
-    // r5 (Coltrane BLOCKER): a member whose trade DECIDED after it joined is a finished streak, not this one. A re-crossing
-    // after that (e.g. decision → restart before the sweep → refusing again) starts a NEW member with a fresh clock; only a
-    // re-crossing with NO decision in between (a restart mid-streak) keeps the stored clock — downtime counts, conservative.
-    const storedDecided = rec.metadata?.[decidedField(c.tradeId)];
-    const prev = stored && !(typeof storedDecided === 'number' && storedDecided > stored.joinedAtMs) ? stored : null;
-    const etDate = easternDate(nowMs);
-    const member: RailMember = prev ?? {
-      symbol: c.symbol, reason: c.lastReason, joinedAtMs: nowMs,
-      sessionClockStartMs: c.pageSinceMs, sessionDateEt: easternDate(c.pageSinceMs),
-    };
-    if (prev) member.reason = c.lastReason;
-    if (member.sessionDateEt !== etDate) { member.sessionClockStartMs = c.pageSinceMs; member.sessionDateEt = etDate; }
-    const suppressedPages = (typeof rec.metadata?.suppressedPages === 'number' ? rec.metadata.suppressedPages : 0) + 1;
+  const joins = c.assetClass === 'xstock_spot' && vtsXstockJoinsStandingRecord(c.lastReason, verdict);
+  if (deps.writeLiveWarning) {
+    const pending = deps.writeLiveWarning({ crossing: c, nowMs, action: joins ? 'join' : 'page' });
+    if (!pending) return joins ? 'joined' : 'paged'; // An identical observation already owns the publication.
+    state.pendingCrossings.set(c.tradeId, (state.pendingCrossings.get(c.tradeId) ?? 0) + 1);
+    try {
+      const result = await pending;
+      if (result?.route === 'joined') {
+        state.memberRecord.set(c.tradeId, result.alertId);
+        countJoin(c.lastReason);
+        return 'joined';
+      }
+      if (result) countLivePage(c.tradeId, result);
+      return 'paged';
+    } finally {
+      const count = state.pendingCrossings.get(c.tradeId) ?? 0;
+      if (count <= 1) state.pendingCrossings.delete(c.tradeId);
+      else state.pendingCrossings.set(c.tradeId, count - 1);
+    }
+  }
+  if (joins) {
+    const rec = await deps.addAlert({ ...standingWarning(nowMs) });
     // ⛔ Langston r5 condition 2: a null return means the record was resolved (or vanished) between `addAlert` and here —
     // the member was NOT written, so this crossing must not be swallowed: fall back to paging on its own key (A4's
     // default-to-page). Member and decision keys are single-key merges; a removed member is a `null` TOMBSTONE that every
     // reader filters (`&& v`), bounded by the record's own lifetime (it resolves when empty) — r5 record item (ii).
-    const receipt = c.streakId ? { [vtsRefusalReceiptField(c.streakId, c.pageSinceMs)]: c.tradeId } : {};
-    const merged = await deps.mergeAlertMetadata(rec.id, {
-      [memberField(c.tradeId)]: member, [decidedField(c.tradeId)]: null, suppressedPages, ...receipt,
-    });
+    const merged = await deps.mergeAlertMetadata(rec.id, standingJoin(c, nowMs, rec.metadata ?? {}));
     if (merged === null) {
       await pageOwnKey(c, nowMs, deps);
       return 'paged';
     }
     state.memberRecord.set(c.tradeId, rec.id);
-    railCounts.joins++;
-    // Row 2 increment (4c) P2: the join's reason, split. `vtsXstockJoinsStandingRecord` admits exactly two reasons —
-    // too_wide, and too_old on a quiet OR closed verdict — so `joinsOther` must stay 0 (a test holds it; Langston C-2),
-    // and joinsTooWide + joinsTooOld + joinsOther === joins.
-    if (c.lastReason === EXPECTED_WIDE) railCounts.joinsTooWide++;
-    else if (c.lastReason === EXPECTED_OLD) railCounts.joinsTooOld++;
-    else railCounts.joinsOther++;
+    countJoin(c.lastReason);
     return 'joined';
   }
   await leaveStandingRecord(c.tradeId, deps);
   await pageOwnKey(c, nowMs, deps);
   return 'paged';
+}
+
+function countJoin(reason: string): void {
+  railCounts.joins++;
+  if (reason === EXPECTED_WIDE) railCounts.joinsTooWide++;
+  else if (reason === EXPECTED_OLD) railCounts.joinsTooOld++;
+  else railCounts.joinsOther++;
+}
+
+function countLivePage(tradeId: string, result: LiveWarningResult): void {
+  railCounts.pagesAttempted++;
+  if (result.minted) railCounts.minted++; else railCounts.dedupeHits++;
+  state.memberRecord.delete(tradeId);
+  indexRow(tradeId, result.alertId);
 }
 
 /** Remove a trade's membership (single-key `null` tombstones) — used when it pages on its own key instead. */
@@ -273,7 +257,13 @@ async function leaveStandingRecord(tradeId: string, deps: Pick<VtsRailDeps, 'mer
 }
 
 /** Is this trade currently a standing-record member? (cheap, in-memory; the runner calls it every refusing pass) */
-export function isStandingMember(tradeId: string): boolean { return state.memberRecord.has(tradeId); }
+export function isStandingMember(tradeId: string): boolean {
+  return state.memberRecord.has(tradeId) || state.pendingCrossings.has(tradeId);
+}
+
+export function shouldCheckMemberReason(tradeId: string): boolean {
+  return !state.loaded || isStandingMember(tradeId);
+}
 
 /**
  * P3's REASON-TRANSITION rule (Coltrane Step 4 BLOCKER-2): a member joined on an EXPECTED reason (`too_wide`, or `too_old`
@@ -282,12 +272,19 @@ export function isStandingMember(tradeId: string): boolean { return state.member
  * Called by the runner on every refusing pass of a member, inside the paging session only. Returns whether it paged.
  */
 export async function onMemberReason(c: Crossing, nowMs: number, deps: VtsRailDeps): Promise<boolean> {
-  if (!state.memberRecord.has(c.tradeId)) return false;
+  if (deps.writeLiveWarning ? !shouldCheckMemberReason(c.tradeId) : !isStandingMember(c.tradeId)) return false;
   let verdict: ClassVerdict | null = null;
   if (c.lastReason.startsWith('no_transactable_side (too_old')) {
     try { verdict = deps.xstockVerdict(nowMs); } catch { verdict = null; }
   }
   if (vtsXstockJoinsStandingRecord(c.lastReason, verdict)) return false;
+  if (deps.writeLiveWarning) {
+    const result = await deps.writeLiveWarning({ crossing: c, nowMs, action: 'leave' });
+    if (!result) return false;
+    railCounts.reasonExits++;
+    countLivePage(c.tradeId, result);
+    return true;
+  }
   railCounts.reasonExits++;
   await leaveStandingRecord(c.tradeId, deps);
   await pageOwnKey(c, nowMs, deps);
@@ -300,6 +297,23 @@ export async function runVtsRailSweep(nowMs: number, deps: VtsRailDeps): Promise
   state.sweepInFlight = true;
   state.lastSweepMs = nowMs;
   try {
+    if (deps.sweepLive) {
+      const result = await deps.sweepLive(nowMs, state.sweepFailures);
+      if (!result) throw new Error('VTS worker did not return the rail sweep result');
+      state.sweepFailures = result.reconciled ? 0 : state.sweepFailures + 1;
+      const { rail } = result;
+      state.rowByTrade.clear();
+      state.memberRecord.clear();
+      for (const [tradeId, alertId] of rail.rowIds) indexRow(tradeId, alertId);
+      for (const [tradeId, alertId] of rail.memberIds) state.memberRecord.set(tradeId, alertId);
+      state.loaded = true;
+      railCounts.escalations += rail.escalated;
+      railCounts.pagesAttempted += rail.escalated;
+      railCounts.minted += rail.minted;
+      railCounts.dedupeHits += rail.escalated - rail.minted;
+      logRailSweep(rail.openWarnings, rail.resolved, rail.members, rail.escalated, deps);
+      return;
+    }
     await deps.reconcileRefusals?.(nowMs, deps.closedTradeIds);
     const all = deps.readAllAlerts();
     const railRows = all.filter((r) => isOpen(r) && (r.dedupe_key ?? '').startsWith(RAIL_KEY_PREFIX));
@@ -313,7 +327,9 @@ export async function runVtsRailSweep(nowMs: number, deps: VtsRailDeps): Promise
     for (const r of railRows) {
       const tid = railRowTradeId(r);
       if (!tid) continue; // cannot be re-measured ⇒ left for a human
-      const why = railRowClear(r.created_at, r.metadata?.decidedAtMs, closed.has(tid));
+      const observedAt = r.metadata?.vtsWarningObservedAtMs;
+      const createdAt = typeof observedAt === 'number' && Number.isFinite(observedAt) ? new Date(observedAt).toISOString() : r.created_at;
+      const why = railRowClear(createdAt, r.metadata?.decidedAtMs, closed.has(tid));
       if (why) { await deps.resolveAlert(r.id, VTS_RAIL_ACTOR, clearEvidence(why, tid), 'engine'); resolved++; }
     }
     let escalated = 0;
@@ -332,16 +348,7 @@ export async function runVtsRailSweep(nowMs: number, deps: VtsRailDeps): Promise
         }
         const clock = stepMemberClock(m, nowMs, regular, etDate);
         if (clock.elapsedMs >= MEMBER_ESCALATE_AFTER_MS) {
-          const mins = Math.round(clock.elapsedMs / 60_000);
-          await pageOwnKey({
-            tradeId: tid, symbol: m.symbol, assetClass: 'xstock_spot', lastReason: m.reason, pageSinceMs: clock.sessionClockStartMs ?? nowMs,
-            title: `VTS exit decisions unavailable — ${mins} min with no decision for ${m.symbol}`,
-            body: `VTS has made NO exit decision for ${mins} minutes of US regular-session paging time (counted from 09:45 ET at the `
-              + `open, row 2 increment (4c)) on open virtual trade ${tid} in `
-              + `${m.symbol} (most recent reason: ${m.reason}) — past the ${MEMBER_ESCALATE_AFTER_MS / 60_000}-minute norm for an expected wide `
-              + `book (row 2 increment (4a), audit A5: 421 of 423 such streaks ended within 30 min, measured on a clock that started at 09:30). While this lasts its stop and `
-              + `target are NOT evaluated. This row clears itself when the trade decides or closes (${VTS_RAIL_REF}).`,
-          }, nowMs, deps);
+          await pageOwnKey(memberEscalation(tid, m, clock, nowMs), nowMs, deps);
           patch[memberField(tid)] = null; patch[decidedField(tid)] = null; escalated++; railCounts.escalations++; continue;
         }
         if (clock.sessionClockStartMs !== m.sessionClockStartMs || clock.sessionDateEt !== m.sessionDateEt) {
@@ -377,14 +384,11 @@ export async function runVtsRailSweep(nowMs: number, deps: VtsRailDeps): Promise
     for (const tid of [...state.closedMemberSweeps.keys()]) if (!members.some(([t]) => t === tid)) state.closedMemberSweeps.delete(tid);
     const stuckClosed = [...state.closedMemberSweeps.entries()].filter(([, n]) => n >= STUCK_CLOSED_MEMBER_SWEEPS).map(([t]) => t);
     await reportStuck(stuckClosed.length ? `closed members still listed after ${STUCK_CLOSED_MEMBER_SWEEPS} sweeps: ${stuckClosed.join(', ')}` : null, nowMs, deps);
-    console.log(`[VTS_RAIL][SWEEP] railRowsOpen=${railRows.length} resolved=${resolved} members=${members.length} escalated=${escalated} `
-      + `crossings=${railCounts.crossings} joins=${railCounts.joins} joinsTooWide=${railCounts.joinsTooWide} joinsTooOld=${railCounts.joinsTooOld} joinsOther=${railCounts.joinsOther} pagesAttempted=${railCounts.pagesAttempted} minted=${railCounts.minted} `
-      + `dedupeHits=${railCounts.dedupeHits} escalations=${railCounts.escalations} markMissedRowMarks=${railCounts.markMisses} reasonExits=${railCounts.reasonExits} sinceStart `
-      + `alertFileBytes=${deps.alertFileBytes?.() ?? 'unread'}`);
+    logRailSweep(railRows.length, resolved, members.length, escalated, deps);
   } catch (err) {
     state.sweepFailures++;
     console.error(`[VTS_RAIL][SWEEP_ERROR] consecutive=${state.sweepFailures}`, err instanceof Error ? err.message : err);
-    if (state.sweepFailures >= STUCK_SWEEP_FAILURES) {
+    if (!deps.sweepLive && state.sweepFailures >= STUCK_SWEEP_FAILURES) {
       try { await reportStuck(`the sweep failed ${state.sweepFailures} times in a row (last: ${err instanceof Error ? err.message : String(err)})`, nowMs, deps); } catch { /* logged above */ }
     }
   } finally {
@@ -392,18 +396,18 @@ export async function runVtsRailSweep(nowMs: number, deps: VtsRailDeps): Promise
   }
 }
 
+function logRailSweep(open: number, resolved: number, members: number, escalated: number, deps: VtsRailDeps): void {
+  console.log(`[VTS_RAIL][SWEEP] railRowsOpen=${open} resolved=${resolved} members=${members} escalated=${escalated} `
+    + `crossings=${railCounts.crossings} joins=${railCounts.joins} joinsTooWide=${railCounts.joinsTooWide} joinsTooOld=${railCounts.joinsTooOld} joinsOther=${railCounts.joinsOther} pagesAttempted=${railCounts.pagesAttempted} minted=${railCounts.minted} `
+    + `dedupeHits=${railCounts.dedupeHits} escalations=${railCounts.escalations} markMissedRowMarks=${railCounts.markMisses} reasonExits=${railCounts.reasonExits} sinceStart `
+    + `alertFileBytes=${deps.alertFileBytes?.() ?? 'unread'}`);
+}
+
 /** r4 FINDING-3 — the standing record is `info` and never re-surfaces, so if it stops clearing itself nothing would say so.
  *  `why` non-null ⇒ mint (or keep) the `vts-quiet-resolve-stuck` warning; null ⇒ resolve it if open. */
 async function reportStuck(why: string | null, nowMs: number, deps: VtsRailDeps): Promise<void> {
   if (why !== null) {
-    await deps.addAlert({
-      triggers_at: new Date(nowMs), category: 'breakage', severity: 'warning',
-      title: 'VTS standing record is not clearing itself',
-      body: `The VTS no-decision rail's standing record (${VTS_STANDING_KEY}) is not being maintained: ${why}. Its members and `
-        + `their 30-min escalation depend on the once-a-minute sweep (${VTS_RAIL_REF}); until it recovers, read the record by hand. `
-        + `This warning resolves itself when the sweep runs clean.`,
-      metadata: { why }, dedupe_key: VTS_STUCK_KEY,
-    });
+    await deps.addAlert({ ...stuckWarning(why, nowMs) });
     return;
   }
   const open = deps.readAllAlerts().find((r) => isOpen(r) && r.dedupe_key === VTS_STUCK_KEY);
@@ -470,11 +474,12 @@ export async function productionVtsRailDeps(): Promise<VtsRailDeps> {
   const { isInXstockWeekendClose, isXstockRailPagingTime } = await import('../asset_classes/xstock_spot/market-hours.js');
   const { db } = await import('../db.js');
   const { sql } = await import('drizzle-orm');
-  return {
+  const deps: VtsRailDeps = {
     addAlert: alerts.addAlert as unknown as VtsRailDeps['addAlert'],
     mergeAlertMetadata: alerts.mergeAlertMetadata as unknown as VtsRailDeps['mergeAlertMetadata'],
     markIndividualDecision: (id, atMs) => alertWrites.markDecision(id, atMs),
-    reconcileRefusals: (nowMs, closeLookup) => alertWrites.reconcileRefusals(nowMs, refusalRunId, closeLookup),
+    markLiveDecision: (id, atMs) => alertWrites.markLiveDecision(id, atMs),
+    writeLiveWarning: (warning) => alertWrites.writeLiveWarning(warning),
     resolveAlert: alerts.resolveAlert as unknown as VtsRailDeps['resolveAlert'],
     readAllAlerts: alerts.readAllAlerts as unknown as VtsRailDeps['readAllAlerts'],
     closedTradeIds: async (ids) => {
@@ -492,4 +497,8 @@ export async function productionVtsRailDeps(): Promise<VtsRailDeps> {
     isRailPagingTime: (nowMs) => isXstockRailPagingTime(new Date(nowMs)),
     alertFileBytes: () => { try { return fs.statSync(alerts.ALERTS_FILE).size; } catch { return null; } },
   };
+  deps.sweepLive = (nowMs, precedingFailures) => alertWrites.sweepRail(nowMs, refusalRunId, deps.closedTradeIds, {
+    regular: deps.isRailPagingTime(nowMs), precedingFailures,
+  });
+  return deps;
 }
