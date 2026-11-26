@@ -104,16 +104,45 @@ interface EquityTickerSubscription {
   readonly requestId: number;
   readonly requested: ReadonlySet<string>;
   readonly receipts: Map<string, EquityTickerSubscriptionReceipt | null>;
+  readonly lastUpdates: Map<string, number>;
+  continuousFromMs: number | null;
+  lastTransportMs: number | null;
 }
 
 let tickerSubscription: EquityTickerSubscription | null = null;
+export const EQUITY_TICKER_MAX_TRANSPORT_GAP_MS = 15_000;
 
-/** A receipt attests symbol membership on the current socket. Freshness and venue hours require separate evidence. */
-export function getEquityTickerSubscriptionReceipt(symbol: string): EquityTickerSubscriptionReceipt | null {
+function currentTickerSubscription(): EquityTickerSubscription | null {
   if (!state.enabled || state.ws?.readyState !== WebSocket.OPEN || tickerSubscription?.generation !== equitySocketGeneration) {
     return null;
   }
-  return tickerSubscription.receipts.get(symbol) ?? null;
+  return tickerSubscription;
+}
+
+/** A receipt attests symbol membership on the current socket. Freshness and venue hours require separate evidence. */
+export function getEquityTickerSubscriptionReceipt(symbol: string): EquityTickerSubscriptionReceipt | null {
+  return currentTickerSubscription()?.receipts.get(symbol) ?? null;
+}
+
+/** A snapshot of transport and genuine-update evidence for one socket generation. */
+export function getEquityTickerFeedEvidence(symbols: Iterable<string>) {
+  const subscription = currentTickerSubscription();
+  if (!subscription) return null;
+  const members = new Map<string, { acknowledgedAtMs: number; updatedAtMs: number | null }>();
+  for (const symbol of symbols) {
+    const receipt = subscription.receipts.get(symbol);
+    if (receipt) members.set(symbol, {
+      acknowledgedAtMs: receipt.receivedMonotonicMs,
+      updatedAtMs: subscription.lastUpdates.get(symbol) ?? null,
+    });
+  }
+  return {
+    generation: subscription.generation,
+    warmedUp: subscription.lastUpdates.size > 0,
+    continuousFromMs: subscription.continuousFromMs,
+    lastTransportMs: subscription.lastTransportMs,
+    members,
+  };
 }
 
 export function getEquitySpotStats(): {
@@ -470,11 +499,20 @@ function recordTickerSubscriptionReceipt(
   if (typeof symbol !== 'string' || !subscription.requested.has(symbol)) return;
   if (msg.success === false) {
     subscription.receipts.set(symbol, null);
+    subscription.lastUpdates.delete(symbol);
   } else if (msg.success === true && !subscription.receipts.has(symbol)) {
     subscription.receipts.set(symbol, Object.freeze({
       symbol, generation: receipt.generation, requestId: subscription.requestId, receivedMonotonicMs: receipt.monotonicMs,
     }));
   }
+}
+
+function recordTickerTransport(subscription: EquityTickerSubscription, receivedAtMs: number): void {
+  if (subscription.lastTransportMs === null
+    || receivedAtMs - subscription.lastTransportMs > EQUITY_TICKER_MAX_TRANSPORT_GAP_MS) {
+    subscription.continuousFromMs = receivedAtMs;
+  }
+  subscription.lastTransportMs = receivedAtMs;
 }
 
 function handleMessage(raw: WebSocket.RawData, generation?: number): void {
@@ -492,9 +530,29 @@ function handleMessage(raw: WebSocket.RawData, generation?: number): void {
       parseOhlcBar(bar);
     }
   } else if (msg.channel === 'ticker' && Array.isArray(msg.data)) {
-    for (const snap of msg.data) parseTickerSnap(snap, msg.type, receipt);
+    const subscription = tickerSubscription;
+    for (const snap of msg.data) {
+      if (subscription && receipt && subscription.generation === receipt.generation
+        && (msg.type === 'update' || msg.type === 'snapshot') && subscription.receipts.get(snap?.symbol)) {
+        if (Number.isFinite(snap.bid) || Number.isFinite(snap.ask) || Number.isFinite(snap.last)) {
+          recordTickerTransport(subscription, receipt.monotonicMs);
+          if (msg.type === 'update') subscription.lastUpdates.set(snap.symbol, receipt.monotonicMs);
+        } else {
+          // A malformed quote from a proven member cannot establish an observed period of silence.
+          subscription.continuousFromMs = null;
+          subscription.lastTransportMs = null;
+        }
+      }
+      parseTickerSnap(snap, msg.type, receipt);
+    }
   } else {
-    if (receipt) recordTickerSubscriptionReceipt(msg, receipt);
+    if (receipt) {
+      recordTickerSubscriptionReceipt(msg, receipt);
+      const subscription = tickerSubscription;
+      if (msg.channel === 'heartbeat' && subscription?.generation === receipt.generation) {
+        recordTickerTransport(subscription, receipt.monotonicMs);
+      }
+    }
     // B-NEW-44: route everything that isn't an ohlc/ticker data message into
     // the diagnostic logger. Includes subscribe-ack, errors, status updates,
     // and any future channels Kraken introduces.
@@ -508,7 +566,10 @@ function subscribe(ws: WebSocket, generation: number): void {
     params: { channel: 'ohlc', symbol: state.symbols, interval: 1 },
   }));
   const requestId = generation;
-  tickerSubscription = { generation, requestId, requested: new Set(state.symbols), receipts: new Map() };
+  tickerSubscription = {
+    generation, requestId, requested: new Set(state.symbols), receipts: new Map(),
+    lastUpdates: new Map(), continuousFromMs: null, lastTransportMs: null,
+  };
   ws.send(JSON.stringify({
     method: 'subscribe',
     params: { channel: 'ticker', symbol: state.symbols },
