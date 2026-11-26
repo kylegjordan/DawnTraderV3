@@ -18,7 +18,7 @@
 | 3 | **A connection leaked OUTSIDE a transaction is invisible to the pool monitor**; no crash-loop or event-loop-stall detection | the monitor reads idle-in-transaction and pool counts; neither sees a checked-out idle connection | stated reach, System Manual Ch.11 §1 and System Impact Map `server/db.ts` row; no work placed | — |
 | 4 | **Standalone scripts and `postgres_exporter` are outside the TLS boot gate**; the boot check does not read certificate dates (pinned root valid to 2031-04-26) | the gate is imported only by `server/index.ts`; `postgres_exporter` holds its own DSN | stated in `REPO_TOPOLOGY_AND_SYNC_RUNBOOK.md` "Database transport" and pre-audit T-C4; the exporter's DSN is its own owner's (Infra Claude) | — |
 | 5 | **`#340` delivery-stamp residual** | pre-existing alert-delivery limit this batch's pages inherit | `RUNNING_ISSUES.md` `#340` (the residual line, :639) | as recorded there |
-| 6 | **`#661` leg 3 — the pages' silence is not evidence** until each family has fired once on real traffic | `db-pool-wait`, `db-pool-acquire-timeout` and `db-pool-idle-in-tx` were forced in tests and on staging, not seen on organic load | standing rule; no work | — |
+| 6 | **`#661` leg 3 — the pages' silence is not evidence** until each family has fired once on real traffic | `db-pool-wait` and `db-pool-acquire-timeout` fired on organic staging traffic (2026-11-26, §7). Idle-in-transaction coverage here still rests on the forced checks | standing rule; no work | — |
 | 7 | **`#1254` archival-scheduler leg** | WITHDRAWN (§9.4 disposition 5) at r3 with its citation | `RUNNING_ISSUES.md` `#1254` | — |
 
 ---
@@ -105,7 +105,7 @@ Run `44853032767` on `cbfeab87793510bcb995f5119d912e7feaee27b7` (2026-11-21, sta
 
 ## 5. HONEST RESIDUAL
 
-- The `app-unplanned-restart:blind` family fired on organic staging state on 2026-11-24 and self-cleared after the stranded lock object was removed (§6). The pool wait, acquire-timeout and idle-in-transaction families still have not fired on organic traffic; their silence is not evidence of a healthy pool (item 0.6).
+- The `app-unplanned-restart:blind` family fired on organic staging state on 2026-11-24 and self-cleared after the stranded lock object was removed (§6). §7 records organic pool waits and acquisition timeouts. The idle-in-transaction result still rests on forced checks (item 0.6).
 - The OBJ-6 benefit under real panel contention is unobserved in the UI (item 0.1).
 - The TLS gate proves the URL's settings and a pinned, readable root at boot; it does not prove the root is still the one Supabase signs with — a rotation shows as connection failures after boot.
 
@@ -120,3 +120,24 @@ OLD Codex applied the documented #540 tier-3 break on the exact object (inode `2
 The monitor resolved the alert itself at `2026-11-24T07:28:05.902Z` as `db-pool-monitor`, transport `engine`, evidence `#1239`. A read at 07:28:52Z positively controlled the absence check with the still-present deploy record, found the lock path absent, and found zero open `app-unplanned-restart:*` rows. The crew never acknowledged the alert.
 
 `REVIEWER: claim-only · objects that settle the wrong-type lock cause, blocking effect and removal safety; other consistent states · HIT: origin remained unproven and an actual refusal plus multi-sample/≥60-second evidence were required · re-derived yes`
+
+---
+
+## 7. 2026-11-26 OPERATIONAL FOLLOW-UP — ORGANIC MAIN-POOL ACQUISITION TIMEOUTS
+
+**Incident.** OBJ-5(a) alert `d32b69f7-fd41-43a0-9b98-2d8e89f012e0` (`db-pool-acquire-timeout:dawntrader_main`) folded **382** failed acquisitions across the two `POOL_MINUTE_V2` flushes in staging `error.log`. The alert body preserves the first flush. `first_at`, `last_at` and `count` in the alert ledger capture both. Phase A was serving `5ecd7ee24fb7a741e8e015e0e6a262a464e7d016` on PID `235604`, restart `716`.
+
+| Flush UTC | Completed checkouts | Acquisition timeouts | Open / total / idle / waiting at flush | Timing witness |
+|---|---:|---:|---|---|
+| 14:56:07 | 2,494 | 0 | 0 / 10 / 10 / 0 | Longest reported client hold was a 24,615 ms scheduled-occurrence lock. |
+| 14:57:26.555 | 202 | 232 | 9 / 10 / 0 / 72 | One 75,371 ms client hold, labeled `sql:select:portfolio_state`. |
+| 14:58:26.555 | 1,860 | 150 | 10 / 10 / 0 / 51 | 18 completed checkouts waited over 10 s. The 75,336 ms maximum was a ticker-snapshot waiter. Three distinct SQL families logged roughly 17 s client holds. |
+| 14:59:26 | 2,582 | 0 | 9 / 10 / 1 / 0 | The next flush measured a 1,181 ms maximum wait. |
+
+**Attribution.** Staging `out.log` independently records timer delays of 75,352 ms (14:56:11.079–14:57:26.481 UTC) and 16,961 ms (14:57:26.979–14:57:43.990 UTC). The latter window also appears in the event-loop histogram at 16,643 ms. During the first gap, `error.log` records VTS escalations in all 74 interior seconds (362 escalation lines). The watchdog measures late timer callbacks. The pool records client wall time from checkout to release (`server/db-pool-instrument.ts`), which includes scheduling delays and cannot identify the time spent running a specific statement at Supabase. The maximum-wait label identifies a waiter, so it cannot name the borrower that held a slot. The timings support app-side delay alongside main-pool saturation. The upstream cause and any contribution from a database writer burst remain unestablished. Item 0.2’s trigger for reopening writer reservation has therefore not been met.
+
+**VTS cross-check.** ANALYST's `8a824936e4e74562cf814618876a45560d6a4d0d` records 450 xStock warnings minted 14:56:11.131–14:57:43.008 UTC. A separate grouping of the 450 distinct per-trade keys by their durable `created_at` counted 369 in the first watchdog gap and 81 in the second. The two bracketing VTS sweep logs measured the ledger growing from 7,560,307 to 8,424,775 bytes. On the serving ref, `vts-runner.ts:4118` awaits the crossing serially, `vts-rail-reporting.ts:166` awaits the new per-trade alert, and `system-alerts.ts:472,516,582–593` shows the synchronous read and full rewrite for each new row. That workload is a candidate contributor to timer delay. Per-write or CPU timing is unavailable for this event. The same VTS evidence captured stale xStock inputs before the wave, from 14:42:11 UTC, and still found 450 of 450 xStock looks without a transactable side at 15:14:27 UTC, after acquisition timeouts had cleared. OLD relayed the incident timing and its attribution limits to ANALYST in Discord `1575531733443547177` for the existing `#1191` follow-up.
+
+**Recovery and disposition.** The two timeout flushes are the positive control. All 19 consecutive flushes from 14:59:26 through 15:17:26 UTC reported completed traffic (48,761 released checkouts total), zero acquisition timeouts and zero completed waits over 5 s. Maximum completed wait was 1,569 ms. The final flush reported 2,500 checkouts and zero waiting. The process continued on restart `716`. Resolve this specific incident with this record after confirming the alert's folded count and last timestamp still match. The separate `db-pool-wait:dawntrader_main` row `bc6f0264-0de8-47c2-853c-7cd0a0841d2f` is owned by its monitor and was still active at 15:20:26 UTC.
+
+`REVIEWER: claim-only · objects that settle recovery, timer delay and attribution, and other states consistent with them · HIT: VTS stderr shows continued progress during the first watchdog gap, and the long wall time matches a timer delay rather than measuring database execution · re-derived yes`
