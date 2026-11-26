@@ -243,3 +243,17 @@ jq -cn '{username: env.USERNAME, password: env.PASSWORD}' |
 A local fixture with real curl and jq reproduced all three bad acceptances on the first candidate. A planted curl config produced a trace on that candidate, and Bash tracing displayed synthetic credential and token values. On the correction, four successful login field cases each produced ten authenticated reads and ten ordered CSV rows. A separate login round-tripped a synthetic credential with quotes, a backslash and a line break. Four missing or empty setting cases made zero requests. Twelve rejected responses made only the sign-in attempt. All sixteen refusal cases preserved the prior CSV. The corrected runs created no curl trace and exposed no fixture values in the shell trace, normal output or curl arguments. Bash syntax passed.
 
 Re-review is for exact source placement. P6/P7a Step 6 and the two November 27 Token Watch reads remain recorded.
+
+### Phase 3C Step 4 whitespace correction
+
+Coltrane returned CHANGES NEEDED at 2026-11-26 14:20:59 UTC on `a99eb74ecbc1dd720f7ffe677913bc246d5f12ea`. He confirmed the prior fixes and found one remaining case. A one-space token passed the sign-in check, replaced the previous CSV and produced a latency PASS despite ten HTTP 401 responses.
+
+The corrected token check also refuses whitespace before creating a CSV:
+
+```jq
+| select(length > 0 and . != "null" and (test("[[:cntrl:][:space:]]") | not))
+```
+
+The local replay reproduced the ten 401 results and false PASS with the prior ref. The correction preserved the previous CSV on all seventeen refused responses, including five tokens with blank, leading, trailing, interior or nonbreaking whitespace. All four missing or empty setting cases also preserved the CSV and made no request. Four successful token-field cases each retained all ten benchmark reads and CSV rows. The tests ran with Bash tracing requested and a planted curl config. The corrected runs displayed no fixture values and created no trace file.
+
+Re-review is for exact source placement. The P6/P7a Step 6 return and both Token Watch reads stay recorded.
