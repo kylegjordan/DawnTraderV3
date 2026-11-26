@@ -2,6 +2,7 @@
 """Find two retired credential literals in a committed DawnTrader tree."""
 
 import argparse
+import gzip
 import hashlib
 import io
 import json
@@ -27,24 +28,33 @@ PATTERN_SOURCES = (
     ),
 )
 EXCLUSION_FILE = "scripts/credential-scan-excludes.txt"
-ARCHIVE_SUFFIXES = (b".zip", b".tar", b".tar.gz", b".tgz")
+ARCHIVE_SUFFIXES = (b".zip", b".tar", b".tgz", b".gz")
 
 
 class ScanError(Exception):
     pass
 
 
-def git(*args, data=None, cwd=None, accepted=(0,)):
+class ScannerArguments(argparse.ArgumentParser):
+    def error(self, _message):
+        self.exit(2, "Credential scan refused: invalid arguments (see --help)\n")
+
+
+def git(*args, data=None, cwd=None, accepted=(0,), show_diagnostics=True):
     result = subprocess.run(["git", *args], cwd=cwd, input=data, capture_output=True)
     if result.returncode not in accepted or result.stderr:
-        detail = result.stderr.decode("utf-8", errors="replace").strip()
-        raise ScanError(f"git {args[0]} exited {result.returncode}: {detail}")
+        detail = result.stderr.decode("utf-8", errors="replace").strip() if show_diagnostics else ""
+        message = f"git {args[0]} did not complete cleanly (exit {result.returncode})"
+        raise ScanError(f"{message}: {detail}" if detail else message)
     return result.stdout
 
 
 def read_patterns(root, patterns):
     for object_name, expression, length in PATTERN_SOURCES:
-        content = git("cat-file", "blob", object_name, cwd=root)
+        try:
+            content = git("cat-file", "blob", object_name, cwd=root, show_diagnostics=False)
+        except ScanError as exc:
+            raise ScanError(f"{object_name}: {exc}") from exc
         matches = set(re.findall(expression, content))
         if len(matches) != 1 or any(
             len(value) != length or re.fullmatch(rb"[!-~]+", value) is None
@@ -122,22 +132,42 @@ def contains_pattern(stream, patterns):
     return False
 
 
+def tar_hits(stream, patterns):
+    with tarfile.open(fileobj=stream, mode="r:") as archive:
+        for member in archive:
+            if member.isfile():
+                with archive.extractfile(member) as member_stream:
+                    if contains_pattern(member_stream, patterns):
+                        yield member.name
+
+        # tarfile can stop at an invalid header after reading a valid member.
+        # Its offset is the next header position, where the two end blocks belong.
+        stream.seek(archive.offset)
+        if stream.read(1024) != bytes(1024):
+            raise tarfile.ReadError("missing tar end blocks")
+        while padding := stream.read(64 * 1024):
+            if padding.strip(b"\0"):
+                raise tarfile.ReadError("nonzero data after tar end blocks")
+
+
 def archive_hits(data, path, patterns):
     source = io.BytesIO(data)
-    if path.lower().endswith(b".zip"):
+    suffix = path.lower()
+    if suffix.endswith(b".zip"):
         with zipfile.ZipFile(source) as archive:
             for member in archive.infolist():
                 if not member.is_dir():
                     with archive.open(member) as stream:
                         if contains_pattern(stream, patterns):
                             yield member.filename
+    elif suffix.endswith(b".tar"):
+        yield from tar_hits(source, patterns)
     else:
-        with tarfile.open(fileobj=source, mode="r|*") as archive:
-            for member in archive:
-                if member.isfile():
-                    with archive.extractfile(member) as stream:
-                        if contains_pattern(stream, patterns):
-                            yield member.name
+        with gzip.GzipFile(fileobj=source) as stream:
+            if suffix.endswith((b".tar.gz", b".tgz")):
+                yield from tar_hits(stream, patterns)
+            elif contains_pattern(stream, patterns):
+                yield path.rsplit(b"/", 1)[-1][:-3].decode("utf-8", errors="surrogateescape")
 
 
 def scan(root, commit, patterns, tree_only):
@@ -172,16 +202,16 @@ def display_path(path, patterns):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = ScannerArguments(description=__doc__)
     parser.add_argument("ref", nargs="?", default="HEAD", help="commit or branch to scan (default HEAD)")
     parser.add_argument("--tree-only", action="store_true", help="skip archive members")
     args = parser.parse_args()
     patterns = []
     try:
-        root = git("rev-parse", "--show-toplevel").decode("utf-8").rstrip("\r\n")
+        root = git("rev-parse", "--show-toplevel", show_diagnostics=False).decode("utf-8").rstrip("\r\n")
+        read_patterns(root, patterns)
         commit = git("rev-parse", "--verify", "--end-of-options", f"{args.ref}^{{commit}}", cwd=root)
         commit = commit.decode("ascii").strip()
-        read_patterns(root, patterns)
         files, members = scan(root, commit, patterns, args.tree_only)
     except (ScanError, OSError) as exc:
         print(f"Credential scan refused: {redact(str(exc), patterns)}", file=sys.stderr)
