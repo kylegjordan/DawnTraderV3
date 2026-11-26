@@ -21,6 +21,7 @@ CHANGE-CLASS: non_architecture
 | Sprint to Live Plan | Existing approved row 14a. Update after verification. |
 | Shared, Analyst and reviewer memory | Analyst Step 4 position recorded in `9d3881e37`. Shared and reviewer governance entries are due at close. |
 | Session task lists | Existing CC-C row 14a. Other sessions' lists are N/A. |
+| Observation | N/A. Step 2 approved the point-in-time staging verification in Pre-Audit P3. |
 
 **Step 2 reference** — `Claude Comms and Packages/Scope Files/B_KRAKEN_PRIMARY_KEY_RESOLUTION_PRE_AUDIT.md` at `c0e7c06d1de23b0c702c750d400fd26ddcaaec6e`. Compare the scoped patch from shared base `e62c8788f2ec4295dff30e26de5efdd15b6950f9`. Implementation Step 3 was pushed at `9f03895422387e3e0e73e05a42695535ae62b394`.
 
@@ -119,3 +120,9 @@ The regression uses the real adapter, cache, Kraken mapping and ladder with two 
 Coltrane ruled PROCEED to Step 5 at exact `fa48f737b7ffd50ed99b27decddad898fe109e3f` on November 25 at 23:37:40 UTC. The real adapter wrote both BTC quotes, and the ladder accepted both. Only the current pair earned assignment credit. Removing that qualification credited both. A separate replay moved an already frozen alias to the older pair and failed when only the current-map check was removed. The inherited adapter row without response identity recorded a gap. His review passed all 114 focused checks, including default JSON and JSONL parity and the capture across the handler await. The TypeScript gate matched the 314 baseline signatures.
 
 The delivery card is CI + Deploy with External as the blocker. The review write was rejected with HTTP 404 from Coltrane's GitHub session. His exact ruling above is the review record. The approved code advances through shared CI while staging remains behind 8c Phase A, OLD's readback and Phase B.
+
+## Shared change-class ruling
+
+On November 26 at 00:15:50 UTC, Coltrane confirmed `non_architecture` at shared `2dbc2b568f5747dd347155f8bfbc844b72ed9af5` for alert `359913cf-4d47-40cf-b59a-42efad21f5e6`. The checker matched the signal orchestrator, one of 16 paths touched by that commit. Its two changes pass existing symbols to the recorder after selection. The active-execution and VTS changes do the same. The cache commits before assignment credit, and the new readout is opt-in. The class ruling is filed in `GOVERNANCE_EXCEPTIONS.md`.
+
+Step 10 will update the System Manual with the local receipt-clock and same-process limits and the System Impact Map with the diagnostic state and S27 producer and reader census. Carry all other applicable rows into the close ledger, including the Observation N/A above. The governing staging order remains Phase A, OLD readback, then Phase B before Kraken.
