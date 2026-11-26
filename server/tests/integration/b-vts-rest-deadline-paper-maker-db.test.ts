@@ -125,6 +125,47 @@ describe('#1073 paper crypto pending maker pair on Postgres', () => {
     });
   });
 
+  it('refuses a placement stamp already queued behind the winning fill', async (ctx) => {
+    if (!reachable) ctx.skip();
+    await withRest({ linked: true }, async (position, tradeId) => {
+      const pending = (await storage.getActiveOpenPosition('paper', position.id))!;
+      const { filling, stamping } = await db.transaction(async (tx) => {
+        const { rows: [holder] } = await tx.execute<{ pid: number }>(sql`SELECT pg_backend_pid() AS pid`);
+        await tx.select({ id: closedTradesTable.id }).from(closedTradesTable)
+          .where(eq(closedTradesTable.id, tradeId)).for('update');
+        const waitForQueue = async (pattern: string) => {
+          for (let attempt = 0; attempt < 80; attempt++) {
+            const { rows: [status] } = await db.execute<{ waiting: boolean }>(sql`
+              SELECT EXISTS (
+                SELECT 1 FROM pg_stat_activity a
+                CROSS JOIN LATERAL unnest(pg_blocking_pids(a.pid)) AS blocker(pid)
+                WHERE a.query LIKE ${pattern} AND a.wait_event_type = 'Lock'
+                  AND (${holder.pid} = blocker.pid OR ${holder.pid} = ANY(pg_blocking_pids(blocker.pid)))
+              ) AS waiting
+            `);
+            if (status.waiting) return;
+            await delay(20);
+          }
+          throw new Error('Expected the exact fill/placement lock queue');
+        };
+        const filling = storage.transitionPaperCryptoPendingMaker(position, { ...fill, tradeId });
+        void filling.catch(() => {});
+        await waitForQueue('select%from "closed_trades"%for update');
+        const stamping = storage.recordPaperMakerPlacement(pending, tradeId);
+        void stamping.catch(() => {});
+        await waitForQueue('update "closed_trades"%paperMakerPlacement%');
+        return { filling, stamping };
+      });
+
+      expect(await filling).toEqual({ status: 'committed', tradeId });
+      expect(await stamping).toBe(false);
+      expect(await storage.getActiveOpenPosition('paper', position.id)).toMatchObject({ state: 'open' });
+      const trade = await storage.getClosedTrade('paper', tradeId);
+      expect(trade?.metadata).toMatchObject({ paperMakerTerminal: { positionId: position.id, outcome: 'fill' } });
+      expect(trade?.metadata).not.toHaveProperty('paperMakerPlacement');
+    });
+  });
+
   it('keeps refusal evidence linked to the newer slot and exact pending rest through terminal transition', async (ctx) => {
     if (!reachable) ctx.skip();
     await withRest({ linked: true }, async (position, tradeId) => {

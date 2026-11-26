@@ -141,6 +141,16 @@ def capture_receipts(manifest, log_paths, history_dir):
     }
 
 
+def advances_monitor_clock(earlier, later, allowance):
+    wall_start, wall_end = earlier.get("wallAtMs"), later.get("wallAtMs")
+    mono_start, mono_end = earlier.get("monotonicAtMs"), later.get("monotonicAtMs")
+    if not all(map(has_number, (wall_start, wall_end, mono_start, mono_end))):
+        return False
+    wall_span, mono_span = wall_end - wall_start, mono_end - mono_start
+    # The writer permits one clock allowance at each endpoint of the retained span.
+    return wall_span >= 0 and mono_span > 0 and abs(wall_span - mono_span) <= 2 * allowance
+
+
 def refusal_evidence(terminal, deadline, placed):
     summary = terminal.get("refusalEvidence")
     if not isinstance(summary, dict) or summary.get("version") != 1:
@@ -168,11 +178,13 @@ def refusal_evidence(terminal, deadline, placed):
     if (first.get("observation") != "upstream_refusal" or last.get("observation") != "upstream_refusal"
             or slots[0] < 1 or slots[2] < 1 or slots[1] - slots[0] + 1 != span["count"]
             or slots[3] - slots[2] + 1 != span["count"] or span["count"] < 2
-            or not placed < first_time < deadline - allowance < deadline + allowance < last_time):
+            or not placed < first_time < deadline - allowance < deadline + allowance < last_time
+            or not advances_monitor_clock(first, last, allowance)):
         return "unknown"
     if summary.get("recovered") and (sample.get("observation") != "evaluated_side"
             or sample.get("slot") != slots[1] + 1 or sample.get("callbackNumber") != slots[3] + 1
-            or sample["wallAtMs"] <= last_time or summary.get("discontinuity") is not None):
+            or sample["wallAtMs"] <= last_time or not advances_monitor_clock(last, sample, allowance)
+            or summary.get("discontinuity") is not None):
         return "unknown"
     return "recovered_across_deadline" if summary.get("recovered") else "refused_across_deadline"
 
@@ -198,7 +210,7 @@ def passes_rest_limit(trade, placement):
     return price <= limit if trade["side"] == "buy" else price >= limit
 
 
-def grade_trade(receipt, trade, position, censor_at_ms):
+def grade_trade(receipt, trade, position, censor_at_ms, captured_at_ms):
     position_id, symbol, asset_class, placed = receipt
     result = {"asset_class": asset_class, "placed_at_ms": placed, "position_id": position_id,
               "receipt_timing": "unknown", "refusal": "unknown", "outcome": "unknown", "trigger": "unknown"}
@@ -250,8 +262,14 @@ def grade_trade(receipt, trade, position, censor_at_ms):
             category = "unfilled_other"
         return result | {"outcome": category, "receipt_timing": "no_winning_quote", "trigger": "no"}
     if (terminal.get("outcome") != "fill" or trade["close_reason"] == "never_filled"
-            or not has_number(evaluated) or not placed < evaluated < censor_at_ms
-            or position is not None and position["state"] != "open"):
+            or not has_number(evaluated) or not placed < evaluated < censor_at_ms):
+        return result | {"coverage_issue": "fill_unreconciled"}
+    closed_at = trade["closed_at"]
+    if closed_at:
+        lifecycle_agrees = position is None and evaluated <= utc_ms(utc(closed_at)) <= captured_at_ms
+    else:
+        lifecycle_agrees = position is not None and position["state"] == "open"
+    if not lifecycle_agrees:
         return result | {"coverage_issue": "fill_unreconciled"}
     result["outcome"] = "filled"
     quote_arrived = terminal.get("quoteArrivedAtMs")
@@ -278,7 +296,8 @@ def grade(receipts, snapshot):
     if sorted(snapshot["receipt_ids"]) != receipts["receipt_ids"]:
         raise ValueError("candidate export did not use the exact independent receipt IDs")
     lower, upper, terminal = (utc_ms(utc(receipts[key])) for key in ("activation", "placements_until", "terminal_at"))
-    if utc_ms(utc(snapshot["captured_at"])) < terminal:
+    captured_at_ms = utc_ms(utc(snapshot["captured_at"]))
+    if captured_at_ms < terminal:
         raise ValueError("candidate export predates the terminal cut")
 
     issues = defaultdict(list)
@@ -292,7 +311,7 @@ def grade(receipts, snapshot):
         if trade_id in receipts["ambiguous_receipts"]:
             issues[receipt[2]].append((trade_id, "conflicting_receipts"))
             continue
-        entries[trade_id] = grade_trade(receipt, trades.get(trade_id), positions.get(receipt[0]), terminal)
+        entries[trade_id] = grade_trade(receipt, trades.get(trade_id), positions.get(receipt[0]), terminal, captured_at_ms)
     for trade_id, trade in trades.items():
         if trade_id in known:
             continue

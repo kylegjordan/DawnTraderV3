@@ -3446,6 +3446,8 @@ export class DatabaseStorage implements IStorage {
       eq(closedTradesTable.symbol, symbol), eq(closedTradesTable.quantity, quantity),
       eq(closedTradesTable.chosenEntryMode, 'maker'), isNull(closedTradesTable.closedAt),
       sql`NOT (COALESCE(${closedTradesTable.metadata}, '{}'::jsonb) ? 'paperMakerPlacement')`,
+      // A queued update rechecks this trade row even if its pending-position snapshot is stale.
+      sql`NOT (COALESCE(${closedTradesTable.metadata}, '{}'::jsonb) ? 'paperMakerTerminal')`,
       sql`EXISTS (${pending})`,
     )).returning({ id: closedTradesTable.id });
     return Boolean(written);

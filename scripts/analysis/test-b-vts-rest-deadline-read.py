@@ -43,13 +43,21 @@ def filled(quote, *, trade_id="t", pos_id="p", outcome="fill"):
                          "version": 1, "epochId": "boot:timer", "placedAtMs": PLACED, "deadlineAtMs": DEADLINE,
                          "periodMs": 2_000, "discontinuity": None,
                          "sample": {"slot": 5, "callbackNumber": 5, "wallAtMs": evaluated + 1,
+                                    "monotonicAtMs": 10_001,
                                     "observation": "evaluated_side"},
                          "recovered": {"first": {"slot": 2, "callbackNumber": 2, "wallAtMs": PLACED + 4_000,
+                                                 "monotonicAtMs": 4_000,
                                                  "observation": "upstream_refusal"},
                                        "last": {"slot": 4, "callbackNumber": 4, "wallAtMs": PLACED + 8_000,
+                                                "monotonicAtMs": 8_000,
                                                 "observation": "upstream_refusal"}, "count": 3},
                      }},
     }
+
+
+def open_position(trade_id="t", position_id="p", placed=PLACED):
+    return {"position_id": position_id, "state": "open", "placed_at_ms": placed,
+            "trade_id": trade_id, "mode": "paper", "asset_class": ASSET, "symbol": "BTC/USD"}
 
 
 class P4Fixture(unittest.TestCase):
@@ -80,8 +88,13 @@ class P4Fixture(unittest.TestCase):
                 file.with_name("boot_history").write_text("different boot history\n", encoding="utf-8")
             return reader.capture_receipts(manifest, [file], file.parent)
 
-    def grade(self, trades, *, receipts=None, positions=()):
+    def grade(self, trades, *, receipts=None, positions=None):
         receipts = self.collect() if receipts is None else receipts
+        if positions is None:
+            positions = [
+                open_position(item["trade_id"], item["placement"]["positionId"], item["placement"]["makerPlacedAtMs"])
+                for item in trades if item["placement"] and item["terminal"]["outcome"] == "fill" and not item["closed_at"]
+            ]
         snapshot = {key: receipts[key] for key in ("version", "activation", "placements_until", "terminal_at",
                                                    "receipt_ids")}
         snapshot.update(captured_at=CENSOR.isoformat(), trades=trades, positions=positions)
@@ -114,7 +127,8 @@ class P4Fixture(unittest.TestCase):
         missing_stamp = filled(DEADLINE)
         missing_stamp["placement"] = None
         missing_receipt = filled(DEADLINE, trade_id="other", pos_id="another")
-        result = self.grade([missing_stamp, missing_receipt])[ASSET]
+        result = self.grade([missing_stamp, missing_receipt],
+                            positions=[open_position(), open_position("other", "another")])[ASSET]
         self.assertEqual(result["exact_placements"], 1)
         self.assertEqual(result["verdict"], "NO-RESULT")
         self.assertIn(("t", "placement_stamp_unreconciled"), result["coverage_issues"])
@@ -180,6 +194,39 @@ class P4Fixture(unittest.TestCase):
         self.assertEqual(result["receipt_timing"], {"at_or_after_deadline": 1})
         self.assertEqual(result["verdict"], "NO-RESULT")
         self.assertEqual(result["confirmed_trigger_ids"], [])
+
+    def test_fill_reconciles_open_position_or_later_close(self):
+        trade = filled(DEADLINE)
+        missing_open = self.grade([trade], positions=[])[ASSET]
+        self.assertEqual(missing_open["verdict"], "NO-RESULT")
+        self.assertIn(("t", "fill_unreconciled"), missing_open["coverage_issues"])
+
+        trade.update(closed_at=(START + timedelta(seconds=9)).isoformat(), close_reason="target_hit")
+        before_fill = self.grade([trade])[ASSET]
+        self.assertEqual(before_fill["verdict"], "NO-RESULT")
+        self.assertEqual(before_fill["confirmed_trigger_ids"], [])
+
+        trade["closed_at"] = (START + timedelta(seconds=11)).isoformat()
+        later_close = self.grade([trade])[ASSET]
+        self.assertEqual(later_close["confirmed_trigger_ids"], ["t"])
+        closed_with_position = self.grade([trade], positions=[open_position()])[ASSET]
+        self.assertEqual(closed_with_position["verdict"], "NO-RESULT")
+        trade["closed_at"] = (CENSOR + timedelta(seconds=1)).isoformat()
+        future_close = self.grade([trade])[ASSET]
+        self.assertEqual(future_close["verdict"], "NO-RESULT")
+
+    def test_recovery_requires_forward_coherent_monotonic_samples(self):
+        for path, monotonic_value in (("first", 9_000), ("sample", 7_000), ("sample", 13_000), ("sample", None)):
+            with self.subTest(path=path, clock=monotonic_value):
+                trade = filled(DEADLINE)
+                evidence = trade["terminal"]["refusalEvidence"]
+                point = evidence["sample"] if path == "sample" else evidence["recovered"][path]
+                point["monotonicAtMs"] = monotonic_value
+                result = self.grade([trade])[ASSET]
+                self.assertEqual(result["verdict"], "NO-RESULT")
+                self.assertEqual(result["confirmed_trigger_ids"], [])
+                self.assertEqual(result["outcome"], {"filled": 1})
+                self.assertEqual(result["receipt_timing"], {"at_or_after_deadline": 1})
 
 
 if __name__ == "__main__":

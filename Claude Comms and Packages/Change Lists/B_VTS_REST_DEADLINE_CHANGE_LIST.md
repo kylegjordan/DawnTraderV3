@@ -88,3 +88,25 @@ return result
 - Five focused Vitest files passed 53/53, including the two exact source suites and eight actual isolated PostgreSQL #1073 cases. TypeScript reported the same 314 findings as baseline. Twelve reader fixtures passed, including exact placement boundaries, an at-deadline constructed positive, a pre-deadline quote processed late, a noncrossing winning-side price, an interrupted source, an unmatched placement and a bad history digest. The at-deadline positive challenges the reader. It is no claim of a real paper fill, and the shipping evaluator refuses that arrival under a valid deadline.
 - REVIEWER: claim-only · paper_rest_p4_reader · which objects could corroborate an individual trigger when source coverage fails · found an unlogged before-edge placement that could be skipped by the broad opened-time candidate cut, unverified history bytes and a missing crossing-price witness · re-derived yes at the engine clocks and actual reader inputs. The candidate export reaches the terminal day and discharges only candidates with an exact outside placement stamp. The reader checks the independent history file hashes and exact persisted crossing price. Re-derived with PostgreSQL and receipt fixtures. The wider no-reset and staging-world claims are NOT RE-READ.
 - Please challenge the production handoff from scheduler to exact position, from independently logged receipt to DB evidence and from actual winning fill to graded verdict. Examine whether a missed callback or worker failure can masquerade as continuity and whether a reported flatten can count another writer's work. Use the Step-2 boundary and restore controls. The Step 7 observation remains a separate authorization.
+
+## Step 4 r4 — queue and lifecycle riders
+
+Coltrane returned CHANGES NEEDED at 16:59:01Z on `43fab10a80504a8eb38447f004d82633c25ae089` (45860276851 four green).
+The corrections are confined to the placement stamp and the offline reader. The independent stdout placement receipt remains.
+
+- Placement stamp: add the same target-trade terminal guard as the existing refusal stamp. The test holds the exact trade
+  row, observes the fill and then the placement update queue, and releases the lock. In isolated PostgreSQL the previous
+  candidate returned true for the queued stamp on 1/1 trials despite the committed fill. With the guard the fill still
+  commits and the queued stamp returns false, with no placement metadata attached after the terminal receipt. The earlier
+  pre-fill successful placement and repeated-stamp controls remain green.
+- Offline reader: require either the exact surviving open position or an exact close at/after the recorded fill and by
+  snapshot capture with that position absent. Retain the exact fill and quote timing when the terminal refusal summary
+  has missing, nonforward or incoherent monotonic times. The writer bounds each endpoint clock difference, so the
+  reader allows the two endpoint tolerances together when comparing elapsed wall and monotonic times.
+- Re-derived the open-without-position false trigger and all four malformed clock subcases on the unfixed reader.
+  The corrected reader also refuses a close before the fill, a closed trade with a still-open position and a future
+  close. The same exact fill with a later observed close or its surviving position remains a positive control.
+- Focused rerun passed 59/59 across five Vitest files, including all nine isolated PostgreSQL cases, and 14/14 reader
+  fixtures. No observation dates or staging settings changed.
+
+Please re-grade these two corrections on the exact candidate. Shared placement still requires the review and normal CI checks.
