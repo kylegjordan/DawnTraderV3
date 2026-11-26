@@ -104,4 +104,18 @@ At 11:15:07 UTC Coltrane confirmed the corrected login inputs and found that Pla
 
 Playwright 1.56.1 ran the Config Snapshot Developer-tab check and the Phase 41F-L login against a loopback login fixture with a fresh synthetic password. The Phase 41F-L copy stopped after login, before later stages. The trace-and-HTML control authenticated both tests and found the password in four members of each trace attachment and in both tests' embedded HTML report data. The HTML-only control also authenticated both tests and reproduced both embedded report hits with zero trace ZIPs. The candidate authenticated both tests and scanned all three generated files, including the Phase 41F-L reports, with no password hits, trace, image, video or HTML report. Both intentional missing-login-field failures also kept the synthetic password out of terminal output and all five generated files. These runs used the repository config with the browser executable and temporary output location supplied by the local fixture.
 
+### Step 4 follow-up — a disabled password input
+
+Coltrane sent back `d294aa2684815772e09329ec7cab367a8337edc4` at 11:26:00 UTC. The prior artifact correction still printed the password in the list reporter when the field existed but was disabled. Both specs now replace an exception from that password-field action with a fixed-text failure.
+
+```ts
+    try {
+      await page.getByTestId('input-password').fill(password);
+    } catch {
+      throw new Error('The login password field did not accept input.');
+    }
+```
+
+The loopback control used both unchanged specs from `d294aa268` with a disabled input: two failed tests, two terminal password hits and no login submits. With the correction, both tests still failed, both printed the fixed message, and the terminal plus all five generated files had zero hits for the synthetic password. Both normal fixture logins also passed again, with zero hits across terminal output and all three generated files. The successful Phase 41F-L fixture stopped after login.
+
 **Staging:** this increment is a source review only. Apply the existing staging windows and release gates when a later install is approved. System Manual references belong to the OBJ-2 governance step.

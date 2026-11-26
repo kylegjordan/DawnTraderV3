@@ -177,7 +177,11 @@ test.describe('Phase 41F-L.E2E-VALIDATE-FLOW - Complete Pipeline Validation', ()
     await page.goto('http://localhost:5000/login');
     
     await page.getByTestId('input-username').fill(username);
-    await page.getByTestId('input-password').fill(password);
+    try {
+      await page.getByTestId('input-password').fill(password);
+    } catch {
+      throw new Error('The login password field did not accept input.');
+    }
     await page.getByTestId('button-login').click();
     
     await expect(page).toHaveURL(/.*dashboard/, { timeout: 10000 });

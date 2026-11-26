@@ -21,7 +21,11 @@ test.describe('Config Snapshot Viewer - Phase 27.G E2E Tests', () => {
     // Login as admin to access Developer tab
     await page.goto('/login');
     await page.getByTestId('input-username').fill(username);
-    await page.getByTestId('input-password').fill(password);
+    try {
+      await page.getByTestId('input-password').fill(password);
+    } catch {
+      throw new Error('The login password field did not accept input.');
+    }
     await page.getByTestId('button-login').click();
     
     // Wait for dashboard to load
