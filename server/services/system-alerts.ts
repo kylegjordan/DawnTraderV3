@@ -539,6 +539,51 @@ export interface AddAlertOptions {
   one_shot?: boolean;
 }
 
+type AlertMetadataPatch = Record<string, unknown> | ((current: Record<string, unknown>) => Record<string, unknown>);
+
+interface AlertStoreDraft {
+  readonly rows: readonly Readonly<SystemAlert>[];
+  add(opts: AddAlertOptions): SystemAlert;
+  mergeMetadata(id: string, patch: AlertMetadataPatch): SystemAlert | null;
+}
+
+/** A synchronous edit of the latest rows under the shared store lock. An exception commits nothing. */
+export async function editAlertStore<T>(edit: (draft: AlertStoreDraft) => { value: T }): Promise<T> {
+  ensureFileExists();
+  return withLock(() => {
+    const rows = readAllAlerts();
+    let changed = false;
+    const draft: AlertStoreDraft = {
+      rows,
+      add(opts) {
+        const entry = createAlertEntry(opts);
+        // A one-shot key also covers terminal history. Ordinary keys only cover live rows.
+        const existing = opts.dedupe_key && rows.find((row) => row.dedupe_key === opts.dedupe_key
+          && (opts.one_shot === true || row.state !== 'resolved'));
+        if (existing) return existing;
+        rows.push(entry);
+        changed = true;
+        return entry;
+      },
+      mergeMetadata(id, patch) {
+        const row = rows.find((candidate) => candidate.id === id);
+        if (!row || row.state === 'resolved') return null;
+        // The function form must see the current values while still under the lock.
+        const current = row.metadata ?? {};
+        const delta = typeof patch === 'function' ? patch(current) : patch;
+        if (Object.keys(delta).length) {
+          row.metadata = { ...current, ...delta };
+          changed = true;
+        }
+        return { ...row };
+      },
+    };
+    const { value } = edit(draft);
+    if (changed) writeAllAlertsAtomic(rows);
+    return value;
+  });
+}
+
 /**
  * Insert a new alert. If `triggers_at` is in the past, the dispatcher will
  * promote it to active on its next run. State starts as `scheduled`.
@@ -550,9 +595,12 @@ export interface AddAlertOptions {
  * omit `dedupe_key` get the original always-append behavior.
  */
 export async function addAlert(opts: AddAlertOptions): Promise<SystemAlert> {
-  ensureFileExists();
+  return editAlertStore((draft) => ({ value: draft.add(opts) }));
+}
+
+function createAlertEntry(opts: AddAlertOptions): SystemAlert {
   const triggersAtISO = typeof opts.triggers_at === 'string' ? opts.triggers_at : opts.triggers_at.toISOString();
-  const entry: SystemAlert = {
+  return {
     schema_version: 1,
     id: crypto.randomUUID(),
     created_at: new Date().toISOString(),
@@ -574,25 +622,6 @@ export async function addAlert(opts: AddAlertOptions): Promise<SystemAlert> {
     recurrence_interval_seconds: opts.recurrence_interval_seconds ?? null,
     dedupe_key: opts.dedupe_key ?? null,
   };
-  let result: SystemAlert = entry;
-  await withLock(() => {
-    const all = readAllAlerts();
-    if (opts.dedupe_key) {
-      // Dedup: a non-resolved alert with the same key already represents this
-      // condition. A one-shot key represents an immutable event, so its
-      // resolved row also blocks re-creation.
-      const existing = all.find((a) =>
-        a.dedupe_key === opts.dedupe_key
-        && (opts.one_shot === true || a.state !== 'resolved'));
-      if (existing) {
-        result = existing;
-        return;
-      }
-    }
-    all.push(entry);
-    writeAllAlertsAtomic(all);
-  });
-  return result;
 }
 
 /**
@@ -947,21 +976,7 @@ export async function resolveAlertsByDedupePrefix(
  */
 export async function mergeAlertMetadata(
   id: string,
-  patch: Record<string, unknown> | ((current: Record<string, unknown>) => Record<string, unknown>),
+  patch: AlertMetadataPatch,
 ): Promise<SystemAlert | null> {
-  ensureFileExists();
-  let result: SystemAlert | null = null;
-  await withLock(() => {
-    const all = readAllAlerts();
-    const found = all.find((a) => a.id === id);
-    if (!found || found.state === 'resolved') return;
-    // A function patch is computed INSIDE the lock from the row's current metadata, so a counter's read and
-    // its increment are one step (B-XSTOCK-BAR-AVAILABILITY R4 C8, Langston: two raises must not both read N).
-    const current = (found.metadata ?? {}) as Record<string, unknown>;
-    const delta = typeof patch === 'function' ? patch(current) : patch;
-    found.metadata = { ...current, ...delta };
-    result = { ...found };
-    writeAllAlertsAtomic(all);
-  });
-  return result;
+  return editAlertStore((draft) => ({ value: draft.mergeMetadata(id, patch) }));
 }

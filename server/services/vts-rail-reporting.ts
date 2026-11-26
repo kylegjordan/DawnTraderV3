@@ -19,6 +19,7 @@ import {
 } from '../core/trading/vts-rail.js';
 import type { ClassVerdict } from './venue-quiet-alerting.js';
 import type { VtsFeedIncidentEvidence } from './vts-feed-incident-windows.js';
+import { VtsAlertWriteQueue } from './vts-alert-write-queue.js';
 import fs from 'node:fs';
 
 /** `decided_<tradeId>` on the standing record: a member decided at this time (single-key merge, never a map rewrite). */
@@ -42,6 +43,7 @@ export interface RailMember extends MemberClock {
 export interface VtsRailDeps {
   addAlert: (a: Record<string, unknown>) => Promise<RailAlertRow>;
   mergeAlertMetadata: (id: string, patch: Record<string, unknown>) => Promise<RailAlertRow | null>;
+  markIndividualDecision?: (id: string, atMs: number) => Promise<boolean>;
   resolveAlert: (id: string, by: string, evidence: string, transport: 'engine') => Promise<unknown>;
   readAllAlerts: () => RailAlertRow[];
   /** Of these VTS trade ids, which are CLOSED in durable state — a PRESENT `vts_open_trades` row with `closed`/`closed_at`
@@ -123,23 +125,24 @@ export function ensureVtsRailIndex(deps: Pick<VtsRailDeps, 'readAllAlerts'>): vo
  * A pass made an exit decision for this trade. If it has an open rail row or is a standing-record member, write the
  * decision time onto the DURABLE row now (fire-and-forget; a failed write keeps the index entry so the next decision retries).
  */
-export function markDecided(tradeId: string, nowMs: number, deps: Pick<VtsRailDeps, 'mergeAlertMetadata'>): void {
+export function markDecided(
+  tradeId: string, nowMs: number, deps: Pick<VtsRailDeps, 'mergeAlertMetadata' | 'markIndividualDecision'>,
+): void {
   const rowIds = [...(state.rowByTrade.get(tradeId) ?? [])];
   // r5 (Langston condition 3): `mergeAlertMetadata` RETURNS null (it does not throw) when the row is missing or already
   // resolved, so an unwritten mark is counted (`markMisses`, the seventh count) rather than assumed. Either way the index
   // entry goes, and that is deliberate (Langston r5 condition 2, the markDecided half): null means the row is already
   // resolved or gone, so nothing is owed — there is no later decision that could usefully retry it.
-  // Store cost, stated (condition 4): each mark is one whole-file rewrite of the alert file, made at most ONCE per open row
-  // or membership (the entry leaves the index on the first attempt) — so a pass costs at most (open rail rows + members)
-  // rewrites, measured max 118 concurrent open rail rows (2026-10-15T13:41Z), before the standing record absorbs the
-  // expected wide books.
+  // Individual rows share one background write. Standing-record membership still uses the existing single-key merge.
   for (const rowId of rowIds) {
-    deps.mergeAlertMetadata(rowId, { decidedAtMs: nowMs })
-      .then((row) => {
-        if (row === null) railCounts.markMisses++;
-        const set = state.rowByTrade.get(tradeId);
-        if (set) { set.delete(rowId); if (set.size === 0) state.rowByTrade.delete(tradeId); }
-      })
+    const written = deps.markIndividualDecision
+      ? deps.markIndividualDecision(rowId, nowMs)
+      : deps.mergeAlertMetadata(rowId, { decidedAtMs: nowMs }).then((row) => row !== null);
+    written.then((stored) => {
+      if (!stored) railCounts.markMisses++;
+      const set = state.rowByTrade.get(tradeId);
+      if (set) { set.delete(rowId); if (set.size === 0) state.rowByTrade.delete(tradeId); }
+    })
       .catch((err) => console.error(`[VTS_RAIL][DECIDED_MARK_FAILED] trade=${tradeId}:`, err instanceof Error ? err.message : err));
   }
   const recId = state.memberRecord.get(tradeId);
@@ -445,9 +448,11 @@ export async function productionVtsRailDeps(): Promise<VtsRailDeps> {
   const { isInXstockWeekendClose, isXstockRailPagingTime } = await import('../asset_classes/xstock_spot/market-hours.js');
   const { db } = await import('../db.js');
   const { sql } = await import('drizzle-orm');
+  const decisionWrites = new VtsAlertWriteQueue();
   return {
     addAlert: alerts.addAlert as unknown as VtsRailDeps['addAlert'],
     mergeAlertMetadata: alerts.mergeAlertMetadata as unknown as VtsRailDeps['mergeAlertMetadata'],
+    markIndividualDecision: (id, atMs) => decisionWrites.markDecision(id, atMs),
     resolveAlert: alerts.resolveAlert as unknown as VtsRailDeps['resolveAlert'],
     readAllAlerts: alerts.readAllAlerts as unknown as VtsRailDeps['readAllAlerts'],
     closedTradeIds: async (ids) => {
