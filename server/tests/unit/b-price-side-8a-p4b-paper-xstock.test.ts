@@ -156,7 +156,7 @@ describe('8a-P4b — every cell is a three-way with a named default arm (Langsto
     expect(AEE).toMatch(/const _isXstockPending = position\.assetClass === 'xstock_spot';/);
     expect(AEE).toMatch(/let fillPrice: number \| null = safePrice;\s*\n\s*if \(_isXstockPending\) \{\s*\n\s*fillPrice = side === 'buy' \? xstockSides\.ask : xstockSides\.bid;/);
     // row 2 increment B (P3): the same judged frame's sizes ride with its sides, and X1 passes the size gate.
-    expect(AEE).toMatch(/\}, \{ bid: xsBid, ask: xsAsk, basis: xsSideBasis, arrivedAtMs: xsArrivedAtMs, bidQty: xsBidQty, askQty: xsAskQty \}\);/);
+    expect(AEE).toMatch(/\}, \{ bid: xsBid, ask: xsAsk, basis: xsSideBasis, arrivedAtMs: xsArrivedAtMs, bidQty: xsBidQty, askQty: xsAskQty \}, attempt\);/);
     expect(AEE).toMatch(/fillPrice = this\._xsRestSizeGate\('x1', side === 'buy' \? 'ask' : 'bid', xstockSides, position, fillPrice, limit, side\);/);
   });
 
