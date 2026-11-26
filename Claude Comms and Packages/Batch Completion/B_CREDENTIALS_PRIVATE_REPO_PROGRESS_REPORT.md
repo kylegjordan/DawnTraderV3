@@ -1,6 +1,6 @@
 # B-CREDENTIALS-PRIVATE-REPO — PROGRESS REPORT
 
-## OPEN — the GB-8 bridges increment, OBJ-2, OBJ-3, remaining OBJ-4 readers and OBJ-6 (the flip); OBJ-1 is complete
+## OPEN — OBJ-2, OBJ-3, remaining OBJ-4 readers and OBJ-6 (the flip)
 
 **Owner:** Infra Claude (CC-INFRA) · **Issue:** `#1023` · **Change-class:** `non_architecture` · **Plan:** `SPRINT_TO_LIVE_PLAN.md` §0 (Infra plate, "RUN NOW") · **Scope:** `Claude Comms and Packages/Scope Files/B_CREDENTIALS_PRIVATE_REPO_SCOPE.md` · **Pre-audit:** `…/B_CREDENTIALS_PRIVATE_REPO_PRE_AUDIT.md` (Langston PROCEED WITH CONDITIONS 2026-09-29T17:30Z, recorded §6 at `8309ba598`)
 
@@ -105,10 +105,53 @@ The staging monitor's per-file pin lagged behind an independently reviewed versi
 
 Coltrane independently confirmed Step 8 at 09:46:09 UTC on exact evidence ref `f50fbd358ca1181cbf0e62263b08328e513a045b`. He re-derived the effective pin and disproved the earlier duplicate as a match for the live deployer. See `B_CREDENTIALS_PRIVATE_REPO_DT_DEPLOY_SOURCE_CHANGE_LIST.md` for approval, CI, controls and the preflight disposition. The monitor's source contract is already in the System Impact Map. The remaining parent objectives and existing rollout holds continue.
 
+### 2E. GB-8 bridge install verification and `#463` closure (November 26)
+
+The preregistered GB-8 check was to install the reviewed bridge group with a pinned `discord.py` release, in a window with no queued review, then observe a ref stamp on the next invocation. The November 13 install used `5215c529d`, verified all 17 selected paths, and retained the installed 2.7.1 release. The authorized historical readback found the first ref stamp and reply. The exact-ref replay captured the pinned read instruction at the child boundary and the predecessor supplied an affirmative raw-GitHub control. The original invocation's prompt and subsequent tool choices remain unverified.
+
+Coltrane confirmed the two verification legs at 10:04:14 UTC on exact evidence `910e3a5bebdecca754741324561799ddfca35fd9`. The GB-8 Change List carries the install receipt, exact replay, host capture and verdict. `#463` is closed as the bridges group is now installed from reviewable source that the installer verifies against Git. The parent continues with OBJ-2, OBJ-3, the remaining OBJ-4 readers and OBJ-6 in the existing plan.
+
+#### GB-8 governance ledger
+
+CHANGE-CLASS: non_architecture
+
+| Tier | Document or control | GB-8 disposition |
+| --- | --- | --- |
+| T1 | BATCH_CATALOG.md | Parent close. GB-8 is in this progress report. |
+| T1 | PHASE_HISTORY.md | Parent close. The active plan records GB-8. |
+| T1 | SPRINT_TO_LIVE_PLAN.md | Updated. GB-8 is verified and OBJ-2 is next in the existing parent order. |
+| T1 | PHASE_19_PLAN.md | N/A. No in-flight Phase 19 row for this batch. |
+| T1 | Shared MEMORY.md and MEMORY_CC_INFRA.md | INFRA position updated. The shared read contract stands. |
+| T1 | B_CREDENTIALS_PRIVATE_REPO_SCOPE.md | Existing GB-8 rider applies. The scope is unchanged. |
+| T1 | B_CREDENTIALS_PRIVATE_REPO_PRE_AUDIT.md | Updated. The reviewed raw-host check distinguishes a read instruction from a prohibition. |
+| T1 | COMPLETION_REPORT | Pending the remaining #1023 objectives. This is the parent progress report. |
+| T1 | Observation column | N/A. GB-8 has a first-invocation proof and no open observation window. |
+| T1 | Four session task lists | CC_INFRA_SESSION_TASK_LIST.md updated. The other three lists have no GB-8 work. |
+| T1 | Langston's MEMORY.md | N/A for this increment. The exact-ref reader rule is already governed by OBJ-4a. |
+| T2 | SYSTEM_MANUAL.md | N/A. No trading architecture or logic change. |
+| T2 | SYSTEM_IMPACT_MAP.md | Updated. Records the verified bridge source, installer boundary and release pin. |
+| T2 | RUNNING_ISSUES.md | Updated. Closes #463 and leaves #1023 open. |
+| T2 | CHANGES_AND_FIXES.md | N/A. A crew bridge install record with no trading fix. |
+| T2 | POST_AUDIT_ROADMAP.md | N/A. The existing placement is retained. |
+| T2 | ADJUSTMENT_FRAMEWORK.md | N/A. No governed parameter changed. |
+| T2 | AUTHORITY_BASELINE.md | N/A. The install and verification use existing authority. |
+| T2 | STORAGE_POLICY.md | N/A. The existing reviewed source and mirror policy applies. |
+| T2 | MULTI_ASSET_VTS_EXPANSION_PLAN.md | N/A. GB-8 has no VTS surface. |
+| T2 | ASSET_CLASS_ONBOARDING_WORKFLOW.md | N/A. No asset-class onboarding. |
+| T2 | BUILD_METHOD_PLAYBOOK.md | N/A. The existing workflow covers this verification. |
+| T2 | LANGSTON_ARCHITECTURE.md | Updated. Records the bridge deployment and pinned review instruction. |
+| T2 | CLAUDE.md and CONDUCT.md | N/A. Existing workflow and conduct rules apply. |
+| T2 | CLAUDE_MD_RULE_HISTORY.md | N/A. No rule retired. |
+| T2 | DELETED_COMPONENTS_LOG.md | N/A. No component removed. |
+| T2 | MISTAKE_PATTERNS.md | N/A. The nondiscriminating journal stamp is recorded in the change list. |
+| T2 | GOVERNANCE_EXCEPTIONS.md | N/A. No exception or observation added. |
+| T2 | ALERT_HANDLING_PROTOCOL.md | N/A. Alert rules are unchanged. |
+| T2 | DELIVERY_BOARD_PROTOCOL.md | N/A. The existing fields record the transition to Governance. |
+| T2 | CLAUDE_CODE_FEATURE_WATCH.md | N/A. No feature check belongs to GB-8. |
+
 ### 3. WHAT IS STILL OPEN, AND WHAT CLOSES IT (written before the work)
 | objective | closes when | fails if |
 |---|---|---|
-| **GB-8 — the bridges increment** | `deploy.sh --only bridges` installs the new REVIEW SOURCE note with **`discord.py` pinned** (Langston's rider), in a window with no queued review; the next invocation's journal shows the stamp; `#463` closes | the bridges run an unpinned upgrade, or the live note still sends him to raw GitHub at the flip |
 | **OBJ-6 — the flip** | the repo is private; an anonymous raw read returns 404 (scope check (f)), `#1043` closes, and every reader still works | any reader breaks, or anonymous reads still return 200 |
 | the rest of the scope (CI docs-only skip, password-literal removal, the other readers of OBJ-4) | as the scope's objective table states | as stated there |
 

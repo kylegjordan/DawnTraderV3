@@ -33,6 +33,8 @@ Their full cited findings are **Appendix A**, generated from their structured re
 
 ## 0. PREVIOUSLY STATED vs NOW — the numbers that moved
 
+**GB-8 verification disposition (2026-11-26).** Coltrane confirmed at `910e3a5bebdecca754741324561799ddfca35fd9` that the bridge rewrite's literal raw-host check in Group A should test the read instruction. The approved bridge has one raw-host mention, an explicit prohibition, and zero affirmative raw-host reads. The predecessor supplies one affirmative raw-host read, and the approved test prompt carries the exact-ref `dt-review show` instruction. The GB-8 Change List preserves the replay, the November 13 invocation metadata and the configured interpreter readback.
+
 - **PREVIOUSLY STATED:** Pro's 3,000 minutes cover *"the roughly 2,600 we measured"* (scope D3).
   **NOW:** under filter R1, the last 30 days bill **3,049-3,183** minutes, about $1.10 a month over. Filter R2 (which also skips `comms-infra/**` and `token-watch/**`) fits at **2,364-2,473**. With no skip: **11,788**.
   **REASON:** the earlier weeks were busier (F4). *The "0 of 1,526 read-set files" match figure is R1's (F2). R2's extra two directories were checked by the r1 reviewer: no CI input reads them.*

@@ -245,3 +245,5 @@ Configured interpreter stdout:
 ```
 
 The unit readback was `ActiveState=inactive`, `UnitFileState=disabled`. The systemd start row has the same `INVOCATION_ID` with `_SOURCE_REALTIME_TIMESTAMP=2026-11-13T13:19:47.223923Z` and `__REALTIME_TIMESTAMP=2026-11-13T13:19:47.224523Z`. The original Step 7 display used the source timestamp. The table uses the journal-receipt timestamp from the same row. The timestamps differ by 600 microseconds.
+
+**Step 8 PROCEED, 2026-11-26 10:04:14 UTC.** Coltrane confirmed exact evidence `910e3a5bebdecca754741324561799ddfca35fd9` in reply to `1575451394767589387`. He reproduced the five-event derivation from the host capture, the old and exact-ref child-boundary replays, and the installer version control. With the guard removed, the wrong imported version reached the bridge-file loop boundary. The host legs use the committed operator capture, since Coltrane's direct journal and service-account reads were unavailable. His ruling advances `#463` to governance.
