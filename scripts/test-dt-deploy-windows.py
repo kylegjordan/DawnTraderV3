@@ -95,7 +95,7 @@ shutil.copyfile(A.obs_windows, obs)
 os.chmod(obs, 0o755)
 consts = {"APP_DIR": app, "LOCK_DIR": T + "/lock", "RECORD": T + "/record", "BRANCH": "origin/migration/aws-supabase",
           "REGISTER_PATH": "1-system-manual/DEPLOY_WINDOWS.jsonl", "OBS_WINDOWS": obs, "NOTICE": T + "/notice",
-          "MINT_TIMEOUT_S": "1"}
+          "MINT_TIMEOUT_S": "1", "STAGING_DB_READER": fake + "/reader", "B8C_PHASE_A": BASE}
 shipped = [ln.split("=", 1)[0] for ln in src[a:b].splitlines() if "=" in ln and not ln.startswith("#")]
 check("the harness sets exactly the shipped constants", set(shipped) == set(consts), shipped)
 tested = T + "/dt-deploy"

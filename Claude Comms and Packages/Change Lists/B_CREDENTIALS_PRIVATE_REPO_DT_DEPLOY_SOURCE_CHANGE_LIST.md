@@ -48,8 +48,25 @@ The diagnostic `8f97c294ed705fab920245762183632eec7bad71` and literal Phase A `5
 
 REVIEWER: claim-only · does the exact deployer source alone reconcile without rollout or Phase B placement? · HIT: the database-helper surface gate also requires the two existing reviewed deployer rows · re-derived y with the failed script-only validator.
 
+### Step 4 SEND BACK carry, 2026-11-26 06:29:19 UTC
+
+The candidate now descends from shared `a69222dc9d79dbd62d5abb07b88b559a4e3ff087`, which preserves the intervening KD-34 return and recovery record. The installed deployer blob is unchanged.
+
+**`scripts/test-dt-deploy-windows.py` — MODIFIED.** The existing sandbox replaces the entire constants block and asserts that it replaced every constant. Extend the fixture mapping to cover the two constants the reviewed deployer added:
+
+```diff
+ consts = {"APP_DIR": app, "LOCK_DIR": T + "/lock", "RECORD": T + "/record", "BRANCH": "origin/migration/aws-supabase",
+           "REGISTER_PATH": "1-system-manual/DEPLOY_WINDOWS.jsonl", "OBS_WINDOWS": obs, "NOTICE": T + "/notice",
+-          "MINT_TIMEOUT_S": "1"}
++          "MINT_TIMEOUT_S": "1", "STAGING_DB_READER": fake + "/reader", "B8C_PHASE_A": BASE}
+ shipped = [ln.split("=", 1)[0] for ln in src[a:b].splitlines() if "=" in ln and not ln.startswith("#")]
+ check("the harness sets exactly the shipped constants", set(shipped) == set(consts), shipped)
+```
+
+The reader path stays within the fixture and fails closed if the ordinary-path suite tries to use it. With the same reviewed deployer bytes, the Linux scratch run reproduced 26/27 on the original shared harness and passed 27/27 with the two constants mapped. The exact Phase B sandbox's 32/32 also covers the extra Phase B fixture cases.
+
 ## Review and verification
 
-Review whether putting the exact deployer blob and its two classification rows on the shared branch gives the manifest a valid source while preserving the diagnostic and the literal Phase A return arrangement. Verify that the review commit adds neither the migration, its SQL and verifier, nor an ancestry link to the Phase B commit. The deploy script is the only executable file in the increment.
+Review whether putting the exact deployer blob, its two classification rows and its sandbox compatibility update on the shared branch gives the manifest a valid source while preserving the diagnostic and the literal Phase A return arrangement. Verify that the review commit adds neither the migration, its SQL and verifier, nor an ancestry link to the Phase B commit. The deploy script is the only production executable change in the increment.
 
 After approval and green exact CI, land the script source separately. Read the installed digest, owner and mode and the checker's shared ancestor and blob before updating the per-file pin. Record the previous manifest and preserve its other entries. Read back a fresh successful checker run that names the exact file and pin, then resolve the alert with evidence. Verify staging still serves the recorded same process. This lane carries no authority to deploy the application, restart it, change the rollout or return, or release Phase B, Entry Gate D or Universe Refresh P10.
