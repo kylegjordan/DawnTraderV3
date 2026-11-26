@@ -267,6 +267,8 @@ type PaperCryptoPendingMakerResult =
   | { status: 'unresolved'; reason: string };
 
 type PaperCryptoPendingMakerPosition = Pick<ActiveOpenPosition, 'id' | 'symbol' | 'quantity' | 'metadata'>;
+type PaperMakerPlacementPosition = Pick<ActiveOpenPosition,
+  'id' | 'symbol' | 'quantity' | 'mode' | 'assetClass' | 'state' | 'makerPlacedAt' | 'makerDeadline' | 'makerLimitPrice'>;
 
 function positionTradeId(metadata: ActiveOpenPosition['metadata']): string | null {
   const id = (metadata as Record<string, unknown> | null)?.tradeId;
@@ -660,6 +662,7 @@ export interface IStorage {
     position: PaperCryptoPendingMakerPosition,
     change: PaperCryptoPendingMakerTransition,
   ): Promise<PaperCryptoPendingMakerResult>;
+  recordPaperMakerPlacement(position: PaperMakerPlacementPosition, tradeId: string): Promise<boolean>;
   closePaperXstockTrade(
     trade: PaperXstockTradeKey,
     position: PaperXstockPositionKey | null,
@@ -3378,6 +3381,37 @@ export class DatabaseStorage implements IStorage {
       if (!written) throw new Error(`Pending maker trade ${tradeId} changed during its position transition`);
       return true;
     });
+  }
+
+  async recordPaperMakerPlacement(position: PaperMakerPlacementPosition, tradeId: string): Promise<boolean> {
+    const { assetClass, id: positionId, quantity } = position;
+    if (position.mode !== 'paper' || position.state !== 'pending'
+      || (assetClass !== 'crypto_spot' && assetClass !== 'xstock_spot')) return false;
+
+    const symbol = normalizeToInternalSymbol(position.symbol);
+    const { makerLimitPrice } = position;
+    const limit = Number(makerLimitPrice);
+    const patch = { paperMakerPlacement: {
+      version: 1, tradeId, positionId, mode: 'paper', assetClass, symbol,
+      makerPlacedAtMs: makerAuditTime(position.makerPlacedAt?.getTime()),
+      makerDeadlineAtMs: makerAuditTime(position.makerDeadline?.getTime()),
+      limitPrice: Number.isFinite(limit) && limit > 0 ? makerLimitPrice : null,
+    } };
+    const pending = db.select({ id: activeOpenPositions.id }).from(activeOpenPositions).where(and(
+      eq(activeOpenPositions.id, positionId), eq(activeOpenPositions.mode, 'paper'), eq(activeOpenPositions.assetClass, assetClass),
+      eq(activeOpenPositions.symbol, symbol), eq(activeOpenPositions.quantity, quantity), eq(activeOpenPositions.state, 'pending'),
+      sql`${activeOpenPositions.metadata}->>'tradeId' = ${tradeId}`,
+    ));
+    const [written] = await db.update(closedTradesTable).set({
+      metadata: sql`COALESCE(${closedTradesTable.metadata}, '{}'::jsonb) || ${JSON.stringify(patch)}::jsonb`,
+    }).where(and(
+      eq(closedTradesTable.id, tradeId), eq(closedTradesTable.mode, 'paper'), eq(closedTradesTable.assetClass, assetClass),
+      eq(closedTradesTable.symbol, symbol), eq(closedTradesTable.quantity, quantity),
+      eq(closedTradesTable.chosenEntryMode, 'maker'), isNull(closedTradesTable.closedAt),
+      sql`NOT (COALESCE(${closedTradesTable.metadata}, '{}'::jsonb) ? 'paperMakerPlacement')`,
+      sql`EXISTS (${pending})`,
+    )).returning({ id: closedTradesTable.id });
+    return Boolean(written);
   }
 
   async transitionPaperCryptoPendingMaker(

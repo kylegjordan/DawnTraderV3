@@ -95,6 +95,35 @@ describe('#1073 paper crypto pending maker pair on Postgres', () => {
     });
   });
 
+  it('records a placement once for the actual linked paper maker without endangering the slot', async (ctx) => {
+    if (!reachable) ctx.skip();
+    await withRest({ linked: true }, async (position, tradeId) => {
+      const makerPlacedAt = new Date(evaluatedAtMs - 40_000);
+      const makerDeadline = new Date(evaluatedAtMs + 20_000);
+      await db.update(activeOpenPositions).set({ makerPlacedAt, makerDeadline, makerLimitPrice: '100' })
+        .where(eq(activeOpenPositions.id, position.id));
+      const pending = (await storage.getActiveOpenPosition('paper', position.id))!;
+      const record = storage.recordPaperMakerPlacement.bind(storage);
+      expect(await record({ ...pending, mode: 'live' }, tradeId)).toBe(false);
+      expect(await record({ ...pending, state: 'open' }, tradeId)).toBe(false);
+      expect(await record({ ...pending, assetClass: 'xstock_spot' }, tradeId)).toBe(false);
+      expect(await record({ ...pending, id: 'replaced-position' }, tradeId)).toBe(false);
+      expect(await record(pending, `${tradeId}-other`)).toBe(false);
+      await expect(record(pending, `${tradeId}\0`)).rejects.toThrow();
+      expect(await storage.getActiveOpenPosition('paper', position.id)).toEqual(pending);
+      expect(await record(pending, tradeId)).toBe(true);
+      expect(await record({ ...pending, makerDeadline: new Date(evaluatedAtMs) }, tradeId)).toBe(false);
+      const trade = await storage.getClosedTrade('paper', tradeId);
+      expect(trade).toMatchObject({ metadata: {
+        tradeOnlyEvidence: 'retain', paperMakerPlacement: {
+          version: 1, tradeId, positionId: position.id, mode: 'paper', assetClass: 'crypto_spot', symbol: position.symbol,
+          makerPlacedAtMs: makerPlacedAt.getTime(), makerDeadlineAtMs: makerDeadline.getTime(),
+        },
+      } });
+      expect(Number((trade?.metadata as { paperMakerPlacement: { limitPrice: string } }).paperMakerPlacement.limitPrice)).toBe(100);
+    });
+  });
+
   it('keeps zero or multiple legacy matches pending and honors a newly persisted exact link', async (ctx) => {
     if (!reachable) ctx.skip();
     await withRest({ linked: false, initialTrade: false }, async (position, tradeId, insertTrade) => {

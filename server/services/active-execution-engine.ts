@@ -7261,8 +7261,20 @@ export class ActiveExecutionEngine {
         return { opened: false, stage: 'DUP_POSITION', reason: `lost concurrent position race for ${signal.symbol}; orphaned trade record ${trade.id} deleted` };
       }
 
-      // AJ10.3: Diagnostic - open position created
-      console.log(`[AJ10.3][OPEN_POSITION_OK] positionId=${openPosition.id} | symbol=${signal.symbol} | tradeId=${trade.id}`);
+      // Preserve the placement receipt even if the separate audit write fails or the slot changes immediately.
+      const paperSpotRest = this.mode === 'paper' && _b72cPendingMaker
+        && (_openClass === 'crypto_spot' || _openClass === 'xstock_spot');
+      const makerReceipt = paperSpotRest
+        ? ` | makerAuditVersion=1 | makerAuditRole=pending_maker | mode=paper | assetClass=${_openClass} | makerPlacedAtMs=${_makerPlacedAtMs ?? 'unknown'}`
+        : '';
+      console.log(`[AJ10.3][OPEN_POSITION_OK] positionId=${openPosition.id} | symbol=${signal.symbol} | tradeId=${trade.id}${makerReceipt}`);
+      if (paperSpotRest) {
+        void storage.recordPaperMakerPlacement(openPosition, trade.id).then((recorded) => {
+          if (!recorded) console.warn(`[#1073][MAKER_PLACEMENT_AUDIT_MISSING] tradeId=${trade.id} positionId=${openPosition.id}`);
+        }).catch((error: unknown) => {
+          console.warn(`[#1073][MAKER_PLACEMENT_AUDIT_FAILED] tradeId=${trade.id} positionId=${openPosition.id}`, error);
+        });
+      }
 
       // P19-B8.2 (OBJ-3): the ONE friction-divergence evaluation seam — compares
       // THIS open's real notional against the risk-equivalent live-balance order
