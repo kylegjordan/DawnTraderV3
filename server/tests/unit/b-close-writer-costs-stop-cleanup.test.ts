@@ -14,6 +14,7 @@ const h = vi.hoisted(() => ({
   getClosedTrades: vi.fn(),
   getActiveOpenPositions: vi.fn(async () => []),
   updateClosedTrade: vi.fn(async () => ({})),
+  closePaperXstockTrade: vi.fn(),
   getPriceWithFallback: vi.fn(),
   resolveFillDepthGateConfig: vi.fn(),
   addAlert: vi.fn(async () => undefined),
@@ -24,6 +25,7 @@ vi.mock('../../storage', async (orig) => {
     if (p === 'getClosedTrades') return h.getClosedTrades;
     if (p === 'getActiveOpenPositions') return h.getActiveOpenPositions;
     if (p === 'updateClosedTrade') return h.updateClosedTrade;
+    if (p === 'closePaperXstockTrade') return h.closePaperXstockTrade;
     return (t as any)[p];
   } }) };
 });
@@ -119,6 +121,33 @@ describe('B-CLOSE-WRITER-COSTS P-11 — the engine-stop cleanup books real costs
     expect(parseFloat(w.exitPrice)).toBe((f as any).fillPrice);
     expect(parseFloat(w.exitFee)).toBe((f as any).feeQuote);
     expect(parseFloat(w.exitSlippage)).toBe((f as any).slippageQuote);
+  });
+
+  it('#961 refuses orphan pricing for both pending and legacy xStock records with no fill proof', async () => {
+    h.getClosedTrades.mockResolvedValue([
+      { ...RECORD, assetClass: 'xstock_spot', chosenEntryMode: 'maker', entryPriceProducer: 'kraken-equities-ws' },
+      { ...RECORD, id: 't-10', assetClass: 'xstock_spot', chosenEntryMode: 'taker' },
+    ]);
+    expect(await reconcileIncompleteTrades('paper', 'sess-1')).toEqual({ reconciled: 0, stillOpen: 2, errors: 0 });
+    expect(h.getPriceWithFallback).not.toHaveBeenCalled();
+    expect(h.closePaperXstockTrade).not.toHaveBeenCalled();
+    expect(h.updateClosedTrade).not.toHaveBeenCalled();
+  });
+
+  it('#961 prices a filled orphan through the guarded writer and counts only committed cleanup', async () => {
+    h.getClosedTrades.mockResolvedValue([{
+      ...RECORD, assetClass: 'xstock_spot', chosenEntryMode: 'taker',
+      metadata: { paperXstockEntryFill: { method: 'taker', filledAtMs: 1_700_000_000_005 } },
+    }]);
+    h.closePaperXstockTrade.mockResolvedValueOnce({ committed: true });
+    expect(await reconcileIncompleteTrades('paper', 'sess-1')).toEqual({ reconciled: 1, stillOpen: 0, errors: 0 });
+    expect(h.closePaperXstockTrade).toHaveBeenCalledWith(
+      expect.objectContaining({ id: RECORD.id }), null,
+      expect.objectContaining({ closeReason: 'engine_stop_cleanup', exitFillArm: 'synthetic_reference' }),
+    );
+    h.closePaperXstockTrade.mockResolvedValueOnce({ committed: false, trade: { closedAt: new Date(), closeReason: 'stop_hit' } });
+    expect(await reconcileIncompleteTrades('paper', 'sess-1')).toEqual({ reconciled: 0, stillOpen: 0, errors: 0 });
+    expect(h.updateClosedTrade).not.toHaveBeenCalled();
   });
 });
 

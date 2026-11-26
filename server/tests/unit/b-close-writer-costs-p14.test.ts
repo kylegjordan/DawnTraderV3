@@ -36,15 +36,19 @@ describe('B-CLOSE-WRITER-COSTS P-14', () => {
     const feeFb = ENGINE.indexOf("entryFee = _num((trade as any).fees); _fromRecord.push('entry fee');", start);
     const slipFb = ENGINE.indexOf("entrySlippage = _num((trade as any).slippage); _fromRecord.push('entry slippage');", start);
     const refuse = ENGINE.indexOf('await this._refuseMissingEntryCost(position, trade.id,', start);
-    const warn = ENGINE.indexOf('if (_fromRecord.length) await this._warnEntryCostFromRecord(position, trade.id, _fromRecord);', start);
+    const warn = ENGINE.indexOf('if (!guardedClose && _fromRecord.length) await this._warnEntryCostFromRecord(position, trade.id, _fromRecord);', start);
+    const winner = ENGINE.indexOf('if (!result.committed) return;', start);
+    const guardedWarn = ENGINE.indexOf('if (_fromRecord.length) await this._warnEntryCostFromRecord(position, trade.id, _fromRecord);', start);
     const pnl = ENGINE.indexOf('const { grossPnl, totalCost, netPnl, netPnlPercent } = computeRealizedPnl({', start);
     expect(start).toBeGreaterThan(0);
-    // the fallback runs BEFORE the refusal, so a refusal means neither source had it; the warning before the P&L
+    // The fallback runs before refusal. The paper xStock warning belongs to the committed winner.
     expect(feeFb).toBeGreaterThan(start);
     expect(slipFb).toBeGreaterThan(start);
     expect(refuse).toBeGreaterThan(Math.max(feeFb, slipFb));
     expect(warn).toBeGreaterThan(refuse);
     expect(pnl).toBeGreaterThan(warn);
+    expect(winner).toBeGreaterThan(pnl);
+    expect(guardedWarn).toBeGreaterThan(winner);
     // the refusal's own alert — not the restore remedy, which is for an unresolvable RECORD
     const fn = ENGINE.slice(ENGINE.indexOf('private async _refuseMissingEntryCost('), ENGINE.indexOf('private async _refuseUnresolvedRecord('));
     expect(fn).toContain('dedupe_key: `close-entry-cost-missing-${this.mode}-${position.symbol}`');

@@ -403,6 +403,14 @@ The `B74` archiver logged actual updates in 1 of 32 minute samples from 11:49:08
 
 **Exact Step 2 r6 review, November 26.** PROCEED at `0ade6d3154e0c356f7db8f21880c8d72060204c3`, dispatch `1575481344556011571`, Coltrane 12:03:06 UTC. Implement the paper-wide publication drain and preserve the live-mode control. Keep Clear Data, Clear Trades and C14 validation-start in #1174, row 183b3. #962 is ready for disposition at row 2 closeout and #1087 keeps its existing prerequisites. The Step 3 checkpoint starts with the two paper hard-reset routes.
 
+### 5b. #961 Step 3 implementation checkpoint, November 26
+
+- `98db4a251` closes entry publication on stop and waits for paper writers in both quote classes before orphan classification and the paper-only session reset. CI `45819902966` passed TypeScript Check, Test Suite, Build and Docker Build for that exact revision. The drain budget is 5 seconds within the current 30-second request budget. A retryable refusal keeps both destructive routes from proceeding during the drain. The budget is subject to Step 4 review.
+- The draft above that revision uses exact paper xStock trade and position identity for maker fill, never-filled cancellation, monitor or operator close, and stop-time cleanup. The maker stamp commits with the position transition. Taker evidence comes from the completed simulation. A record without its position needs positive fill proof and a quiescent paper engine before it can book a reference close. A failed, pending or unlinked close cannot produce booked profit or the successful close's learning and archive writes. Operator and hard-stop totals use only their own committed wins.
+- The xStock socket now identifies and freezes the actual raw frame with a local monotonic receipt clock. Retired sockets cannot update the current book or schedule another reconnect. Mark and archive clocks retain their current meanings.
+- The registered exact decision-to-consumption historical denominator is still unknown. The 65 archive-depth closes are a positive control for measuring recorded depth age, which cannot establish raw frame lineage, generation or displayed size at consumption. The socket work is groundwork for the offline quote path. The new price or retry limits have no approved runtime enforcement.
+- Resume Step 3 with the raw-frame handoff, offline coverage and hold counts, and full Reset / Start New route controls. The addendum integration tests exercise the storage races and rollback on the isolated CI Postgres. Their result belongs to the exact new implementation revision, independently of the earlier green run. Staging still waits for its existing gates.
+
 ## 6d. Governance files changed — the C-P5 retirement (Step 10, 2026-11-20)
 CHANGE-CLASS: sub_batch (row 2's C-P5 outcome; declared in the C-P5 pre-audit header)
 | tier | document | verdict | what changed / why not |
