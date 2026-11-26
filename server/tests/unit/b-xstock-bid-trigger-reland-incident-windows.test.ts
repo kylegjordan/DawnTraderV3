@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
-  vtsEquityIncidentCohort, VtsFeedIncidentWindows, VTS_FEED_INCIDENT_SAMPLE_MS,
+  vtsEquityIncidentCohort, VtsIncidentTradeMap, VtsFeedIncidentWindows, VTS_FEED_INCIDENT_SAMPLE_MS, type VtsFeedIncidentCohort,
 } from '../../services/vts-feed-incident-windows.js';
 import { VtsIncidentRecoveryWindows } from '../../services/vts-feed-incident-recovery.js';
 import type { SelectedXstockUpdate } from '../../asset_classes/xstock_spot/vts-xs-selected-update.js';
@@ -21,14 +21,14 @@ function evidence(now: number, changes: { generation?: number; continuousFromMs?
   if (changes.acknowledged) members.set(changes.acknowledged, { acknowledgedAtMs: now, updatedAtMs: null });
   return {
     generation: changes.generation ?? 1, continuousFromMs: changes.continuousFromMs ?? 0,
-    lastTransportMs: now, warmedUp: true, members,
+    lastTransportMs: now, warmedUp: true, members, subscriptionRevision: 0,
   };
 }
 
-function observePair(tracker: VtsFeedIncidentWindows, secondLook: string[], options: { skipSamples?: boolean } = {}) {
+function observePair(tracker: VtsFeedIncidentWindows, secondLook: string[], options: { skipSamples?: boolean; cohort?: VtsFeedIncidentCohort } = {}) {
   for (let now = 0; now <= 120_000; now += VTS_FEED_INCIDENT_SAMPLE_MS) {
     if (options.skipSamples && now >= 65_000 && now < 80_000) continue;
-    tracker.sample(common, evidence(now), now);
+    tracker.sample(options.cohort ?? common, evidence(now), now);
     const looks = now === 10_000 ? symbols.slice(0, 10) : now === 80_000 ? secondLook : [];
     for (const symbol of looks) tracker.observeStale(symbol, now);
   }
@@ -60,16 +60,18 @@ describe('#1191 covered VTS feed-incident windows', () => {
   });
 
   it('keeps the per-trade path when clocks, membership or current-socket evidence change', () => {
-    const tracker = new VtsFeedIncidentWindows();
-    observePair(tracker, symbols.slice(0, 10));
     const feed = evidence(120_000);
-    const grade = (cohort = common, current = feed, now = 120_000) =>
-      tracker.evidenceAtCrossing(firstSymbol, cohort, current, now);
+    const grade = (cohort = common, current = feed, now = 120_000) => {
+      const tracker = new VtsFeedIncidentWindows();
+      observePair(tracker, symbols.slice(0, 10));
+      return tracker.evidenceAtCrossing(firstSymbol, cohort, current, now);
+    };
     expect(grade()).not.toBeNull();
     expect(grade(common, evidence(120_000, { update: symbols[8] }))).toBeNull();
     expect(grade(common, evidence(120_000, { generation: 2 }))).toBeNull();
     expect(grade(common, evidence(120_000, { continuousFromMs: 1 }))).toBeNull();
     expect(grade(common, evidence(120_000, { acknowledged: noReceipt }))).toBeNull();
+    expect(grade(common, { ...feed, subscriptionRevision: 2 })).toBeNull();
     expect(grade({ ...common, key: 'different-verified-session' })).toBeNull();
     expect(grade({ ...common, symbols: new Set(symbols) })).toBeNull();
     expect(grade(common, { ...feed, warmedUp: false })).toBeNull();
@@ -78,6 +80,65 @@ describe('#1191 covered VTS feed-incident windows', () => {
     const interrupted = new VtsFeedIncidentWindows();
     observePair(interrupted, symbols.slice(0, 10), { skipSamples: true });
     expect(interrupted.evidenceAtCrossing(firstSymbol, common, feed, 120_000)).toBeNull();
+  });
+
+  it('shares one grade across unchanged crossings and rechecks transport, updates and completed windows', () => {
+    const tracker = new VtsFeedIncidentWindows();
+    observePair(tracker, symbols.slice(0, 10));
+    const feed = evidence(120_000);
+    const firstGrade = tracker.evidenceAtCrossing(firstSymbol, common, feed, 120_000);
+    expect(firstGrade?.qualified).toEqual(symbols.slice(0, 10));
+    expect(tracker.evidenceAtCrossing(symbols[1], common, { ...feed, lastTransportMs: 120_001 }, 120_001)).toBe(firstGrade);
+    expect(tracker.evidenceAtCrossing(symbols[1], common, { ...feed, continuousFromMs: 120_001 }, 120_001)).toBeNull();
+    expect(tracker.evidenceAtCrossing(symbols[1], common, evidence(120_001, { update: firstSymbol }), 120_001)).toBeNull();
+    expect(tracker.evidenceAtCrossing(noReceipt, common, feed, 120_001)).toBeNull();
+    for (let now = 125_000; now <= 180_000; now += VTS_FEED_INCIDENT_SAMPLE_MS) {
+      tracker.sample(common, { ...feed, lastTransportMs: now }, now);
+      if (now === 130_000) for (const symbol of symbols.slice(0, 10)) tracker.observeStale(symbol, now);
+    }
+    const next = tracker.evidenceAtCrossing(firstSymbol, common, { ...feed, lastTransportMs: 180_000 }, 180_000);
+    expect(next).not.toBe(firstGrade);
+    expect(next).toMatchObject({ startMs: 60_000, endMs: 180_000, qualified: symbols.slice(0, 10) });
+  });
+
+  it('rebuilds the monitored symbol set on trade changes and checks the exact session on every read', () => {
+    const trades = new VtsIncidentTradeMap<{ assetClass: string; state: string; symbol: string }>();
+    const beforeClose = Date.parse('2026-11-28T00:59:59.999Z');
+    const atClose = beforeClose + 1;
+    const xstock = { assetClass: 'xstock_spot', state: 'open', symbol: firstSymbol };
+    trades.set('first', xstock);
+    trades.set('sibling', { ...xstock });
+    trades.set('pending', { ...xstock, state: 'pending', symbol: symbols[1] });
+    const original = trades.incidentCohort(beforeClose);
+    expect(original.symbols).toEqual(new Set([firstSymbol]));
+    expect(trades.incidentCohort(beforeClose)).toBe(original);
+    expect(trades.incidentCohort(atClose)).toEqual({ ...original, key: 'kraken-equities/ticker/known-weekend-closure' });
+    expect(trades.incidentCohort(beforeClose)).toBe(original);
+    trades.delete('first');
+    expect(trades.incidentCohort(beforeClose)).toBe(original);
+    trades.set('sibling', { assetClass: 'xstock_spot', state: 'open', symbol: symbols[2] });
+    expect(trades.incidentCohort(beforeClose).symbols).toEqual(new Set([symbols[2]]));
+    trades.setTradeState('pending', 'open');
+    expect(trades.incidentCohort(beforeClose).symbols).toEqual(new Set([symbols[1], symbols[2]]));
+    trades.clear();
+    expect(trades.incidentCohort(beforeClose).symbols.size).toBe(0);
+    expect(original.symbols).toEqual(new Set([firstSymbol]));
+  });
+
+  it('starts new windows after the monitored set leaves and returns between samples', () => {
+    const trades = new VtsIncidentTradeMap<{ assetClass: string; symbol: string }>();
+    for (const symbol of common.symbols) trades.set(symbol, { assetClass: 'xstock_spot', symbol });
+    const now = Date.parse('2026-11-27T16:00:00Z');
+    const cohort = trades.incidentCohort(now);
+    const tracker = new VtsFeedIncidentWindows();
+    observePair(tracker, symbols.slice(0, 10), { cohort });
+    const feed = evidence(120_000);
+    expect(tracker.evidenceAtCrossing(firstSymbol, cohort, feed, 120_000)?.qualified).toHaveLength(10);
+    trades.delete(firstSymbol);
+    trades.set(firstSymbol, { assetClass: 'xstock_spot', symbol: firstSymbol });
+    const restored = trades.incidentCohort(now);
+    expect(restored.symbols).toEqual(cohort.symbols);
+    expect(tracker.evidenceAtCrossing(firstSymbol, restored, feed, 120_001)).toBeNull();
   });
 });
 

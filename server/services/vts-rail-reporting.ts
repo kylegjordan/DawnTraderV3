@@ -17,12 +17,12 @@ import {
   memberField, RAIL_KEY_PREFIX, VTS_STANDING_KEY, VTS_RAIL_ACTOR, VTS_RAIL_REF, MEMBER_ESCALATE_AFTER_MS,
   unpricedCloseKey, shadowUnpricedKey, VTS_STUCK_KEY, STUCK_SWEEP_FAILURES, STUCK_CLOSED_MEMBER_SWEEPS, EXPECTED_WIDE, EXPECTED_OLD,
 } from '../core/trading/vts-rail.js';
-import type { ClassVerdict } from './venue-quiet-alerting.js';
+import { classVerdict, measureXstockTicking, readVenueQuietConfig, type ClassVerdict } from './venue-quiet-alerting.js';
 import { vtsRefusalReceiptField, type VtsRefusalEvent } from '../core/trading/vts-refusal-evidence.js';
 import { VtsAlertWriteQueue } from './vts-alert-write-queue.js';
 import { vtsIncidentRecoveryWindows, type VtsIncidentRecoveryProof } from './vts-feed-incident-recovery.js';
 import {
-  decidedField, memberEscalation, ownWarning, standingJoin, standingWarning, stuckWarning,
+  decidedField, memberEscalation, ownWarning, refusalAtCrossing, standingJoin, standingWarning, stuckWarning,
   type Crossing, type LiveRailSweepResult, type LiveWarning, type LiveWarningResult, type RailMember,
 } from './vts-live-warning.js';
 import fs from 'node:fs';
@@ -199,8 +199,18 @@ async function pageOwnKey(c: Crossing, nowMs: number, deps: VtsRailDeps): Promis
   }
 }
 
+type WorkerCrossingDeps = Pick<VtsRailDeps, 'xstockVerdict'> & Required<Pick<VtsRailDeps, 'writeLiveWarning'>>;
+
+// Crossing evidence and delivery can be queued before the sweep's database dependencies are ready.
+const workerCrossingDeps: WorkerCrossingDeps = {
+  xstockVerdict: nowMs => classVerdict(measureXstockTicking(nowMs), readVenueQuietConfig(), nowMs),
+  writeLiveWarning: warning => alertWrites.writeLiveWarning(warning),
+};
+
 /** A streak crossed the page threshold. An expected wide/quiet xStock book joins the standing record; all else pages. */
-export async function onCrossing(c: Crossing, nowMs: number, deps: VtsRailDeps): Promise<'joined' | 'paged'> {
+export async function onCrossing(
+  c: Crossing, nowMs: number, deps: VtsRailDeps | WorkerCrossingDeps = workerCrossingDeps, refusalCutMs?: number,
+): Promise<'joined' | 'paged'> {
   railCounts.crossings++;
   let verdict: ClassVerdict | null = null;
   if (c.assetClass === 'xstock_spot' && c.lastReason.startsWith('no_transactable_side (too_old')) {
@@ -208,7 +218,7 @@ export async function onCrossing(c: Crossing, nowMs: number, deps: VtsRailDeps):
   }
   const joins = c.assetClass === 'xstock_spot' && vtsXstockJoinsStandingRecord(c.lastReason, verdict);
   if (deps.writeLiveWarning) {
-    const pending = deps.writeLiveWarning({ crossing: c, nowMs, action: joins ? 'join' : 'page' });
+    const pending = deps.writeLiveWarning({ crossing: c, nowMs, action: joins ? 'join' : 'page', refusalCutMs });
     if (!pending) return joins ? 'joined' : 'paged'; // An identical observation already owns the publication.
     state.pendingCrossings.set(c.tradeId, (state.pendingCrossings.get(c.tradeId) ?? 0) + 1);
     try {
@@ -231,6 +241,9 @@ export async function onCrossing(c: Crossing, nowMs: number, deps: VtsRailDeps):
       else state.pendingCrossings.set(c.tradeId, count - 1);
     }
   }
+  if (!('addAlert' in deps)) throw new Error('VTS crossing has no writer');
+  const refusal = refusalAtCrossing(c, nowMs, refusalCutMs);
+  if (refusal) recordVtsRefusal(refusal);
   if (joins) {
     const rec = await deps.addAlert({ ...standingWarning(nowMs) });
     // ⛔ Langston r5 condition 2: a null return means the record was resolved (or vanished) between `addAlert` and here —
@@ -499,7 +512,6 @@ async function shadowUnpricedStep(t: { tradeId: string; symbol: string; assetCla
 /** The production dependencies. */
 export async function productionVtsRailDeps(): Promise<VtsRailDeps> {
   const alerts = await import('./system-alerts.js');
-  const vq = await import('./venue-quiet-alerting.js');
   const { getXstockSession } = await import('../asset_classes/xstock_spot/time-of-day.js');
   const { isInXstockWeekendClose, isXstockRailPagingTime } = await import('../asset_classes/xstock_spot/market-hours.js');
   const { db } = await import('../db.js');
@@ -509,7 +521,7 @@ export async function productionVtsRailDeps(): Promise<VtsRailDeps> {
     mergeAlertMetadata: alerts.mergeAlertMetadata as unknown as VtsRailDeps['mergeAlertMetadata'],
     markIndividualDecision: (id, atMs) => alertWrites.markDecision(id, atMs),
     markLiveDecision: (id, atMs) => alertWrites.markLiveDecision(id, atMs),
-    writeLiveWarning: (warning) => alertWrites.writeLiveWarning(warning),
+    writeLiveWarning: workerCrossingDeps.writeLiveWarning,
     resolveAlert: alerts.resolveAlert as unknown as VtsRailDeps['resolveAlert'],
     readAllAlerts: alerts.readAllAlerts as unknown as VtsRailDeps['readAllAlerts'],
     closedTradeIds: async (ids) => {
@@ -522,7 +534,7 @@ export async function productionVtsRailDeps(): Promise<VtsRailDeps> {
       const rows = ((res as unknown as { rows?: Array<{ id: string; closed: boolean | null; closed_at: unknown }> }).rows ?? []);
       return new Set(rows.filter((r) => r.closed === true || r.closed_at != null).map((r) => r.id));
     },
-    xstockVerdict: (nowMs) => vq.classVerdict(vq.measureXstockTicking(nowMs), vq.readVenueQuietConfig(), nowMs),
+    xstockVerdict: workerCrossingDeps.xstockVerdict,
     isRegularSession: (nowMs) => !isInXstockWeekendClose(new Date(nowMs)) && getXstockSession(nowMs) === 'regular',
     isRailPagingTime: (nowMs) => isXstockRailPagingTime(new Date(nowMs)),
     alertFileBytes: () => { try { return fs.statSync(alerts.ALERTS_FILE).size; } catch { return null; } },

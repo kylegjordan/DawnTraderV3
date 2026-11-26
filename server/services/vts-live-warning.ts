@@ -3,7 +3,7 @@ import {
   MEMBER_ESCALATE_AFTER_MS, RAIL_KEY_PREFIX, STUCK_SWEEP_FAILURES, VTS_RAIL_ACTOR, VTS_RAIL_REF,
   VTS_STANDING_KEY, VTS_STUCK_KEY, vtsXstockJoinsStandingRecord, type MemberClock,
 } from '../core/trading/vts-rail.js';
-import { vtsRefusalReceiptField } from '../core/trading/vts-refusal-evidence.js';
+import { vtsRefusalReceiptField, type VtsRefusalEvent } from '../core/trading/vts-refusal-evidence.js';
 import type { VtsFeedIncidentEvidence } from './vts-feed-incident-windows.js';
 import type { VtsIncidentRecoveryCandidate } from './vts-feed-incident-recovery.js';
 import type { AddAlertOptions, AlertStoreDraft, SystemAlert } from './system-alerts.js';
@@ -21,27 +21,45 @@ export interface RailMember extends MemberClock {
   joinedAtMs: number;
 }
 
-export interface Crossing {
+export type Crossing = {
   tradeId: string;
   symbol: string;
   assetClass: string;
   lastReason: string;
   pageSinceMs: number;
-  title: string;
-  body: string;
   feedIncident?: VtsFeedIncidentEvidence | null;
   streakId?: string;
-}
+} & ({ title: string; body: string } | { firstRefusalAtMs: number; cryptoCeilings?: string });
 
 function receipt(c: Pick<Crossing, 'tradeId' | 'streakId' | 'pageSinceMs'>): Record<string, string> {
   return c.streakId ? { [vtsRefusalReceiptField(c.streakId, c.pageSinceMs)]: c.tradeId } : {};
+}
+
+function crossingMessage(c: Crossing, nowMs: number): Pick<AddAlertOptions, 'title' | 'body'> {
+  if ('title' in c) return { title: c.title, body: c.body };
+  const pagingMinutes = Math.round((nowMs - c.pageSinceMs) / 60_000);
+  const totalMinutes = Math.round((nowMs - c.firstRefusalAtMs) / 60_000);
+  return {
+    title: `VTS exit decisions unavailable — ${pagingMinutes} min with no decision for ${c.symbol}`,
+    body: `VTS has made NO exit decision for ${pagingMinutes} minutes of paging time (${totalMinutes} minutes in all) on open `
+      + `virtual trade ${c.tradeId} in ${c.symbol} (most recent reason: ${c.lastReason}). \`no_transactable_side\` means a mark exists but no usable BID within the VTS `
+      + (c.cryptoCeilings ?? `xStock exit ceilings (paper's risk-derived age ceiling for the symbol, and the \`vts_xstock_touch\` spread ceiling; `
+        + 'this rail pages in the US regular session only)')
+      + `; \`no_usable_mark\` means no live price at all. While this lasts the trade's stop and target are NOT evaluated, `
+      + `its high-water mark and latches do not advance, and if it reaches the max-hold valve it closes with NO recorded `
+      + `price (\`time_stop_unpriced\`) — kept out of every outcome, but its stop or target may have been missed. The reason `
+      + `in brackets is the selector's own refusal: a ceiling (\`too_old\`, \`too_wide\`, a stale age) can be tuned; a `
+      + `\`crossed_book\` or a one-sided book cannot be fixed by any ceiling. Read the symbol's cached sides first (a bid `
+      + `equal to the ask means the cache never received real sides) before touching either ceiling. `
+      + `This row CLEARS ITSELF when the trade decides or closes (row 2 increment (4a)); if you resolve it by hand, never ACK it — an ack silences the dedupe key permanently.`,
+  };
 }
 
 export function ownWarning(c: Crossing, nowMs: number): AddAlertOptions {
   const evidence = c.feedIncident;
   return {
     triggers_at: new Date(nowMs), category: 'breakage', severity: 'warning',
-    title: c.title, body: c.body, dedupe_key: railKey(c.symbol, c.tradeId),
+    ...crossingMessage(c, nowMs), dedupe_key: railKey(c.symbol, c.tradeId),
     metadata: {
       tradeId: c.tradeId, ...receipt(c),
       ...(evidence ? { feedIncident: {
@@ -90,8 +108,27 @@ export function standingJoin(
   };
 }
 
-export type LiveWarning = { crossing: Crossing; nowMs: number; action: 'join' | 'page' | 'leave'; leaveStanding?: boolean };
+export type LiveWarning = {
+  crossing: Crossing;
+  nowMs: number;
+  action: 'join' | 'page' | 'leave';
+  leaveStanding?: boolean;
+  refusalCutMs?: number;
+};
 export type LiveWarningResult = { alertId: string; route: 'joined' | 'incident' | 'individual'; minted: boolean };
+
+export function refusalAtCrossing(c: Crossing, nowMs: number, cutMs: number | undefined): Extract<VtsRefusalEvent, { kind: 'crossing' }> | null {
+  if (cutMs === undefined || !c.streakId) return null;
+  const proof = c.feedIncident;
+  return {
+    kind: 'crossing', tradeId: c.tradeId, streakId: c.streakId, pageSinceMs: c.pageSinceMs,
+    observedAtMs: nowMs, reason: c.lastReason,
+    feedCoverage: proof ? {
+      key: proof.key, generation: proof.generation, startMs: proof.startMs, endMs: proof.endMs, cutMs,
+      subscribed: proof.subscribed, qualified: proof.qualified.length,
+    } : null,
+  };
+}
 
 function warningObservedAt(row: Readonly<SystemAlert>): number {
   const observedAt = row.metadata?.vtsWarningObservedAtMs;
@@ -99,7 +136,9 @@ function warningObservedAt(row: Readonly<SystemAlert>): number {
 }
 
 /** The warning and its exact crossing evidence commit together. The queue retries a failed publication. */
-export function writeLiveWarning(draft: AlertStoreDraft, { crossing: c, nowMs, action, leaveStanding }: LiveWarning): LiveWarningResult | null {
+export function writeLiveWarning(draft: AlertStoreDraft, { crossing: c, nowMs, action, leaveStanding, refusalCutMs }: LiveWarning): LiveWarningResult | null {
+  const refusal = refusalAtCrossing(c, nowMs, refusalCutMs);
+  if (refusal) draft.recordVtsRefusal(refusal);
   const saved = c.streakId ? draft.vtsRefusals.get(c.streakId) : undefined;
   const identity = saved?.tradeId === c.tradeId ? saved : undefined;
   const disposition = identity?.crossings.find(item => item.pageSinceMs === c.pageSinceMs)?.disposition;
@@ -129,9 +168,15 @@ export function writeLiveWarning(draft: AlertStoreDraft, { crossing: c, nowMs, a
     return { alertId: row.id, route: 'joined', minted: !standing };
   }
 
-  const ownCrossing = reasonExits.length ? { ...c, streakId: undefined } : c;
-  const warning = ownWarning(ownCrossing, nowMs);
-  const active = draft.rows.find(row => row.dedupe_key === warning.dedupe_key && row.state !== 'resolved');
+  const ownKey = railKey(c.symbol, c.tradeId);
+  let active = draft.rows.find(row => row.dedupe_key === ownKey && row.state !== 'resolved');
+  if (action === 'page' && active && identity) {
+    if (railRowTradeId(active) !== c.tradeId) throw new Error('VTS warning dedupe key belongs to a different trade');
+    const priorDecision = active.metadata?.decidedAtMs;
+    // A previously decided warning cannot discharge a new streak while the sweep is still catching up.
+    if (typeof priorDecision === 'number' && priorDecision > warningObservedAt(active) && priorDecision < identity.firstAtMs
+      && draft.resolve(active.id, VTS_RAIL_ACTOR, clearEvidence('decided_after_mint', c.tradeId), 'engine')) active = undefined;
+  }
   if (action === 'page' && !active) {
     const group = joinVtsFeedIncident(draft, c, nowMs);
     if (group) {
@@ -143,15 +188,20 @@ export function writeLiveWarning(draft: AlertStoreDraft, { crossing: c, nowMs, a
     }
   }
   const episodeExit = reasonExits[0]?.member;
-  const row = active ?? draft.add({
-    ...warning,
-    ...(episodeExit ? {
-      title: `VTS exit decisions unavailable — ${c.symbol} now has a separate refusal`,
-      body: `Open virtual trade ${c.tradeId} in ${c.symbol} started refusing at ${new Date(episodeExit.firstAtMs).toISOString()} `
-        + `and now has a separate reason (${c.lastReason}). This warning clears when the trade decides or closes.`,
-    } : {}),
-    metadata: { ...warning.metadata, vtsWarningObservedAtMs: nowMs },
-  });
+  const ownCrossing = episodeExit ? { ...c, streakId: undefined } : c;
+  let row = active;
+  if (!row) {
+    const warning = ownWarning(ownCrossing, nowMs);
+    row = draft.add({
+      ...warning,
+      ...(episodeExit ? {
+        title: `VTS exit decisions unavailable — ${c.symbol} now has a separate refusal`,
+        body: `Open virtual trade ${c.tradeId} in ${c.symbol} started refusing at ${new Date(episodeExit.firstAtMs).toISOString()} `
+          + `and now has a separate reason (${c.lastReason}). This warning clears when the trade decides or closes.`,
+      } : {}),
+      metadata: { ...warning.metadata, vtsWarningObservedAtMs: nowMs },
+    });
+  }
   if (railRowTradeId(row) !== c.tradeId) throw new Error('VTS warning dedupe key belongs to a different trade');
   if (leaveMember) {
     draft.mergeMetadata(standing.id, { [memberField(c.tradeId)]: null, [decidedField(c.tradeId)]: null });

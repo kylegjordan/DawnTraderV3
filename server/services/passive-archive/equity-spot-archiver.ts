@@ -110,12 +110,16 @@ interface EquityTickerSubscriptionReceipt {
   readonly receivedMonotonicMs: number;
 }
 
+type EquityTickerMemberEvidence = Readonly<{ acknowledgedAtMs: number; updatedAtMs: number | null }>;
+
 interface EquityTickerSubscription {
   readonly generation: number;
   readonly requestId: number;
   readonly requested: ReadonlySet<string>;
   readonly receipts: Map<string, EquityTickerSubscriptionReceipt | null>;
+  subscriptionRevision: number;
   readonly lastUpdates: Map<string, number>;
+  memberSnapshot?: ReadonlyMap<string, EquityTickerMemberEvidence>;
   continuousFromMs: number | null;
   lastTransportMs: number | null;
 }
@@ -143,24 +147,27 @@ export function getEquityTickerSourceIdentity(symbol: string) {
   };
 }
 
-/** A snapshot of transport and genuine-update evidence for one socket generation. */
-export function getEquityTickerFeedEvidence(symbols: Iterable<string>) {
+/** Transport clocks are live on each read. Verified member evidence is republished only when it changes. */
+export function getEquityTickerFeedEvidence() {
   const subscription = currentTickerSubscription();
   if (!subscription) return null;
-  const members = new Map<string, { acknowledgedAtMs: number; updatedAtMs: number | null }>();
-  for (const symbol of symbols) {
-    const receipt = subscription.receipts.get(symbol);
-    if (receipt) members.set(symbol, {
-      acknowledgedAtMs: receipt.receivedMonotonicMs,
-      updatedAtMs: subscription.lastUpdates.get(symbol) ?? null,
-    });
+  if (!subscription.memberSnapshot) {
+    const members = new Map<string, EquityTickerMemberEvidence>();
+    for (const [symbol, receipt] of subscription.receipts) {
+      if (receipt) members.set(symbol, {
+        acknowledgedAtMs: receipt.receivedMonotonicMs,
+        updatedAtMs: subscription.lastUpdates.get(symbol) ?? null,
+      });
+    }
+    subscription.memberSnapshot = members;
   }
   return {
     generation: subscription.generation,
+    subscriptionRevision: subscription.subscriptionRevision,
     warmedUp: subscription.lastUpdates.size > 0,
     continuousFromMs: subscription.continuousFromMs,
     lastTransportMs: subscription.lastTransportMs,
-    members,
+    members: subscription.memberSnapshot,
   };
 }
 
@@ -294,6 +301,7 @@ const latestEquityTick = new Map<string, EquityTick>();
  *  heartbeats only. Both restarts that day (11:59:23Z, 17:05:16Z) were followed within a minute by the cohort count reading
  *  468 of 468 — every symbol "ticking" on a closed market. */
 const lastTickerUpdateAt = new Map<string, number>();
+let tickerUpdateCount: { fromMs: number; throughMs: number; count: number } | undefined;
 /** r7 (row 3a1 Step 9, Langston BLOCKER-1): when THIS process received its first `update` frame. The count above lives in
  *  memory, so after a restart it is empty and `T = 0` reads `thin` — every family pages (16 positions per bounce on
  *  2026-10-10). An empty instrument is not a reading: the count is WARM only once a full window has passed since this.
@@ -325,11 +333,19 @@ export function getLatestEquityTick(symbol: string): EquityTick | null {
 export const EQUITY_TICKING_WINDOW_MS = 60_000;
 
 export function countEquitySymbolsUpdatedSince(sinceMs: number): number {
-  let n = 0;
+  const prior = tickerUpdateCount;
+  if (prior && sinceMs >= prior.fromMs && sinceMs <= prior.throughMs) return prior.count;
+  let count = 0;
+  let throughMs = Number.POSITIVE_INFINITY;
   for (const at of lastTickerUpdateAt.values()) {
-    if (at >= sinceMs) n++;
+    if (at >= sinceMs) {
+      count++;
+      throughMs = Math.min(throughMs, at);
+    }
   }
-  return n;
+  // The oldest counted update leaves only after its exact receipt time. An update invalidates this range.
+  tickerUpdateCount = { fromMs: sinceMs, throughMs, count };
+  return count;
 }
 
 /** B-FEED-HEALTH-GRADE-ARM F-2 (#1123, row 3a): each xStock symbol's age since its last ticker UPDATE (receipt time, the
@@ -345,6 +361,7 @@ export function getEquityTickerUpdateAges(nowMs: number): { symbol: string; ageM
 /** Test-only: the per-symbol update clock. */
 export function _resetTickerUpdateClockForTests(): void {
   lastTickerUpdateAt.clear();
+  tickerUpdateCount = undefined;
   firstTickerUpdateAtMs = null;
   state.tickerSnapsByType60s = { update: 0, snapshot: 0, other: 0 };
 }
@@ -401,6 +418,7 @@ function parseTickerSnap(data: any, frameType?: string, receipt?: TickerSourceRe
     // r4 (row 3a1): only a venue CHANGE counts toward the cohort's "ticking" measure — never a replayed snapshot.
     if (frameType === 'update') {
       lastTickerUpdateAt.set(_sym, _now);
+      tickerUpdateCount = undefined;
       if (firstTickerUpdateAtMs === null) firstTickerUpdateAtMs = _now;
     }
     // B-EXIT-BOOK-AGE-STAMP P1: one predicate, one home. `_bid`/`_ask` are NaN when a side is
@@ -529,12 +547,16 @@ function recordTickerSubscriptionReceipt(
   const symbol = msg.result.symbol;
   if (typeof symbol !== 'string' || !subscription.requested.has(symbol)) return;
   if (msg.success === false) {
+    if (subscription.receipts.get(symbol)) subscription.subscriptionRevision++;
     subscription.receipts.set(symbol, null);
     subscription.lastUpdates.delete(symbol);
+    subscription.memberSnapshot = undefined;
   } else if (msg.success === true && !subscription.receipts.has(symbol)) {
     subscription.receipts.set(symbol, Object.freeze({
       symbol, generation: receipt.generation, requestId: subscription.requestId, receivedMonotonicMs: receipt.monotonicMs,
     }));
+    subscription.subscriptionRevision++;
+    subscription.memberSnapshot = undefined;
   }
 }
 
@@ -571,6 +593,7 @@ function handleMessage(raw: WebSocket.RawData, generation?: number): void {
           recordTickerTransport(subscription, receipt.monotonicMs);
           if (msg.type === 'update') {
             subscription.lastUpdates.set(snap.symbol, receipt.monotonicMs);
+            subscription.memberSnapshot = undefined;
             verifiedUpdate = true;
           }
         } else {
@@ -604,7 +627,7 @@ function subscribe(ws: WebSocket, generation: number): void {
   const requestId = generation;
   tickerSubscription = {
     generation, requestId, requested: new Set(state.symbols), receipts: new Map(),
-    lastUpdates: new Map(), continuousFromMs: null, lastTransportMs: null,
+    subscriptionRevision: 0, lastUpdates: new Map(), continuousFromMs: null, lastTransportMs: null,
   };
   ws.send(JSON.stringify({
     method: 'subscribe',

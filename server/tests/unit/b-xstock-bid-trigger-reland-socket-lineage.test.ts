@@ -24,7 +24,7 @@ vi.mock('../../services/passive-archive/ticker-batch-writer.js', () => ({
 }));
 
 import {
-  getEquityTickerFeedEvidence, getEquityTickerSourceIdentity, getEquityTickerSubscriptionReceipt,
+  countEquitySymbolsUpdatedSince, getEquityTickerFeedEvidence, getEquityTickerSourceIdentity, getEquityTickerSubscriptionReceipt,
   getLatestEquityTick, isCurrentEquityTickerFrame,
   startEquitySpotArchiver, stopEquitySpotArchiver,
 } from '../../services/passive-archive/equity-spot-archiver.js';
@@ -176,7 +176,7 @@ describe('#1191 — exact xStock ticker subscription evidence', () => {
       const socket = sockets.instances[0];
       socket.emit('open');
       const reqId = JSON.parse(socket.send.mock.calls[1][0]).req_id;
-      const read = () => getEquityTickerFeedEvidence([symbol, other]);
+      const read = getEquityTickerFeedEvidence;
       const heartbeat = () => socket.emit('message', Buffer.from('{"channel":"heartbeat"}'));
 
       deliver(socket, 'update', 90);
@@ -186,14 +186,20 @@ describe('#1191 — exact xStock ticker subscription evidence', () => {
       deliver(socket, 'snapshot', 90);
       expect(read()).toMatchObject({ warmedUp: false, continuousFromMs: 200, lastTransportMs: 200 });
       expect(read()?.members).toEqual(new Map([[symbol, { acknowledgedAtMs: 100, updatedAtMs: null }]]));
+      const snapshot = read()?.members;
+      expect(read()?.members).toBe(snapshot);
 
       clock.mockReturnValue(300);
       deliver(socket, 'update', 91);
       expect(read()?.warmedUp).toBe(true);
       expect(read()?.members.get(symbol)?.updatedAtMs).toBe(300);
+      const updated = read()?.members;
+      expect(updated).not.toBe(snapshot);
+      expect(snapshot?.get(symbol)?.updatedAtMs).toBeNull();
       clock.mockReturnValue(15_300);
       heartbeat();
       expect(read()).toMatchObject({ continuousFromMs: 200, lastTransportMs: 15_300 });
+      expect(read()?.members).toBe(updated);
       clock.mockReturnValue(30_301);
       heartbeat();
       expect(read()).toMatchObject({ continuousFromMs: 30_301, lastTransportMs: 30_301 });
@@ -208,6 +214,7 @@ describe('#1191 — exact xStock ticker subscription evidence', () => {
       deliverAck(socket, reqId, { channel: 'ticker', symbol }, false);
       expect(read()?.warmedUp).toBe(false);
       expect(read()?.members.size).toBe(0);
+      expect(updated?.get(symbol)?.updatedAtMs).toBe(300);
 
       await startEquitySpotArchiver();
       const replacement = sockets.instances[1];
@@ -216,6 +223,30 @@ describe('#1191 — exact xStock ticker subscription evidence', () => {
       expect(read()).toMatchObject({ warmedUp: false, continuousFromMs: null, lastTransportMs: null });
     } finally {
       clock.mockRestore();
+    }
+  });
+
+  it('only reuses the venue-ticking count until the oldest qualifying receipt expires or a new update arrives', async () => {
+    await startEquitySpotArchiver();
+    const socket = sockets.instances[0];
+    const wall = vi.spyOn(Date, 'now').mockReturnValue(1_800_000_000_000);
+    try {
+      const first = Date.now();
+      deliver(socket, 'update', 91);
+      wall.mockReturnValue(first + 1_000);
+      socket.emit('message', Buffer.from(JSON.stringify({ channel: 'ticker', type: 'update', data: [{ symbol: other, bid: 90, ask: 91 }] })));
+      expect(countEquitySymbolsUpdatedSince(first - 500)).toBe(2);
+      expect(countEquitySymbolsUpdatedSince(first)).toBe(2);
+      expect(countEquitySymbolsUpdatedSince(first + 1)).toBe(1);
+      expect(countEquitySymbolsUpdatedSince(first - 500)).toBe(2);
+      expect(countEquitySymbolsUpdatedSince(first + 1_001)).toBe(0);
+      wall.mockReturnValue(first + 2_000);
+      deliver(socket, 'snapshot', 91);
+      expect(countEquitySymbolsUpdatedSince(first + 1_001)).toBe(0);
+      deliver(socket, 'update', 92);
+      expect(countEquitySymbolsUpdatedSince(first + 1_001)).toBe(1);
+    } finally {
+      wall.mockRestore();
     }
   });
 

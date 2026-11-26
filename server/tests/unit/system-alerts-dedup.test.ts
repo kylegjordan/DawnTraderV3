@@ -192,8 +192,7 @@ describe('#1191 alert store edits', () => {
           symbol: crossing.symbol, assetClass: crossing.assetClass, thresholdMs: 600_000,
         });
         void queue.recordRefusal({ ...id, kind: 'paging', pageSinceMs });
-        void queue.recordRefusal({ ...id, kind: 'crossing', pageSinceMs, observedAtMs: nowMs, reason: crossing.lastReason, feedCoverage: null });
-        return queue.writeLiveWarning({ crossing, nowMs, action: index < 225 ? 'join' : 'page' });
+        return queue.writeLiveWarning({ crossing, nowMs, action: index < 225 ? 'join' : 'page', refusalCutMs: 120_004 });
       });
       const leave = queue.writeLiveWarning({
         crossing: { ...crossings[0], lastReason: 'no_usable_mark' }, nowMs: nowMs + 1, action: 'leave',
@@ -238,12 +237,58 @@ describe('#1191 alert store edits', () => {
     }
   }, 10_000);
 
+  it('queues a crossing through the production writer independently of sweep setup', async () => {
+    const { readAllAlerts, readVtsRefusalEvidence } = await load();
+    const { onCrossing, recordVtsRefusal } = await import('../../services/vts-rail-reporting.js');
+    const nowMs = Date.parse('2026-11-27T15:00:00Z');
+    const pageSinceMs = nowMs - 600_000;
+    const id = { tradeId: 'cold-writer-trade', streakId: 'cold-writer-streak' };
+    const coverage = { symbol: 'AZN/USD', assetClass: 'xstock_spot' };
+    recordVtsRefusal({ ...id, ...coverage, kind: 'first', firstAtMs: pageSinceMs, firstReason: 'no_usable_mark', thresholdMs: 600_000 });
+    recordVtsRefusal({ ...id, kind: 'paging', pageSinceMs });
+    expect(await onCrossing({ ...id, ...coverage, firstRefusalAtMs: pageSinceMs,
+      pageSinceMs, lastReason: 'no_usable_mark' }, nowMs, undefined, 120_004)).toBe('paged');
+    const [row] = readAllAlerts();
+    expect(readVtsRefusalEvidence()[0]?.crossings[0]).toMatchObject({ observedAtMs: nowMs, disposition: { route: 'individual', alertId: row.id } });
+    expect(row.metadata[vtsRefusalReceiptField(id.streakId, pageSinceMs)]).toBe(id.tradeId);
+  });
+
+  it('issues a new individual warning when a worker backlog contains an earlier decision and a new crossing', async () => {
+    const { VtsAlertWriteQueue } = await import('../../services/vts-alert-write-queue.js');
+    const { readAllAlerts, readVtsRefusalEvidence } = await load();
+    const queue = new VtsAlertWriteQueue();
+    const firstMs = Date.parse('2026-11-27T15:00:00Z');
+    const firstReason = 'no_usable_mark';
+    const trade = { tradeId: 'recross-trade', symbol: 'AZN/USD', assetClass: 'xstock_spot' };
+    function report(streakId: string, pageSinceMs: number) {
+      void queue.recordRefusal({ ...trade, streakId, kind: 'first', firstAtMs: pageSinceMs, firstReason, thresholdMs: 600_000 });
+      void queue.recordRefusal({ tradeId: trade.tradeId, streakId, kind: 'paging', pageSinceMs });
+      return queue.writeLiveWarning({
+        crossing: { ...trade, streakId, pageSinceMs, firstRefusalAtMs: pageSinceMs, lastReason: firstReason },
+        nowMs: pageSinceMs + 600_000, action: 'page', refusalCutMs: 120_004,
+      });
+    }
+    const old = await report('old-streak', firstMs);
+    const decisionAt = firstMs + 600_001;
+    void queue.recordRefusal({ tradeId: trade.tradeId, kind: 'decided', streakId: 'old-streak', atMs: decisionAt });
+    void queue.markLiveDecision(trade.tradeId, decisionAt);
+    const current = await report('new-streak', decisionAt + 1);
+    expect(current).toMatchObject({ route: 'individual', minted: true });
+    expect(current?.alertId).not.toBe(old?.alertId);
+    expect(readAllAlerts().find(row => row.id === old?.alertId)).toMatchObject({ state: 'resolved' });
+    expect(readAllAlerts().find(row => row.id === current?.alertId)).toMatchObject({ state: 'scheduled' });
+    expect(readVtsRefusalEvidence().find(item => item.streakId === 'new-streak')?.crossings[0].disposition)
+      .toEqual({ route: 'individual', alertId: current?.alertId });
+  });
+
   it('keeps 450 correlated trades under one durable warning with separate fallback and terminal evidence', async () => {
     const { VtsAlertWriteQueue } = await import('../../services/vts-alert-write-queue.js');
     const { addAlert, fireDue, processResurface, processVtsFeedIncidentNotices, readAllAlerts, readVtsRefusalEvidence } = await load();
     const queue = new VtsAlertWriteQueue();
     const nowMs = Date.parse('2026-11-27T15:00:00Z');
     const pageSinceMs = nowMs - 600_000;
+    const exposureBeforePagingMs = 120_000;
+    const firstRefusalAtMs = pageSinceMs - exposureBeforePagingMs;
     const symbols = Array.from({ length: 10 }, (_, index) => `XS${index}/USD`);
     const coverage = {
       key: VTS_COMMON_XSTOCK_INCIDENT_COHORT, generation: 5, startMs: 1, endMs: 120_001, cutMs: 120_004, subscribed: 10,
@@ -251,28 +296,28 @@ describe('#1191 alert store edits', () => {
     const crossings = Array.from({ length: 451 }, (_, index): Crossing => ({
       tradeId: `feed-trade-${index}`, streakId: `feed-streak-${index}`,
       symbol: index === 450 ? 'MSTR/USD' : symbols[index % symbols.length], assetClass: 'xstock_spot',
-      pageSinceMs, title: 'VTS warning', body: 'exact trade', lastReason: EXPECTED_OLD,
+      pageSinceMs, firstRefusalAtMs, lastReason: EXPECTED_OLD,
       feedIncident: { ...coverage, qualified: symbols, missing: ['MSTR/USD'] },
     }));
     function queueCrossing(crossing: Crossing, stamp: number) {
       const identity = { tradeId: crossing.tradeId, streakId: crossing.streakId! };
       const pageStart = crossing.pageSinceMs;
       void queue.recordRefusal({
-        ...identity, kind: 'first', firstAtMs: pageStart - 1, firstReason: EXPECTED_OLD,
+        ...identity, kind: 'first', firstAtMs: pageStart - exposureBeforePagingMs, firstReason: EXPECTED_OLD,
         symbol: crossing.symbol, assetClass: crossing.assetClass, thresholdMs: 600_000,
       });
       void queue.recordRefusal({ ...identity, kind: 'paging', pageSinceMs: pageStart });
-      void queue.recordRefusal({
-        ...identity, kind: 'crossing', pageSinceMs: pageStart, observedAtMs: stamp, reason: EXPECTED_OLD,
-        feedCoverage: { ...coverage, qualified: symbols.length },
-      });
-      return queue.writeLiveWarning({ crossing, nowMs: stamp, action: 'page' });
+      return queue.writeLiveWarning({ crossing, nowMs: stamp, action: 'page', refusalCutMs: coverage.cutMs });
     }
     const messages = await Promise.all(crossings.map(crossing => queueCrossing(crossing, nowMs)));
     const [group] = readAllAlerts().filter(isVtsFeedIncidentAlert);
     expect(messages.slice(0, 450).map(message => message?.alertId)).toEqual(Array(450).fill(group.id));
     expect(messages.filter(message => message?.minted && message?.route === 'incident')).toHaveLength(1);
     expect(messages[450]).toMatchObject({ route: 'individual', minted: true });
+    expect(readAllAlerts().find(row => row.id === messages[450]?.alertId)).toMatchObject({
+      title: 'VTS exit decisions unavailable — 10 min with no decision for MSTR/USD',
+      body: expect.stringContaining('10 minutes of paging time (12 minutes in all) on open virtual trade feed-trade-450'),
+    });
     const groupedTradeIds = new Set(crossings.slice(0, 450).map(crossing => crossing.tradeId));
     expect(readVtsRefusalEvidence().filter(item => groupedTradeIds.has(item.tradeId)).map(item => item.crossings[0].disposition))
       .toEqual(Array(450).fill({ alertId: group.id, route: 'incident' }));
@@ -297,7 +342,7 @@ describe('#1191 alert store edits', () => {
     });
     expect(fallback).toMatchObject({ route: 'individual', minted: true });
     const individual = readAllAlerts().find(row => row.id === fallback!.alertId)!;
-    expect(individual.body).toContain(new Date(pageSinceMs - 1).toISOString());
+    expect(individual.body).toContain(new Date(firstRefusalAtMs).toISOString());
     expect(individual.metadata[vtsRefusalReceiptField(changed.streakId!, pageSinceMs)]).toBeUndefined();
     const wide = await afterRestart.writeLiveWarning({
       crossing: { ...crossings[3], lastReason: EXPECTED_WIDE }, nowMs: nowMs + 1, action: 'leave', leaveStanding: false,
@@ -371,7 +416,7 @@ describe('#1191 alert store edits', () => {
       const field = `vtsIncidentMember:${vtsRefusalReceiptField(crossing.streakId!, pageSinceMs)}`;
       const successor = afterHandback.find(row => row.id === (recoveredGroup.metadata[field] as { fallbackAlertId: string }).fallbackAlertId);
       expect(successor).toMatchObject({ metadata: { [`vtsIncidentHandback:${group.id}:${crossing.tradeId}`]: {
-        firstAtMs: pageSinceMs - 1, handedBackAtMs: handbackMs, members: [expect.objectContaining({ tradeId: crossing.tradeId })],
+        firstAtMs: firstRefusalAtMs, handedBackAtMs: handbackMs, members: [expect.objectContaining({ tradeId: crossing.tradeId })],
       } } });
       if (crossing === changed) expect(successor?.id).toBe(fallback!.alertId);
       if (crossing === crossings[3]) expect(successor?.id).toBe(wide!.alertId);

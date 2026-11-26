@@ -56,8 +56,11 @@ import {
   markOpenTradeClosed,
   rehydrateOpenTrades,
   bootstrapOpenTradesFromMemory,
+  markAllXstockWeekendSuspended, unmarkAllXstockWeekendSuspended,
+  type VtsOpenTradeState,
   type OpenVirtualTradeRecord,
 } from '../../services/vts-trade-persistence.js';
+import { VtsIncidentTradeMap } from '../../services/vts-feed-incident-windows.js';
 
 function makeTrade(symbol: string, assetClass: string): OpenVirtualTradeRecord {
   return {
@@ -76,6 +79,19 @@ function makeTrade(symbol: string, assetClass: string): OpenVirtualTradeRecord {
 }
 
 describe('B79.0g — vts-trade-persistence', () => {
+  it('refreshes incident membership when the real lifecycle mirror changes trade state', async () => {
+    const trades = new VtsIncidentTradeMap<{ assetClass: 'xstock_spot'; symbol: string; state: VtsOpenTradeState }>();
+    trades.set('open', { assetClass: 'xstock_spot', symbol: 'RTLY/USD', state: 'open' });
+    trades.set('pending', { assetClass: 'xstock_spot', symbol: 'PGR/USD', state: 'pending' });
+    const sampleAt = Date.parse('2026-11-27T16:00:00Z');
+    expect(trades.incidentCohort(sampleAt).symbols).toEqual(new Set(['RTLY/USD']));
+    await markAllXstockWeekendSuspended(trades);
+    expect(trades.incidentCohort(sampleAt).symbols).toEqual(new Set());
+    await unmarkAllXstockWeekendSuspended(trades);
+    expect(trades.incidentCohort(sampleAt).symbols).toEqual(new Set(['RTLY/USD']));
+    expect(trades.get('pending')?.state).toBe('pending');
+  });
+
   beforeEach(() => {
     dbCalls.length = 0;
     dbReturnOverrides.length = 0;
@@ -157,15 +173,18 @@ describe('B79.0g — vts-trade-persistence', () => {
     // is kept and the ticker is the fallback only for a missing or invalid one.
     it('keeps a valid CARRIED class — a collision-ticker xStock stays xstock_spot; the ticker is not consulted', async () => {
       const xs = makeTrade('SUI/USD', 'xstock_spot');
-      await bootstrapOpenTradesFromMemory([xs]);
+      const classChanged = vi.fn();
+      await bootstrapOpenTradesFromMemory([xs], classChanged);
       expect(resolverCalls).toEqual([]);
       expect(dbCalls.find((c) => c.sql.includes('INSERT INTO vts_open_trades'))).toBeDefined();
       expect(xs.assetClass).toBe('xstock_spot');
+      expect(classChanged).not.toHaveBeenCalled();
     });
 
     it('re-resolves a MISSING or INVALID class from the ticker (the fallback)', async () => {
       const staleTrade = makeTrade('SUI/USD', 'not_a_class');
-      await bootstrapOpenTradesFromMemory([staleTrade]);
+      const classChanged = vi.fn(() => expect(staleTrade.assetClass).toBe('crypto_spot'));
+      await bootstrapOpenTradesFromMemory([staleTrade], classChanged);
 
       // Verify re-resolve was called.
       expect(resolverCalls).toContainEqual({ symbol: 'SUI/USD', exchange: 'kraken' });
@@ -178,6 +197,7 @@ describe('B79.0g — vts-trade-persistence', () => {
 
       // F3 fix verification: the in-memory record is mutated to the corrected value.
       expect(staleTrade.assetClass).toBe('crypto_spot');
+      expect(classChanged).toHaveBeenCalledTimes(1);
     });
 
     it('skips trades whose symbol fails resolver (returns null)', async () => {
