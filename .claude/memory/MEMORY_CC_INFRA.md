@@ -32,7 +32,7 @@
   1. **B-CREDENTIALS-PRIVATE-REPO (#1023):** OBJ-1 CLOSED (`680e87b8d`); parent open for OBJ-2, OBJ-3, OBJ-4 readers and OBJ-6 flip.
      - **Deployer pin — STEP: 9 of 11 · NEXT STEP: 10 of 11 with parent.** Coltrane PROCEED `f50fbd358`. Alert `7953f97f` resolved. Phase A 716.
      - GB-8 Step 10 done; Step 11 with parent. Coltrane PROCEED `910e3a5b`; `#463` closed.
-     - **OBJ-2/P6:** seeder STEP: 5 of 11 · NEXT STEP: 6 held (`cdcac173f`, CI `45811996599` 4/4). P7a STEP: 5 of 11 · NEXT STEP: 6 held (`ac8afdd5a`, CI `45825696290` 4/4).
+     - **OBJ-2/P6:** seeder/P7a STEP: 5 of 11 · NEXT STEP: 6 held (`cdcac173f`/`ac8afdd5a`, CI `45811996599`/`45825696290` 4/4). Phase 3C STEP: 3 of 11 · NEXT STEP: 4 of 11.
   2. **Alert `aaf0b2b5` DUE — Kyle APPROVED removing `is_admin` from crew row `testuser123`** (#1092: its 4 costs listed there); Plans A/B: settle with the reviewer, one gate each (detail on #1092). ⚠️ Langston's bridge is now inactive/disabled (crew mode CODEX) — who reviews is the new crew's call.
   3. **Kyle 2026-10-08, plan §0 Infra row (`SPRINT_TO_LIVE_PLAN.md`):** Langston+Coltrane memory auto-trim (eviction by supersession); the alert lane (built, B-LANGSTON-RELIEF); #1057 reconcile-verb notes live on #1057.
   4. **#1022:** `$dt_bad_report` REMOVED 10-07 (live nginx sha `5be2e58d`, mirror `deploy/nginx.conf` = 48-line header + live); `$dt_bad_token` KEPT until B-PATH-SINK-CENSUS (158a) lands AND every sink resolves in a declared root; arm A (/api/audit) until B-AUDIT-ROUTE-AUTH (158b).
