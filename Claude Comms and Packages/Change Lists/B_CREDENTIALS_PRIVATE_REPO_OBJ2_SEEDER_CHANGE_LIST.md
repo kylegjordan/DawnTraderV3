@@ -341,3 +341,15 @@ Coltrane confirmed continuity at 2026-11-26 18:40:09 UTC in reply to Discord `15
 All four required jobs passed on [the approved source](https://github.com/kylegjordan/DawnTraderV3/actions/runs/45875566318), [exact shared base](https://github.com/kylegjordan/DawnTraderV3/actions/runs/45877237324) and [exact placement candidate](https://github.com/kylegjordan/DawnTraderV3/actions/runs/45877415749). After #1073, the identical placement landed on the shared branch and passed TypeScript Check, Test Suite, Build and Docker Build in [45879801869](https://github.com/kylegjordan/DawnTraderV3/actions/runs/45879801869). The shared placement notice is Discord `1575586046937272382`.
 
 Step 6 return is at staging clearance. Start by confirming the approved delivery target for this tracked template and whether a cleared deployment carries its exact blob. The review and CI establish repository state. Live copies and previously delivered directives remain unverified. Seeder, P7a, Phase 3C and P987 keep their existing Step 6 gates. Both Token Watch checks remain scheduled for 2026-11-27 at 00:00 and 00:05 UTC.
+
+## Independent OBJ-2/P6 increment - Tracked credential scanner
+
+**Scope.** Approved Pre-audit section 2.3 items 1–2 and implementation P6 specify a scanner for a chosen Git ref with archive-member coverage. This increment builds the read-only instrument and its exclusion format. It has no staging dependency. The seeder, P7a, Phase 3C, P987 and directive retain their Step 6 staging gates.
+
+### Scanner Step 3 implementation
+
+`scripts/credential-scan.py` resolves one committed tree, reads the two retired patterns from their pinned Git objects and reports matching tracked paths and direct ZIP and tar member paths. Literal values stay in memory and go to Git over stdin. A clean scan returns 0, findings return 1, and a read or validation failure returns 2. The `--tree-only` output explicitly states that it checked tracked files only.
+
+`scripts/credential-scan-excludes.txt` defines exact tracked-file entries and the reviewed count-plus-manifest rule for `attached_assets/`. This increment starts with zero exemptions. Population of the live list follows the recorded archive and legacy-file dispositions and the pinned census. CI wiring stays with the approved OBJ-3 workflow change after OBJ-2 is ready. The unfiltered baseline is expected to have findings.
+
+The scanner passed 14 synthetic command-line controls covering clean and dirty trees, binary literals, spaced paths, ZIP chunk boundaries, tar members, tree-only scope, exact exclusions, a neighboring new file, arbitrary directory refusal, pinned directory changes, corrupt archives, missing or short patterns and invalid refs. Fixture values were synthetic and the checks confirmed outputs contained neither value. Both Token Watch reads remain scheduled and all staging holds continue.
