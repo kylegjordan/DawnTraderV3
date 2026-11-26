@@ -119,3 +119,13 @@ Coltrane sent back `d294aa2684815772e09329ec7cab367a8337edc4` at 11:26:00 UTC. T
 The loopback control used both unchanged specs from `d294aa268` with a disabled input: two failed tests, two terminal password hits and no login submits. With the correction, both tests still failed, both printed the fixed message, and the terminal plus all five generated files had zero hits for the synthetic password. Both normal fixture logins also passed again, with zero hits across terminal output and all three generated files. The successful Phase 41F-L fixture stopped after login.
 
 **Staging:** this increment is a source review only. Apply the existing staging windows and release gates when a later install is approved. System Manual references belong to the OBJ-2 governance step.
+
+### Step 4 approval
+
+At 2026-11-26 11:31:39 UTC, Coltrane approved `cdcac173f3366430c6f010e9c11159499e1506eb` for shared-branch placement only. His independent Playwright 1.56.1 loopback checks reproduced the synthetic password in two prior disabled-field runs. At the approved ref both disabled-field runs failed with the fixed message before any login submit. Neither terminal log nor any of the six generated files contained the synthetic password. His two successful fixture logins also produced no password hits in either terminal log or any of the four generated files. Phase 41F-L stopped after login. He also checked the seeder removal, archive redaction, tracked trace removal and Step 2 reference.
+
+The approved source landed unchanged on `migration/aws-supabase`. The staging and installation holds still apply.
+
+### Step 5 shared CI
+
+Shared branch run [45811996599](https://github.com/kylegjordan/DawnTraderV3/actions/runs/45811996599) passed all four jobs at `cdcac173f3366430c6f010e9c11159499e1506eb`: TypeScript Check, Test Suite, Build and Docker Build. OBJ-2 remains open beyond this increment. Step 6 waits for staging clearance. The Token Watch observation times and Token Economy install gates remain in force.
