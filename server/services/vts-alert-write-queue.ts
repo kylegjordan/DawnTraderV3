@@ -2,7 +2,7 @@ import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { Worker } from 'node:worker_threads';
 import type { VtsRefusalEvent } from '../core/trading/vts-refusal-evidence.js';
-import type { VtsAlertWrite, VtsAlertWriteResult } from './vts-alert-write-worker.js';
+import type { VtsAlertWrite, VtsAlertWorkerMessage, VtsAlertWorkerRequest } from './vts-alert-write-worker.js';
 
 const COALESCE_MS = 10;
 const RETRY_MS = 1_000;
@@ -23,11 +23,19 @@ interface PendingWrite {
   finish: (written: boolean) => void;
 }
 
+interface PendingReconciliation {
+  nowMs: number;
+  runId: string;
+  closedTradeIds: (ids: string[]) => Promise<Set<string>>;
+  finish: (reconciled: boolean) => void;
+}
+
 /** Keep exact refusal and decision observations until the same store writer responds. */
 export class VtsAlertWriteQueue {
   private worker?: Worker;
   private scheduled?: NodeJS.Timeout;
-  private inFlight?: PendingWrite[];
+  private inFlight?: { writes: PendingWrite[]; reconciliation?: PendingReconciliation };
+  private reconciliation?: PendingReconciliation;
   private readonly pending = new Map<string, PendingWrite>();
 
   markDecision(rowId: string, atMs: number): Promise<boolean> | undefined {
@@ -40,6 +48,16 @@ export class VtsAlertWriteQueue {
     return this.enqueue(key, { kind: 'refusal', event });
   }
 
+  reconcileRefusals(
+    nowMs: number, runId: string, closedTradeIds: (ids: string[]) => Promise<Set<string>>,
+  ): Promise<boolean> | undefined {
+    if (this.reconciliation) return;
+    return new Promise<boolean>((finish) => {
+      this.reconciliation = { nowMs, runId, closedTradeIds, finish };
+      this.schedule(COALESCE_MS);
+    });
+  }
+
   private enqueue(key: string, write: VtsAlertWrite): Promise<boolean> | undefined {
     // An existing entry already owns its completion. Repeats add no waiters during a failed write.
     if (this.pending.has(key)) return;
@@ -50,7 +68,7 @@ export class VtsAlertWriteQueue {
   }
 
   private schedule(delayMs: number): void {
-    if (this.scheduled || this.inFlight || this.pending.size === 0) return;
+    if (this.scheduled || this.inFlight || (!this.pending.size && !this.reconciliation)) return;
     this.scheduled = setTimeout(() => {
       this.scheduled = undefined;
       this.flush();
@@ -61,8 +79,13 @@ export class VtsAlertWriteQueue {
   private flush(): void {
     try {
       const worker = this.worker ?? this.attach(startWorker());
-      this.inFlight = [...this.pending.values()];
-      worker.postMessage(this.inFlight.map(({ write }) => write));
+      const reconciliation = this.reconciliation;
+      this.inFlight = { writes: [...this.pending.values()], reconciliation };
+      const writes = this.inFlight.writes.map(({ write }) => write);
+      const request: VtsAlertWorkerRequest = reconciliation
+        ? { kind: 'reconcile', writes, nowMs: reconciliation.nowMs, runId: reconciliation.runId }
+        : writes;
+      worker.postMessage(request);
     } catch (error) {
       this.retry(error);
     }
@@ -70,21 +93,47 @@ export class VtsAlertWriteQueue {
 
   private attach(worker: Worker): Worker {
     this.worker = worker;
-    worker.on('message', (result: VtsAlertWriteResult) => {
+    worker.on('message', (result: VtsAlertWorkerMessage) => {
       const batch = this.inFlight;
       if (this.worker !== worker || !batch) return;
+      if ('kind' in result) {
+        const request = batch.reconciliation;
+        if (!request) return;
+        void Promise.resolve().then(() => request.closedTradeIds(result.ids)).then(
+          (closed) => [...closed],
+          (error: unknown) => {
+            console.error('[VTS_RAIL][RECOVERY_CLOSE_LOOKUP_FAILED]', error);
+            return null;
+          },
+        ).then((ids) => {
+          if (this.worker === worker && this.inFlight === batch) {
+            try {
+              worker.postMessage({ kind: 'closed-trades', ids } satisfies VtsAlertWorkerRequest);
+            } catch (error) {
+              this.worker = undefined;
+              void worker.terminate().catch(() => {});
+              this.retry(error);
+            }
+          }
+        });
+        return;
+      }
       if ('error' in result) {
         this.retry(result.error);
         return;
       }
-      if (result.written.length !== batch.length) {
+      if (result.written.length !== batch.writes.length) {
         this.retry('worker returned an incomplete alert batch');
         return;
       }
       this.inFlight = undefined;
-      for (const [index, entry] of batch.entries()) {
+      for (const [index, entry] of batch.writes.entries()) {
         this.pending.delete(entry.key);
         entry.finish(result.written[index]);
+      }
+      if (batch.reconciliation) {
+        this.reconciliation = undefined;
+        batch.reconciliation.finish(result.reconciled === true);
       }
       this.schedule(COALESCE_MS);
     });
@@ -96,7 +145,7 @@ export class VtsAlertWriteQueue {
     worker.on('exit', (code) => {
       if (this.worker !== worker) return;
       this.worker = undefined;
-      if (this.pending.size) this.retry(`worker exited with code ${code}`);
+      if (this.pending.size || this.reconciliation) this.retry(`worker exited with code ${code}`);
     });
     worker.unref();
     return worker;

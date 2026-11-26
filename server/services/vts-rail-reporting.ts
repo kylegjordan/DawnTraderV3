@@ -19,14 +19,16 @@ import {
 } from '../core/trading/vts-rail.js';
 import type { ClassVerdict } from './venue-quiet-alerting.js';
 import type { VtsFeedIncidentEvidence } from './vts-feed-incident-windows.js';
-import type { VtsRefusalEvent } from '../core/trading/vts-refusal-evidence.js';
+import { vtsRefusalReceiptField, type VtsRefusalEvent } from '../core/trading/vts-refusal-evidence.js';
 import { VtsAlertWriteQueue } from './vts-alert-write-queue.js';
 import fs from 'node:fs';
+import { randomUUID } from 'node:crypto';
 
 const alertWrites = new VtsAlertWriteQueue();
+const refusalRunId = randomUUID();
 
 export function recordVtsRefusal(event: VtsRefusalEvent): void {
-  void alertWrites.recordRefusal(event);
+  void alertWrites.recordRefusal(event.kind === 'first' ? { ...event, runId: refusalRunId } : event);
 }
 
 /** `decided_<tradeId>` on the standing record: a member decided at this time (single-key merge, never a map rewrite). */
@@ -56,6 +58,7 @@ export interface VtsRailDeps {
   /** Of these VTS trade ids, which are CLOSED in durable state — a PRESENT `vts_open_trades` row with `closed`/`closed_at`
    *  set. An id with no row is NOT closed (it is left for a human), so an empty result can never resolve everything. */
   closedTradeIds: (ids: string[]) => Promise<Set<string>>;
+  reconcileRefusals?: (nowMs: number, closedTradeIds: VtsRailDeps['closedTradeIds']) => Promise<boolean> | undefined;
   /** The paper cohort verdict for xStock (`venue-quiet-alerting.ts`); `null` when unreadable. */
   xstockVerdict: (nowMs: number) => ClassVerdict | null;
   /** Is `nowMs` inside the US regular session on a trading day? The session LABEL (an unpriced close's `session`). */
@@ -171,17 +174,20 @@ export interface Crossing {
   title: string;
   body: string;
   feedIncident?: VtsFeedIncidentEvidence | null;
+  streakId?: string;
 }
 
 /** Page on the symbol's own key, counting minted vs suppressed, and index the row at the mint. */
 async function pageOwnKey(c: Crossing, nowMs: number, deps: VtsRailDeps): Promise<void> {
   railCounts.pagesAttempted++;
   const evidence = c.feedIncident;
+  const field = c.streakId ? vtsRefusalReceiptField(c.streakId, c.pageSinceMs) : undefined;
   const row = await deps.addAlert({
     triggers_at: new Date(nowMs), category: 'breakage', severity: 'warning',
     title: c.title, body: c.body, dedupe_key: railKey(c.symbol, c.tradeId),
     metadata: {
       tradeId: c.tradeId,
+      ...(field ? { [field]: c.tradeId } : {}),
       ...(evidence ? { feedIncident: {
         key: evidence.key, generation: evidence.generation,
         windowStartMonotonicMs: evidence.startMs, windowEndMonotonicMs: evidence.endMs,
@@ -193,7 +199,11 @@ async function pageOwnKey(c: Crossing, nowMs: number, deps: VtsRailDeps): Promis
   // A fresh row is created at or after the pre-call stamp; an existing (deduped) one before it (`system-alerts.ts:539-545`).
   const mintedNow = Date.parse(row.created_at) >= nowMs;
   if (mintedNow) railCounts.minted++; else railCounts.dedupeHits++;
-  if (row.metadata?.tradeId === c.tradeId && isOpen(row)) indexRow(c.tradeId, row.id); // at-mint index (r3)
+  if (row.metadata?.tradeId === c.tradeId && isOpen(row)) {
+    indexRow(c.tradeId, row.id); // at-mint index (r3)
+    // Dedupe keeps one active warning per trade. A reused row gets its own exact receipt for this crossing.
+    if (field && row.metadata[field] !== c.tradeId) await deps.mergeAlertMetadata(row.id, { [field]: c.tradeId });
+  }
 }
 
 /** A streak crossed the page threshold. An expected wide/quiet xStock book joins the standing record; all else pages. */
@@ -231,7 +241,10 @@ export async function onCrossing(c: Crossing, nowMs: number, deps: VtsRailDeps):
     // the member was NOT written, so this crossing must not be swallowed: fall back to paging on its own key (A4's
     // default-to-page). Member and decision keys are single-key merges; a removed member is a `null` TOMBSTONE that every
     // reader filters (`&& v`), bounded by the record's own lifetime (it resolves when empty) — r5 record item (ii).
-    const merged = await deps.mergeAlertMetadata(rec.id, { [memberField(c.tradeId)]: member, [decidedField(c.tradeId)]: null, suppressedPages });
+    const receipt = c.streakId ? { [vtsRefusalReceiptField(c.streakId, c.pageSinceMs)]: c.tradeId } : {};
+    const merged = await deps.mergeAlertMetadata(rec.id, {
+      [memberField(c.tradeId)]: member, [decidedField(c.tradeId)]: null, suppressedPages, ...receipt,
+    });
     if (merged === null) {
       await pageOwnKey(c, nowMs, deps);
       return 'paged';
@@ -287,6 +300,7 @@ export async function runVtsRailSweep(nowMs: number, deps: VtsRailDeps): Promise
   state.sweepInFlight = true;
   state.lastSweepMs = nowMs;
   try {
+    await deps.reconcileRefusals?.(nowMs, deps.closedTradeIds);
     const all = deps.readAllAlerts();
     const railRows = all.filter((r) => isOpen(r) && (r.dedupe_key ?? '').startsWith(RAIL_KEY_PREFIX));
     const record = all.find((r) => isOpen(r) && r.dedupe_key === VTS_STANDING_KEY) ?? null;
@@ -460,6 +474,7 @@ export async function productionVtsRailDeps(): Promise<VtsRailDeps> {
     addAlert: alerts.addAlert as unknown as VtsRailDeps['addAlert'],
     mergeAlertMetadata: alerts.mergeAlertMetadata as unknown as VtsRailDeps['mergeAlertMetadata'],
     markIndividualDecision: (id, atMs) => alertWrites.markDecision(id, atMs),
+    reconcileRefusals: (nowMs, closeLookup) => alertWrites.reconcileRefusals(nowMs, refusalRunId, closeLookup),
     resolveAlert: alerts.resolveAlert as unknown as VtsRailDeps['resolveAlert'],
     readAllAlerts: alerts.readAllAlerts as unknown as VtsRailDeps['readAllAlerts'],
     closedTradeIds: async (ids) => {

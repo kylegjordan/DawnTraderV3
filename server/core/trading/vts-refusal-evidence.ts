@@ -5,11 +5,17 @@ interface RefusalIdentity {
 }
 
 interface FirstRefusal {
+  runId?: string;
   symbol: string;
   assetClass: string;
   firstAtMs: number;
   firstReason: string;
   thresholdMs: number;
+}
+
+interface RefusalDisposition {
+  alertId: string;
+  route: 'joined' | 'individual';
 }
 
 export interface VtsRefusalCrossing {
@@ -25,19 +31,34 @@ export interface VtsRefusalCrossing {
     subscribed: number;
     qualified: number;
   } | null;
+  disposition?: RefusalDisposition;
 }
 
 export type VtsRefusalEvent = RefusalIdentity & (
   | ({ kind: 'first' } & FirstRefusal)
   | { kind: 'paging'; pageSinceMs: number }
-  | ({ kind: 'crossing' } & VtsRefusalCrossing)
+  | ({ kind: 'crossing' } & Omit<VtsRefusalCrossing, 'disposition'>)
   | { kind: 'decided'; atMs: number }
+  | { kind: 'closed' }
+  | { kind: 'disposition'; pageSinceMs: number; disposition: RefusalDisposition }
 );
 
 export interface VtsRefusalEvidence extends RefusalIdentity, FirstRefusal {
   pagingStarts: number[];
   crossings: VtsRefusalCrossing[];
   decidedAtMs: number | null;
+  closed?: true;
+}
+
+export const VTS_REFUSAL_RECEIPT_PREFIX = 'vtsRefusalCrossing:';
+export const vtsRefusalReceiptField = (streakId: string, pageSinceMs: number) =>
+  `${VTS_REFUSAL_RECEIPT_PREFIX}${streakId}:${pageSinceMs}`;
+
+export function isProvedVtsRefusalCrossing(refusal: VtsRefusalEvidence, crossing: VtsRefusalCrossing): boolean {
+  return Number.isFinite(refusal.firstAtMs) && Number.isFinite(refusal.thresholdMs) && refusal.thresholdMs > 0
+    && Number.isFinite(crossing.pageSinceMs) && Number.isFinite(crossing.observedAtMs)
+    && crossing.pageSinceMs >= refusal.firstAtMs && refusal.pagingStarts.includes(crossing.pageSinceMs)
+    && crossing.observedAtMs - crossing.pageSinceMs >= refusal.thresholdMs;
 }
 
 /** Missing predecessors prove nothing. Replays preserve the first confirmed observation for each run. */
@@ -50,7 +71,17 @@ export function applyVtsRefusalEvidence(
     return { ...exposure, pagingStarts: [], crossings: [], decidedAtMs: null };
   }
   if (!previous || previous.tradeId !== event.tradeId || previous.streakId !== event.streakId
-    || previous.decidedAtMs !== null) return previous;
+    || previous.decidedAtMs !== null || previous.closed) return previous;
+
+  if (event.kind === 'closed') return { ...previous, closed: true };
+
+  if (event.kind === 'disposition') {
+    const crossing = previous.crossings.find((item) => item.pageSinceMs === event.pageSinceMs);
+    if (!crossing || crossing.disposition || !isProvedVtsRefusalCrossing(previous, crossing)) return previous;
+    const crossings = previous.crossings.map((item) =>
+      item === crossing ? { ...item, disposition: event.disposition } : item);
+    return { ...previous, crossings };
+  }
 
   if (event.kind === 'decided') {
     const lastCrossing = previous.crossings.at(-1)?.observedAtMs ?? previous.firstAtMs;
@@ -65,7 +96,7 @@ export function applyVtsRefusalEvidence(
     return { ...previous, pagingStarts: [...previous.pagingStarts, event.pageSinceMs] };
   }
 
-  if (event.pageSinceMs !== lastStart || event.observedAtMs - event.pageSinceMs < previous.thresholdMs
+  if (event.pageSinceMs !== lastStart || !isProvedVtsRefusalCrossing(previous, event)
     || previous.crossings.at(-1)?.pageSinceMs === event.pageSinceMs) return previous;
   const { pageSinceMs, observedAtMs, reason, feedCoverage } = event;
   return { ...previous, crossings: [...previous.crossings, { pageSinceMs, observedAtMs, reason, feedCoverage }] };

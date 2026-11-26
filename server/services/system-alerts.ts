@@ -577,8 +577,9 @@ export interface AddAlertOptions {
 
 type AlertMetadataPatch = Record<string, unknown> | ((current: Record<string, unknown>) => Record<string, unknown>);
 
-interface AlertStoreDraft {
+export interface AlertStoreDraft {
   readonly rows: readonly Readonly<SystemAlert>[];
+  readonly vtsRefusals: ReadonlyMap<string, VtsRefusalEvidence>;
   add(opts: AddAlertOptions): SystemAlert;
   mergeMetadata(id: string, patch: AlertMetadataPatch): SystemAlert | null;
   recordVtsRefusal(event: VtsRefusalEvent): boolean;
@@ -593,6 +594,7 @@ export async function editAlertStore<T>(edit: (draft: AlertStoreDraft) => { valu
     let changed = false;
     const draft: AlertStoreDraft = {
       rows,
+      vtsRefusals: store.vtsRefusals,
       add(opts) {
         const entry = createAlertEntry(opts);
         // A one-shot key also covers terminal history. Ordinary keys only cover live rows.

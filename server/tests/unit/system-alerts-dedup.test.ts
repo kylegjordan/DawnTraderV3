@@ -14,6 +14,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import type { VtsRefusalEvent } from '../../core/trading/vts-refusal-evidence.js';
+import { vtsRefusalReceiptField } from '../../core/trading/vts-refusal-evidence.js';
 
 const TMP = path.join(os.tmpdir(), `sa-dedup-test-${process.pid}.jsonl`);
 process.env.SYSTEM_ALERTS_FILE = TMP;
@@ -244,4 +245,103 @@ describe('#1191 alert store edits', () => {
       { ...id, streakId: 'second-streak', crossings: [], decidedAtMs: 610_001 },
     ]);
   });
+});
+
+describe('#1191 restart reconciliation', () => {
+  const firstAtMs = 1_000;
+  const pageSinceMs = 2_000;
+  const observedAtMs = 602_000;
+  const restartAtMs = 2_000_000;
+
+  function events(tradeId: string, streakId = tradeId, runId = 'before-restart'): VtsRefusalEvent[] {
+    const identity = { tradeId, streakId };
+    return [
+      { ...identity, kind: 'first', runId, symbol: 'NVO/USD', assetClass: 'xstock_spot',
+        firstAtMs, firstReason: 'no_usable_mark', thresholdMs: 600_000 },
+      { ...identity, kind: 'paging', pageSinceMs },
+      { ...identity, kind: 'crossing', pageSinceMs, observedAtMs,
+        reason: 'no_transactable_side (too_old)', feedCoverage: null },
+    ];
+  }
+
+  it('retries only proved, still-owed old crossings and keeps their original evidence after a restart', async () => {
+    const { VtsAlertWriteQueue } = await import('../../services/vts-alert-write-queue.js');
+    const { editAlertStore, readAllAlerts, readVtsRefusalEvidence, resolveAlert } = await load();
+    const firstProcess = new VtsAlertWriteQueue();
+    const earlier = [
+      ...events('owed'), ...events('closed'), ...events('held'), ...events('joined'), ...events('individual'),
+      ...events('unproved').slice(0, 2), ...events('current', 'current', 'new-run'),
+      ...events('owed', 'later-streak', 'new-run').slice(0, 2),
+      { kind: 'decided', tradeId: 'held', streakId: 'held', atMs: observedAtMs + 1 },
+      { kind: 'decided', tradeId: 'owed', streakId: 'later-streak', atMs: observedAtMs + 1 },
+    ] satisfies VtsRefusalEvent[];
+    expect(await Promise.all(earlier.map(event => firstProcess.recordRefusal(event)))).toEqual(earlier.map(() => true));
+
+    const joinedMarker = vtsRefusalReceiptField('joined', pageSinceMs);
+    const individualMarker = vtsRefusalReceiptField('individual', pageSinceMs);
+    const unrelatedMarker = vtsRefusalReceiptField('owed', pageSinceMs);
+    const published = await editAlertStore(draft => ({
+      value: [
+        // A standing record can have lost the live member already. The exact join receipt is retained.
+        draft.add({ ...base, dedupe_key: 'vts-quiet-xstock_spot', metadata: { [joinedMarker]: 'joined', member_joined: null } }),
+        draft.add({ ...base, dedupe_key: 'no-trigger-vts-NVO/USD-individual', metadata: { tradeId: 'individual', [individualMarker]: 'individual' } }),
+        draft.add({ ...base, dedupe_key: 'no-trigger-vts-NVO/USD-other', metadata: { tradeId: 'other', [unrelatedMarker]: 'other' } }),
+      ],
+    }));
+    await resolveAlert(published[1].id, 'cc-b', 'NO-EVIDENCE-GIVEN', 'cli');
+
+    const afterRestart = new VtsAlertWriteQueue();
+    const closeLookup = vi.fn(async (_ids: string[]) => new Set(['closed']));
+    expect(await afterRestart.reconcileRefusals(restartAtMs, 'new-run', closeLookup)).toBe(true);
+    expect(closeLookup).toHaveBeenCalledExactlyOnceWith(['owed', 'closed', 'joined', 'individual', 'unproved']);
+    const alerts = readAllAlerts();
+    const recovered = alerts.filter(row => row.metadata.decisionAtRecovery === 'unknown');
+    expect(recovered).toHaveLength(1);
+    expect(recovered[0]).toMatchObject({
+      state: 'scheduled',
+      metadata: { tradeId: 'owed', originalRefusal: { streakId: 'owed', firstAtMs, pageSinceMs, observedAtMs } },
+    });
+    const evidence = new Map(readVtsRefusalEvidence().map(item => [item.streakId, item]));
+    expect(evidence.get('owed')).toMatchObject({
+      firstAtMs, decidedAtMs: null,
+      crossings: [{ pageSinceMs, observedAtMs, disposition: { alertId: recovered[0].id, route: 'individual' } }],
+    });
+    expect(evidence.get('closed')).toMatchObject({ closed: true, firstAtMs, crossings: [{ observedAtMs }] });
+    expect(evidence.get('held')).toMatchObject({ decidedAtMs: observedAtMs + 1, crossings: [{ observedAtMs }] });
+    expect(evidence.get('joined')?.crossings[0].disposition).toEqual({ alertId: published[0].id, route: 'joined' });
+    expect(evidence.get('individual')?.crossings[0].disposition).toEqual({ alertId: published[1].id, route: 'individual' });
+    expect(evidence.get('unproved')).toMatchObject({ firstAtMs, pagingStarts: [pageSinceMs], crossings: [], decidedAtMs: null });
+    expect(evidence.get('current')?.crossings[0].disposition).toBeUndefined();
+    expect(evidence.get('later-streak')?.decidedAtMs).toBe(observedAtMs + 1);
+
+    const persisted = fs.readFileSync(TMP, 'utf8');
+    expect(await new VtsAlertWriteQueue().reconcileRefusals(restartAtMs + 60_000, 'new-run', closeLookup)).toBe(true);
+    expect(fs.readFileSync(TMP, 'utf8')).toBe(persisted);
+  }, 8_000);
+
+  it('rechecks after the unlocked lookup and preserves owed warnings while the database read fails', async () => {
+    const { VtsAlertWriteQueue } = await import('../../services/vts-alert-write-queue.js');
+    const { editAlertStore, readAllAlerts, readVtsRefusalEvidence } = await load();
+    const earlier = events('ordered');
+    await editAlertStore(draft => ({ value: earlier.map(event => draft.recordVtsRefusal(event)) }));
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const worker = new VtsAlertWriteQueue();
+    try {
+      const before = fs.readFileSync(TMP, 'utf8');
+      expect(await worker.reconcileRefusals(restartAtMs, 'new-run', async () => { throw new Error('database unavailable'); })).toBe(false);
+      expect(error).toHaveBeenCalledWith('[VTS_RAIL][RECOVERY_CLOSE_LOOKUP_FAILED]', expect.any(Error));
+      expect(fs.readFileSync(TMP, 'utf8')).toBe(before);
+
+      expect(await worker.reconcileRefusals(restartAtMs + 1, 'new-run', async () => {
+        await editAlertStore(draft => ({
+          value: draft.recordVtsRefusal({ kind: 'decided', tradeId: 'ordered', streakId: 'ordered', atMs: observedAtMs + 1 }),
+        }));
+        return new Set();
+      })).toBe(true);
+      expect(readAllAlerts()).toEqual([]);
+      expect(readVtsRefusalEvidence()).toMatchObject([{ tradeId: 'ordered', decidedAtMs: observedAtMs + 1 }]);
+    } finally {
+      error.mockRestore();
+    }
+  }, 8_000);
 });

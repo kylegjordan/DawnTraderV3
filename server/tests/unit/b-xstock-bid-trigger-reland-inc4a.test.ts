@@ -5,6 +5,7 @@
  * the existing row) — so "restart" is modelled by resetting the reporting module's in-memory state while the store survives.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
+import { vtsRefusalReceiptField } from '../../core/trading/vts-refusal-evidence.js';
 import {
   vtsXstockJoinsStandingRecord, stepMemberClock, railRowClear, railRowTradeId, railKey, easternDate,
   MEMBER_ESCALATE_AFTER_MS, VTS_STANDING_KEY, VTS_STUCK_KEY, memberField,
@@ -151,6 +152,24 @@ describe('the rail end to end, on the fake store', () => {
     d.setClock(WED + 60_000);
     await onCrossing(crossing('r1', 'KKR/USD', 'no_usable_mark', WED), WED + 60_000, d);
     expect(railCounts).toMatchObject({ minted: 1, dedupeHits: 1 });
+  });
+
+  it('records exact receipts with live joins and deduped independent pages', async () => {
+    const d = makeStore(); d.setClock(WED);
+    const wide = crossing('t-wide', 'KKR/USD', WIDE, WED - 600_000);
+    const individual = crossing('t-page', 'PPL/USD', 'no_usable_mark', WED - 600_000);
+    await onCrossing({ ...wide, streakId: 'wide' }, WED, d);
+    await onCrossing({ ...individual, streakId: 'first-page' }, WED, d);
+    await onCrossing({ ...individual, streakId: 'next-page', pageSinceMs: WED }, WED + 600_000, d);
+
+    const joined = d.rows.find(row => row.dedupe_key === VTS_STANDING_KEY);
+    const independent = d.rows.filter(row => row.dedupe_key === railKey(individual.symbol, individual.tradeId));
+    expect(joined?.metadata?.[vtsRefusalReceiptField('wide', wide.pageSinceMs)]).toBe(wide.tradeId);
+    expect(independent).toHaveLength(1);
+    expect(independent[0].metadata).toMatchObject({
+      [vtsRefusalReceiptField('first-page', individual.pageSinceMs)]: individual.tradeId,
+      [vtsRefusalReceiptField('next-page', WED)]: individual.tradeId,
+    });
   });
 
   it('MUTATION (a) — mint → decision → RESTART before the sweep → still refusing ⇒ the row resolves (the mark is on the row)', async () => {

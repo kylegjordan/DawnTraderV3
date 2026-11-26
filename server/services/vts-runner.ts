@@ -4172,6 +4172,7 @@ async function resolveOpenVirtualTrades(): Promise<{
           if (!_rd) throw new Error('rail deps unavailable');
           await onCrossing({
             tradeId, symbol: trade.symbol, assetClass: trade.assetClass, lastReason: _nt.lastReason, pageSinceMs: _nt.pageSinceMs ?? _ntNow,
+            streakId: streak.streakId,
             feedIncident,
             title: `VTS exit decisions unavailable — ${_ntMins} min with no decision for ${trade.symbol}`,
             body: `VTS has made NO exit decision for ${_ntMins} minutes of paging time (${_ntTotalMins} minutes in all) on open `
