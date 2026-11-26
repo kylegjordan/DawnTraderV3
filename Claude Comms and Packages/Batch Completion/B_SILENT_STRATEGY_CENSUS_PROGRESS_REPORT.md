@@ -287,6 +287,8 @@ The six bounded witnesses `342004755`, `342026512`, `342036118`, `342045027`, `3
 
 `REVIEWER: claim-only · what objects distinguish a true setup absence from missing provenance? · HIT: same-identity Range Trading provenance preserves MCE ATR and by-value final bars but no context-cache or quote checkpoint key · re-derived y at e3a96a812, the six staging witnesses and the 14 pinned replays`
 
+**Evidence review.** Coltrane confirmed **UNDERPOWERED on both fee arms** at 14:36:08 UTC on November 26 for exact `abbed15016c717ccf6f983d114bc2d4ef6586081` (dispatch `1575519812720009327`). He verified the unchanged preregistration, table arithmetic and both recorded digest mismatches. At serving ref `e3a96a812`, his settled-bar mutation changed the digest and his final-bar mutation changed only the separately captured bar. His quote control reproduced identical archived inputs for an observed update and a replayed snapshot with the same payload and timestamp. The staging population and raw witnesses remain **NOT RE-READ** in that review. Support Bounce remains disabled, 4.1 ATR is ungraded and row 52 stays open.
+
 ## 4. Unproven, stated as unproven
 - Whether strong_bull_trend fires on xStock at all inside 21 days (it was feasible only after the 09-20 seed; first-week opens not yet read).
 - D.1 cannot rank strategies (`#596`); the table says "losing at this n", not "worse than".
