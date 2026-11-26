@@ -267,7 +267,18 @@ describe('the run — arm (a), degeneracy and arm (b) against the real loader ga
     expect(lastRow()).toMatchObject({ outcome: 'applied', confirmable: true, countBefore: 469, countAfter: 371,
       triggerSource: 'cron', maxDropShare: 0.30, confirmMaxDiffShare: 0.50,
       untrackedOverflowAdds: [] });
+    expect(h.applyCalls).toEqual([expect.objectContaining({
+      proof: { computed: h.universe.symbols, pins: [], bounded: false },
+    })]);
     expect(rungRows()).toHaveLength(0);
+  });
+
+  it('applies a catch-up with the same changes without arming a diagnostic', async () => {
+    h.universe = universeOf([...range(0, 359), ...range(600, 612)]);
+    const occurrenceId = randomUUID();
+    const result = await refresh.runCryptoUniverseRefresh({ occurrenceId, triggerSource: 'missed_catchup' });
+    expect(result).toMatchObject({ outcome: 'applied', addedCount: 12, droppedCount: 110 });
+    expect(h.applyCalls).toEqual([{ occurrenceId, add: range(600, 612), drop: range(359, 469) }]);
   });
 
   it('persists the exact overflow symbols whose open-time subscribe replies are not add-tracked', async () => {
