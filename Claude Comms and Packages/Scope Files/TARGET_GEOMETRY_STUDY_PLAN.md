@@ -4,6 +4,8 @@
 
 > **DATED ADDENDUM — 2026-11-12, KD-73.** This plan contains real generic industry research and must not be described as though no such research occurred. It did not, however, complete Kyle's narrower 2026-11-06 request for an SBT/xStock-specific comparison against reputable published **15-minute equity momentum/trend** practice. `R-SBT-XSTOCK-PUBLISHED-BASELINE` reconciles this plan rather than duplicating or erasing it: NEW supplies current-setting/mechanism provenance, ANALYST compares published practice with DawnTrader's actual fees, executable spread, volatility, balance, position and slot constraints, and Coltrane rules transferability. Its result is a bounded starting range plus a pre-stated falsifier, or `not transferable / insufficient`; it changes no live setting. It is a prerequisite to the SBT xStock cell of 25-17 and to any 25-20 action touching SBT's xStock `min_rr`, but it does not gate O3's four other candidates. The transferability verdict cannot close before the registered clean post-entry-gate SBT window ends or returns insufficient evidence.
 
+> **KD-73 evidence handoff — 2026-11-26.** Coltrane confirmed the clean post-Entry Gate observation reached its registered terminal result in Silent Strategy Census §§3a.2 and 3a.5. The [Strong Bull Trend xStock Step 2 audit and plan](R_SBT_XSTOCK_PUBLISHED_BASELINE_PRE_AUDIT.md) records the first-20 cohort, the maker and taker price bases and the inputs ANALYST needs for the comparison. Transferability remains for Coltrane's review.
+
 ## 0. THE QUESTION
 
 Why do so few crypto signals carry targets large enough to clear an 0.80% round-trip fee — and what should each strategy's target geometry actually be, per asset class?
