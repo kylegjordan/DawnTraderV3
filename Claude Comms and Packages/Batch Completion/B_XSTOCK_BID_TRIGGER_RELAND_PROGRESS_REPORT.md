@@ -376,7 +376,9 @@ The staging equity recorder saw a silent stall at 03:37:07 UTC, reconnected at 0
 
 **Exact Step 2 r1 review, 10:52:38Z November 26.** CHANGES NEEDED at `ae0ba6c3f98c77cb5d63b29e97721206ca554bea`, dispatch `1575462910321496137`. Coltrane supported the same judged raw update and a strict full displayed size at fill. r2 adds retired-socket and final-consumption checks, a single winning close and atomic position cleanup, operator-route and maker policy controls, an offline attempt coverage denominator, and the architecture doc set. The two thresholds remain comparisons. Step 2 r2 needs exact review before implementation.
 
-**Exact Step 2 r2 review, November 26.** CHANGES NEEDED at `4fd2c8e259e5d05f78b9213f4f2c810722b893cc`, dispatch `1575466649098788905`. Same-frame, full-size, maker, offline coverage and architecture clear. r3 extends the terminal guard to engine-stop reconciliation and orphan cleanup, pending cancellation and actual operator attribution. Exact r3 approval gates Step 3.
+**Exact Step 2 r2 review, November 26.** CHANGES NEEDED at `4fd2c8e259e5d05f78b9213f4f2c810722b893cc`, dispatch `1575466649098788905`. Same-frame, full-size, maker, offline coverage and architecture clear. r3 extends the terminal guard to engine-stop reconciliation and orphan cleanup, pending cancellation and actual operator attribution.
+
+**Exact Step 2 r3 review, November 26.** CHANGES NEEDED at `9e89e53f79290656079841cabe651b347a426e82`, dispatch `1575470075367137392`, Coltrane 11:19:48 UTC. Exact-link cleanup and both manual routes clear. r4 makes the stop price-book only a filled position, joins the in-flight entry writer before looking for orphans, and gives maker fill and hard-stop reporting the committed result. Exact r4 approval gates Step 3. OLD's #441 audit evidence was pushed at `49f0077b50677675202d23c15235f44f46337adc`; its independent stage counts, writer-loss replay and weekly registration remain Step 2.
 
 ## 6d. Governance files changed — the C-P5 retirement (Step 10, 2026-11-20)
 CHANGE-CLASS: sub_batch (row 2's C-P5 outcome; declared in the C-P5 pre-audit header)
