@@ -57,8 +57,12 @@ OBS_WINDOWS="/usr/local/bin/dt-obs-windows"
 NOTICE="/home/deploy/dawntrader-deploy.notice"
 # C-21: the in-window alert mint gives up after this; -k kills a child that ignores SIGTERM (Langston, gate A).
 MINT_TIMEOUT_S="60"
+STAGING_DB_READER="/usr/local/bin/dt-sql"
+B8C_PHASE_A="5ecd7ee24fb7a741e8e015e0e6a262a464e7d016"
 # ── END CONSTANTS ──
 LIVENESS_URL="http://localhost:5000/api/health/liveness"
+B8C_MIGRATION="2026-11-25-b-price-side-8c-off-removal.sql"
+B8C_GATE_SQL="scripts/b8c-off-removal-stage-a-census.sql"
 
 SHA="${1:-}"
 PRE_RESTART=""
@@ -288,6 +292,27 @@ if [ -n "$DIRTY" ]; then
   echo "$DIRTY" >&2
   echo "Disposition is a human call: commit it, stash it, or name it disposable — then rerun." >&2
   exit 3
+fi
+
+# 8c Phase B deletes a row before restarting. Take the proof while THIS
+# invocation owns the deploy lock, before the checkout or running bundle moves.
+B8C_TARGET=$(git ls-tree "$SHA" -- "drizzle/migrations/$B8C_MIGRATION") || fail "cannot inspect the target for the 8c migration"
+if [ -n "$B8C_TARGET" ]; then
+  B8C_SQL=$(git show "$SHA:$B8C_GATE_SQL") || fail "cannot read the target 8c deployment prerequisite"
+  B8C_STATE=$(printf '%s\n' "$B8C_SQL" | "$STAGING_DB_READER") || fail "cannot read the 8c database prerequisite"
+  case "$B8C_STATE" in
+    PENDING_ON)
+      [ "$(git rev-parse HEAD)" = "$B8C_PHASE_A" ] || fail "8c removal requires exact Phase A live before migration"
+      node scripts/b8c-off-removal-verify-a.mjs "$B8C_PHASE_A" || fail "8c Phase A running-process proof failed"
+      say "8c pending migration admitted: exact Phase A live and four-row switch ON gate passed"
+      ;;
+    APPLIED)
+      say "8c migration already recorded with the exact three retained rows"
+      ;;
+    *)
+      fail "8c database prerequisite refused: expected pending with four exact ON rows or applied with three exact retained rows"
+      ;;
+  esac
 fi
 
 # ── B-DEPLOY-WINDOW-GUARD: TELL THE OWNERS BEFORE THE TREE MOVES (Langston BLOCKER-1, C-12, C-13) ─────────────
