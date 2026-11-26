@@ -12,6 +12,7 @@
     { "path": "comms-infra/staging/dt-db-map-runner.mjs", "type": "governed_dt_sql_consumer", "reason": "passes the installed dt-sql path to the reviewed database-map generator" },
     { "path": "scripts/db-map/generate.mjs", "type": "governed_dt_sql_consumer", "reason": "executes exactly one catalog read through dt-sql and has no credential fallback" },
     { "path": "scripts/db-map/remote-baseline.sh", "type": "governed_dt_sql_consumer", "reason": "binds database-map generation to the installed dt-sql reader" },
+    { "path": "scripts/dt-deploy.sh", "type": "governed_dt_sql_consumer", "reason": "reads the 8c migration ledger and row prerequisite under the deploy lock through the installed read-only tool" },
 
     { "path": "drizzle.config.ts", "type": "delegated_tool_config", "reason": "supplies the application URL to the governed Drizzle migration tool; opens no connection itself" },
 
