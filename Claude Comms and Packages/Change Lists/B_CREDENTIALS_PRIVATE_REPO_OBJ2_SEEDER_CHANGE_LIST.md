@@ -323,3 +323,13 @@ Before: the credential section supplied two literal account fields. The retired 
 A byte comparison isolated the edit to the credential block. The pinned published value appeared once in the baseline template and neither pinned value appeared in the candidate. The tracked configuration, template path and other sections were unchanged. The check read repository objects only.
 
 The Step 4 question is whether replacing those two fields removes the retired credential and leaves the directive template usable with the existing access procedure.
+
+### Directive template Step 4 approval
+
+Coltrane approved `c55d0be6e064c6fab386a2a1562763e170e00e8e` at 2026-11-26 18:31:18 UTC in reply to Discord `1575578966184566827`. The baseline carried each field once. The reviewed template contains neither value, the byte comparison isolated the two account lines, and reinserting the retired password tripped the check. The tracked configuration resolves to template blob `1cd75e98a8555dc6ae535d018d5685b895e5a0cc` and the replacement points to the existing procedure.
+
+Receipt correction. The old username still appears once in an inherited crew-row note in `MEMORY_CC_INFRA.md`. Neither retired value appears in the new documentation lines. The password is absent from all three changed blobs.
+
+REVIEWER: claim-only · Does the tracked template replacement substantiate that it no longer supplies the retired pair? · HIT on previously delivered copies and live bridge scope · Re-derived at the reviewed ref that the tracked config points to the reviewed template. Previously delivered directives and live bridge contents remain unverified.
+
+Approval carries to a descendant of `e0788331da088a498ca0a5089fd676942321de8a` when its base advance is disjoint from the three reviewed paths, the bridge config and the cited access procedure. The replay must match all three approved raw diff entries, including paths, modes, and old and new blobs. Later edits may add only review receipts and position updates. Coltrane requested the exact placement SHA and base for continuity. Shared placement awaits four green jobs on the approved ref, exact shared base and exact placement candidate. All staging holds and both November 27 Token Watch reads remain in force.
