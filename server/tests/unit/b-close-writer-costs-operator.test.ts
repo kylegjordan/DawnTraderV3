@@ -21,6 +21,10 @@ const st = vi.hoisted(() => ({
   getActiveOpenPosition: vi.fn(),
   findOpenTradeRecord: vi.fn(),
   getClosedTrade: vi.fn(),
+  getPaperXstockTrade: vi.fn(),
+  getActiveOpenPositions: vi.fn(),
+  getClosedTradesCount: vi.fn(),
+  getRunningEngineSession: vi.fn(),
   insertOpenTradeRecordIfNoneOpen: vi.fn(),
   updateActiveOpenPosition: vi.fn(async () => ({})),
   getLatestClosedTradeForKey: vi.fn(),
@@ -60,6 +64,12 @@ describe('R — what the operator routes send back', () => {
     expect(r.body.error).toBe('Closed 4; 1 left open (no observed price, or the close was refused — each one is alerted), 0 failed');
     expect(closeAllResponse({ closed: 3, leftOpen: 0, failed: 0 }).body).toEqual({ success: true, closed: 3, leftOpen: 0, failed: 0, message: 'All positions closed (3)' });
   });
+  it('reports the actual reason and preserves a close already made by the monitor', () => {
+    const body = manualCloseResponse('p1', { status: 'closed', symbol: 'NEM/USD', committed: false, closeReason: 'stop_hit' }).body;
+    expect(body).toMatchObject({ success: true, message: 'Already closed NEM/USD position', closeReason: 'stop_hit' });
+    expect(closeAllResponse({ closed: 1, leftOpen: 0, failed: 0, alreadyClosed: 1 }).body)
+      .toMatchObject({ success: true, closed: 1, alreadyClosed: 1 });
+  });
 });
 
 describe('C — the client premise', () => {
@@ -84,6 +94,45 @@ const POSITION = {
   chosenEntryMode: 'taker', entryFillPolicy: 'walk', entryFeeRate: '0.004', tradeMode: 'TRAILING_TAKE', state: 'open',
   metadata: { tradeId: 'gone-1', origin: 'x' },
 };
+
+describe('#961 — xStock operator and stop results', () => {
+  const position = { ...POSITION, symbol: 'NEM/USD', assetClass: 'xstock_spot' };
+  const price = { price: 90, sourceLabel: 'raw_bid', provenance: { producer: 'kraken-equities-ws', source: 'raw', observedAtMs: null } };
+  function managerWith(forceClosePosition: ReturnType<typeof vi.fn>) {
+    const manager = Object.create(ActivePortfolioManager.prototype);
+    Object.assign(manager, {
+      mode: 'paper',
+      resolveFlattenPrice: vi.fn().mockResolvedValue(price),
+      executionEngine: { forceClosePosition },
+    });
+    return manager as ActivePortfolioManager;
+  }
+
+  it('returns the monitor winner and counts no second close on a single trade or close-all', async () => {
+    const manager = managerWith(vi.fn().mockResolvedValue({ success: true }));
+    st.getActiveOpenPosition.mockResolvedValueOnce(position);
+    st.getPaperXstockTrade.mockResolvedValue({ closedAt: new Date(), closeReason: 'stop_hit' });
+    expect(await manager.closeOnePositionByOperator(position.id, 'manual_close')).toMatchObject({
+      status: 'closed', committed: false, closeReason: 'stop_hit',
+    });
+    expect(st.getPaperXstockTrade).toHaveBeenCalledWith(expect.objectContaining({ id: 'gone-1', symbol: 'NEM/USD', quantity: '0.5' }));
+    st.getActiveOpenPositions.mockResolvedValue([position]);
+    expect(await manager.closeAllPositions()).toEqual({ closed: 0, leftOpen: 0, failed: 0, alreadyClosed: 1 });
+    st.getActiveOpenPositions.mockResolvedValueOnce([position]).mockResolvedValueOnce([]);
+    expect(await manager.forceCloseAllOpenPositionsOnStop()).toMatchObject({
+      closedCount: 0, failedCount: 0, skippedCount: 0, details: [{ status: 'already_closed', reason: 'stop_hit' }],
+    });
+  });
+
+  it('credits a successful operator commit with the actual stored reason', async () => {
+    st.getActiveOpenPosition.mockResolvedValueOnce(position);
+    const manager = managerWith(vi.fn().mockResolvedValue({ success: true, committed: true, closeReason: 'manual_stop' }));
+    expect(await manager.closeOnePositionByOperator(position.id, 'manual_close')).toMatchObject({
+      status: 'closed', committed: true, closeReason: 'manual_stop',
+    });
+    expect(st.getPaperXstockTrade).not.toHaveBeenCalled();
+  });
+});
 
 describe('D — the Close All button sits behind its confirm (Langston KD-45 fold, condition 2)', () => {
   it('D-1 the button is the dialog trigger, and onCloseAll is wired ONLY to the dialog action', () => {

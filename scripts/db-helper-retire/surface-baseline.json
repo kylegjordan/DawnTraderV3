@@ -593,6 +593,12 @@
       }
     },
     {
+      "path": "server/tests/integration/b-xstock-paper-trade-transition-db.test.ts",
+      "markers": {
+        "database_url": 1
+      }
+    },
+    {
       "path": "server/tests/integration/b-xstock-snapshot-retention-db.test.ts",
       "markers": {
         "database_url": 2,

@@ -351,6 +351,32 @@ The `B74` archiver logged actual updates in 1 of 32 minute samples from 11:49:08
 
 **Disposition:** leave all six alerts, critical recurrence `186e8711-236c-4ba8-a782-788e893f9264` and venue event `e80d1129-3865-478b-abba-b93f72350140` active and unacknowledged. The per-position writer clears on accepted pricing, close or regular-session handback. The reconnect event still requires persistent genuine update flow and verified pricing recovery. No change to the Phase A restart fence or its dependent deploy gates.
 
+## 3k.3. Fifteen refreshed near-silent warnings (2026-11-26)
+
+The exact alert ledger at 12:48:32 UTC found 15 of 15 active and unacknowledged, all fired at 12:42:22.513 UTC. The read-only paper xStock position query at 12:48:47 UTC returned one open long for each symbol. Their last stored monitor prices came from 12:01:00 UTC for 14 positions and 11:18:20 UTC for CME. The comparison below uses each position's own stop. It measures the last stored monitor price and establishes no currently usable bid.
+
+| xStock | Current warning | Open paper position | Stored price vs stop |
+|---|---|---|---:|
+| PGR/USD | `36b6ef5b-4253-424f-9143-d807efd4f080` | `9ce526ee-de05-4317-996a-126355ee8055` | +0.40% |
+| UL/USD | `403b108f-bfad-46fa-a572-35a759977892` | `846a97bc-e110-4625-8705-68f0877b1a41` | +1.43% |
+| PPL/USD | `384a9083-6081-4b60-98c2-06d60ed0ffd2` | `a22fec59-2d46-4d6d-a890-2b20f2d60eee` | +0.62% |
+| MGM/USD | `df20188b-3331-4d25-8647-054359ac1fee` | `ab4d5642-fb4c-48a9-9ec5-0d1506e47a0c` | +4.20% |
+| HPQ/USD | `77902586-9c3b-40a7-9794-bab5de53c13a` | `63e1da6b-b56b-4407-8dfe-db93ae405dad` | +8.57% |
+| TGT/USD | `64cb45c2-a758-44d9-9497-d6136345af2b` | `1e97abe5-f5e1-408f-87b1-010a18fd33c2` | +7.97% |
+| EWL/USD | `14830920-5292-4680-a7df-33c0800138b6` | `0ffec77f-065d-48ca-8414-03b4e532ed20` | +1.60% |
+| CME/USD | `5f6f5b53-b29d-4c05-847c-8b1c02847d17` | `a09e0fc4-66b5-4ab3-abc2-e7c403c7e725` | +0.81% |
+| PCG/USD | `f3abf007-bf1c-4d5b-aefc-06d60cb0eb09` | `6ec5d5d2-e159-4f61-be0e-e30fa2410a01` | +1.54% |
+| AZN/USD | `2a8c032c-0204-48b0-bac6-76544c74e6c5` | `c23046b2-547f-4b90-9fad-281de01f7b96` | +1.33% |
+| BAX/USD | `a5bccf2a-35ac-4397-8859-7e16d659baab` | `50b0f8be-c5b0-45c0-acc5-3900367092ee` | +2.86% |
+| CARR/USD | `a80c244c-3006-46a3-b1ea-b3c2766be4c7` | `19b7cb45-db69-40dc-b224-8652bd7a82ff` | +5.07% |
+| NVO/USD | `8769a9c6-6d6c-45a8-a08c-e88462d7a99e` | `f0ed25da-6ea2-4d4f-806e-f4a25356f6c9` | +3.47% |
+| XBI/USD | `702fb1da-cb7a-4cde-95ba-9a3833924a77` | `6e2982b0-9c33-454e-a7e1-1167c29b18f6` | +3.97% |
+| TJX/USD | `cdfa3689-884e-4eed-a087-73c262bdc063` | `620cd7cc-203a-4ea6-b206-278e6bc5bdbf` | +7.60% |
+
+All 29 minute samples from 12:20:08 through 12:48:08 UTC showed zero genuine ticker updates. The same counter measured 302 at 12:01:08 UTC. Forced reconnects at 12:26:38 and 12:39:38 UTC each gave 469 replayed snapshots and zero updates in their next sample. All seven exit sweeps from 12:42:48 through 12:48:49 UTC showed `thin`, zero updating symbols and all 15 held. The critical reconnect and aggregate venue-quiet rows also remained active and unacknowledged.
+
+**Disposition:** all 15 remain visible to the exit monitor. The same accepted-price, closure and regular-session handback gates govern the per-position warning; sustained genuine updates plus verified pricing govern the critical reconnect row. At the check staging still served exact Phase A `5ecd7ee24fb7a741e8e015e0e6a262a464e7d016` at restart 716. The feed read gives no basis to release any existing staging gate. Return to #961 Step 3.
+
 ## 4. PRE-REGISTERED close criteria (written before the data)
 **(4a), objective 11 — WINDOW: the first three full weekday US regular sessions after the deploy (2026-10-19, 10-20, 10-21).** Quoted from the pre-audit (r5e, Langston's reading): *"crossings conserved against A3 · joins taking the too_wide/quiet share · pagesAttempted falling · `dedupeHits == 0` as a SEPARATE tripwire, never a term (non-zero = FAIL)."* Also PASS requires `markMissedRowMarks` near zero and zero `no-trigger-vts-*` rows resolved by `cli`. **FAIL:** any `no_usable_mark` or isolated-staleness crossing that joins instead of paging; minted down with `dedupeHits` up; or `alertFileBytes` growing faster than ~1 MB/day. Source: the `[VTS_RAIL][SWEEP]` lines (cumulative since start).
 **Objective 6 — S6 (the stop-hold cost) — QUANTITY WINDOW: the first `spread_blown` refused tick with the bid at or below the stop.** PASS: `spreadBlownFirstStopRefusedBid` and `spreadBlownStopHeldMs` are populated for that position and its release or close records the bid against the stop. Until then S6 is **UNEXERCISED** and no silence may be cited as a pass (Langston, Step 8).
@@ -402,6 +428,14 @@ The `B74` archiver logged actual updates in 1 of 32 minute samples from 11:49:08
 **Exact Step 2 r5 review, November 26.** CHANGES NEEDED at `6fb88effbef534b9898e67b8356d3fee7ba24e27`, dispatch `1575477631879618591`, Coltrane 11:48:55 UTC. Positive proof of an actual fill clears. Both Reset and Start New could still run during a paused crypto entry write under an xStock-only gate. R6 gives the paper session operation a paper-wide drain across all admitted publishers and explicitly preserves live-mode rows. It records the direct legacy cleanup call sites for reviewer disposition. Exact r6 approval gates Step 3.
 
 **Exact Step 2 r6 review, November 26.** PROCEED at `0ade6d3154e0c356f7db8f21880c8d72060204c3`, dispatch `1575481344556011571`, Coltrane 12:03:06 UTC. Implement the paper-wide publication drain and preserve the live-mode control. Keep Clear Data, Clear Trades and C14 validation-start in #1174, row 183b3. #962 is ready for disposition at row 2 closeout and #1087 keeps its existing prerequisites. The Step 3 checkpoint starts with the two paper hard-reset routes.
+
+### 5b. #961 Step 3 implementation checkpoint, November 26
+
+- `98db4a251` closes entry publication on stop and waits for paper writers in both quote classes before orphan classification and the paper-only session reset. CI `45819902966` passed TypeScript Check, Test Suite, Build and Docker Build for that exact revision. The drain budget is 5 seconds within the current 30-second request budget. A retryable refusal keeps both destructive routes from proceeding during the drain. The budget is subject to Step 4 review.
+- The draft above that revision uses exact paper xStock trade and position identity for maker fill, never-filled cancellation, monitor or operator close, and stop-time cleanup. The maker stamp commits with the position transition. Taker evidence comes from the completed simulation. A record without its position needs positive fill proof and a quiescent paper engine before it can book a reference close. A failed, pending or unlinked close cannot produce booked profit or the successful close's learning and archive writes. Operator and hard-stop totals use only their own committed wins.
+- The xStock socket now identifies and freezes the actual raw frame with a local monotonic receipt clock. Retired sockets cannot update the current book or schedule another reconnect. Mark and archive clocks retain their current meanings.
+- The registered exact decision-to-consumption historical denominator is still unknown. The 65 archive-depth closes are a positive control for measuring recorded depth age, which cannot establish raw frame lineage, generation or displayed size at consumption. The socket work is groundwork for the offline quote path. The new price or retry limits have no approved runtime enforcement.
+- Resume Step 3 with the raw-frame handoff, offline coverage and hold counts, and full Reset / Start New route controls. The addendum integration tests exercise the storage races and rollback on the isolated CI Postgres. Their result belongs to the exact new implementation revision, independently of the earlier green run. Staging still waits for its existing gates.
 
 ## 6d. Governance files changed — the C-P5 retirement (Step 10, 2026-11-20)
 CHANGE-CLASS: sub_batch (row 2's C-P5 outcome; declared in the C-P5 pre-audit header)

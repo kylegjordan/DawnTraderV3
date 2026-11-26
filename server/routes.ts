@@ -12520,8 +12520,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         return res.status(nr.http).json(nr.body);
       }
       const r = await manager.closeOnePositionByOperator(req.params.id, 'manual_close');
-      if (r.status === 'closed') {
-        contextBridge.broadcast({ type: 'active_trade_closed', payload: { id: req.params.id, symbol: r.symbol, reason: 'manual_stop' } });
+      if (r.status === 'closed' && r.committed !== false) {
+        contextBridge.broadcast({ type: 'active_trade_closed', payload: { id: req.params.id, symbol: r.symbol, reason: r.closeReason ?? 'manual_stop' } });
       }
       const out = manualCloseResponse(req.params.id, r);
       return res.status(out.http).json(out.body);

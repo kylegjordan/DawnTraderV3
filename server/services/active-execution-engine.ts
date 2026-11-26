@@ -47,7 +47,7 @@
  * ============================================================================
  */
 
-import { storage } from '../storage';
+import { storage, type PaperXstockEntryFill } from '../storage';
 import { stampPositionTradeId } from './trade-record-restore';
 import { tradingModeToRunMode } from './run-mode-controller.js'; // ITEM-4 step 2: single-site mode map
 import { PaperOrderPlacer } from './execution/order-placer.js'; // P19-B3a: typed order-placement port
@@ -1652,7 +1652,7 @@ export class ActiveExecutionEngine {
     // B-SIZING-DEC-RESTORE increment 3: the close condition — was a hardcoded 'manual_stop'. REQUIRED (the one
     // production caller, `_flattenOne`, passes it) so a caller cannot silently mislabel a reset as a manual stop.
     closeType: FlattenCloseType,
-  ): Promise<{ success: boolean; error?: string }> {
+  ): Promise<{ success: boolean; error?: string; committed?: boolean; closeReason?: ExitConditionType }> {
     console.log('[DEBUG-B9][ENGINE_FORCE_CLOSE]', {
       positionId,
       exitPrice,
@@ -1660,6 +1660,7 @@ export class ActiveExecutionEngine {
       mode: this.mode,
     });
 
+    let committedReason: ExitConditionType | undefined;
     try {
       const exitCondition: ExitCondition = {
         type: closeType,
@@ -1673,6 +1674,7 @@ export class ActiveExecutionEngine {
         // B-FEED-MISMATCH-FIX P2: every caller of this method is a stopped-engine / operator flatten with no
         // next exit cycle, so it closes under the flatten arms (see `closePosition` options).
         flatten: true,
+        onPaperXstockCloseCommitted: (reason) => { committedReason = reason; },
         exitProvenance: {
           // A force-close IS the decision — there is no separate driving price to record.
           decisionPrice: exitPrice,
@@ -1687,14 +1689,18 @@ export class ActiveExecutionEngine {
         },
       });
       
-      return { success: true };
+      return committedReason
+        ? { success: true, committed: true, closeReason: committedReason }
+        : { success: true };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.error('[DEBUG-B9][ENGINE_FORCE_CLOSE_FAILED]', {
         positionId,
         error: errorMessage,
       });
-      return { success: false, error: errorMessage };
+      return committedReason
+        ? { success: true, committed: true, closeReason: committedReason }
+        : { success: false, error: errorMessage };
     }
   }
 
@@ -1937,16 +1943,18 @@ export class ActiveExecutionEngine {
     const _quoteArrivedAtMs = _isCryptoPending
       ? (_fillTouch !== null && _fillTouch.ok ? _fillTouch.quote.quoteArrivedAtMs : null)
       : (_isXstockPending ? xstockSides.arrivedAtMs : null);
+    const makerEvaluatedAtMs = Date.now();
     const outcome = evaluatePendingMaker({
       side,
       transactablePrice: fillPrice,
       limit,
-      nowMs: Date.now(),
+      nowMs: makerEvaluatedAtMs,
       deadlineMs,
       restPlacedAtMs: _placedAtMs,
       quoteArrivedAtMs: _quoteArrivedAtMs,
     });
-    if (outcome !== 'rest') this._entryFillLooked.delete(position.id);
+    const guardedMaker = this.mode === 'paper' && _isXstockPending;
+    if (outcome !== 'rest' && !guardedMaker) this._entryFillLooked.delete(position.id);
     if (outcome === 'fill') {
       // `8a-P3` — what DROVE the fill, for the durable stamp below.
       const _fillQuote = _fillTouch !== null && _fillTouch.ok ? _fillTouch.quote : null;
@@ -1962,59 +1970,70 @@ export class ActiveExecutionEngine {
       // included in any holding-duration analytic (cosmetic; EV/expectancy unaffected
       // since entry price is the limit either way). A true in-market duration needs a
       // filledAt stamp — Phase-25 fill-rate report card decides if it wants one.
-      await storage.updateActiveOpenPosition(this.mode, position.id, {
-        state: 'open',
-        currentPrice: currentPrice.toString(),
-        lastUpdated: new Date(),
-      } as any);
-      // ── B-EXIT-PROVENANCE P4 (R5-2 LINE 2) — THE DURABLE ENTRY STAMP, AT THE FILL SEAM.
-      // The write above targets `active_open_positions`, which the census shows is deleted from
-      // SEVEN independent paths including a timer-driven orphan sweep — so a stamp there is
-      // unrecoverable forensics by construction. `closed_trades` is the only durable target.
-      // ★ NOT A NEW MECHANISM: the DROP branch below already proves this exact route from inside
-      // this method to the durable row. The drop branch had it; the fill branch did not.
-      const _fillTradeId = (position.metadata as any)?.tradeId;
-      if (_fillTradeId) {
-        // ⛔ RIDER-1 (Langston Step 4): the RETURN IS CAPTURED. `updateClosedTrade` destructures
-        // `.returning()` off a possibly-empty array, so a MISSING ROW yields `undefined` and
-        // throws nothing. The guard above covers a missing tradeId; it does NOT cover a tradeId
-        // that resolves to no row — a silent no-op that would leave the stamp absent while every
-        // log line says it was written. Same class as #704.
-        const _fillStamped = await storage.updateClosedTrade(this.mode, _fillTradeId, {
-          entryPriceProducer: provenance.producer,
-          // ⛔⛔ `8a-P3` (Langston r4 CONDITION-1) — THE STAMP NAMES THE RUNG. A crypto fill is DECIDED on a touch
-          // quote, so its source is that quote's `basis:producer` (`book_top:…` / `ticker_bbo:…`) — which also makes a
-          // post-cutover row self-identifying against pre-cutover rows carrying the mark's source. Still PASSED from
-          // the object that decided, never re-derived from `priceSource`. xStock: `provenance.source`, unchanged.
-          entryPriceSource: _fillSource,
-          entryObservedAtMs: provenance.observedAtMs,
-          // `8a-P3`/`8a-P4b` — THE PRICE THAT DROVE THE FILL: the ASK on crypto AND xStock (one quantity in the column for
-          // both classes since `8a-P4b`); the LIMIT on any other class, as before.
-          entryDecisionPrice: _fillDecisionPrice.toString(),
-          // ⛔ `8a-P3` — REWRITTEN. This read "NULL BY CONSTRUCTION… a maker fill consults NO book", which a crypto
-          // fill now falsifies whenever the WS book carried the touch. It is the book quote's age on the BOOK rung and
-          // `null` otherwise: after the cutover a `null` means the TICKER rung carried the fill (read
-          // `entry_price_source`); before it, that no book was read. The column comment says the same.
-          entryBookAgeMs: _fillBookAgeMs,
-        } as any);
-        // ⭐ #1250 P7 (OBJ-3, Langston option (c)): the AGE of the price that filled this resting order, at the fill — under
-        // its own name, so `entry_book_age_ms` keeps its NULL-by-intent arm discriminator (option (b) refused). The fill
-        // instant exists only here (`openedAt` stays at placement), so it is stamped here or never.
-        if (_fillStamped && typeof provenance.observedAtMs === 'number' && Number.isFinite(provenance.observedAtMs)) {
-          const _ageMs = Math.max(0, Math.round(Date.now() - provenance.observedAtMs));
-          storage.mergeClosedTradeMetadata(this.mode, _fillTradeId, { entryObservedAgeMs: _ageMs })
-            .then((ok) => { if (!ok) console.error(`[#1250][ENTRY_OBSERVED_AGE][NO_ROW] ${position.symbol} trade=${_fillTradeId}`); })
-            .catch((e) => console.error(`[#1250][ENTRY_OBSERVED_AGE][WRITE_FAILED] ${position.symbol} trade=${_fillTradeId}:`, e instanceof Error ? e.message : e));
+      const _fillTradeId = position.metadata?.tradeId;
+      const entryStamp = {
+        entryPriceProducer: provenance.producer,
+        entryPriceSource: _fillSource,
+        entryObservedAtMs: provenance.observedAtMs,
+        entryDecisionPrice: _fillDecisionPrice.toString(),
+        entryBookAgeMs: _fillBookAgeMs,
+      };
+      if (guardedMaker) {
+        if (typeof _fillTradeId !== 'string' || !_fillTradeId) {
+          await this._refuseUnresolvedRecord(position, 'its durable trade link is missing', 'qualified for a resting maker fill');
+          return;
         }
-        if (!_fillStamped) {
-          console.warn(`[P19-B7.2c][MAKER_FILL_STAMP_NOROW:${this.mode}] ${position.symbol}: tradeId ${_fillTradeId} matched no closed_trades row — entry provenance NOT written (silent no-op made visible)`);
+        const filled = await storage.transitionPaperXstockPendingMaker(position, _fillTradeId, {
+          kind: 'fill',
+          currentPrice: currentPrice.toString(),
+          proof: { method: 'maker', filledAtMs: makerEvaluatedAtMs, quoteArrivedAtMs: _quoteArrivedAtMs },
+          stamp: entryStamp,
+          observedAgeMs: typeof provenance.observedAtMs === 'number' && Number.isFinite(provenance.observedAtMs)
+            ? Math.max(0, Math.round(makerEvaluatedAtMs - provenance.observedAtMs)) : null,
+        });
+        if (!filled) {
+          await this._reportUnmatchedPaperXstockPendingMaker(position, 'qualified for a resting maker fill');
+          return;
         }
+        this._entryFillLooked.delete(position.id);
       } else {
-        // ⛔ CONDITION-2 (Langston): the absence is LOGGED, never silent. A silent skip makes the
-        // fill-rate instrument show a gap indistinguishable from a non-fill — the #546 shape
-        // landing on the one instrument we do not otherwise have. The drop branch records its
-        // own no-tradeId case for exactly this reason; the fill branch now matches it.
-        console.warn(`[P19-B7.2c][MAKER_FILL_UNSTAMPED:${this.mode}] ${position.symbol}: filled at ${makerFillPrice(limit)} but metadata carries no tradeId — entry provenance left NULL rather than fabricated (position opened normally)`);
+        await storage.updateActiveOpenPosition(this.mode, position.id, {
+          state: 'open',
+          currentPrice: currentPrice.toString(),
+          lastUpdated: new Date(),
+        } as any);
+        // ── B-EXIT-PROVENANCE P4 (R5-2 LINE 2) — THE DURABLE ENTRY STAMP, AT THE FILL SEAM.
+        // The write above targets `active_open_positions`, which the census shows is deleted from
+        // SEVEN independent paths including a timer-driven orphan sweep — so a stamp there is
+        // unrecoverable forensics by construction. `closed_trades` is the only durable target.
+        // ★ NOT A NEW MECHANISM: the DROP branch below already proves this exact route from inside
+        // this method to the durable row. The drop branch had it; the fill branch did not.
+        if (_fillTradeId) {
+          // ⛔ RIDER-1 (Langston Step 4): the RETURN IS CAPTURED. `updateClosedTrade` destructures
+          // `.returning()` off a possibly-empty array, so a MISSING ROW yields `undefined` and
+          // throws nothing. The guard above covers a missing tradeId; it does NOT cover a tradeId
+          // that resolves to no row — a silent no-op that would leave the stamp absent while every
+          // log line says it was written. Same class as #704.
+          const _fillStamped = await storage.updateClosedTrade(this.mode, _fillTradeId, entryStamp);
+          // ⭐ #1250 P7 (OBJ-3, Langston option (c)): the AGE of the price that filled this resting order, at the fill — under
+          // its own name, so `entry_book_age_ms` keeps its NULL-by-intent arm discriminator (option (b) refused). The fill
+          // instant exists only here (`openedAt` stays at placement), so it is stamped here or never.
+          if (_fillStamped && typeof provenance.observedAtMs === 'number' && Number.isFinite(provenance.observedAtMs)) {
+            const _ageMs = Math.max(0, Math.round(Date.now() - provenance.observedAtMs));
+            storage.mergeClosedTradeMetadata(this.mode, _fillTradeId, { entryObservedAgeMs: _ageMs })
+              .then((ok) => { if (!ok) console.error(`[#1250][ENTRY_OBSERVED_AGE][NO_ROW] ${position.symbol} trade=${_fillTradeId}`); })
+              .catch((e) => console.error(`[#1250][ENTRY_OBSERVED_AGE][WRITE_FAILED] ${position.symbol} trade=${_fillTradeId}:`, e instanceof Error ? e.message : e));
+          }
+          if (!_fillStamped) {
+            console.warn(`[P19-B7.2c][MAKER_FILL_STAMP_NOROW:${this.mode}] ${position.symbol}: tradeId ${_fillTradeId} matched no closed_trades row — entry provenance NOT written (silent no-op made visible)`);
+          }
+        } else {
+          // ⛔ CONDITION-2 (Langston): the absence is LOGGED, never silent. A silent skip makes the
+          // fill-rate instrument show a gap indistinguishable from a non-fill — the #546 shape
+          // landing on the one instrument we do not otherwise have. The drop branch records its
+          // own no-tradeId case for exactly this reason; the fill branch now matches it.
+          console.warn(`[P19-B7.2c][MAKER_FILL_UNSTAMPED:${this.mode}] ${position.symbol}: filled at ${makerFillPrice(limit)} but metadata carries no tradeId — entry provenance left NULL rather than fabricated (position opened normally)`);
+        }
       }
       this._reportMakerWouldCancel(position, 'fill');
       console.log(`[P19-B7.2c][MAKER_FILLED:${this.mode}] ${position.symbol}: ${_isCryptoPending || _isXstockPending ? (side === 'buy' ? 'ask' : 'bid') : 'mark'} ${fillPrice} (mark ${currentPrice}) traded through limit ${limit} — pending→open at ${makerFillPrice(limit)} + maker fee (reserved at placement)`);
@@ -2169,6 +2188,16 @@ export class ActiveExecutionEngine {
     | { status: 'unresolved'; why: string }> {
     const cls = asValidAssetClass(position.assetClass);
     if (!cls) return { status: 'unresolved', why: `the position has no valid asset class (${String(position.assetClass)})` };
+    if (this.mode === 'paper' && cls === 'xstock_spot') {
+      const tradeId = position.metadata?.tradeId;
+      if (typeof tradeId !== 'string' || !tradeId) {
+        return { status: 'unresolved', why: 'its durable trade link is missing' };
+      }
+      const record = await storage.getPaperXstockTrade({ id: tradeId, symbol: position.symbol, quantity: position.quantity });
+      return record && !record.closedAt
+        ? { status: 'one', record }
+        : { status: 'unresolved', why: 'its exact linked paper xStock trade is missing or closed' };
+    }
     const rec = await storage.findOpenTradeRecord(this.mode, position.symbol, cls);
     if (rec.status === 'one') {
       // Langston Part C NEW-1: resolved BY KEY ⇒ stamp the record's id onto the position, so a later restore cannot
@@ -2260,7 +2289,36 @@ export class ActiveExecutionEngine {
     }
   }
 
-  private async _dropUnfilledMaker(position: any, why: string): Promise<void> {
+  private async _reportUnmatchedPaperXstockPendingMaker(position: any, action: string): Promise<void> {
+    const remaining = await storage.getActiveOpenPosition('paper', position.id);
+    if (remaining?.state === 'pending') {
+      await this._refuseUnresolvedRecord(position, 'its exact open maker trade and position no longer match', action);
+    }
+  }
+
+  private async _dropUnfilledMaker(position: any, why: string): Promise<boolean> {
+    if (this.mode === 'paper' && position.assetClass === 'xstock_spot') {
+      const tradeId = position.metadata?.tradeId;
+      const action = `was due to be dropped as never filled (${why})`;
+      if (typeof tradeId !== 'string' || !tradeId) {
+        await this._refuseUnresolvedRecord(position, 'its durable trade link is missing', action);
+        return false;
+      }
+      const cancelled = await storage.transitionPaperXstockPendingMaker(position, tradeId, { kind: 'cancel', reason: why });
+      if (!cancelled) {
+        await this._reportUnmatchedPaperXstockPendingMaker(position, action);
+        return false;
+      }
+      this._entryFillLooked.delete(position.id);
+      this._reportMakerWouldCancel(position, 'drop');
+      try {
+        krakenWebSocketAdapter.releaseIntentReason(position.symbol, 'open');
+      } catch (error) {
+        console.error(`[P19-B7.2c][MAKER_CANCEL_RELEASE_FAILED:${this.mode}] ${position.symbol} trade=${tradeId}`, error);
+      }
+      console.log(`[P19-B7.2c][MAKER_NEVER_FILLED:${this.mode}] ${position.symbol}: ${why} — dropped (slot freed, never-filled record ${tradeId})`);
+      return true;
+    }
     this._reportMakerWouldCancel(position, 'drop');
     let tradeId = (position.metadata as any)?.tradeId;
     // ⛔ B-CLOSE-WRITER-COSTS P-16 (Langston BLOCKER-1, A-8): a position with no `tradeId` on its metadata used to be
@@ -2270,7 +2328,7 @@ export class ActiveExecutionEngine {
       const rec = await this._resolveOpenTradeRecord(position);
       if (rec.status !== 'one') {
         await this._refuseUnresolvedRecord(position, rec.why, `was due to be dropped as never filled (${why})`);
-        return;
+        return false;
       }
       tradeId = rec.record.id;
     }
@@ -2299,6 +2357,7 @@ export class ActiveExecutionEngine {
     // #1222 OBJ-5: the position no longer wants the feed; release only — no unsubscribe here, as before this batch.
     krakenWebSocketAdapter.releaseIntentReason(position.symbol, 'open');
     console.log(`[P19-B7.2c][MAKER_NEVER_FILLED:${this.mode}] ${position.symbol}: ${why} — dropped (slot freed, never-filled record ${tradeId})`);
+    return true;
   }
 
   /**
@@ -2315,7 +2374,10 @@ export class ActiveExecutionEngine {
       const position = await storage.getActiveOpenPosition(this.mode, positionId);
       if (!position) return { success: false, error: 'position not found' };
       if ((position as any).state !== 'pending') return { success: false, error: `position is ${(position as any).state ?? 'open'}, not pending` };
-      await this._dropUnfilledMaker(position, 'pending maker cancelled by the engine stop, unfilled');
+      const cancelled = await this._dropUnfilledMaker(position, 'pending maker cancelled by the engine stop, unfilled');
+      if (this.mode === 'paper' && position.assetClass === 'xstock_spot' && !cancelled) {
+        return { success: false, error: 'exact pending maker cancellation did not commit' };
+      }
       return { success: true };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : String(error) };
@@ -4475,6 +4537,7 @@ export class ActiveExecutionEngine {
        *  and a not-warm walk above the witness is booked rather than refused. Both are stamped and the
        *  diverged/synthetic ones are EXCLUDED from learning capture. */
       flatten?: boolean;
+      onPaperXstockCloseCommitted?: (reason: ExitConditionType) => void;
       exitRest?: { restedAtPrice: number; placedAtMs: number | null; outcome: 'fill' | 'convert' };
       /** The policy snapshot governing the target rest/action that led to this close. */
       targetExitFillPolicy?: FillPolicy;
@@ -4530,6 +4593,8 @@ export class ActiveExecutionEngine {
       console.warn(`[PaperExecution:${this.mode}] Position ${positionId} not found`);
       return;
     }
+    const guardedClose = this.mode === 'paper' && position.assetClass === 'xstock_spot';
+    if (guardedClose && position.state !== 'open') return;
 
     // [B8.PNL][CLOSE_ATTEMPT] - Log before any math is done
     console.log(`[B8.PNL][CLOSE_ATTEMPT]`, JSON.stringify({
@@ -4770,9 +4835,10 @@ export class ActiveExecutionEngine {
     // Langston Step-4 C-1: the fill contract passed, so the refusal streak clears HERE, exactly where it did before this
     // batch. The record refusal below is a DIFFERENT rail and is deliberately not counted into it: that rail's cap means
     // "walk the book anyway", which is meaningless for a missing record and would eventually book the close KD-17 forbids.
-    this._closeRefusalStreak.delete(positionId);
+    if (!guardedClose) this._closeRefusalStreak.delete(positionId);
     const _rec = await this._resolveOpenTradeRecord(position);
     if (_rec.status !== 'one') {
+      if (guardedClose && !await storage.getActiveOpenPosition('paper', positionId)) return;
       await this._refuseUnresolvedRecord(position, _rec.why, 'was due to close');
       return;
     }
@@ -4795,7 +4861,7 @@ export class ActiveExecutionEngine {
       await this._refuseMissingEntryCost(position, trade.id, !Number.isFinite(entryFee) ? 'entry fee' : 'entry slippage');
       return;
     }
-    if (_fromRecord.length) await this._warnEntryCostFromRecord(position, trade.id, _fromRecord);
+    if (!guardedClose && _fromRecord.length) await this._warnEntryCostFromRecord(position, trade.id, _fromRecord);
     // P19-B3a: from the close FillResult (== exitSlippagePerUnit * quantity); P19-B8.6:
     // a maker exit-fill overrides to 0 by construction (filled at the resting limit).
     const exitSlippage = _exitSlippageOverride ?? _takerCloseSlippage;
@@ -4873,99 +4939,102 @@ export class ActiveExecutionEngine {
       mode: this.mode
     }));
 
-    // Phase 8.8.3-C5-5: Consolidated close log (reduced from verbose C2 debug logs)
-    console.log(`[PaperExecution:${this.mode}] Position closed ${position.symbol}: Entry $${avgPrice.toFixed(2)} -> Exit $${actualExitPrice.toFixed(2)}, Net P/L: $${netPnl.toFixed(2)} (${netPnlPercent.toFixed(2)}%), Costs: $${totalCost.toFixed(2)}, Reason: ${exitCondition.type}`);
+    const emitCloseLearningAndArchive = async () => {
+      // Phase 8.8.3-C5-5: Consolidated close log (reduced from verbose C2 debug logs)
+      console.log(`[PaperExecution:${this.mode}] Position closed ${position.symbol}: Entry $${avgPrice.toFixed(2)} -> Exit $${actualExitPrice.toFixed(2)}, Net P/L: $${netPnl.toFixed(2)} (${netPnlPercent.toFixed(2)}%), Costs: $${totalCost.toFixed(2)}, Reason: ${exitCondition.type}`);
     
-    // Directive 8.8.4-L1: Capture trade outcome data for learning aggregation
-    const holdDurationMs = position.openedAt ? Date.now() - new Date(position.openedAt).getTime() : 0;
-    // ⛔ B-FEED-MISMATCH-FIX P2 — THE LEARNING FENCE. A `synthetic_reference` or `flatten_walk_diverged`
-    // close is booked at a price NO BUYER was shown to pay (a stopped-engine flatten with no usable book).
-    // The row is kept — the position really was closed — but it feeds NONE of the three learning captures
-    // below (this aggregate, the exit-decision archive, the outcome-feedback EMA).
-    if (_learnExcluded) {
-      console.warn(`[B-FEED-MISMATCH-FIX][LEARNING_FENCE] ${position.symbol} pos=${positionId}: arm=${_fillArm} — excluded from learning capture`);
-    }
-    if (!_learnExcluded) dataAggregator.capture('TRADE_OUTCOME', {
-      symbol: position.symbol,
-      strategy: position.strategyName || 'unknown',
-      profit: netPnl,
-      profitPct: netPnlPercent,
-      duration: holdDurationMs,
-      stopLossHit: exitCondition.type === 'stop_hit',
-      takeProfitHit: exitCondition.type === 'target_hit',
-      closeReason: exitCondition.type,
-      entryPrice: avgPrice,
-      exitPrice: actualExitPrice,
-      quantity: quantity
-    }).catch(() => {});
-
-    // B70 Step 3.5: exit-decision archive — actual active-engine exit. Fire-and-
-    // forget, try/catch wrapped — must never block closePosition.
-    // B-FEED-MISMATCH-FIX P2: skipped for a learning-fenced close (see above).
-    if (!_learnExcluded) try {
-      const { archiveExitDecision } = await import('./data-archive/exit-decision-archiver.js');
-      const { asValidAssetClass, safeResolveAssetClass } = await import('../../shared/asset-classes.js');
-      const exitReasonMap: Record<string, 'BE_stop' | 'SL_hit' | 'TP_target_hit' | 'TRAIL_hit' | 'time_stop' | 'manual' | 'other'> = {
-        stop_hit: 'SL_hit',
-        target_hit: 'TP_target_hit',
-        trailing_stop_hit: 'TRAIL_hit',
-        break_even_stop: 'BE_stop',
-        timeout: 'time_stop',
-        manual_stop: 'manual',
-      };
-      const mappedReason = exitReasonMap[exitCondition.type] ?? 'other';
-      const exchange = (position as any).exchange ?? 'kraken';
-      // P19-B4a (C4): prefer the position's authoritative stamp; cold-resolve only
-      // if the stamp is missing/invalid. archiveExitDecision requires a non-null
-      // asset_class, so on a null resolution we skip the archive write entirely
-      // (archive-only, fire-and-forget) rather than persist a wrong/blank class.
-      const assetClass =
-        asValidAssetClass((position as any).assetClass) ?? safeResolveAssetClass(position.symbol, exchange);
-      const rMultiple =
-        position.stopLoss && position.avgPrice && position.avgPrice !== position.stopLoss
-          ? (actualExitPrice - avgPrice) /
-            Math.abs(avgPrice - parseFloat(String(position.stopLoss)))
-          : undefined;
-      // P19-B4a (C4): asset_class is REQUIRED on the archive row — skip the write
-      // on an unclassifiable symbol rather than persist a wrong/blank class.
-      if (assetClass === null) {
-        console.warn(`[B70][ARCH] paper exit-decision archive skipped — unclassifiable ${position.symbol} (no valid asset class)`);
-      } else {
-      archiveExitDecision({
-        mode: tradingModeToRunMode(this.mode), // ITEM-4 step 2 (D1): this engine's OWN mode
-        tradeId: positionId,
+      // Directive 8.8.4-L1: Capture trade outcome data for learning aggregation
+      const holdDurationMs = position.openedAt ? Date.now() - new Date(position.openedAt).getTime() : 0;
+      // ⛔ B-FEED-MISMATCH-FIX P2 — THE LEARNING FENCE. A `synthetic_reference` or `flatten_walk_diverged`
+      // close is booked at a price NO BUYER was shown to pay (a stopped-engine flatten with no usable book).
+      // The row is kept — the position really was closed — but it feeds NONE of the three learning captures
+      // below (this aggregate, the exit-decision archive, the outcome-feedback EMA).
+      if (_learnExcluded) {
+        console.warn(`[B-FEED-MISMATCH-FIX][LEARNING_FENCE] ${position.symbol} pos=${positionId}: arm=${_fillArm} — excluded from learning capture`);
+      }
+      if (!_learnExcluded) dataAggregator.capture('TRADE_OUTCOME', {
         symbol: position.symbol,
-        exchange,
-        assetClass,
-        source: 'active-execution-engine',
-        strategy: position.strategyName ?? undefined,
-        exitReason: mappedReason,
+        strategy: position.strategyName || 'unknown',
+        profit: netPnl,
+        profitPct: netPnlPercent,
+        duration: holdDurationMs,
+        stopLossHit: exitCondition.type === 'stop_hit',
+        takeProfitHit: exitCondition.type === 'target_hit',
+        closeReason: exitCondition.type,
         entryPrice: avgPrice,
         exitPrice: actualExitPrice,
-        pnlPct: netPnlPercent,
-        rMultiple,
-        durationMin: holdDurationMs / 60000,
-        stateSnapshot: {
-          mode: this.mode,
-          quantity,
-          entryFee,
-          exitFee,
-          entrySlippage,
-          exitSlippage,
-          totalCost,
-          grossPnl,
-          netPnl,
-          priceSource,
-          sourcePool: (position as any).sourcePool,
-        },
-      });
-      } // P19-B4a (C4): end assetClass-present guard
-    } catch (b70Err) {
-      console.warn(
-        `[B70][ARCH] paper exit-decision archive enqueue failed:`,
-        b70Err instanceof Error ? b70Err.message : b70Err,
-      );
-    }
+        quantity: quantity
+      }).catch(() => {});
+
+      // B70 Step 3.5: exit-decision archive — actual active-engine exit. Fire-and-
+      // forget, try/catch wrapped — must never block closePosition.
+      // B-FEED-MISMATCH-FIX P2: skipped for a learning-fenced close (see above).
+      if (!_learnExcluded) try {
+        const { archiveExitDecision } = await import('./data-archive/exit-decision-archiver.js');
+        const { asValidAssetClass, safeResolveAssetClass } = await import('../../shared/asset-classes.js');
+        const exitReasonMap: Record<string, 'BE_stop' | 'SL_hit' | 'TP_target_hit' | 'TRAIL_hit' | 'time_stop' | 'manual' | 'other'> = {
+          stop_hit: 'SL_hit',
+          target_hit: 'TP_target_hit',
+          trailing_stop_hit: 'TRAIL_hit',
+          break_even_stop: 'BE_stop',
+          timeout: 'time_stop',
+          manual_stop: 'manual',
+        };
+        const mappedReason = exitReasonMap[exitCondition.type] ?? 'other';
+        const exchange = (position as any).exchange ?? 'kraken';
+        // P19-B4a (C4): prefer the position's authoritative stamp; cold-resolve only
+        // if the stamp is missing/invalid. archiveExitDecision requires a non-null
+        // asset_class, so on a null resolution we skip the archive write entirely
+        // (archive-only, fire-and-forget) rather than persist a wrong/blank class.
+        const assetClass =
+          asValidAssetClass((position as any).assetClass) ?? safeResolveAssetClass(position.symbol, exchange);
+        const rMultiple =
+          position.stopLoss && position.avgPrice && position.avgPrice !== position.stopLoss
+            ? (actualExitPrice - avgPrice) /
+              Math.abs(avgPrice - parseFloat(String(position.stopLoss)))
+            : undefined;
+        // P19-B4a (C4): asset_class is REQUIRED on the archive row — skip the write
+        // on an unclassifiable symbol rather than persist a wrong/blank class.
+        if (assetClass === null) {
+          console.warn(`[B70][ARCH] paper exit-decision archive skipped — unclassifiable ${position.symbol} (no valid asset class)`);
+        } else {
+        archiveExitDecision({
+          mode: tradingModeToRunMode(this.mode), // ITEM-4 step 2 (D1): this engine's OWN mode
+          tradeId: positionId,
+          symbol: position.symbol,
+          exchange,
+          assetClass,
+          source: 'active-execution-engine',
+          strategy: position.strategyName ?? undefined,
+          exitReason: mappedReason,
+          entryPrice: avgPrice,
+          exitPrice: actualExitPrice,
+          pnlPct: netPnlPercent,
+          rMultiple,
+          durationMin: holdDurationMs / 60000,
+          stateSnapshot: {
+            mode: this.mode,
+            quantity,
+            entryFee,
+            exitFee,
+            entrySlippage,
+            exitSlippage,
+            totalCost,
+            grossPnl,
+            netPnl,
+            priceSource,
+            sourcePool: (position as any).sourcePool,
+          },
+        });
+        } // P19-B4a (C4): end assetClass-present guard
+      } catch (b70Err) {
+        console.warn(
+          `[B70][ARCH] paper exit-decision archive enqueue failed:`,
+          b70Err instanceof Error ? b70Err.message : b70Err,
+        );
+      }
+    };
+    if (!guardedClose) await emitCloseLearningAndArchive();
 
     // ★ #620: the PERSISTED net, hoisted to this scope on purpose. The write below lives inside a block
     // while the reconciliation call sits OUTSIDE it, so a const declared in the block is NOT in scope at
@@ -4977,6 +5046,8 @@ export class ActiveExecutionEngine {
     // throws). Since B-CLOSE-WRITER-COSTS the record is always resolved before this point (the close refuses
     // otherwise), so the old "no trade row" arm of the eviction is gone; the eviction still runs on a throw.
     const _lsAcc = _ladderShadow.get(position.id);
+    let committedGuardedClose = false;
+    let guardedSlotCountBefore: number | undefined;
 
     // ⛔⛔ `try/finally` AROUND THE WHOLE BLOCK, NOT `try/catch` — THE THROW STILL PROPAGATES.
     // Langston §13, Step-4 r2: `storage.updateClosedTrade` below sits in NO try (the nearest closes
@@ -5008,7 +5079,7 @@ export class ActiveExecutionEngine {
       // ★ #620: the return value is CAPTURED, not discarded. `updateClosedTrade` already does
       // `.returning()`, so the PERSISTED row is in hand with NO extra read — which is why the
       // engine-vs-persisted round-trip check (the one P&L invariant never checked) costs nothing.
-      const _persistedTrade = await storage.updateClosedTrade(this.mode, trade.id, {
+      const close = {
         // F-G-2 OBJ-0: the shadow arm's record rides from the position onto the closed row so the
         // 2×2 is readable where the close reason lives. Only when one exists — never a wipe.
         ...((() => {
@@ -5164,7 +5235,21 @@ export class ActiveExecutionEngine {
         originalStopPrice: finalOriginalStop !== null ? finalOriginalStop.toString() : null,
         latchTriggerPrice: finalLatchTrigger !== null ? finalLatchTrigger.toString() : null,
         rungTargetHistory: finalRungHistory,
-      });
+      };
+      let _persistedTrade;
+      if (guardedClose) {
+        guardedSlotCountBefore = (await storage.getActiveOpenPositions(this.mode)).length;
+        const result = await storage.closePaperXstockTrade(trade, position, close);
+        if (!result.committed) return;
+        committedGuardedClose = true;
+        options?.onPaperXstockCloseCommitted?.(exitCondition.type);
+        _persistedTrade = result.trade;
+        this._closeRefusalStreak.delete(positionId);
+        if (_fromRecord.length) await this._warnEntryCostFromRecord(position, trade.id, _fromRecord);
+        await emitCloseLearningAndArchive();
+      } else {
+        _persistedTrade = await storage.updateClosedTrade(this.mode, trade.id, close);
+      }
       // Capture the round-trip value at the OUTER scope (see the hoist above).
       _persistedNetPnl = _persistedTrade?.netPnl != null
         ? parseFloat(_persistedTrade.netPnl.toString())
@@ -5219,13 +5304,13 @@ export class ActiveExecutionEngine {
     // entry is a SOURCE, which this row's rule forbids. (Since B-CLOSE-WRITER-COSTS a close reaches this point only
     // with its one trade record resolved — otherwise it is refused and the position kept — so the old no-trade-row
     // log had no case left and was removed.)
-    if (_lsAcc) {
+    if ((!guardedClose || committedGuardedClose) && _lsAcc) {
       _ladderShadow.delete(position.id);
     }
     // ── row 2 increment A, P5 (Langston Step 4 gate 2 C-1): evict the refusal tally, the near-miss signature and its
     // accumulator HERE, in the same `finally` as the ladder accumulator and for the same reason — whether or not the
     // write threw. C-2: a non-empty accumulator is FLUSHED to the log first.
-    {
+    if (!guardedClose || committedGuardedClose) {
       const _accC = this._riMissAcc.get(position.id);
       if (_accC && _accC.n > 0) {
         console.warn(
@@ -5314,7 +5399,7 @@ export class ActiveExecutionEngine {
     }
 
     // [AJ19-B] Trade lifecycle CLOSE event - track slot counts before/after delete
-    const slotCountBefore = (await storage.getActiveOpenPositions(this.mode)).length;
+    const slotCountBefore = guardedSlotCountBefore ?? (await storage.getActiveOpenPositions(this.mode)).length;
     let deleteSuccessful = false;
     let deleteError: string | undefined;
     
@@ -5335,7 +5420,7 @@ export class ActiveExecutionEngine {
 
     // Delete open position with error handling for AJ19-B
     try {
-      await storage.deleteActiveOpenPosition(this.mode, positionId);
+      if (!guardedClose) await storage.deleteActiveOpenPosition(this.mode, positionId);
       deleteSuccessful = true;
       console.log(`[AJ19-B][DELETE_SUCCESS] positionId=${positionId} | symbol=${position.symbol}`);
       
@@ -6372,6 +6457,7 @@ export class ActiveExecutionEngine {
     let entryFee: number;
     let totalSlippage: number;
     let _entryBookConsumptionAgeMs: number | null = null;
+    let paperXstockEntryFill: PaperXstockEntryFill | null = null;
     // B-ENTRY-DISTANCE-GUARD (Langston Step-4 CHANGE 1): the OBJ-2 shadow measurement, carried to the DURABLE archive row of
     // BOTH arms (admitted and refused) with one schema — out.log alone rotates away long before the promotion read needs it.
     // The plan's age rides with it (queuedAt / rtbQueueId), so a stale plan can be told from a fast move. On a maker the
@@ -6490,6 +6576,9 @@ export class ActiveExecutionEngine {
       return { opened: false, stage: 'FILL_REJECTED', reason: 'filled quantity = 0' };
     }
     actualEntryPrice = _openFill.fillPrice;
+    if (this.mode === 'paper' && _openClass === 'xstock_spot') {
+      paperXstockEntryFill = { method: 'taker', filledAtMs: Date.now() };
+    }
     entryFee = _openFill.feeQuote;
     totalSlippage = _openFill.slippageQuote;
     // B-ENTRY-DISTANCE-GUARD (sprint row 59 increment 1). The fill is a pure book walk (`openOrder` writes nothing), so
@@ -6883,7 +6972,12 @@ export class ActiveExecutionEngine {
         // P19-B8.2 (OBJ-4): the balance-ratio calibration stamp (or honest NULLs).
         ..._b82RatioStamp,
         // #1250 P4: the plan beside the carried levels, and how each leg was based (absent ⇒ written before #1250).
-        metadata: { ...(signal.metadata || {}), ...(_levelRec ?? {}) }
+        metadata: {
+          ...(signal.metadata || {}),
+          ...(_levelRec ?? {}),
+          // Reserve the key on paper xStocks, including placement of an unfilled maker.
+          ...(this.mode === 'paper' && _tradeClass === 'xstock_spot' ? { paperXstockEntryFill } : {}),
+        },
       });
 
       // AJ10.3: Diagnostic - trade record created

@@ -143,7 +143,12 @@ export async function restoreOpenTradeRecord(mode: TradingMode, positionId: stri
     entryFillPolicy: position.entryFillPolicy ?? null,
     entryFeeRate: str(position.entryFeeRate),
     tradeMode: position.tradeMode ?? undefined,
-    metadata: { ...(position.metadata ?? {}), ...(pending ? { restoredWhilePending: true } : {}) },
+    metadata: {
+      ...(position.metadata ?? {}),
+      ...(pending ? { restoredWhilePending: true } : {}),
+      // A restored position supplies costs and identity, but cannot supply fresh durable fill proof.
+      ...(mode === 'paper' && cls === 'xstock_spot' ? { paperXstockEntryFill: null } : {}),
+    },
     recordRestoredFromPosition: true,
     restoredAt,
     restoredByClaimed: claimedBy,
