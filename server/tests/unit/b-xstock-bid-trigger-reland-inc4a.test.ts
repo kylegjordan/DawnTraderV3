@@ -113,6 +113,21 @@ describe('rule 3 — a row clears on a durable condition only', () => {
 });
 
 describe('the rail end to end, on the fake store', () => {
+  it('keeps a qualifying stale crossing on its own warning until the incident worker joins it', async () => {
+    const d = makeStore(); d.setClock(WED);
+    const c = crossing('t-covered', 'ACN/USD', OLD, WED - 10 * 60_000);
+    const feedIncident = {
+      key: 'kraken-equities/ticker/common-session', generation: 3, startMs: 0, endMs: 120_000,
+      subscribed: 12, qualified: ['ACN/USD', ...Array.from({ length: 9 }, (_, index) => `XS${index}/USD`)],
+      missing: ['NO-ACK/USD'],
+    };
+    expect(await onCrossing({ ...c, feedIncident }, WED, d)).toBe('paged');
+    expect(d.rows.find(row => row.dedupe_key === railKey(c.symbol, c.tradeId))?.metadata).toMatchObject({
+      tradeId: c.tradeId,
+      feedIncident: { generation: 3, subscribedSymbols: 12, qualifyingSymbols: 10, missingReceipts: 1 },
+    });
+  });
+
   it('an expected wide book JOINS the record and pages nobody; a no_usable_mark crossing PAGES on its own key', async () => {
     const d = makeStore(); d.setClock(WED);
     expect(await onCrossing(crossing('t1', 'STZ/USD', WIDE, WED - 10 * 60_000), WED, d)).toBe('joined');

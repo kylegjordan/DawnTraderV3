@@ -105,6 +105,9 @@ import { selectExitTrigger, exitTriggerClass, type ExitTriggerRefusal } from '..
 import { selectVtsXstockExitBid, selectVtsXstockEntryAsk, vtsXstockSideSize } from '../asset_classes/xstock_spot/vts-xs-select.js';
 import { ensureSigmaFresh } from '../asset_classes/xstock_spot/sigma-rate-cache.js';
 import { markDecided, onCrossing, onMemberReason, isStandingMember, ensureVtsRailIndex, runVtsRailSweep, onUnpricedClose, onShadowUnpriced, productionVtsRailDeps, type VtsRailDeps } from './vts-rail-reporting.js';
+import { EXPECTED_OLD } from '../core/trading/vts-rail.js';
+import { getEquityTickerFeedEvidence } from './passive-archive/equity-spot-archiver.js';
+import { vtsEquityIncidentCohort, VtsFeedIncidentWindows, VTS_FEED_INCIDENT_SAMPLE_MS } from './vts-feed-incident-windows.js';
 import { isInXstockWeekendClose, isXstockVenueTransitionPause, isXstockRailPagingTime } from '../asset_classes/xstock_spot/market-hours.js';
 
 /**
@@ -356,6 +359,7 @@ async function getSystemConfig() {
 let isInitialized = false;
 let calibration: CalibrationCoefficients | null = null;
 let autonomousLoopInterval: NodeJS.Timeout | null = null;
+let feedIncidentSampleInterval: NodeJS.Timeout | null = null;
 let isAutonomousRunning = false;
 // ITEM-4 O1 lifecycle guard (2026-06-09): prevents overlapping simulation
 // cycles now that the loop runs concurrently with active trading. Skip count
@@ -921,6 +925,22 @@ interface OpenVirtualTrade {
 }
 
 const openVirtualTrades: Map<string, OpenVirtualTrade> = new Map();
+const feedIncidentWindows = new VtsFeedIncidentWindows();
+
+function currentVtsFeedIncidentCohort(atMs: number) {
+  const monitored = new Set<string>();
+  for (const trade of openVirtualTrades.values()) {
+    if (trade.assetClass === 'xstock_spot' && trade.state !== 'pending' && trade.state !== 'weekend_suspended') {
+      monitored.add(trade.symbol);
+    }
+  }
+  return vtsEquityIncidentCohort(monitored, isInXstockWeekendClose(new Date(atMs)));
+}
+
+function sampleVtsFeedIncidentWindows(): void {
+  const cohort = currentVtsFeedIncidentCohort(Date.now());
+  feedIncidentWindows.sample(cohort, getEquityTickerFeedEvidence(cohort.symbols), performance.now());
+}
 
 // ════════════════════════════════════════════════════════════════════════════
 // reorg-B4 (2026-06-25) — the shadow-trade telemetry layer's SEPARATE open-trades
@@ -4078,6 +4098,8 @@ async function resolveOpenVirtualTrades(): Promise<{
         ? `no_transactable_side (${_vtsExitRefusal})` : decision.noDecisionReason;
       const _ntStep = stepNoTriggerStreak(_vtsNoTriggerStreak.get(tradeId), _ntReason, _ntPages, _ntNow,
         VTS_NO_TRIGGER_ALERT_AFTER_MS);
+      const incidentLook = trade.assetClass === 'xstock_spot' && _ntReason === EXPECTED_OLD;
+      if (incidentLook) feedIncidentWindows.observeStale(trade.symbol, performance.now());
       if (_ntStep.next) _vtsNoTriggerStreak.set(tradeId, _ntStep.next);
       else _vtsNoTriggerStreak.delete(tradeId);
       if (_ntReason !== undefined) _vtsLastRefusal.set(tradeId, _ntReason);
@@ -4115,8 +4137,12 @@ async function resolveOpenVirtualTrades(): Promise<{
           // on its own key as before (`vts-rail-reporting.ts`; the rules are pure in `core/trading/vts-rail.ts`).
           const _rd = await vtsRailDeps();
           if (!_rd) throw new Error('rail deps unavailable');
+          const cohort = incidentLook ? currentVtsFeedIncidentCohort(Date.now()) : null;
+          const feedIncident = cohort ? feedIncidentWindows.evidenceAtCrossing(
+            trade.symbol, cohort, getEquityTickerFeedEvidence(cohort.symbols), performance.now()) : null;
           await onCrossing({
             tradeId, symbol: trade.symbol, assetClass: trade.assetClass, lastReason: _nt.lastReason, pageSinceMs: _nt.pageSinceMs ?? _ntNow,
+            feedIncident,
             title: `VTS exit decisions unavailable — ${_ntMins} min with no decision for ${trade.symbol}`,
             body: `VTS has made NO exit decision for ${_ntMins} minutes of paging time (${_ntTotalMins} minutes in all) on open `
               + `virtual trade ${tradeId} in ${trade.symbol} (most recent reason: ${_nt.lastReason}). \`no_transactable_side\` means a mark exists but no usable BID within the VTS `
@@ -6371,6 +6397,10 @@ export async function startAutonomousSimulation(): Promise<{ success: boolean; m
   }
 
   isAutonomousRunning = true;
+  feedIncidentWindows.reset();
+  sampleVtsFeedIncidentWindows();
+  feedIncidentSampleInterval = setInterval(sampleVtsFeedIncidentWindows, VTS_FEED_INCIDENT_SAMPLE_MS);
+  feedIncidentSampleInterval.unref();
 
   autonomousLoopInterval = setInterval(async () => {
     // ITEM-4 O1 (2026-06-09): the tradingActive self-teardown is REMOVED — VTS
@@ -6410,6 +6440,11 @@ export function stopAutonomousSimulation(): void {
     clearInterval(autonomousLoopInterval);
     autonomousLoopInterval = null;
   }
+  if (feedIncidentSampleInterval) {
+    clearInterval(feedIncidentSampleInterval);
+    feedIncidentSampleInterval = null;
+  }
+  feedIncidentWindows.reset();
   isAutonomousRunning = false;
   console.log('[11.0E.1][VTS] Autonomous simulation stopped');
 }

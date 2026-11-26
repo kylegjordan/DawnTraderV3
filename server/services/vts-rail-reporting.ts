@@ -18,6 +18,7 @@ import {
   unpricedCloseKey, shadowUnpricedKey, VTS_STUCK_KEY, STUCK_SWEEP_FAILURES, STUCK_CLOSED_MEMBER_SWEEPS, EXPECTED_WIDE, EXPECTED_OLD, type MemberClock,
 } from '../core/trading/vts-rail.js';
 import type { ClassVerdict } from './venue-quiet-alerting.js';
+import type { VtsFeedIncidentEvidence } from './vts-feed-incident-windows.js';
 import fs from 'node:fs';
 
 /** `decided_<tradeId>` on the standing record: a member decided at this time (single-key merge, never a map rewrite). */
@@ -158,14 +159,25 @@ export interface Crossing {
   pageSinceMs: number;
   title: string;
   body: string;
+  feedIncident?: VtsFeedIncidentEvidence | null;
 }
 
 /** Page on the symbol's own key, counting minted vs suppressed, and index the row at the mint. */
 async function pageOwnKey(c: Crossing, nowMs: number, deps: VtsRailDeps): Promise<void> {
   railCounts.pagesAttempted++;
+  const evidence = c.feedIncident;
   const row = await deps.addAlert({
     triggers_at: new Date(nowMs), category: 'breakage', severity: 'warning',
-    title: c.title, body: c.body, metadata: { tradeId: c.tradeId }, dedupe_key: railKey(c.symbol, c.tradeId),
+    title: c.title, body: c.body, dedupe_key: railKey(c.symbol, c.tradeId),
+    metadata: {
+      tradeId: c.tradeId,
+      ...(evidence ? { feedIncident: {
+        key: evidence.key, generation: evidence.generation,
+        windowStartMonotonicMs: evidence.startMs, windowEndMonotonicMs: evidence.endMs,
+        subscribedSymbols: evidence.subscribed, qualifyingSymbols: evidence.qualified.length,
+        missingReceipts: evidence.missing.length,
+      } } : {}),
+    },
   });
   // A fresh row is created at or after the pre-call stamp; an existing (deduped) one before it (`system-alerts.ts:539-545`).
   const mintedNow = Date.parse(row.created_at) >= nowMs;
