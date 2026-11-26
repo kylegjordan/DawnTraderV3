@@ -125,3 +125,53 @@ GitHub Actions run `42829558680` at pushed Step-4 record ref `49a0dc531db5606b4c
 Installed together with `B-AGENT-INVOKE-FAILURE-NOTICE`'s bridge files: `deploy.sh --sha 5215c529d77f8f48063fdfa38c0d128a752a851b --only bridges` (installer blob `d4787047023931baa58b9a1c0366721ea4c2f86a`, matched on the box). Result: `discord.py: 2.7.1 (unchanged)` — the pin matched the already-installed release, so pip changed nothing — and `install-verify: all 17 installed files equal their verified blobs`. Both bridges restarted by their safe paths (Langston's through `langston-bridge-restart --now`, recovery exit-0 summary; the CC bridge by `systemctl restart` with nothing queued). Full record: `B_AGENT_INVOKE_FAILURE_NOTICE_CHANGE_LIST.md`, Step 6.
 
 **STEP: 6 of 11 COMPLETE · NEXT STEP: 7 of 11** — confirm the running bridge imports discord.py 2.7.1 and the installer pin refuses a mismatch only in its test, not live.
+
+## Step 7 — historical first invocation and review-source verification (2026-11-26)
+
+- The Step 6 receipt verified 17/17 installed bridge-group paths at `5215c529d77f8f48063fdfa38c0d128a752a851b`. The Langston bridge blob was `faa03f4195ca38eb6c6b590a56b7416090757802`. The installer reported the same imported `discord.py` 2.7.1 before and after that install. Step 3 exercised the mismatched-version refusal in the isolated 66-assertion suite, before any bridge file replacement.
+- The historical journal for `discord-langston-bridge.service`, invocation `344aeeda54324f9bab5a35c3a087bd54`, recorded start at 13:19:47.223923 UTC on November 13. The first call on that process (PID 2462976) resolved ref `fd3d9c9fc595300bfa2ef89999926c540e0e1894` and entered the Claude child path at 13:19:49.285421 UTC. It returned at 13:26:03.527806 UTC and delivered the reply at 13:26:06.799338 UTC. The resolved ref descends from the install ref and contains the same bridge blob. This journal records the ref and invocation metadata. The exact historical prompt text and the recipient's subsequent tool choices remain unverified.
+- The invocation replay below runs the entire exact reviewed `invoke_claude` against a synthetic request and captures the prompt at its stubbed child boundary. The predecessor emits the same journal stamp while requesting a raw-GitHub single-file read. The reviewed source passes the full resolved ref to `dt-review show`. The pre-audit's literal raw-host check also finds the reviewed note's express prohibition. The replay tests the affirmative read instruction and preserves that prohibition.
+- Current readback used the configured service interpreter as the Langston user, with Python bytecode writes disabled. The import and distribution metadata both reported 2.7.1. Langston's service is disabled and inactive on the Codex shift. The currently installed bridge is a later revision, so the historical file claim uses the install receipt, linked process and exact source. The check concerns the bridge and has no staging UI surface.
+
+REVIEWER: claim-only · what evidence distinguishes the installed note from the earlier note on the first historical call? · HIT: both versions emit the same stamp, and the raw host appears in the reviewed prohibition · re-derived yes with the exact-ref replay and the historical installation and journal.
+
+### Reproduction at the child boundary
+
+```python
+import ast, subprocess, types
+import time
+
+source = "comms-infra/discord/discord-langston-bridge.py"
+ref = "fd3d9c9fc595300bfa2ef89999926c540e0e1894"
+payload = "GB-8 synthetic review request"
+
+def captured_prompt(commit):
+    raw = subprocess.check_output(["git", "show", f"{commit}:{source}"], text=True, encoding="utf-8")
+    tree = ast.parse(raw)
+    keep = {"REVIEW_SOURCE_NOTE", "REVIEW_SOURCE_FAIL_NOTE"}
+    body = [node for node in tree.body if (
+        isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id in keep for t in node.targets)
+    ) or (isinstance(node, ast.FunctionDef) and node.name == "invoke_claude")]
+    prompts, log = [], []
+    def child(args, *unused, **kwargs):
+        if args[0] == "/usr/bin/claude":
+            prompts.append(args[args.index("-p") + 1])
+        return types.SimpleNamespace(returncode=0, stdout="fixture result", stderr="")
+    env = dict(resolve_review_ref=lambda: ref, log=log.append, run_agent=child,
+               subprocess=types.SimpleNamespace(run=child, TimeoutExpired=subprocess.TimeoutExpired),
+               os=types.SimpleNamespace(environ={}), time=time, OAUTH_TOKEN="fixture",
+               WORK_DIR="/fixture", CLAUDE_MODEL="fixture", CLAUDE_TIMEOUT=1)
+    exec(compile(ast.Module(body=body, type_ignores=[]), commit, "exec"), env)
+    assert env["invoke_claude"](payload, "synthetic") == "fixture result"
+    assert len(prompts) == 1 and prompts[0].endswith(payload)
+    return prompts[0], log[0]
+
+old, old_stamp = captured_prompt("5ec1a8227")
+new, new_stamp = captured_prompt("5215c529d77f8f48063fdfa38c0d128a752a851b")
+assert old_stamp == new_stamp == "review ref resolved to fd3d9c9fc"
+assert f"dt-review show {ref} <path>" in new and f"dt-review show {ref} <path>" not in old
+assert "read  https://raw.githubusercontent.com/" in old and "read  https://raw.githubusercontent.com/" not in new
+print("PASS: exact old and reviewed invoke reach the stub child. Shared journal stamp; old raw read versus new pinned dt-review.")
+```
+
+Step 7 evidence is ready for Coltrane. Step 8 must judge the historical record and the discriminating prompt replay. `#463` remains open pending that ruling.
