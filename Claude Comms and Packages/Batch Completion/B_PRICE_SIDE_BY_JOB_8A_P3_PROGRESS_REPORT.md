@@ -743,3 +743,54 @@ CHANGE-CLASS: architecture
 | T2 | ALERT_HANDLING_PROTOCOL.md | N/A | No alert behavior or disposition changed in this report repair. |
 | T2 | DELIVERY_BOARD_PROTOCOL.md | N/A | The report repair changes no board field, stage definition or ownership. |
 | T2 | CLAUDE_CODE_FEATURE_WATCH.md | N/A | The reader repair uses no new Claude Code capability and ran no feature check. |
+
+### #1250 midnight END — Step 11 scoped closeout candidate
+
+**Closeout scope.** November 20 row 8a midnight-END extractor repair. The parent Progress Report stays open.
+ANALYST owns the original #1250 xStock level-basis work under sprint row 17. The #961 exit-booking dependency stays
+with ANALYST in Bid Trigger Reland, row 2, at Step 6 after the recorded staging gates. The remaining row 17 order
+stays full 8c OFF-removal after the Phase A release and deploy gates, then the bounded KD-121 restart replay proof,
+then the remaining KD-19 VTS entry increment. The #677 Dec 16 reminder keeps its separate evidence boundary.
+
+**Pre-registered r5 criterion.** Coltrane approved exact `0e35edf8e01ca53d8194b4db4b82acad9d4c297c` at 12:17:10Z.
+Item 4 requires “physical evidence for the complete boundary interval `[END, END + 1h)` before judging silence or
+applying restart exclusions”. It also requires “a complete line stamped at/after END+1h from the source that actually
+spans or finishes the interval” and states “a positive TOUCH from a non-excluded lane requires that lane's exact
+final-hour rollup.” The registered copy contains the exact normal rotation, one-file and refusal conditions.
+
+**Controlled outcome and disposition.** Step 7 read `[2026-11-25T22:00:00Z, 2026-11-26T00:00:00Z)` under Phase A
+`5ecd7ee24fb7a741e8e015e0e6a262a464e7d016` with restart 716 unchanged. The decoded predecessor archive SHA-256 was
+`ccee3c2368be87108c9e9479d1d89459d4964f88e9909073602aecbdd3917d8b`; the opening successor established boundary
+coverage. The hour cut reconciled two UTC hours per lane, four cells total: 23,617 shadow and 52,371 VTS looks.
+There was one after-hours session label per lane. The stamp control lost the final flush and admitted the earlier
+flush, leaving a net deficit of 4,324 shadow looks and 9,932 VTS looks. Step 7 record `71e9d9104cc87dfbfaa01372b0f943323ed8d215`
+contains the source identities and both output objects. At 14:37:31Z Coltrane independently reproduced the four cells
+and both boundary movements from exact shared extractor `59bfa6d49cbc83ed2b9988311d200ae04ae8ebcf`, executable blob
+`04adf09391e48ecf6a98f226798d61eada4d7a64`. He cleared use for the scoped report. The next midnight-ended report
+uses the reviewed hour cut when its own source coverage is proved. The stamp cut remains a control.
+
+| Objective | Verdict | Evidence |
+|---|---|---|
+| Use the correct hour when the flush is logged after midnight | YES | Step 7 table and Step 8 independent recount of four after-hours cells and both timestamp boundary movements. |
+| Require proof of source coverage and refuse an unprovable final-hour attribution | YES | r5 amendment, four discriminating mutants in the 8a-P4c Increment 2 Change List and all 52 synthetic assertions at the shared ref, including damaged-archive refusal. Real delayed-rotation source pair in Step 7. |
+| Verify the reader before its next midnight-ended use | YES | Coltrane Step 8 PROCEED at 14:37:31Z on exact shared extractor. Exact reviewed blob retained at Step 10. |
+| Carry the architecture governance set | YES | The 31-row Step 10 tier ledger immediately above records every verdict including N/A, the System Manual, the System Impact Map and the guarded reviewer-memory receipt. |
+
+**Governance and CI.** The complete governance-files-changed list is the Step 10 tier ledger directly above in this
+report, including its N/A dispositions. Shared `101ec2d73c97965ee6ebed320f161b6195d33f3c`, run `45857728978`:
+TypeScript Check (baseline gate) success, Test Suite success, Build success, Docker Build success. The manual reader
+verified the staging sample without a restart. The board census found one parent Verify card among 210 items and no
+separate card for the November 20 amendment. The parent stays in Verify.
+
+**Evidence limits.** Agreement covers the recorded two lane histories in one real after-hours midnight read. Both
+streams can agree while an upstream gap affects both, or while balanced omissions or duplicates cancel out. A
+coverage check must be repeated for each report window. The real sample exercised delayed rotation with the final
+flush in the predecessor. Separate synthetic cases covered early reads, successor gzip and missing or corrupt sources.
+Live quote freshness, regular-hours policy and exit booking retain their separate evidence requirements.
+
+**REVIEWER:** exact shared `101ec2d73c97965ee6ebed320f161b6195d33f3c` and scoped closeout claim · could the same
+counters agree with an upstream gap or a wrong window, and what remains open? · the stamp cut shares the hourly
+comparison and the real sample only covers delayed after-hours rotation · re-derived yes from the distinct clock
+cuts, exact archived recount, independent Step 8 review and the two task-list rows.
+
+Step 11 reviewer confirmation is required before recording the amendment as complete.
