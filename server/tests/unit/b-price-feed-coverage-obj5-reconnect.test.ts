@@ -128,6 +128,42 @@ describe('#1222 OBJ-5 T2 — the safe resubscribe restores a symbol that was sti
 
     expect(tickerSubs(sent)).toEqual([Z]);
   });
+
+  it('replays an unacknowledged RTB request on a separate socket after a slow handshake', async () => {
+    vi.useFakeTimers();
+    const { adapter, sent: previousFrames } = makeAdapter({ connected: false });
+    adapter.addIntentReason(X, 'rtb:paper');
+    adapter.subscribeToSymbols([X]);
+    adapter.handleOpen();
+    await flush();
+
+    expect(tickerSubs(previousFrames)).toEqual([X]);
+    expect(adapter.pendingSubscriptions.has(X)).toBe(true);
+    expect(adapter.subscribedSymbols.has(X)).toBe(false);
+    expect(adapter.getIntentReasons(X)).toEqual(['rtb:paper']);
+
+    const replacementFrames: unknown[] = [];
+    const replacementSocket = {
+      readyState: 0,
+      send: (frame: string) => replacementFrames.push(JSON.parse(frame)),
+      close() {},
+    };
+    adapter.connect = async () => {
+      adapter.ws = replacementSocket;
+    };
+
+    await adapter.softResubscribeAll();
+    await vi.advanceTimersByTimeAsync(4_100);
+    expect(logs).toContain('[OBJ-5][RESUB_DEFERRED] reason=not_connected intent=1 trigger=soft_resubscribe');
+    expect(tickerSubs(replacementFrames)).toEqual([]);
+
+    replacementSocket.readyState = 1;
+    adapter.handleOpen();
+    await flush();
+
+    expect(tickerSubs(replacementFrames)).toEqual([X]);
+    expect(tickerSubs(previousFrames)).toEqual([X]);
+  });
 });
 
 describe('#1222 OBJ-5 T3 — not connected: one deferred line, then the audit restores', () => {

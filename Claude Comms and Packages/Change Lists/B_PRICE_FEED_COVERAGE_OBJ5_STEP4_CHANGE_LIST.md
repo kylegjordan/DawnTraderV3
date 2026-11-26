@@ -219,3 +219,13 @@ The post-deploy read covers 2026-11-24 00:03:08–21:00:00Z, including the full 
 **Step 7 remains open** for direct crypto set conservation and the paper close carrier. The full-session counts remain observations of reconnect and restore dispatch. This read made no change to the process.
 
 `REVIEWER: claim-only · which object supplies the historical drop rate and what states fit the restore claim? · HIT: separate xStock socket baseline; attempted-chunk carrier can coexist with downstream omission, rejection or stale price · re-derived y`
+
+### Step 7 local pending-subscription control — 2026-11-26
+
+The existing T2 case marks the stub connected immediately, and T3's delayed connection starts with an RTB intent that was never in the pending set. The new case in `b-price-feed-coverage-obj5-reconnect.test.ts` exercises both conditions together. The original fake socket emits a ticker subscription for paper RTB-owned `SOL/USD`, which remains pending without an ACK. At 4.1 seconds of simulated time the actual safe-resubscribe path logs a defer, with zero ticker sends to the replacement socket. Opening that distinct socket through the adapter emits exactly one ticker subscribe for `SOL/USD` there. The original socket retains its one send.
+
+Local Vitest on shared base `f50fbd358` passed all **22 cases in the reconnect suite**. The adapter, dependency lock and Vitest config are byte-identical to serving Phase A `5ecd7ee24`. As a negative control, a temporary local mutation discarded the previously pending intents only when the safe-resubscribe decision found the socket still disconnected. The replacement socket then received no `SOL/USD` ticker request and the new assertion failed while all 21 existing cases passed. The mutation was reverted and the suite passed again.
+
+The fixture establishes request replay. The separate staging check still owes live symbol and owner conservation and the paper-close witness. For each retained symbol use a successful channel-bearing ticker ACK or a raw ticker receipt attributable to the replacement generation, with the observation ending before the next disconnect. `handleV2SystemMessage` at Phase A shares its per-symbol `Sub OK` log and ACK state across ticker and book. Use a book-only ACK, an adjacent-generation receipt or an equal-count symbol swap as a negative control when validating the live capture. Keep the reconnect and paper-close checks in their own agreed window.
+
+`REVIEWER: claim-only · what live outcomes are compatible with the local slow-handshake control? · HIT: T2 and T3 separate pending and delay, and generic per-symbol success merges book and ticker; combined two-socket test and channel check added · re-derived y`
