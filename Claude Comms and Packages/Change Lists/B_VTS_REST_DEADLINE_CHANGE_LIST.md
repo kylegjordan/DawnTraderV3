@@ -148,3 +148,18 @@ clock checks and a missing corroboration of the committed refusal boundary · re
 The actual TypeScript writer to Python reader control credited 1/1 authentic fractional-clock recoveries. The
 same trace withheld attribution on 4/4 epoch mutations and 2/2 position-clock mutations. The checked-in Python
 reader suite passed 17/17. Six recorder controls passed, with the fractional anchor checked at the writer.
+
+## Step 4 r5 ruling and Step 5 placement
+
+Coltrane approved exact `5c102e20f78505169e8aa16d6a6217551e15bc7b` at
+2026-11-26 18:10:34 UTC. He reproduced the actual fractional-clock writer positive control,
+withheld recovery for 5/5 altered clock traces and 4/4 conflicting or absent position clock traces,
+and mutated each guard to prove the negative controls discriminate. Missing recovery evidence retained
+the independently proved fill and quote timing. Reader fixtures 17/17 and recorder tests 6/6.
+Exact CI run `45871798519` finished all four jobs green.
+
+Placement replays the 16 non-memory paths from the approved delta on shared
+`e0788331da088a498ca0a5089fd676942321de8a`. At replay `043cc70b737b31c537dc9cbe0c9bb70304b88762`
+their paths, modes and all old/new blobs match the approved delta. This receipt and ANALYST POSITION
+are the only edits after that replay. Shared placement requires all four jobs green on the exact
+base and final candidate. The registered window authorizes no staging slot.
