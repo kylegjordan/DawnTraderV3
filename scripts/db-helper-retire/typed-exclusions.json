@@ -48,6 +48,7 @@
     { "path": "server/tests/integration/p19-perpfeed-ohlc-upsert-constraint-fence.test.ts", "type": "test_fixture", "reason": "source-marker fence" },
     { "path": "server/tests/unit/b-b75-script-test-harness.test.ts", "type": "test_fixture", "reason": "script harness fixture" },
     { "path": "server/tests/unit/b-db-app-tls-boot-check.test.ts", "type": "test_fixture", "reason": "shared-pool TLS fixture" },
+    { "path": "server/tests/integration/b-xstock-paper-trade-transition-db.test.ts", "type": "test_fixture", "reason": "#961 checks the isolated test database identity before using the existing application pool for transaction fixtures" },
     { "path": "server/tests/unit/b-db-pool-guard-p3.test.ts", "type": "test_fixture", "reason": "shared-pool guard fixture" },
     { "path": "server/tests/unit/b-disk-file-tiering-amendment2.test.ts", "type": "test_fixture", "reason": "script-source fixture" },
     { "path": "server/tests/unit/b-disk-file-tiering.test.ts", "type": "test_fixture", "reason": "script-source fixture" },

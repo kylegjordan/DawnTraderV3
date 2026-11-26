@@ -11,9 +11,11 @@ export class PaperEntryDrainIncomplete extends Error {
 /** The paper trade and its linked position can be written by separate awaits. */
 export class PaperEntryPublication {
   private activeRun: symbol | undefined;
+  private resetPermit: symbol | undefined;
   private readonly writers = new Set<Promise<void>>();
 
-  startRun(): symbol {
+  startRun(resetPermit?: symbol): symbol {
+    if (!this.allowsStart(resetPermit)) throw new PaperEntryDrainIncomplete();
     if (this.activeRun || this.hasPendingWriters()) {
       throw new Error('The previous paper run has not stopped and settled its entry writes.');
     }
@@ -50,6 +52,24 @@ export class PaperEntryPublication {
 
   hasDrainingWriters(): boolean {
     return !this.activeRun && this.hasPendingWriters();
+  }
+
+  allowsStart(resetPermit?: symbol): boolean {
+    return this.resetPermit === resetPermit && !this.hasDrainingWriters();
+  }
+
+  acquireResetPermit(): symbol | undefined {
+    if (this.resetPermit || !this.isQuiescent()) return undefined;
+    this.resetPermit = Symbol('quiescent paper reset');
+    return this.resetPermit;
+  }
+
+  holdsResetPermit(permit: symbol | undefined): boolean {
+    return permit !== undefined && this.resetPermit === permit;
+  }
+
+  releaseResetPermit(permit: symbol): void {
+    if (this.holdsResetPermit(permit)) this.resetPermit = undefined;
   }
 
   async drain(timeBudgetMs: number): Promise<boolean> {

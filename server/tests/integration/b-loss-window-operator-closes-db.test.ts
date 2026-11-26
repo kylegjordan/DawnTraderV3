@@ -17,6 +17,7 @@ import { sql } from 'drizzle-orm';
 import { activeEngineSessions, activeOpenPositions, closedTradesTable, portfolioAnchorEvents } from '@shared/schema';
 import { selectLastAnchorAt, OPERATOR_REBASE_REASONS } from '../../services/portfolio-anchor-service.js';
 import { closeOpenTradesForHardReset, resetActiveEngineTables } from '../../storage.js';
+import { PaperEntryDrainIncomplete, paperEntryPublication } from '../../services/paper-entry-publication.js';
 
 const RAW_DB_URL = process.env.DATABASE_URL ?? '';
 const isTestDb =
@@ -120,7 +121,12 @@ describe('B-LOSS-WINDOW-OPERATOR-CLOSES — database predicates', () => {
         { sessionId: liveId, mode: 'live', status: 'running', startingBalance: '500' },
       ]);
 
-      const got = await resetActiveEngineTables(tx, 'paper');
+      await expect(resetActiveEngineTables(tx, 'paper')).rejects.toBeInstanceOf(PaperEntryDrainIncomplete);
+      const permit = paperEntryPublication.acquireResetPermit();
+      expect(permit).toBeDefined();
+      if (!permit) throw new Error('Test paper reset permit was unavailable');
+      await expect(resetActiveEngineTables(tx, 'live', permit)).rejects.toBeInstanceOf(PaperEntryDrainIncomplete);
+      const got = await resetActiveEngineTables(tx, 'paper', permit).finally(() => paperEntryPublication.releaseResetPermit(permit));
       expect(got.clearedPositions).toBeGreaterThanOrEqual(1);
       const positions = rows(await tx.execute(sql`SELECT id FROM active_open_positions WHERE id IN (${paperId}, ${liveId})`));
       expect(positions).toEqual([{ id: liveId }]);

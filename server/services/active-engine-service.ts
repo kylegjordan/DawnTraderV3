@@ -7,9 +7,9 @@
 
 import { nanoid } from 'nanoid';
 import type { FlattenCloseType } from './active-execution-engine';
-import { storage } from '../storage.js';
+import { hasPaperXstockEntryFill, storage } from '../storage.js';
 import { stampPositionTradeId } from './trade-record-restore.js';
-import type { InsertActiveEngineSession } from '../../shared/schema.js';
+import type { ActiveOpenPosition, InsertActiveEngineSession } from '../../shared/schema.js';
 import { tradingStateSync } from './trading-state-sync.js';
 import { KrakenService } from '../exchanges/kraken/kraken.js';
 import { activeOperationQueue } from '../utils/operation-queue.js';
@@ -404,7 +404,14 @@ export function getOrchestratorByMode(mode: 'paper' | 'live'): any | null {
  * Shared by the stop-time reconciler and the stop flow's orphan step, so a position is never deleted before its record
  * is finished. Anything it cannot price honestly is LEFT OPEN with an alert. Returns which happened.
  */
-async function closeStaleRecordAtReference(mode: 'paper' | 'live', trade: any): Promise<'closed' | 'left_open'> {
+async function closeStaleRecordAtReference(
+  mode: 'paper' | 'live', trade: any, position: ActiveOpenPosition | null = null,
+): Promise<'closed' | 'already_closed' | 'left_open'> {
+        const guarded = mode === 'paper' && trade.assetClass === 'xstock_spot';
+        if (guarded && !position && !hasPaperXstockEntryFill(trade)) {
+          console.warn(`[B-XSTOCK-BID-TRIGGER-RELAND][ORPHAN_FILL_UNPROVEN] ${trade.symbol} trade=${trade.id} left open`);
+          return 'left_open';
+        }
         // ⛔ B-FEED-MISMATCH-FIX P4 — NEVER THE ENTRY PRICE. This used to fall back to `trade.entryPrice` when no
         // quote existed and book the row with no fee, no walk and no provenance — the sixth close path the
         // Step-2 audit found. There is no position left to walk here (that is why the row is stale), so the
@@ -492,7 +499,7 @@ async function closeStaleRecordAtReference(mode: 'paper' | 'live', trade: any): 
         const pnl = netPnl;
 
         // Update trade with close info — now WITH provenance, so the row says what the number is and how old.
-        await storage.updateClosedTrade(mode, trade.id, {
+        const close = {
           closedAt: new Date(),
           exitPrice: fillPrice.toString(),
           actualExitPrice: fillPrice.toString(),
@@ -512,13 +519,19 @@ async function closeStaleRecordAtReference(mode: 'paper' | 'live', trade: any): 
           // P-14: the entry values written explicitly (they read their column defaults before).
           entryFee: entryFee.toString(),
           entrySlippage: entrySlippage.toString(),
-          closeReason: 'engine_stop_cleanup',
+          closeReason: 'engine_stop_cleanup' as const,
           exitDecisionPrice: exitPrice.toString(),
           exitPriceProducer: quote.producer,
           exitPriceSource: quote.source,
           exitObservedAtMs: quote.observedAt,
           exitFillArm: 'synthetic_reference',
-        } as any);
+        };
+        if (guarded) {
+          const result = await storage.closePaperXstockTrade(trade, position, close);
+          if (!result.committed) return result.trade?.closedAt ? 'already_closed' : 'left_open';
+        } else {
+          await storage.updateClosedTrade(mode, trade.id, close);
+        }
 
         // Emit trade lifecycle event for diagnostics
         const strategy = trade.strategyName || 'unknown';
@@ -595,7 +608,8 @@ export async function reconcileIncompleteTrades(
         console.log(`[8.8.3-I3][STOP_FLOW] Closing stale trade ${trade.id} for ${trade.symbol} (no matching open position)`);
         
         const _outcome = await closeStaleRecordAtReference(mode, trade);
-        if (_outcome === 'closed') reconciled++; else stillOpen++;
+        if (_outcome === 'closed') reconciled++;
+        if (_outcome === 'left_open') stillOpen++;
         
       } catch (tradeErr) {
         console.error(`[8.8.3-I3][STOP_FLOW] Error reconciling trade ${trade.id}:`, tradeErr);
@@ -672,10 +686,10 @@ export async function startActiveEngine(userId: string, options?: PaperStartOpti
 export async function runPaperStartRequest<T>(
   userId: string,
   request: 'new' | 'continue',
-  run: (start: (options: PaperStartOptions) => Promise<ActiveEngineResult>) => Promise<T>,
+  run: (start: (options: PaperStartOptions, paperResetPermit?: symbol) => Promise<ActiveEngineResult>) => Promise<T>,
 ): Promise<T> {
   return activeOperationQueue.enqueue(
-    () => run((options) => startActiveEngineWith(userId, options, (job) => job())),
+    () => run((options, permit) => startActiveEngineWith(userId, options, (job) => job(), permit)),
     { userId, mode: 'paper', action: request === 'new' ? 'start-new' : 'continue' },
   );
 }
@@ -684,6 +698,7 @@ async function startActiveEngineWith(
   userId: string,
   options: PaperStartOptions | undefined,
   run: (job: PaperStartJob) => ReturnType<PaperStartJob>,
+  paperResetPermit?: symbol,
 ): Promise<ActiveEngineResult> {
   const t0 = Date.now();
   console.log(`[41F][QUEUE] startActiveEngine called (userId: ${userId}, balance: ${options?.startingBalance})`);
@@ -693,7 +708,7 @@ async function startActiveEngineWith(
     const queueResult = await run(
     async () => {
       try {
-        if (paperEntryPublication.hasDrainingWriters()) return paperEntryDrainRefusal();
+        if (!paperEntryPublication.allowsStart(paperResetPermit)) return paperEntryDrainRefusal();
         console.log(`[41D-DEBUG-5] Checking DB for existing session (t+${Date.now()-t0}ms)`);
         // Phase 27.F.9 + Phase 3D: Mode-based session lookup
         const mode = 'paper';
@@ -717,7 +732,7 @@ async function startActiveEngineWith(
           // If manager exists but is not running, we need to start it
           if (!existingManager.getIsRunning || !existingManager.getIsRunning()) {
             console.log('[DEBUG-B9][MANAGER_NOT_RUNNING] Manager exists but not running - starting it now');
-            await existingManager.start('api');
+            await existingManager.start('api', paperResetPermit);
             
             // Phase 8.8.3-I6-FIX: Set trading mode to 'paper' for correct WebSocket broadcasts
             livePricingAdapter.setTradingMode('paper');
@@ -781,7 +796,7 @@ async function startActiveEngineWith(
           // Phase 27.F.13.O + Phase 3D: Use mode instead of userId
           const manager = new ActivePortfolioManager(mode, userId);
           setGlobalActiveEngineManager(manager);
-          await manager.start('api');
+          await manager.start('api', paperResetPermit);
           
           // Phase 8.8.3-I6-FIX: Set trading mode to 'paper' for correct WebSocket broadcasts
           livePricingAdapter.setTradingMode('paper');
@@ -870,7 +885,7 @@ async function startActiveEngineWith(
         // Phase 41C-FIX: Start manager synchronously with proper error handling
         // Previous async approach caused UI to show ACTIVE while engine failed silently
         try {
-          await manager.start('api');
+          await manager.start('api', paperResetPermit);
           console.log('[ENGINE_CHECKPOINT_12] Manager started successfully');
           
           // Phase 8.8.3-I6-FIX: Set trading mode to 'paper' for correct WebSocket broadcasts
@@ -934,6 +949,11 @@ async function startActiveEngineWith(
           }
         } catch (managerError: any) {
           console.error('[ENGINE_ERROR] Manager start failed:', managerError);
+          try {
+            await manager.stop();
+          } catch (stopError) {
+            console.error('[ENGINE_ERROR] Failed to stop the partially started manager:', stopError);
+          }
           // Rollback on manager start failure
           clearGlobalActiveEngineManager();
           // Find the session we just created and mark it as failed
@@ -1167,6 +1187,27 @@ export async function stopActiveEngine(
                   // which then booked it at its ENTRY price — the harm this batch removes, by a second route.
                   if (_deliberatelyOpen.has(orphan.id)) {
                     console.error(`[B-FEED-MISMATCH-FIX][STOP_FLOW] ${orphan.symbol} (${orphan.id}) left OPEN deliberately (no observed price) — NOT deleted; alert raised by the flatten`);
+                    continue;
+                  }
+                  if (orphan.assetClass === 'xstock_spot') {
+                    const tradeId = (orphan.metadata as { tradeId?: string } | null)?.tradeId;
+                    try {
+                      const exact = typeof tradeId === 'string' && tradeId
+                        ? await storage.getPaperXstockTrade({ ...orphan, id: tradeId }) : undefined;
+                      const removed = exact && orphan.state === 'open' && (exact.closedAt
+                          ? await storage.removeClosedPaperXstockPosition(exact, orphan)
+                          : (await closeStaleRecordAtReference('paper', exact, orphan)) === 'closed');
+                      if (removed) {
+                        krakenWebSocketAdapter.releaseIntentReason(orphan.symbol, 'open');
+                        flattenReport.orphansDeleted.push(orphan.symbol);
+                      } else if (await storage.getActiveOpenPosition('paper', orphan.id)) {
+                        flattenReport.orphansKept.push(orphan.symbol);
+                        console.warn(`[B-XSTOCK-BID-TRIGGER-RELAND][ORPHAN_KEPT] ${orphan.symbol} pos=${orphan.id} exact filled position could not be reconciled`);
+                      }
+                    } catch (cleanupErr) {
+                      flattenReport.orphansKept.push(orphan.symbol);
+                      console.error(`[B-XSTOCK-BID-TRIGGER-RELAND][ORPHAN_KEPT] ${orphan.symbol} pos=${orphan.id}`, cleanupErr);
+                    }
                     continue;
                   }
                   // ⛔ B-CLOSE-WRITER-COSTS P-17 (Langston BLOCKER-1, A-8): FINISH THE RECORD FIRST. This step used to delete the

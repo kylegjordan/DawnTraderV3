@@ -236,7 +236,7 @@ describe('plan item 4 — the start path closes a leftover running row when the 
     expect(res.data?.wasReconciled).toBe(true);
     expect(m.createActiveEngineSession).not.toHaveBeenCalled();
     expect(m.updateActiveEngineSession.mock.calls.filter((c) => c[1]?.status === 'stopped')).toHaveLength(0);
-    expect(m.managerStart).toHaveBeenCalledWith('api');
+    expect(m.managerStart).toHaveBeenCalledWith('api', undefined);
   });
 
   it('a leftover row that cannot be closed refuses the start (never two running rows) and alerts', async () => {

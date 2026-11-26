@@ -11066,14 +11066,17 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       const { runPaperStartRequest } = await import('./services/active-engine-service.js');
       const response = await runPaperStartRequest(userId, mode, async (start) => {
+        const { PAPER_ENTRY_DRAIN_REASON, paperEntryPublication } = await import('./services/paper-entry-publication.js');
+        let paperResetPermit: symbol | undefined;
         try {
           if (mode === 'new') {
             console.log(`[B7.1][HARD_RESET] Running hardResetActiveEngineTables + resetPaper() before new simulation...`);
             const { activeSessionResetService } = await import('./services/active-session-reset.js');
-            const resetResult = await activeSessionResetService.hardResetActiveEngine('paper');
+            const resetResult = await activeSessionResetService.hardResetActiveEngine('paper', true);
             if (!resetResult.success) {
               return { status: resetResult.refusal ? 409 : 500, body: { error: resetResult.message } };
             }
+            paperResetPermit = resetResult.paperResetPermit;
             console.log(`[B7.1][HARD_RESET] Complete:`, {
               success: resetResult.success,
               closedTrades: resetResult.details.closedTrades,
@@ -11163,7 +11166,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
 
             // Start the simulation
             // REB 2.8.13: Pass startingBalance to startActiveEngine (required after REB 2.8.12)
-            const result = await start({ startingBalance: balance });
+            const result = await start({ startingBalance: balance }, paperResetPermit);
 
             // Directive 12.2.3: Bob Core cache invalidation removed (Batch 7B)
 
@@ -11184,6 +11187,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
             return { status: 200, body: { success: true, message: `New simulation started with $${balance.toFixed(2)}` } };
           }
 
+          if (!paperEntryPublication.allowsStart()) {
+            return { status: 409, body: { error: PAPER_ENTRY_DRAIN_REASON } };
+          }
           console.log(`[B7.1][CONTINUE] Preserving existing state (no hard reset)`);
 
           // Phase 27.F.14.J: Handle "Continue Previous Simulation" mode (default)
@@ -11257,6 +11263,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           // The queue must not repeat a partially completed reset or reanchor.
           console.error('Error starting paper trading simulation:', error);
           return { status: 500, body: { error: error.message || 'Failed to start paper trading simulation' } };
+        } finally {
+          if (paperResetPermit) paperEntryPublication.releaseResetPermit(paperResetPermit);
         }
       });
       return res.status(response.status).json(response.body);
@@ -12520,8 +12528,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         return res.status(nr.http).json(nr.body);
       }
       const r = await manager.closeOnePositionByOperator(req.params.id, 'manual_close');
-      if (r.status === 'closed') {
-        contextBridge.broadcast({ type: 'active_trade_closed', payload: { id: req.params.id, symbol: r.symbol, reason: 'manual_stop' } });
+      if (r.status === 'closed' && r.committed !== false) {
+        contextBridge.broadcast({ type: 'active_trade_closed', payload: { id: req.params.id, symbol: r.symbol, reason: r.closeReason ?? 'manual_stop' } });
       }
       const out = manualCloseResponse(req.params.id, r);
       return res.status(out.http).json(out.body);
