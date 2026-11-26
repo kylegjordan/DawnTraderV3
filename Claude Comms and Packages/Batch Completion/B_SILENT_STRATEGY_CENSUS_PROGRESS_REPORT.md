@@ -218,7 +218,9 @@ The same-symbol MCE lookup within 90 seconds before the four witnesses returned 
 
 `REVIEWER: claim-only · which retained objects could settle lane admission and consumed inputs? · HIT: MCE cache can skip the archive write, the scanner uses the legacy bar path and rotated stdout carries only partial logs · re-derived y at e3a96a812 and the named witnesses. Population totals NOT RE-READ by the fresh reader; sent for exact-ref review.`
 
-**Return.** CC-B owns exact-result review. To reopen this historical grade, supply a retained per-pair VTS pre-strategy lane trace or complete gate replay inputs, and evaluation-linked original bars or a proved read cutoff with certified revisions. Detector and fee replay additionally require the consumed MCE price/cache path, detector-entry timestamp and a positively identified observed quote update. Row 52 stays open for the other O3 work.
+**Evidence review.** Coltrane confirmed **UNDERPOWERED** on both fee arms at 12:36:36 UTC on Nov 26 for exact `879108a572cf622bb9acb09d91f61d8e02703882` (dispatch `1575489888906645525`). He checked the unchanged preregistration, the signed DBS arithmetic and all four recorded digest mismatches. He independently exercised the pinned digest with settled-bar and forming-bar mutations, including a deliberately wrong forming-bar inclusion. Historical population totals and witness rows remain **NOT RE-READ**. The confirmed disposition leaves Volatility Edge disabled, 4.1 ATR ungraded and row 52 open.
+
+**Return.** CC-B owns the next eligible O3 check. To reopen the Volatility Edge grade, supply a retained per-pair VTS pre-strategy lane trace or complete gate replay inputs, and evaluation-linked original bars or a proved read cutoff with certified revisions. Detector and fee replay additionally require the consumed MCE price/cache path, detector-entry timestamp and a positively identified observed quote update.
 
 ## 4. Unproven, stated as unproven
 - Whether strong_bull_trend fires on xStock at all inside 21 days (it was feasible only after the 09-20 seed; first-week opens not yet read).
