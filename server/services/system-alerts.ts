@@ -831,7 +831,7 @@ export async function markResurfaced(id: string, nowMs: number = Date.now()): Pr
 export interface ResurfaceResult {
   id: string;
   delivered: boolean;
-  skipped?: 'resolved';
+  skipped?: 'resolved' | 'deferred';
 }
 
 /**
@@ -848,9 +848,14 @@ export interface ResurfaceResult {
 export async function processResurface(
   nowMs: number,
   deliver: (alert: SystemAlert, d: ResurfaceDecision) => Promise<boolean>,
+  defer?: (alert: SystemAlert) => boolean,
 ): Promise<ResurfaceResult[]> {
   const out: ResurfaceResult[] = [];
   for (const d of computeResurfaceStale(readAllAlerts(), nowMs)) {
+    if (defer?.(d.alert)) {
+      out.push({ id: d.alert.id, delivered: false, skipped: 'deferred' });
+      continue;
+    }
     const fresh = readAllAlerts().find((a) => a.id === d.alert.id);
     if (!fresh || fresh.state === 'resolved') {
       out.push({ id: d.alert.id, delivered: false, skipped: 'resolved' });

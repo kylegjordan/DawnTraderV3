@@ -57,6 +57,28 @@ import {
   type ResurfaceDecision,
 } from '../server/services/system-alerts.js';
 import * as fs from 'node:fs';
+import { createHash } from 'node:crypto';
+import { RAIL_KEY_PREFIX } from '../server/core/trading/vts-rail.js';
+
+// #1191: one expiring, retrospective hold for the exact Nov 26 incident. The
+// reviewed manifest digest binds the 450 IDs with verified first deliveries.
+const NOV26_VTS_REPEAT_HOLD_UNTIL = Date.parse('2026-11-27T15:15:00Z');
+const NOV26_VTS_REPEAT_HOLD_DIGEST = '37dc0d1d99c37a49a614f24a136434a04ad5263be80fe19e20ee0906e24f9816';
+
+function readNov26VtsRepeatHold(): ReadonlySet<string> {
+  const manifest = process.env.DT_VTS_NOV26_REPEAT_HOLD_FILE;
+  if (!manifest || Date.now() >= NOV26_VTS_REPEAT_HOLD_UNTIL) return new Set();
+  try {
+    const payload = fs.readFileSync(manifest);
+    if (createHash('sha256').update(payload).digest('hex') !== NOV26_VTS_REPEAT_HOLD_DIGEST) {
+      throw new Error('manifest differs from the verified cohort');
+    }
+    return new Set(payload.toString('utf8').trimEnd().split('\n'));
+  } catch (error) {
+    console.warn('[fire-due] Nov 26 VTS repeat hold unavailable, ordinary delivery continues:', error instanceof Error ? error.message : error);
+    return new Set();
+  }
+}
 
 // ─── Argument parsing ──────────────────────────────────────────────────────
 
@@ -237,14 +259,19 @@ async function cmdFireDue(): Promise<void> {
   // and the back-off advances ONLY on real delivery (processResurface) — an undelivered
   // re-surface does NOT consume the window and retries next tick.
   const nowMs = Date.now();
+  const repeatHold = readNov26VtsRepeatHold();
   const results = await processResurface(nowMs, async (alert, d) => {
     const framed = frameResurface(alert, d, nowMs);
     return pushToDiscord(framed); // delivered iff the sole sink succeeded (behavior-identical to the isolation-on state: false || dc || false)
-  });
+  }, (alert) => Date.now() < NOV26_VTS_REPEAT_HOLD_UNTIL && repeatHold.has(alert.id)
+    && alert.state === 'active' && alert.category === 'breakage' && alert.severity === 'warning'
+    && alert.dedupe_key?.startsWith(RAIL_KEY_PREFIX) === true);
   const delivered = results.filter((r) => r.delivered);
   if (delivered.length > 0) {
     console.log(`[fire-due] re-surfaced ${delivered.length} stale unresolved alert(s): ${delivered.map((r) => r.id).join(', ')}`);
   }
+  const held = results.filter((r) => r.skipped === 'deferred').length;
+  if (held) console.log(`[fire-due] Nov 26 VTS repeat hold deferred ${held} verified, previously delivered alert ID(s)`);
   const undelivered = results.filter((r) => !r.delivered && !r.skipped);
   if (undelivered.length > 0) {
     // No channel delivered — the closure guarantee could not reach anyone. Do NOT advance
