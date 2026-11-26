@@ -28,6 +28,7 @@ const h = vi.hoisted(() => ({
   archiveBid: null as number | null,
   archiveRead: vi.fn(),
   preFillRead: vi.fn(async () => undefined),
+  tecCause: null as 'trailing_stop_hit' | 'moonbag_timeout' | null,
   updateActiveOpenPosition: vi.fn(),
   closePaperXstockTrade: vi.fn(),
   deleteActiveOpenPosition: vi.fn(),
@@ -124,6 +125,15 @@ vi.mock('../../services/trailing-exit-controller.js', async (orig) => ({
   getTrailingState: () => null,
   clearTrailingState: () => undefined,
 }));
+vi.mock('../../services/tec-evaluator.js', async (original) => {
+  const real = await original<typeof import('../../services/tec-evaluator.js')>();
+  return {
+    ...real,
+    evaluateTECExit: async (input: Parameters<typeof real.evaluateTECExit>[0]) => h.tecCause
+      ? { shouldExit: true, exitReason: h.tecCause }
+      : real.evaluateTECExit(input),
+  };
+});
 vi.mock('../../services/data-aggregator.js', () => ({ dataAggregator: { capture: h.capture } }));
 vi.mock('../../services/data-archive/exit-decision-archiver.js', () => ({ archiveExitDecision: vi.fn() }));
 vi.mock('../../services/vts-live-comparison-audit.js', () => ({ recordPaperTrade: vi.fn() }));
@@ -240,6 +250,7 @@ beforeEach(() => {
   h.judgedFrame = null;
   h.spreadGuard = true;
   h.archiveBid = null;
+  h.tecCause = null;
   h.preFillRead.mockResolvedValue(undefined);
   h.createActiveTradeLog.mockResolvedValue({});
   h.updateActiveOpenPosition.mockImplementation(async (_mode: string, id: string, patch: Record<string, unknown>) => {
@@ -326,7 +337,10 @@ describe('B-CLASS-LEG-FILL-MODE — target policy through the real engine seam',
 function quote(id: number, changes: Partial<EquityTickRaw> = {}): EquityTickRaw {
   return Object.freeze({
     bid: 89, ask: 90, last: 89.5, bidQty: 1, askQty: 5, atMs: Date.now(),
-    frame: Object.freeze({ id, symbol: 'MDB/USD', kind: 'update' as const, generation: 1, receivedMonotonicMs: 19_999 }),
+    frame: Object.freeze({
+      id, symbol: 'MDB/USD', kind: 'update' as const, generation: 1, receivedMonotonicMs: 19_999,
+      numericPrices: true, numericBidQty: true,
+    }),
     ...changes,
   });
 }
@@ -409,8 +423,10 @@ describe('#961 offline paper xStock quote from the monitor through the real clos
     ['malformed_book', { bid: 90.25, ask: 90 }],
     ['malformed_book', { bid: 1e-10, ask: 90 }],
     ['malformed_book', { ask: Infinity }],
-    ['position_mismatch', { frame: { id: 1, symbol: 'OTHER/USD', kind: 'update', generation: 1, receivedMonotonicMs: 19_999 } }],
-    ['replay', { frame: { id: 1, symbol: 'MDB/USD', kind: 'snapshot', generation: 1, receivedMonotonicMs: 19_999 } }],
+    ['position_mismatch', { frame: { ...quote(1).frame!, symbol: 'OTHER/USD' } }],
+    ['replay', { frame: { ...quote(1).frame!, kind: 'snapshot' } }],
+    ['size_unknown', { frame: { ...quote(1).frame!, numericBidQty: false } }],
+    ['malformed_book', { frame: { ...quote(1).frame!, numericPrices: false } }],
     ['no_frame', { frame: undefined }],
   ] as const)('leaves the position open on %s with a warm archive available', async (reason, changes) => {
     const eng = stopReplay();
@@ -468,6 +484,23 @@ describe('#961 offline paper xStock quote from the monitor through the real clos
     expect(h.closePaperXstockTrade.mock.calls[0][2].metadata).not.toHaveProperty('paperXstockExitFill');
   });
 
+  it.each(['trailing_stop_hit', 'moonbag_timeout'] as const)('grades the actual TEC cause %s before the shared close category', async (cause) => {
+    const eng = stopReplay();
+    h.tecCause = cause;
+    h.rawFrame = quote(1, { bidQty: null });
+    await eng.checkOpenPositions();
+    if (cause === 'trailing_stop_hit') {
+      expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('reason=size_unknown '));
+      expect(h.archiveRead).not.toHaveBeenCalled();
+      expect(h.closePaperXstockTrade).not.toHaveBeenCalled();
+      expect(h.position).not.toBeNull();
+    } else {
+      expect(h.archiveRead).toHaveBeenCalled();
+      expect(h.closePaperXstockTrade.mock.calls[0][2]).toMatchObject({ closeReason: 'trailing_stop_hit', exitPrice: '86' });
+      expect(h.closePaperXstockTrade.mock.calls[0][2].metadata).not.toHaveProperty('paperXstockExitFill');
+    }
+  });
+
   it('reports the 60th refusal once, drops the old trigger and closes only on a later breach', async () => {
     const eng = stopReplay();
     h.rawFrame = quote(1, { bidQty: 0.25 });
@@ -486,6 +519,27 @@ describe('#961 offline paper xStock quote from the monitor through the real clos
     await eng.checkOpenPositions();
     expect(h.closePaperXstockTrade).toHaveBeenCalledTimes(1);
     expect(h.closePaperXstockTrade.mock.calls[0][2]).toMatchObject({ exitPrice: '88' });
+  });
+
+  it('does not carry a refused trigger or hold count into a new engine', async () => {
+    const original = stopReplay();
+    h.rawFrame = quote(1, { bidQty: 0.25 });
+    await original.checkOpenPositions();
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('reason=size_short attempts=1 '));
+
+    const restarted = makeEngine(true);
+    h.generation++;
+    await restarted.checkOpenPositions();
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('reason=retired_connection attempts=1 '));
+    expect(h.closePaperXstockTrade).not.toHaveBeenCalled();
+
+    h.mark = 95.5;
+    const recovered = quote(2, { bid: 95, ask: 96 });
+    h.rawFrame = { ...recovered, frame: { ...recovered.frame!, generation: h.generation } };
+    await restarted.checkOpenPositions();
+    expect(console.info).toHaveBeenCalledWith(expect.stringContaining('outcome=trigger_cleared attempts=1 '));
+    expect(h.closePaperXstockTrade).not.toHaveBeenCalled();
+    expect(h.position).not.toBeNull();
   });
 
   it.each(['maker_preferred', 'maker_only'] as const)('honors %s on an expired target when the mark alone crossed it', async (policy) => {

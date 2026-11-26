@@ -110,7 +110,7 @@ beforeAll(async () => {
   const address = server.address();
   if (!address || typeof address === 'string') throw new Error('Expected the isolated HTTP fixture to listen locally');
   base = `http://127.0.0.1:${address.port}/api/active-engine`;
-});
+}, 30_000); // Cold import of the full router with concurrent test workers.
 
 afterAll(async () => {
   if (server?.listening) {

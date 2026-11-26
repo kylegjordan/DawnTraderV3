@@ -59,7 +59,7 @@ export function gradePaperXstockExitQuote(
     || !Number.isFinite(raw.atMs) || raw.atMs <= 0) return { ok: false, reason: 'age_invalid' };
   if (ageAtFillMs > maxAgeMs) return { ok: false, reason: 'stale' };
   const sides = xstockTransactableSides(raw);
-  if (!sides || !Number.isFinite(sides.bid) || !Number.isFinite(sides.ask) || sides.bid >= MAX_PRECISE
+  if (!raw.frame.numericPrices || !sides || !Number.isFinite(sides.bid) || !Number.isFinite(sides.ask) || sides.bid >= MAX_PRECISE
     || Number(sides.bid.toFixed(8)) <= 0 || trigger.price === null || !Number.isFinite(trigger.price)
     || (trigger.basis === 'bid' ? trigger.price !== sides.bid : trigger.basis !== 'mark')) {
     return { ok: false, reason: 'malformed_book' };
@@ -67,7 +67,9 @@ export function gradePaperXstockExitQuote(
   const quantity = Number(position.quantity);
   const bidQty = raw.bidQty;
   if (!Number.isFinite(quantity) || quantity < 1e-8 || quantity >= MAX_PRECISE
-    || bidQty === null || !Number.isFinite(bidQty) || bidQty < 0) return { ok: false, reason: 'size_unknown' };
+    || !raw.frame.numericBidQty || bidQty === null || !Number.isFinite(bidQty) || bidQty < 0) {
+    return { ok: false, reason: 'size_unknown' };
+  }
   if (bidQty < quantity) return { ok: false, reason: 'size_short' };
   return {
     ok: true,

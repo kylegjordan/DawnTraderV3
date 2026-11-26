@@ -193,6 +193,8 @@ export interface EquityTickerFrame {
   readonly kind: 'update' | 'snapshot' | 'other';
   readonly generation: number;
   readonly receivedMonotonicMs: number;
+  readonly numericPrices: boolean;
+  readonly numericBidQty: boolean;
 }
 
 export function isCurrentEquityTickerFrame(frame: EquityTickerFrame): boolean {
@@ -311,6 +313,9 @@ function parseTickerSnap(data: any, frameType?: string, receipt?: { generation: 
       kind: frameType === 'update' || frameType === 'snapshot' ? frameType : 'other' as const,
       generation: receipt.generation,
       receivedMonotonicMs: receipt.monotonicMs,
+      // Record wire types before the legacy pricing and archive normalization.
+      numericPrices: Number.isFinite(data.bid) && Number.isFinite(data.ask),
+      numericBidQty: Number.isFinite(data.bid_qty),
     });
     const _raw: EquityTickRaw = Object.freeze({
       bid: Number.isFinite(_bid) ? _bid : null,

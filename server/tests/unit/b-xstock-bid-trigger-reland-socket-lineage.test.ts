@@ -26,11 +26,12 @@ vi.mock('../../services/passive-archive/ticker-batch-writer.js', () => ({
 import {
   getLatestEquityTick, isCurrentEquityTickerFrame, startEquitySpotArchiver, stopEquitySpotArchiver,
 } from '../../services/passive-archive/equity-spot-archiver.js';
+import { gradePaperXstockExitQuote } from '../../services/execution/paper-xstock-exit-quote.js';
 
 const symbol = 'RTLY/USD';
-function deliver(socket: EventEmitter, type: string, bid: number) {
+function deliver(socket: EventEmitter, type: string, bid: number, fields: Record<string, unknown> = {}) {
   socket.emit('message', Buffer.from(JSON.stringify({
-    channel: 'ticker', type, data: [{ symbol, bid, ask: bid + 1, bid_qty: 4 }],
+    channel: 'ticker', type, data: [{ symbol, bid, ask: bid + 1, bid_qty: 4, ...fields }],
   })));
 }
 
@@ -40,6 +41,27 @@ afterEach(() => {
 });
 
 describe('#961 — immutable xStock raw quote lineage', () => {
+  it('requires actual numeric wire prices and size even when legacy readers normalize them', async () => {
+    await startEquitySpotArchiver();
+    const socket = sockets.instances[0];
+    const position = { id: 'wire-fixture', symbol, mode: 'paper', assetClass: 'xstock_spot', state: 'open', quantity: '1' } as const;
+    const grade = () => gradePaperXstockExitQuote({
+      positionId: position.id, symbol, raw: getLatestEquityTick(symbol)?.raw ?? null,
+      cause: 'stop_hit', trigger: { basis: 'bid', price: 89, reason: 'ok' },
+    }, position, 15_000, performance.now(), isCurrentEquityTickerFrame);
+
+    deliver(socket, 'update', 89, { bid_qty: 1 });
+    expect(grade()).toMatchObject({ ok: true, proof: { bid: 89, displayedBidQty: 1, filledQty: 1 } });
+    for (const nonNumber of [true, '1', [1]]) {
+      deliver(socket, 'update', 89, { bid_qty: nonNumber });
+      expect(getLatestEquityTick(symbol)?.raw?.bidQty).toBe(1);
+      expect(grade()).toEqual({ ok: false, reason: 'size_unknown' });
+    }
+    deliver(socket, 'update', 89, { bid: '89', bid_qty: 1 });
+    expect(getLatestEquityTick(symbol)?.raw?.bid).toBe(89);
+    expect(grade()).toEqual({ ok: false, reason: 'malformed_book' });
+  });
+
   it('distinguishes frames at one wall time and keeps the old judged frame intact', async () => {
     await startEquitySpotArchiver();
     const socket = sockets.instances[0];

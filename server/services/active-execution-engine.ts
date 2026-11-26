@@ -3537,6 +3537,7 @@ export class ActiveExecutionEngine {
         );
 
         if (this.xstockExitReplayPolicy && exitCondition === null && xsRawExitFrame?.frame?.kind === 'update'
+          && xsRawExitFrame.frame.numericPrices
           && xsBid !== null && this.xstockReplayRefusals.has(position.id)) {
           const ageMs = performance.now() - xsRawExitFrame.frame.receivedMonotonicMs;
           if (ageMs >= 0 && ageMs <= this.xstockExitReplayPolicy.maxAgeMs && isCurrentEquityTickerFrame(xsRawExitFrame.frame)) {
