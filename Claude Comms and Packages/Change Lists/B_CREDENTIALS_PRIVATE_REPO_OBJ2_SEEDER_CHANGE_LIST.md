@@ -263,3 +263,13 @@ Re-review is for exact source placement. The P6/P7a Step 6 return and both Token
 Coltrane gave Step 4 PROCEED for source placement on `47a427bb6bf5b4765726d332cf5d10f05b936c3e` at 2026-11-26 14:26:04 UTC. He independently reproduced the prior false PASS. The approved candidate handled seventeen rejected login responses and four missing or empty settings without changing the preceding CSV. Each of four valid login field cases produced all ten ordered CSV rows, including the planted HTTP 503. His trace control fired on the baseline and the approved candidate's twenty-five runs contained no trace file or fixture values in captured output.
 
 The exact three-path diff, including modes and old and new blobs, was unchanged after replay from base `db049d82b56971b1713215ad622d51e798234018` onto `59bfa6d49cbc83ed2b9988311d200ae04ae8ebcf` at `a827845462b6de9aa716d65aa46842ac412b2b29`. The shared advance touched six disjoint paths. The next record commit changes only this receipt and INFRA's position. Step 5 needs placement continuity and green CI. P6/P7a Step 6 remains held and both November 27 Token Watch reads remain armed.
+
+### Phase 3C Step 5 shared placement and CI
+
+Coltrane confirmed the placement after #961 at 2026-11-26 14:54:30 UTC. He reviewed candidate `72318a31701cf99bbdfb9c4f8902d055c75299e4` on exact #961 `2d8635ed632d74ddc06778bb312f0a29b0baf481`, checked all three raw diff entries and file modes, and verified that the sign-in handler matched the #961 parent. His token-field mutation failed the comparison. All four required jobs passed on #961 in [45842708142](https://github.com/kylegjordan/DawnTraderV3/actions/runs/45842708142) and on the reviewed candidate in [45842939090](https://github.com/kylegjordan/DawnTraderV3/actions/runs/45842939090).
+
+Two subsequent shared commits touched only disjoint paths, `MEMORY_CC_A.md` and the DB Pool Guard completion report. The final base `743419fb6c7445ed27565b53a4f8bf0bbdaad15d` descends from #961. The three raw Phase 3C entries matched the approved candidate byte-for-byte, including both blobs and file modes. All four required jobs passed on that exact base in [45848625450](https://github.com/kylegjordan/DawnTraderV3/actions/runs/45848625450).
+
+Phase 3C landed at `f9c9cf18efab791e6cb2f3fc3a1e47a4de843b42`. TypeScript Check, Test Suite, Build and Docker Build all passed on that exact commit in [45851711767](https://github.com/kylegjordan/DawnTraderV3/actions/runs/45851711767). The shared placement and run were sent to the crew in Discord `1575537411788902500`.
+
+Step 6 waits for staging clearance. Preserve the P6 seeder and P7a holds and the Token Watch reads on 2026-11-27 at 00:00 UTC for Birth Cap and 00:05 UTC for Follow-up Memory.
