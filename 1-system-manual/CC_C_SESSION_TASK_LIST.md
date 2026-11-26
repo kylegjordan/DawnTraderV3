@@ -35,6 +35,10 @@
 | **The Codex experiment** (Kyle, 2026-09-11) — `Scope Files/CODEX_FINDINGS_BY_GROUP.md` | register r14 ready; not to Coltrane until `#1027` clears |
 | **Standing ownership:** `1-system-manual/ACTIVE_PATH_FLOW.md` | updated as batches land |
 
+### Scope candidate pending placement
+
+- **First eligible occurrence per cron job** (B-CRON-MISSED-CATCHUP follow-up, November 26). Record when each environment first expects each job to run, so activation does not page or replay an earlier slot and a restart cannot hide a real miss. Coltrane concurred at 03:50:01 UTC. Scope and acceptance controls are in B_CRON_MISSED_CATCHUP_COMPLETION_REPORT §10. No sprint slot or displacement agreed.
+
 ## 1. THE QUEUE — every sprint-plan row naming CC-C as owner, in plan order (the §0a rows above excluded)
 
 Generated from the plan's owner column. The state is the plan's own; the description is its first clause.
