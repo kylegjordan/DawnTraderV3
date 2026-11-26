@@ -16,7 +16,7 @@ grep -F "[I8C-AUDIT][SUMMARY]" "$LOG" | tail -5
 echo "=== eventLoopLag from /api/metrics/snapshot, 5 samples 10 s apart ==="
 # The loopback metrics route is the same credential-free read used by the observation logger.
 for i in 1 2 3 4 5; do
-  snapshot=$(curl --fail --silent --show-error http://localhost:5000/api/metrics/snapshot) || exit $?
+  snapshot=$(curl --fail --silent --show-error --noproxy localhost http://localhost:5000/api/metrics/snapshot) || exit $?
   printf '%s' "$snapshot" | python3 -c '
 import json, sys
 def walk(o, path=""):

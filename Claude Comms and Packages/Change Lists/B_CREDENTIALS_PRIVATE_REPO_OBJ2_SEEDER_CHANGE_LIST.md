@@ -142,7 +142,7 @@ The original helper performed one login using a retired pair, then read the loop
 
 ```bash
 for i in 1 2 3 4 5; do
-  snapshot=$(curl --fail --silent --show-error http://localhost:5000/api/metrics/snapshot) || exit $?
+  snapshot=$(curl --fail --silent --show-error --noproxy localhost http://localhost:5000/api/metrics/snapshot) || exit $?
   printf '%s' "$snapshot" | python3 -c '
   # The existing lag formatter consumes the JSON from stdin.
 ```
@@ -150,3 +150,9 @@ for i in 1 2 3 4 5; do
 Git Bash syntax passed. The isolated shell run replaced the log file path and stubbed curl and sleep. Success produced five exact GETs, five timestamped samples and both expected lag fields per sample. Injected HTTP failure, malformed JSON, and a valid response missing the lag field each stopped on the first request with no sample. A planted login call was caught before it could reach a server. The historical-value check found one match in the baseline helper and none in the candidate helper without printing the value. This is source verification with no staging run, app deploy or restart.
 
 `REVIEWER: claim-only | Can the existing endpoint and supported caller preserve genuine samples without a login? | Found that an empty JSON object could look like a completed sample if counted by timestamp alone | re-derived y`. The amended fixture requires the existing route's eventLoopLag field and verifies actual lag values as well as markers.
+
+### P7a Step 4 correction: bypass proxy for loopback
+
+Coltrane accepted the credential-free GET and sent back `cd3fe914576a85ab12a96da3e05c54875fc737a2` at 2026-11-26 12:31:10 UTC. curl can send a localhost URL through an inherited HTTP proxy. The sampler now explicitly bypasses proxies for localhost.
+
+Real curl against two isolated loopback listeners: without a proxy, the prior script made 5 direct requests and measured lag 19. With the fixture proxy enabled, the prior script made 0 direct and 5 proxy requests and measured the proxy's lag 57. The corrected script made 5 direct and 0 proxy requests and measured lag 19 with the proxy enabled and with it absent. The fixture substituted only the local port and log path and skipped sleep. Neither server received an Authorization header. The HTTP, malformed JSON, missing lag and planted-login controls were also rerun.
