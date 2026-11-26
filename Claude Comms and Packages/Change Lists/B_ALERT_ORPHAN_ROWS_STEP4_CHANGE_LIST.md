@@ -69,3 +69,33 @@ No code, no test, no route or service change, no DDL. The writer's re-open-witho
 
 ## 5. Deploy and Step 7 (unchanged from scope)
 After 11-23 21:00Z; separate from the shared one-sha deploy unless OLD Claude agrees to fold. Immediately before: re-run C-2; take pre-counts (total, orphans). Step 7: orphans = 0, total = `pre_total − pre_orphans` from the same pre-deploy read, read by `dt-sql`. (The NOTICE is not relied on: `scripts/db-migrate.ts` has no notice handler, so it may not reach the deploy log.)
+
+## 6. Phase A staging deploy — 2026-11-26
+
+OLD and NEW cleared the conditional fold and ANALYST handled the release (NEW agreement `1575113776116662383`, fallback `1575118494658461878`, executed handoff `1575338499127640085`). The exact target was `5ecd7ee24fb7a741e8e015e0e6a262a464e7d016`, with all four jobs green in CI `45589022150`. The forward and rollback git blobs are `6710254032d6d7688ebc234e8546c48be65b2d5c` and `eca6c17dec44a63df2687a57872971e9ef0dc5b3`. The forward file is at MANIFEST line 264.
+
+ANALYST's immediate preflight at 02:31:33.849 UTC found C-2 exact **12/12**, **5,936** operator alerts, **12** orphans and **3** users. The registered expected post-migration total was **5,924**. The Phase A handoff records restart **716** at 02:32:06.222 UTC, engine resumed and deploy recorded at 02:32:16 UTC. At the Step 7 read, the build SHA and 581-byte deploy record corroborated that exact target and restart (record SHA-256 `db39222490ae9a9de0bfdb322520610afac5a734adda575ae8a59fa24ca9bb2a`). These are the record's captured values at the read. The durable migration ledger separately records the forward filename applied at **02:32:03.327920 UTC**.
+
+## 7. First-pass staging verification — 2026-11-26
+
+| UTC read | Users | Total operator alerts | Orphans | Alerts linked to a user |
+|---|---:|---:|---:|---:|
+| 02:31:33.849 (ANALYST preflight) | 3 | 5,936 | 12 | 5,924, by subtraction |
+| 02:43:17.830979 (NEW) | 3 | 5,924 | 0 | 5,924 |
+
+The same anti-join that matched the preflight's 12 orphans returned zero, and the total matched `5,936 − 12 = 5,924`. A second read at 02:44:22.136188 UTC repeated the total and orphan count and found **0/12** of the exact rollback primary keys in the whole alert table, independent of user linkage. No extant alert carried a timestamp at or after the preflight instant in that second read. The before/after totals grade the registered count and the key check identifies the removed rows. A full survivor-ID comparison would require a preflight snapshot of the other keys.
+
+**Chrome:** Opened System Monitoring (`/systems`) in Kyle's signed-in Chrome session at 02:44 UTC, expanded **System Notifications 2**, and read both rendered Weekly Expert Insights rows (weeks Nov 2 and Oct 26). The deployed page mounts the AlertBanner that reads the authenticated `/api/alerts`, whose reader uses the current user and trading mode. Each rendered title and date matched one unacknowledged paper alert with an existing user in staging SQL. UTC row times were Nov 3 23:13:12.753009 and Oct 27 23:13:12.713282, displayed at 00:13:12 the next day in the browser. This is an operator-alert rendering control. The 12 preflight targets were already acknowledged and tied to deleted users.
+
+**Reproduction:** Run the read-only aggregate below through staging `dt-sql --csv`. Extract the 12 first-column IDs from the tracked rollback INSERTs at the deployed ref. Confirm the same aggregate with `count(*) filter (where a.id::text in (<rollback IDs>))` as an added projection, and select `name, applied_at` from `public._migrations` for the exact forward and rollback filenames. The forward ledger entry is present. Search the two Chrome notification titles in `system_alerts` filtered to unacknowledged rows, checking `mode`, timestamp and the same users join. Read the actual expanded System Notifications panel on `/systems` for UI confirmation.
+
+```sql
+select clock_timestamp() at time zone 'UTC' as captured_utc,
+       (select count(*) from users) as users,
+       count(*) as total,
+       count(*) filter (where not exists (select 1 from users u where u.id = a.user_id)) as orphans,
+       count(*) filter (where exists (select 1 from users u where u.id = a.user_id)) as linked
+from system_alerts a;
+```
+
+REVIEWER: claim-only · which objects distinguish removal from reparenting or replacement? · exact target keys needed and full survivor identity requires a preflight key set · re-derived y for target keys; full survivor identity unmeasured.
