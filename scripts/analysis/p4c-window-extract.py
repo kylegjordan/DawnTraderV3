@@ -39,6 +39,7 @@ import json
 import os
 import re
 import sys
+from contextlib import contextmanager
 from datetime import datetime, time, timedelta, timezone
 
 ap = argparse.ArgumentParser()
@@ -127,6 +128,8 @@ while c <= last_content:
     c = nxt
 if MIDNIGHT_FINAL_HOUR is not None:
     # The in-window loop already rejected competing rotations dated END. Apply the same split rule to END+1.
+    midnight_predecessor = required[-1]
+    midnight_successor = live
     following_day = END.date() + timedelta(days=1)
     following = bases(following_day)
     if len(following) > 1:
@@ -137,18 +140,22 @@ if MIDNIGHT_FINAL_HOUR is not None:
             die(f'required in-window rotation dated {END.date()} is missing in {args.dir}; '
                 f'live cannot replace it after the {following_day} rotation')
         archived = following[0]
-        required.append(archived if os.path.exists(archived) else archived + '.gz')
+        midnight_successor = archived if os.path.exists(archived) else archived + '.gz'
+        required.append(midnight_successor)
 if live not in required:
     if not os.path.exists(live):
         die(f'{live} missing — it holds the flush of the window\'s final hour')
     required.append(live)
 
 
+@contextmanager
 def open_log(p):
     try:
-        return gzip.open(p, 'rt', errors='replace') if p.endswith('.gz') else open(p, 'r', errors='replace')
-    except OSError as e:
-        die(f'cannot open {p}: {e}')
+        reader = gzip.open if p.endswith('.gz') else open
+        with reader(p, 'rt', errors='replace') as fh:
+            yield fh
+    except (OSError, EOFError) as e:
+        die(f'cannot read {p}: {e}')
 
 
 # ── (b, continued) the window's FIRST content day is covered from START, judged on CONTENT (Langston, Step-4 r3).
@@ -242,7 +249,9 @@ first_line = {}    # lane -> first instrument-line stamp
 excluded = set()   # (lane, hour) excluded by a restart
 lost_touch = {}    # lane -> looks attributed to no hour (pending at a restart)
 final_hour_looks = set()    # lane with positive in-window looks not assigned to a preceding hour
+late_hour_looks = set()     # positive TOUCH in the boundary attribution interval may describe the final hour
 final_hour_rollups = set()  # lanes whose exact final-hour rollup was read, independent of the optional stamp cut
+midnight_source_bounds = {} # first/last complete stamped lines in the actual read of each boundary source
 ri = 0
 
 
@@ -270,17 +279,30 @@ def add_kv(a, kv, skip):
 
 for f in required:
     n_lines = n_instr = n_in = n_before = n_after = 0
+    check_midnight_source = MIDNIGHT_FINAL_HOUR is not None and f in (midnight_predecessor, midnight_successor)
+    source_head = source_tail = None
     with open_log(f) as fh:
         for line in fh:
             n_lines += 1
-            if '[8a-P4c][VTS_XS_' not in line:
+            instrument_line = '[8a-P4c][VTS_XS_' in line
+            if not instrument_line and not check_midnight_source:
                 continue
-            n_instr += 1
+            if check_midnight_source and not line.endswith('\n'):
+                continue  # an incomplete final line cannot prove the end of this read or supply a rollup
             m = TS.match(line)
             if not m:
-                bad += 1
+                if instrument_line:
+                    n_instr += 1
+                    bad += 1
                 continue
             t = datetime.strptime(m.group(1), '%Y-%m-%d %H:%M:%S').replace(tzinfo=timezone.utc)
+            if check_midnight_source:
+                if source_head is None:
+                    source_head = t
+                source_tail = t
+            if not instrument_line:
+                continue
+            n_instr += 1
             while ri < len(restarts) and restarts[ri] <= t:
                 apply_restart(restarts[ri])
                 ri += 1
@@ -293,8 +315,11 @@ for f in required:
                     p[kv['session']] = p.get(kv['session'], 0) + kv['looks']
                     cur_flush.pop(lane, None)
                 inside = START_S <= t < END
-                if MIDNIGHT_FINAL_HOUR is not None and inside and t >= MIDNIGHT_FINAL_HOUR and kv['looks'] > 0:
-                    final_hour_looks.add(lane)
+                if MIDNIGHT_FINAL_HOUR is not None and kv['looks'] > 0:
+                    if inside and t >= MIDNIGHT_FINAL_HOUR:
+                        final_hour_looks.add(lane)
+                    elif END <= t < END + HOUR:
+                        late_hour_looks.add(lane)
             elif '[VTS_XS_SYM]' in line:
                 h = datetime.strptime(kv['hour'], '%Y-%m-%dT%HZ').replace(tzinfo=timezone.utc)
                 if h + HOUR > START and h < END + HOUR:
@@ -332,6 +357,8 @@ for f in required:
                 a = sym.setdefault((lane, kv['session'], kv['symbol']), {'lines': 0})
                 a['lines'] += 1
                 add_kv(a, kv, ('lane', 'session', 'symbol', 'hour'))
+    if check_midnight_source:
+        midnight_source_bounds[f] = (source_head, source_tail)
     per_file.append({'file': os.path.basename(f), 'lines': n_lines, 'instrument_lines': n_instr,
                      'in_window': n_in, 'before': n_before, 'after': n_after})
 while ri < len(restarts):
@@ -339,7 +366,29 @@ while ri < len(restarts):
     ri += 1
 
 if MIDNIGHT_FINAL_HOUR is not None:
-    for lane in sorted(final_hour_looks - final_hour_rollups):
+    cutoff = END + HOUR
+    before_head, before_tail = midnight_source_bounds[midnight_predecessor]
+    after_head, after_tail = midnight_source_bounds[midnight_successor]
+    spans_boundary = any(h is not None and h < END and t >= cutoff
+                         for h, t in midnight_source_bounds.values())
+    verified_pair = False
+    if not spans_boundary and midnight_predecessor != midnight_successor:
+        name = os.path.basename(midnight_predecessor)
+        date_stamp = re.fullmatch(r'error__(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})\.log(?:\.gz)?', name)
+        if date_stamp:
+            try:
+                cut = datetime.strptime(date_stamp.group(1), '%Y-%m-%d_%H-%M-%S').replace(tzinfo=timezone.utc)
+            except ValueError:
+                die(f'invalid midnight rotation time in {name}')
+            verified_pair = (END <= cut < cutoff and before_head is not None and before_head < END
+                             and after_head is not None and cut <= after_head < cutoff
+                             and before_tail <= after_head and after_tail >= cutoff)
+    if not (spans_boundary or verified_pair):
+        bounds = [(os.path.basename(p), str(h), str(t)) for p, (h, t) in midnight_source_bounds.items()]
+        die(f'midnight source coverage missing for [{END.isoformat()}, {cutoff.isoformat()}): '
+            f'expected a spanning file or an exact opening-hour archive pair; read {bounds}')
+
+    for lane in sorted((final_hour_looks | late_hour_looks) - final_hour_rollups):
         if (lane, MIDNIGHT_FINAL_HOUR) not in excluded:
             source_names = [os.path.basename(path) for path in required]
             die(f'final-hour rollup missing for {lane} at {MIDNIGHT_FINAL_HOUR.isoformat()} despite observed looks; '

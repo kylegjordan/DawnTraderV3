@@ -71,7 +71,7 @@ HEAD = '2026-01-05 00:01:41 +00:00: [boot] unrelated process output'
 
 
 def run(pm2_lines, s1=False, name='error__2026-01-06_00-00-00.log', extra=(), head=True, files=None, lines=None,
-        live_lines=(), window=(START, END), sym_cut='hour'):
+        live_lines=(), window=(START, END), sym_cut='hour', live_fragment=''):
     with tempfile.TemporaryDirectory() as d:
         src = corpus(s1) if lines is None else lines
         body = ('\n'.join(([HEAD] if head and lines is None else []) + src) + '\n').encode()
@@ -87,6 +87,7 @@ def run(pm2_lines, s1=False, name='error__2026-01-06_00-00-00.log', extra=(), he
                 f.write('\n'.join(xl) + '\n')
         with open(os.path.join(d, 'error.log'), 'w', encoding='utf-8') as f:
             f.writelines(line + '\n' for line in live_lines)
+            f.write(live_fragment)
         pm2 = os.path.join(d, 'pm2.log')
         with open(pm2, 'w') as f:
             f.write('\n'.join(pm2_lines) + '\n')
@@ -235,6 +236,8 @@ check('H-gap exit 2: a prepended rotation whose content ends before START does n
 MIDNIGHT_WINDOW = ('2026-01-05T22:00:00Z', '2026-01-06T00:00:00Z')
 MIDNIGHT_HEAD = '2026-01-05 21:59:59 +00:00: [boot] evidence starts before the window'
 BOUNDARY_STAMP = '2026-01-06 00:00:01 +00:00: [boot] unrelated post-boundary line'
+OPENING_STAMP = '2026-01-06 00:00:08 +00:00: [boot] first stamped line after the normal cut'
+COMPLETE_STAMP = '2026-01-06 01:00:00 +00:00: [boot] attribution interval complete'
 LATER_HEAD = '2026-01-07 00:01:00 +00:00: [boot] later live file'
 BOUNDARY_ARCHIVE = 'error__2026-01-06_00-00-05.log'
 LATE_ARCHIVE = 'error__2026-01-07_00-00-03.log.gz'
@@ -254,6 +257,8 @@ EARLY_TOUCH = midnight_touch('2026-01-05 22:01:00', 4)
 EARLY_ROLLUP = midnight_sym('2026-01-05 23:00:06', '2026-01-05T22Z', 4)
 FINAL_TOUCH = midnight_touch('2026-01-05 23:02:00', 9)
 FINAL_ROLLUP = midnight_sym('2026-01-06 00:00:06', '2026-01-05T23Z', 9)
+COMPLETE_ROLLUP = [FINAL_ROLLUP, COMPLETE_STAMP]
+COMPLETE_QUIET = [OPENING_STAMP, COMPLETE_STAMP]
 PRE_BOUNDARY = [MIDNIGHT_HEAD, EARLY_TOUCH, EARLY_ROLLUP, FINAL_TOUCH, BOUNDARY_STAMP]
 
 
@@ -271,29 +276,30 @@ def check_midnight(name, result, expected_files, cells=2, gap=0):
 
 
 check_midnight('M-live one unrotated file spans midnight',
-               run([BOOT], name=None, live_lines=PRE_BOUNDARY + [FINAL_ROLLUP], window=MIDNIGHT_WINDOW),
+               run([BOOT], name=None, live_lines=PRE_BOUNDARY + COMPLETE_ROLLUP, window=MIDNIGHT_WINDOW),
                ['error.log'])
 check_midnight('M-delayed final rollup in the dated-END rotation',
                run([BOOT], name='error__2026-01-06_00-01-30.log', lines=PRE_BOUNDARY + [FINAL_ROLLUP],
-                   live_lines=[LATER_HEAD], window=MIDNIGHT_WINDOW),
+                   live_lines=['2026-01-06 00:01:31 +00:00: [boot] delayed successor', COMPLETE_STAMP],
+                   window=MIDNIGHT_WINDOW),
                ['error__2026-01-06_00-01-30.log', 'error.log'])
 check_midnight('M-gzip final rollup in next-day archive',
-               run([BOOT], name=BOUNDARY_ARCHIVE, lines=PRE_BOUNDARY, files={LATE_ARCHIVE: [FINAL_ROLLUP]},
+               run([BOOT], name=BOUNDARY_ARCHIVE, lines=PRE_BOUNDARY, files={LATE_ARCHIVE: COMPLETE_ROLLUP},
                    live_lines=[LATER_HEAD], window=MIDNIGHT_WINDOW),
                [BOUNDARY_ARCHIVE, LATE_ARCHIVE, 'error.log'])
 late_plain = LATE_ARCHIVE.removesuffix('.gz')
 check_midnight('M-alias matching plain and gzip copies are read once',
                run([BOOT], name=BOUNDARY_ARCHIVE, lines=PRE_BOUNDARY,
-                   files={late_plain: [FINAL_ROLLUP], LATE_ARCHIVE: [FINAL_ROLLUP]},
+                   files={late_plain: COMPLETE_ROLLUP, LATE_ARCHIVE: COMPLETE_ROLLUP},
                    live_lines=[LATER_HEAD], window=MIDNIGHT_WINDOW),
                [BOUNDARY_ARCHIVE, late_plain, 'error.log'])
 check_midnight('M-stamp control keeps source coverage and exposes the nine-look selection gap',
-               run([BOOT], name=BOUNDARY_ARCHIVE, lines=PRE_BOUNDARY, files={LATE_ARCHIVE: [FINAL_ROLLUP]},
+               run([BOOT], name=BOUNDARY_ARCHIVE, lines=PRE_BOUNDARY, files={LATE_ARCHIVE: COMPLETE_ROLLUP},
                    live_lines=[LATER_HEAD], window=MIDNIGHT_WINDOW, sym_cut='stamp'),
                [BOUNDARY_ARCHIVE, LATE_ARCHIVE, 'error.log'], gap=9)
 
 code, out, err = run([BOOT], name=BOUNDARY_ARCHIVE, lines=PRE_BOUNDARY,
-                     live_lines=[LATER_HEAD], window=MIDNIGHT_WINDOW)
+                     live_lines=COMPLETE_QUIET, window=MIDNIGHT_WINDOW)
 check('M-missing exit 2 with no output when a date stamp survives but the final rollup is lost',
       code == 2 and not out and 'final-hour rollup' in err and 'vts' in err, (code, bool(out), err.strip()))
 
@@ -319,17 +325,86 @@ check('M-missing-window refuses the lost in-window day even when the following a
 midnight_restart = '2026-01-06T00:00:03: PM2 log: App [dawntrader:0] starting in -fork mode-'
 check_midnight('M-restart exclusion legitimately needs no final rollup',
                run([BOOT, midnight_restart], name=BOUNDARY_ARCHIVE, lines=PRE_BOUNDARY,
-                   live_lines=[LATER_HEAD], window=MIDNIGHT_WINDOW),
+                   live_lines=COMPLETE_QUIET, window=MIDNIGHT_WINDOW),
                [BOUNDARY_ARCHIVE, 'error.log'], cells=1, gap=9)
 check_midnight('M-quiet earlier activity does not require a final rollup',
                run([BOOT], name=BOUNDARY_ARCHIVE, lines=[MIDNIGHT_HEAD, EARLY_TOUCH, EARLY_ROLLUP, BOUNDARY_STAMP],
-                   live_lines=[LATER_HEAD], window=MIDNIGHT_WINDOW),
+                   live_lines=COMPLETE_QUIET, window=MIDNIGHT_WINDOW),
                [BOUNDARY_ARCHIVE, 'error.log'], cells=1)
 straddled = midnight_touch('2026-01-05 23:00:02', 4)
 check_midnight('M-straddle earlier pass stamped in final hour is attributed to its earlier flush',
                run([BOOT], name=BOUNDARY_ARCHIVE, lines=[MIDNIGHT_HEAD, straddled, EARLY_ROLLUP, BOUNDARY_STAMP],
-                   live_lines=[LATER_HEAD], window=MIDNIGHT_WINDOW),
+                   live_lines=COMPLETE_QUIET, window=MIDNIGHT_WINDOW),
                [BOUNDARY_ARCHIVE, 'error.log'], cells=1)
+
+
+def check_midnight_refusal(name, result, reason='midnight source coverage missing'):
+    code, out, err = result
+    check(name, code == 2 and not out and reason in err, (code, bool(out), err.strip()))
+
+
+# Only after the selected source finishes the first hour can a late TOUCH be attributed. March the same snapshot
+# through an early prefix, a completed source with unresolved activity, and restored final-hour evidence.
+pre_quiet = [MIDNIGHT_HEAD, EARLY_TOUCH, EARLY_ROLLUP, BOUNDARY_STAMP]
+late_touch = midnight_touch('2026-01-06 00:00:09', 9)
+late_rollup = midnight_sym('2026-01-06 00:00:12', '2026-01-05T23Z', 9)
+
+
+def run_opening(lines, **kwargs):
+    return run([BOOT], name=BOUNDARY_ARCHIVE, lines=pre_quiet, live_lines=lines, window=MIDNIGHT_WINDOW, **kwargs)
+
+
+check_midnight_refusal('R5 early snapshot without a completed first hour', run_opening([OPENING_STAMP]))
+check_midnight_refusal('R5 an unterminated cutoff line cannot prove the hour',
+                       run_opening([OPENING_STAMP], live_fragment=COMPLETE_STAMP))
+check_midnight_refusal('R5 late TOUCH with source coverage still needs its own lane rollup',
+                       run_opening([OPENING_STAMP, late_touch, COMPLETE_STAMP]), 'final-hour rollup missing for vts')
+check_midnight('R5 the exact late rollup restores both cells with a minus-nine stamp gap',
+               run_opening([OPENING_STAMP, late_touch, late_rollup, COMPLETE_STAMP]),
+               [BOUNDARY_ARCHIVE, 'error.log'], gap=-9)
+after_rollup = midnight_touch('2026-01-06 00:00:14', 3)
+check_midnight('R5 late activity after its own final rollup does not change the previous hour',
+               run_opening([OPENING_STAMP, late_touch, late_rollup, after_rollup, COMPLETE_STAMP]),
+               [BOUNDARY_ARCHIVE, 'error.log'], gap=-9)
+
+same_day_tail = ['2026-01-06 14:00:01 +00:00: [boot] surviving size-rotated tail']
+check_midnight_refusal('R5 later same-day live tail cannot stand in for missing opening slice', run_opening(same_day_tail))
+check_midnight_refusal('R5 identical later same-day gzip tail cannot supply opening coverage',
+                       run_opening([LATER_HEAD], files={LATE_ARCHIVE: same_day_tail}))
+size_cut = 'error__2026-01-06_14-00-00.log.gz'
+check_midnight_refusal('R5 restored size slice exposes the explicit split rather than grading only the tail',
+                       run_opening(same_day_tail, files={size_cut: [OPENING_STAMP, late_touch, late_rollup, COMPLETE_STAMP]}),
+                       'more than one rotation is dated 2026-01-06')
+check_midnight('R5 intact live file with the same late records grades both cells',
+               run([BOOT], name=None, live_lines=pre_quiet + [late_touch, late_rollup, COMPLETE_STAMP],
+                   window=MIDNIGHT_WINDOW), ['error.log'], gap=-9)
+
+# Use a multi-day report so the independent start-coverage check does not decide the missing END archive case.
+previous_day = 'error__2026-01-05_00-00-05.log.gz'
+window = ('2026-01-04T23:00:00Z', MIDNIGHT_WINDOW[1])
+earlier_archives = {previous_day: [
+    '2026-01-04 22:59:59 +00:00: [boot] start coverage',
+    midnight_touch('2026-01-04 23:01:00', 4),
+    midnight_sym('2026-01-05 00:00:01', '2026-01-04T23Z', 4),
+]}
+same_second_cut = 'error__2026-01-06_00-00-00.log'
+same_second_head = '2026-01-06 00:00:00 +00:00: [boot] successor in rotation second'
+same_second_live = [same_second_head, COMPLETE_STAMP]
+head_before_rollover = [MIDNIGHT_HEAD, midnight_touch('2026-01-06 00:00:00', 9),
+                        midnight_sym('2026-01-06 00:00:00', '2026-01-05T23Z', 9)]
+check_midnight_refusal('R5 same-second successor without its END archive is unreadable',
+                       run([BOOT], name=None, files=earlier_archives,
+                           live_lines=same_second_live, window=window))
+check_midnight('R5 restored END archive permits successor equality at the stamped cut',
+               run([BOOT], name=same_second_cut, files=earlier_archives, lines=head_before_rollover,
+                   live_lines=same_second_live, window=window),
+               [previous_day, same_second_cut, 'error.log'], gap=-9)
+check_midnight('R5 one file starting strictly before END needs no artificial pair',
+               run([BOOT], name=None, files=earlier_archives, live_lines=head_before_rollover + same_second_live,
+                   window=window), [previous_day, 'error.log'], gap=-9)
+check_midnight_refusal('R5 successor starting before the predecessor tail is reversed',
+                       run([BOOT], name=same_second_cut, files=earlier_archives,
+                           lines=head_before_rollover + [OPENING_STAMP], live_lines=same_second_live, window=window))
 
 print('SELFTEST ' + ('FAILED: ' + ', '.join(fails) if fails else 'OK — all expectations met'))
 sys.exit(1 if fails else 0)
