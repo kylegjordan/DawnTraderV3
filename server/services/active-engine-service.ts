@@ -7,9 +7,10 @@
 
 import { nanoid } from 'nanoid';
 import type { FlattenCloseType } from './active-execution-engine';
+import type { ActivePortfolioManager } from './active-portfolio-manager.js';
 import { hasPaperXstockEntryFill, storage } from '../storage.js';
 import { stampPositionTradeId } from './trade-record-restore.js';
-import type { ActiveOpenPosition, InsertActiveEngineSession } from '../../shared/schema.js';
+import type { ActiveEngineSession, ActiveOpenPosition, InsertActiveEngineSession } from '../../shared/schema.js';
 import { tradingStateSync } from './trading-state-sync.js';
 import { KrakenService } from '../exchanges/kraken/kraken.js';
 import { activeOperationQueue } from '../utils/operation-queue.js';
@@ -350,6 +351,17 @@ export function clearGlobalActiveEngineManager(mode: ActiveEngineMode = 'paper')
   if (mode === 'paper') getGlobalActiveEngineManager(mode)?.getExecutionEngine?.()?.closePaperEntryAdmission?.();
   _activeEngineManagers().delete(mode);
   console.log(`[ActiveEngineService] Manager cleared from global scope (mode=${mode})`);
+}
+
+async function stopFailedPaperStart(manager: ActivePortfolioManager): Promise<void> {
+  manager.getExecutionEngine?.()?.closePaperEntryAdmission?.();
+  try {
+    await manager.stop();
+  } catch (error) {
+    console.error('[ENGINE_ERROR] Failed to stop the partially started manager:', error);
+  } finally {
+    if (getGlobalActiveEngineManager() === manager) clearGlobalActiveEngineManager();
+  }
 }
 
 /**
@@ -707,6 +719,8 @@ async function startActiveEngineWith(
   try {
     const queueResult = await run(
     async () => {
+      let startingManager: ActivePortfolioManager | undefined;
+      let startingSession: Pick<ActiveEngineSession, 'id' | 'sessionId'> | undefined;
       try {
         if (!paperEntryPublication.allowsStart(paperResetPermit)) return paperEntryDrainRefusal();
         console.log(`[41D-DEBUG-5] Checking DB for existing session (t+${Date.now()-t0}ms)`);
@@ -732,6 +746,8 @@ async function startActiveEngineWith(
           // If manager exists but is not running, we need to start it
           if (!existingManager.getIsRunning || !existingManager.getIsRunning()) {
             console.log('[DEBUG-B9][MANAGER_NOT_RUNNING] Manager exists but not running - starting it now');
+            startingManager = existingManager;
+            startingSession = existingSession;
             await existingManager.start('api', paperResetPermit);
             
             // Phase 8.8.3-I6-FIX: Set trading mode to 'paper' for correct WebSocket broadcasts
@@ -791,11 +807,13 @@ async function startActiveEngineWith(
         }
         if (existingSession && !existingManager && !leftoverClosed) {
           // Reconcile: DB session exists but manager was lost (e.g., server restart)
+          startingSession = existingSession;
           console.log('[ActiveEngineService] Reconciling manager from database session');
           const { ActivePortfolioManager } = await import('./active-portfolio-manager.js');
           // Phase 27.F.13.O + Phase 3D: Use mode instead of userId
           const manager = new ActivePortfolioManager(mode, userId);
           setGlobalActiveEngineManager(manager);
+          startingManager = manager;
           await manager.start('api', paperResetPermit);
           
           // Phase 8.8.3-I6-FIX: Set trading mode to 'paper' for correct WebSocket broadcasts
@@ -846,6 +864,7 @@ async function startActiveEngineWith(
 
         console.log('[ENGINE_DB_CHECKPOINT_1] Creating paper sim session in database...');
         const dbSession = await storage.createActiveEngineSession(sessionData);
+        startingSession = dbSession;
         console.log(`[ENGINE_DB_CHECKPOINT_2] Session created in database: ${sessionId}`);
         
         // [B4] Reset diagnostic session for clean data capture (after DB session created)
@@ -885,6 +904,7 @@ async function startActiveEngineWith(
         // Phase 41C-FIX: Start manager synchronously with proper error handling
         // Previous async approach caused UI to show ACTIVE while engine failed silently
         try {
+          startingManager = manager;
           await manager.start('api', paperResetPermit);
           console.log('[ENGINE_CHECKPOINT_12] Manager started successfully');
           
@@ -949,18 +969,6 @@ async function startActiveEngineWith(
           }
         } catch (managerError: any) {
           console.error('[ENGINE_ERROR] Manager start failed:', managerError);
-          try {
-            await manager.stop();
-          } catch (stopError) {
-            console.error('[ENGINE_ERROR] Failed to stop the partially started manager:', stopError);
-          }
-          // Rollback on manager start failure
-          clearGlobalActiveEngineManager();
-          // Find the session we just created and mark it as failed
-          const failedSession = await storage.getActiveEngineSessionBySessionId(sessionId);
-          if (failedSession) {
-            await storage.updateActiveEngineSession(failedSession.id, { status: 'failed' });
-          }
           throw new Error(`Failed to start trading engine: ${managerError.message}`);
         }
         
@@ -1011,15 +1019,13 @@ async function startActiveEngineWith(
         };
       } catch (error: any) {
         // Phase 41C-FIX: Complete rollback - clean up manager AND database session
-        clearGlobalActiveEngineManager();
+        if (startingManager) await stopFailedPaperStart(startingManager);
         
-        // Roll back database session if it was created
+        // Roll back only the session this attempt created or was trying to resume.
         try {
-          const mode = 'paper';
-          const existingSession = await storage.getRunningEngineSession(mode);
-          if (existingSession) {
-            console.log(`[ActiveEngineService] Rolling back database session: ${existingSession.sessionId}`);
-            await storage.updateActiveEngineSession(existingSession.id, { status: 'failed' });
+          if (startingSession) {
+            console.log(`[ActiveEngineService] Rolling back database session: ${startingSession.sessionId}`);
+            await storage.updateActiveEngineSession(startingSession.id, { status: 'failed' });
           }
         } catch (rollbackError) {
           console.error('[ActiveEngineService] Failed to rollback database session:', rollbackError);
@@ -1648,7 +1654,12 @@ export async function resumeActiveEngines(): Promise<void> {
         const { ActivePortfolioManager } = await import('./active-portfolio-manager.js');
         const manager = new ActivePortfolioManager('paper', existingSession.startedBy || 'system-resume');
         setGlobalActiveEngineManager(manager);
-        await manager.start('internal');
+        try {
+          await manager.start('internal');
+        } catch (error) {
+          await stopFailedPaperStart(manager);
+          throw error;
+        }
         
         // Set trading mode for live pricing
         livePricingAdapter.setTradingMode('paper');

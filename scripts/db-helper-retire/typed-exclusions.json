@@ -52,6 +52,7 @@
     { "path": "server/tests/unit/b-db-pool-guard-p3.test.ts", "type": "test_fixture", "reason": "shared-pool guard fixture" },
     { "path": "server/tests/unit/b-disk-file-tiering-amendment2.test.ts", "type": "test_fixture", "reason": "script-source fixture" },
     { "path": "server/tests/unit/b-disk-file-tiering.test.ts", "type": "test_fixture", "reason": "script-source fixture" },
+    { "path": "server/tests/unit/b-xstock-paper-reset-routes.test.ts", "type": "test_fixture", "reason": "#961 signed reset and restore fixtures use a private schema on the isolated test database" },
     { "path": "server/tests/unit/b-xstock-snapshot-retention.test.ts", "type": "test_fixture", "reason": "isolated database test" },
     { "path": "vitest.config.ts", "type": "test_fixture", "reason": "sets an isolated localhost test URL for test processes" }
   ]

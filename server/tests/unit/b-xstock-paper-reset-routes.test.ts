@@ -1,13 +1,19 @@
 import express from 'express';
 import jwt from 'jsonwebtoken';
+import { randomBytes } from 'node:crypto';
 import { once } from 'node:events';
 import type { Server } from 'node:http';
+import pg from 'pg';
+import { drizzle } from 'drizzle-orm/node-postgres';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as schema from '@shared/schema';
+import { DatabaseStorage } from '../../storage';
 import { clearGlobalActiveEngineManager, setGlobalActiveEngineManager } from '../../services/active-engine-service.js';
 import { PAPER_ENTRY_DRAIN_BUDGET_MS, paperEntryPublication } from '../../services/paper-entry-publication.js';
 
 const h = vi.hoisted(() => ({
   managerStart: vi.fn(),
+  managerStop: vi.fn(),
   hardReset: vi.fn(),
   readMirror: vi.fn(),
   reanchor: vi.fn(),
@@ -16,19 +22,36 @@ const h = vi.hoisted(() => ({
   writeContext: vi.fn(async (_mode: string, _patch: unknown) => undefined),
   createSession: vi.fn(),
   readSession: vi.fn(),
+  updateSession: vi.fn(),
+  getSystemContext: vi.fn(),
+  getActiveOpenPosition: vi.fn(),
+  isolatedDb: undefined as typeof import('../../db').db | undefined,
 }));
+
+vi.mock('../../db', async (original) => {
+  const real = await original<typeof import('../../db')>();
+  return { ...real, db: new Proxy(real.db, {
+    get: (target, key) => {
+      const db = h.isolatedDb ?? target;
+      const value = Reflect.get(db, key);
+      return typeof value === 'function' ? value.bind(db) : value;
+    },
+  }) };
+});
 
 vi.mock('../../storage', async (original) => {
   const real = await original<typeof import('../../storage')>();
   const fixture = {
     getUser: async () => ({ role: 'admin', isAdmin: true }),
     getPortfolioState: async () => ({ balance: '500' }),
-    getSystemContext: async () => ({ baselineMode: 'persistent' }),
+    getSystemContext: h.getSystemContext,
     updateSystemContext: h.writeContext,
     getActiveOpenPositions: async () => [],
+    getActiveOpenPosition: h.getActiveOpenPosition,
     hardResetActiveEngineTables: h.hardReset,
     getRunningEngineSession: h.readSession,
     createActiveEngineSession: h.createSession,
+    updateActiveEngineSession: h.updateSession,
     getWatchlist: async () => [{ symbol: 'BTC/USD' }],
   };
   return { ...real, storage: new Proxy(real.storage, {
@@ -39,6 +62,7 @@ vi.mock('../../services/active-portfolio-manager.js', () => ({
   ActivePortfolioManager: class {
     getIsRunning() { return true; }
     start = h.managerStart;
+    stop = h.managerStop;
   },
 }));
 vi.mock('../../services/context-bridge.js', async (original) => {
@@ -125,6 +149,9 @@ beforeEach(() => {
   positions = [{ id: 'unrelated-live-position', mode: 'live' }];
   trades = [{ id: 'unrelated-live-trade', mode: 'live', closed: false }];
   h.readSession.mockResolvedValue(null);
+  h.updateSession.mockResolvedValue(undefined);
+  h.getSystemContext.mockResolvedValue({ baselineMode: 'persistent' });
+  h.getActiveOpenPosition.mockResolvedValue(undefined);
   h.clearRtb.mockResolvedValue(0);
   h.readMirror.mockResolvedValue({ mirrorBalanceUsd: 750 });
   h.reanchor.mockResolvedValue(undefined);
@@ -141,6 +168,7 @@ beforeEach(() => {
   h.managerStart.mockImplementation(async (_source: string, permit?: symbol) => {
     started = paperEntryPublication.startRun(permit);
   });
+  h.managerStop.mockImplementation(async () => paperEntryPublication.closeRun(started));
 });
 
 afterEach(() => {
@@ -157,6 +185,13 @@ async function post(action: 'reset' | 'new' | 'continue') {
     method: 'POST',
     headers: { authorization: `Bearer ${auth}`, 'content-type': 'application/json' },
     body: JSON.stringify(action === 'reset' ? {} : { mode: action }),
+  });
+  return { status: response.status, body: await response.json() };
+}
+
+async function postRestore(positionId: string) {
+  const response = await fetch(`${base}/positions/${positionId}/restore-record`, {
+    method: 'POST', headers: { authorization: `Bearer ${auth}` },
   });
   return { status: response.status, body: await response.json() };
 }
@@ -230,6 +265,25 @@ describe('#961 paper reset through signed requests on the registered routes', ()
     expect(h.managerStart).toHaveBeenCalledWith('api', undefined);
   });
 
+  it.each(['reset', 'new', 'continue'] as const)('stops a partially started Continue before a later %s', async (action) => {
+    h.getSystemContext.mockResolvedValue({ baselineMode: 'persistent', isEngineActive: true });
+    h.readSession.mockResolvedValue({ id: 'db-row', sessionId: 'lost-manager', mode: 'paper' });
+    h.updateSession.mockImplementation(async () => { h.readSession.mockResolvedValue(null); });
+    h.managerStart.mockImplementationOnce(async (_source: string, permit?: symbol) => {
+      started = paperEntryPublication.startRun(permit);
+      throw new Error('fixture: startup failed after opening admission');
+    });
+
+    expect(await post('continue')).toMatchObject({ status: 400 });
+    expect(h.managerStop).toHaveBeenCalledOnce();
+    expect(paperEntryPublication.isQuiescent()).toBe(true);
+    expect(h.updateSession).toHaveBeenCalledWith('db-row', { status: 'failed' });
+
+    expect(await post(action)).toMatchObject({ status: 200, body: { success: true } });
+    expect(h.hardReset).toHaveBeenCalledTimes(action === 'continue' ? 0 : 1);
+    expect(h.managerStart).toHaveBeenCalledTimes(action === 'reset' ? 1 : 2);
+  });
+
   it('releases the reset permit after a failed mirror so Continue can recover', async () => {
     h.readMirror.mockRejectedValueOnce(new Error('test balance read failed'));
     expect(await post('new')).toMatchObject({ status: 502 });
@@ -237,5 +291,154 @@ describe('#961 paper reset through signed requests on the registered routes', ()
     expect(h.reanchor).not.toHaveBeenCalled();
     expect(h.managerStart).not.toHaveBeenCalled();
     expect(await post('continue')).toMatchObject({ status: 200, body: { success: true } });
+  });
+});
+
+describe('#961 record restore and destructive routes on isolated PostgreSQL tables', () => {
+  const namespace = `xstock_961_${randomBytes(6).toString('hex')}`;
+  const realStorage = new DatabaseStorage();
+  let admin: pg.Pool | undefined;
+  let fixture: pg.Pool | undefined;
+  let created = false;
+  const tables = ['active_open_positions', 'closed_trades', 'active_engine_sessions'];
+  const dbUrl = process.env.DATABASE_URL ?? '';
+
+  beforeAll(async () => {
+    if (!/^postgres(ql)?:\/\/[^@]*@(localhost|127\.0\.0\.1|postgres)(:\d+)?\/test(\?|$)/.test(dbUrl)) {
+      if (process.env.CI) throw new Error('The restore race requires an isolated test database in CI');
+      return;
+    }
+    admin = new pg.Pool({ connectionString: dbUrl, connectionTimeoutMillis: 1_500 });
+    try {
+      await admin.query('SELECT 1');
+    } catch (error) {
+      if (process.env.CI) throw error;
+      return;
+    }
+
+    await admin.query(`CREATE SCHEMA ${namespace}`);
+    created = true;
+    for (const table of tables) await admin.query(`CREATE TABLE ${namespace}.${table} (LIKE public.${table} INCLUDING ALL)`);
+    fixture = new pg.Pool({ connectionString: dbUrl, options: `-c search_path=${namespace},public -c statement_timeout=7000` });
+    const { rows } = await fixture.query('SELECT current_schema() AS name');
+    expect(rows[0].name).toBe(namespace);
+  });
+
+  afterAll(async () => {
+    if (fixture) await fixture.end();
+    if (created) await admin?.query(`DROP SCHEMA ${namespace} CASCADE`);
+    if (admin) await admin.end();
+  });
+
+  beforeEach(async () => {
+    if (fixture) await fixture.query(`TRUNCATE ${tables.map((table) => `${namespace}.${table}`).join(', ')}`);
+  });
+
+  afterEach(() => {
+    h.isolatedDb = undefined;
+  });
+
+  async function seed(positionId: string) {
+    if (!fixture) throw new Error('Missing the PostgreSQL fixture');
+    h.isolatedDb = drizzle(fixture, { schema });
+    h.hardReset.mockImplementation(realStorage.hardResetActiveEngineTables.bind(realStorage));
+    h.getActiveOpenPosition.mockImplementation(realStorage.getActiveOpenPosition.bind(realStorage));
+    await h.isolatedDb.insert(schema.activeOpenPositions).values({
+      id: positionId, mode: 'paper', symbol: 'PDD/USD', assetClass: 'xstock_spot',
+      exchange: 'kraken', strategyName: 'strong_bull_trend', side: 'buy', quantity: '1', avgPrice: '96',
+      entryFee: '0.1', entrySlippage: '0.2', metadata: { original: 'retain' },
+    });
+  }
+
+  for (const action of ['reset', 'new'] as const) {
+    it(`refuses a restore if ${action} removed its exact position after the first read`, async (ctx) => {
+      if (!fixture) return ctx.skip();
+      const id = `position-before-${action}`;
+      await seed(id);
+      let release!: () => void;
+      const resume = new Promise<void>((resolve) => { release = resolve; });
+      let observed!: () => void;
+      const firstRead = new Promise<void>((resolve) => { observed = resolve; });
+      h.getActiveOpenPosition.mockImplementationOnce(async () => {
+        const position = await realStorage.getActiveOpenPosition('paper', id);
+        observed();
+        await resume;
+        return position;
+      });
+
+      const restoring = postRestore(id);
+      try {
+        await firstRead;
+        expect(await post(action)).toMatchObject({ status: 200, body: { success: true } });
+      } finally {
+        release();
+        await restoring;
+      }
+      expect(await restoring).toMatchObject({ status: 404, body: { ok: false, error: 'position not found' } });
+      expect(await h.isolatedDb?.select().from(schema.closedTradesTable)).toEqual([]);
+    });
+  }
+
+  it('commits its still-present position link, refuses a duplicate and then lets reset close the restored record', async (ctx) => {
+    if (!fixture) return ctx.skip();
+    const id = 'uninterrupted-position';
+    await seed(id);
+    const restored = await postRestore(id);
+    expect(restored).toMatchObject({ status: 200, body: { ok: true, positionId: id } });
+    const recordId = restored.body.recordId;
+    expect(await realStorage.getActiveOpenPosition('paper', id)).toMatchObject({ metadata: { tradeId: recordId, original: 'retain' } });
+    expect(await realStorage.findOpenTradeRecord('paper', 'PDD/USD', 'xstock_spot')).toMatchObject({ status: 'one', record: { id: recordId } });
+    expect(await postRestore(id)).toMatchObject({ status: 409, body: { recordId } });
+    expect(await post('reset')).toMatchObject({ status: 200, body: { success: true } });
+    expect(await realStorage.getActiveOpenPosition('paper', id)).toBeUndefined();
+    expect(await realStorage.getClosedTrade('paper', recordId)).toMatchObject({ closeReason: 'hard_reset' });
+  });
+
+  it('waits for a restore holding the mode lock before Reset closes trades', async (ctx) => {
+    if (!fixture) return ctx.skip();
+    const id = 'restore-before-reset';
+    await seed(id);
+    const blocker = await fixture.connect();
+    let resetting: ReturnType<typeof post> | undefined;
+    let restoring: ReturnType<typeof postRestore> | undefined;
+    try {
+      await blocker.query('BEGIN');
+      await blocker.query("SELECT pg_advisory_xact_lock(hashtext('open-record:paper:PDD/USD:xstock_spot'))");
+      restoring = postRestore(id);
+      await vi.waitFor(async () => {
+        const { rows } = await fixture!.query("SELECT pg_try_advisory_xact_lock(hashtext('engine-reset:paper')) AS available");
+        expect(rows[0].available).toBe(false);
+      });
+
+      resetting = post('reset');
+      await vi.waitFor(async () => {
+        const { rows } = await fixture!.query(`SELECT EXISTS (SELECT 1 FROM pg_locks
+          WHERE locktype = 'advisory' AND objid = hashtext('engine-reset:paper')::oid
+            AND mode = 'ExclusiveLock' AND NOT granted) AS waiting`);
+        expect(rows[0].waiting).toBe(true);
+      });
+    } finally {
+      await blocker.query('ROLLBACK');
+      blocker.release();
+      await Promise.allSettled([restoring, resetting]);
+    }
+    const restored = await restoring;
+    expect(restored).toMatchObject({ status: 200, body: { ok: true } });
+    expect(await resetting).toMatchObject({ status: 200, body: { success: true } });
+    expect(await realStorage.getActiveOpenPosition('paper', id)).toBeUndefined();
+    expect(await realStorage.getClosedTrade('paper', restored?.body.recordId)).toMatchObject({ closeReason: 'hard_reset' });
+  });
+
+  it('rolls back the new trade when the position link cannot be written', async (ctx) => {
+    if (!fixture) return ctx.skip();
+    const id = 'failed-position-link';
+    await seed(id);
+    await fixture.query(`CREATE FUNCTION ${namespace}.refuse_link() RETURNS trigger LANGUAGE plpgsql
+      AS $$ BEGIN RETURN NULL; END; $$`);
+    await fixture.query(`CREATE TRIGGER refuse_link BEFORE UPDATE ON ${namespace}.active_open_positions
+      FOR EACH ROW EXECUTE FUNCTION ${namespace}.refuse_link()`);
+    expect(await postRestore(id)).toMatchObject({ status: 500, body: { ok: false } });
+    expect(await realStorage.findOpenTradeRecord('paper', 'PDD/USD', 'xstock_spot')).toEqual({ status: 'none' });
+    expect(await realStorage.getActiveOpenPosition('paper', id)).toMatchObject({ metadata: { original: 'retain' } });
   });
 });

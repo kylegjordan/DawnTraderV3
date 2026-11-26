@@ -30,15 +30,16 @@
  * normal pending state — no fill is asserted; the record is closed `never_filled` by the drop or finished by the fill. The
  * metadata says it was restored while pending.
  *
- * IDEMPOTENT AND ATOMIC (attack 2): the insert happens under a transaction-scoped advisory lock that re-checks no open
- * record exists for (mode, symbol, class) — two concurrent restores cannot both insert. Refuses when an open record exists
- * (one or several) and when the position's own `tradeId` names an existing record.
+ * IDEMPOTENT AND ATOMIC (attack 2): storage locks the exact position and checks (mode, symbol, class) before inserting
+ * and linking in one transaction. The reset shares its mode lock with this operation, including the operator script.
+ * Refuses when an open record exists (one or several) or the position's own `tradeId` names an existing record.
  * INVOKERS: `POST /active-engine/positions/:id/restore-record` (logged-in) and the operator script
  * `server/scripts/restore-trade-record.ts` (run on staging; the shell API tool refuses writes). The mode is chosen by the
  * caller (KD-37: the mode-scoped engine at the boundary); only paper exists today.
  */
-import { storage } from '../storage';
-import { asValidAssetClass } from '../../shared/asset-classes.js';
+import { storage, type RestoredRecordWrite } from '../storage';
+import { asValidAssetClass, type AssetClass } from '../../shared/asset-classes.js';
+import type { ActiveOpenPosition } from '../../shared/schema.js';
 import type { TradingMode } from '../lib/event-bus';
 
 /**
@@ -74,8 +75,8 @@ export type RestoreResult =
   | { ok: false; code: 404 | 409; error: string; recordId?: string; recordIds?: string[]; more?: boolean };
 
 export async function restoreOpenTradeRecord(mode: TradingMode, positionId: string, claimedBy: string): Promise<RestoreResult> {
-  const position: any = await storage.getActiveOpenPosition(mode, positionId);
-  if (!position) return { ok: false, code: 404, error: 'position not found' };
+  const position = await storage.getActiveOpenPosition(mode, positionId);
+  if (!position || position.mode !== mode) return { ok: false, code: 404, error: 'position not found' };
   const cls = asValidAssetClass(position.assetClass);
   if (!cls) return { ok: false, code: 409, error: `the position has no valid asset class (${String(position.assetClass)})` };
 
@@ -86,26 +87,57 @@ export async function restoreOpenTradeRecord(mode: TradingMode, positionId: stri
   if (existing.status === 'many') {
     return { ok: false, code: 409, error: 'several open trade records match — investigate the duplicate, do not restore', recordIds: existing.ids, more: existing.more };
   }
-  const tid: string | undefined = position.metadata?.tradeId;
-  if (tid && (await storage.getClosedTrade(mode, tid))) {
+  const tid = (position.metadata as Record<string, unknown> | null)?.tradeId;
+  if (typeof tid === 'string' && tid && (await storage.getClosedTrade(mode, tid))) {
     return { ok: false, code: 409, error: `the position's own record ${tid} exists and is not open — investigate, do not restore`, recordId: tid };
   }
 
   // Part B condition 2: copy the entry costs or refuse — never a fabricated zero (the batch's origin, PHASE_19_PLAN:116).
+  const missingCost = 'the position carries no entry fee or slippage — a restore would invent a cost; investigate, do not restore';
   if (position.entryFee == null || position.entrySlippage == null) {
-    return { ok: false, code: 409, error: 'the position carries no entry fee or slippage — a restore would invent a cost; investigate, do not restore' };
+    return { ok: false, code: 409, error: missingCost };
   }
 
+  const result = await storage.restoreOpenTradeRecordForPosition(mode, position, cls, (lockedPosition) =>
+    makeRestoredRecord(mode, lockedPosition, cls, claimedBy));
+  if (result.status === 'position_missing') return { ok: false, code: 404, error: 'position not found' };
+  if (result.status === 'missing_cost') return { ok: false, code: 409, error: missingCost };
+  if (result.status === 'linked') {
+    return { ok: false, code: 409, error: `the position's own record ${result.id} exists and is not open — investigate, do not restore`, recordId: result.id };
+  }
+  if (result.status === 'exists') {
+    return { ok: false, code: 409, error: 'an open trade record appeared for this position while restoring — not restored', recordIds: result.ids };
+  }
+  const { record, pending } = result;
+  // P-14 (Langston Part C record 1): name the most recent CLOSED record for the key — best-effort information; a failed
+  // read never undoes or blocks the restore that has already happened.
+  let latestClosed: { id: string; closedAt: string; closeReason: string | null } | null = null;
+  try {
+    const lc = await storage.getLatestClosedTradeForKey(mode, position.symbol, cls);
+    latestClosed = lc ? { id: lc.id, closedAt: lc.closedAt.toISOString(), closeReason: lc.closeReason } : null;
+  } catch (err) {
+    console.error(`[B-CLOSE-WRITER-COSTS][RECORD_RESTORED:${mode}] latest-closed read failed (information only):`, err);
+  }
+
+  console.log(`[B-CLOSE-WRITER-COSTS][RECORD_RESTORED:${mode}] ${position.symbol} pos=${position.id}${pending ? ' (pending maker)' : ''} -> record ${record.id} (claimed by ${claimedBy})`);
+  if (latestClosed) {
+    console.log(`[B-CLOSE-WRITER-COSTS][RECORD_RESTORED:${mode}] ${position.symbol}: the latest CLOSED record for this key is ${latestClosed.id} (${latestClosed.closeReason ?? 'no reason'}, closed ${latestClosed.closedAt}) — check it is not this same trade`);
+  }
+  return { ok: true, recordId: record.id, positionId: position.id, symbol: position.symbol, pending, latestClosed };
+}
+
+function makeRestoredRecord(mode: TradingMode, position: ActiveOpenPosition, cls: AssetClass, claimedBy: string): RestoredRecordWrite | null {
+  if (position.entryFee == null || position.entrySlippage == null) return null;
   const pending = position.state === 'pending';
   const str = (v: unknown) => (v == null ? null : String(v));
   // Part B condition 1: the six regime stamps, promoted from the position's metadata (the open path writes the same values
   // to both). Only well-formed values travel; anything else stays NULL, as on an organic row with no MCE context.
-  const meta: Record<string, unknown> = position.metadata ?? {};
+  const meta = (position.metadata ?? {}) as Record<string, unknown>;
   const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
   const int = (v: unknown) => (typeof v === 'number' && Number.isInteger(v) ? v : null);
   const phase = meta.phase === 'EARLY' || meta.phase === 'PRIME' || meta.phase === 'LATE' ? meta.phase : null;
   const restoredAt = new Date();
-  const result = await storage.insertOpenTradeRecordIfNoneOpen(mode, position.symbol, cls, {
+  return {
     symbol: position.symbol,
     baseCurrency: position.symbol.split('/')[0] || position.symbol,
     exchange: position.exchange,
@@ -144,7 +176,7 @@ export async function restoreOpenTradeRecord(mode: TradingMode, positionId: stri
     entryFeeRate: str(position.entryFeeRate),
     tradeMode: position.tradeMode ?? undefined,
     metadata: {
-      ...(position.metadata ?? {}),
+      ...meta,
       ...(pending ? { restoredWhilePending: true } : {}),
       // A restored position supplies costs and identity, but cannot supply fresh durable fill proof.
       ...(mode === 'paper' && cls === 'xstock_spot' ? { paperXstockEntryFill: null } : {}),
@@ -152,25 +184,5 @@ export async function restoreOpenTradeRecord(mode: TradingMode, positionId: stri
     recordRestoredFromPosition: true,
     restoredAt,
     restoredByClaimed: claimedBy,
-  });
-  if (result.status === 'exists') {
-    return { ok: false, code: 409, error: 'an open trade record appeared for this position while restoring — not restored', recordIds: result.ids };
-  }
-  const record = result.record;
-  // P-14 (Langston Part C record 1): name the most recent CLOSED record for the key — best-effort information; a failed
-  // read never undoes or blocks the restore that has already happened.
-  let latestClosed: { id: string; closedAt: string; closeReason: string | null } | null = null;
-  try {
-    const lc = await storage.getLatestClosedTradeForKey(mode, position.symbol, cls);
-    latestClosed = lc ? { id: lc.id, closedAt: lc.closedAt.toISOString(), closeReason: lc.closeReason } : null;
-  } catch (err) {
-    console.error(`[B-CLOSE-WRITER-COSTS][RECORD_RESTORED:${mode}] latest-closed read failed (information only):`, err);
-  }
-  // The position now points at its record, so the next close (and P-16 / P-17) resolve it by `tradeId` as well as by key.
-  await storage.updateActiveOpenPosition(mode, position.id, { metadata: { ...(position.metadata ?? {}), tradeId: record.id } } as any);
-  console.log(`[B-CLOSE-WRITER-COSTS][RECORD_RESTORED:${mode}] ${position.symbol} pos=${position.id}${pending ? ' (pending maker)' : ''} -> record ${record.id} (claimed by ${claimedBy})`);
-  if (latestClosed) {
-    console.log(`[B-CLOSE-WRITER-COSTS][RECORD_RESTORED:${mode}] ${position.symbol}: the latest CLOSED record for this key is ${latestClosed.id} (${latestClosed.closeReason ?? 'no reason'}, closed ${latestClosed.closedAt}) — check it is not this same trade`);
-  }
-  return { ok: true, recordId: record.id, positionId: position.id, symbol: position.symbol, pending, latestClosed };
+  };
 }

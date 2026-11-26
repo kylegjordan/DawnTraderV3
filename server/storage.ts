@@ -193,6 +193,13 @@ import { NON_OUTCOME_CLOSE_REASONS, BOOKED_CLOSE_REASONS } from "./services/trad
 import type { TradeCloseReason } from "./services/trade-close-reason";
 /** A closed_trades write payload whose `closeReason`, when present, is a TradeCloseReason (B-CLOSE-WRITER-COSTS P-15). */
 type ClosedTradeWrite<T> = Omit<T, 'closeReason'> & { closeReason?: TradeCloseReason | null };
+export type RestoredRecordWrite = Omit<InsertClosedTrade, 'mode' | 'closeReason'>;
+type RestoreRecordWriteResult =
+  | { status: 'inserted'; record: ClosedTrade; pending: boolean }
+  | { status: 'exists'; ids: string[] }
+  | { status: 'linked'; id: string }
+  | { status: 'position_missing' }
+  | { status: 'missing_cost' };
 
 export type PaperXstockEntryFill =
   | { method: 'maker'; filledAtMs: number; quoteArrivedAtMs: number | null }
@@ -650,7 +657,7 @@ export interface IStorage {
     dateTo?: Date;
   }): Promise<{ trades: ClosedTrade[]; totalCount: number }>;
   findOpenTradeRecord(mode: TradingMode, symbol: string, assetClass: string): Promise<OpenTradeRecordLookup>;
-  insertOpenTradeRecordIfNoneOpen(mode: TradingMode, symbol: string, assetClass: string, record: ClosedTradeWrite<Omit<InsertClosedTrade, 'mode'>>): Promise<{ status: 'inserted'; record: ClosedTrade } | { status: 'exists'; ids: string[] }>;
+  restoreOpenTradeRecordForPosition(mode: TradingMode, position: Pick<ActiveOpenPosition, 'id' | 'symbol'>, assetClass: string, buildRecord: (position: ActiveOpenPosition) => RestoredRecordWrite | null): Promise<RestoreRecordWriteResult>;
   deleteClosedTrade(mode: TradingMode, id: string): Promise<void>; // B-PROMOTION-RACE-FIX (#508): single-row delete for the dup-race orphan compensation
 
   // Open positions
@@ -800,13 +807,15 @@ export async function closeOpenTradesForHardReset(executor: Pick<typeof db, 'upd
 }
 
 export async function resetActiveEngineTables(
-  executor: Pick<typeof db, 'update' | 'delete'>,
+  executor: Pick<typeof db, 'execute' | 'update' | 'delete'>,
   mode: 'paper' | 'live',
   paperResetPermit?: symbol,
 ) {
   if ((mode === 'paper' && (!paperEntryPublication.holdsResetPermit(paperResetPermit) || !paperEntryPublication.isQuiescent()))
     || (mode !== 'paper' && paperResetPermit !== undefined)) throw new PaperEntryDrainIncomplete();
 
+  // Exclude restores, including from the separate operator process, before closing trades or deleting positions.
+  await executor.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`engine-reset:${mode}`}))`);
   const closed = await closeOpenTradesForHardReset(executor, mode);
   const cleared = await executor
     .delete(activeOpenPositions)
@@ -3244,7 +3253,7 @@ export class DatabaseStorage implements IStorage {
     // floor, which is why seven readers could accept a mode and none could filter on one.
     // One of TWO physical INSERTs into closed_trades (census 2026-08-21 found one site, three
     // callers, all passing a correct mode; B-CLOSE-WRITER-COSTS P-12 added the second,
-    // `insertOpenTradeRecordIfNoneOpen`, the restore's atomic insert, which also stamps `mode`).
+    // `restoreOpenTradeRecordForPosition`, the atomic restore, which also stamps `mode`).
     const normalizedTrade = { ...trade, symbol: canonicalSymbol, mode };
     const [result] = await db.insert(closedTradesTable).values(normalizedTrade).returning();
     return result;
@@ -3860,17 +3869,23 @@ export class DatabaseStorage implements IStorage {
    * (`closed_trades.opened_at` is NOT NULL, so `closed_at IS NULL` alone is the faithful translation of the old
    * predicate; a `never_filled` row always carries `closed_at`, so it can never match here.)
    */
-  /**
-   * B-CLOSE-WRITER-COSTS P-12 (Langston Part B attack 2): the restore's insert, made ATOMIC. Under a transaction-scoped
-   * advisory lock on (mode, symbol, class), it re-checks that NO open record exists for the key and only then inserts —
-   * so two concurrent restores cannot both insert (the loser gets `exists`, never a duplicate the 'many' alert would then
-   * ask a human to remove by hand). Not a partial unique index: that would fail to create if any historical duplicate
-   * exists. The symbol is normalised the way `createClosedTrade` normalises it, so the lock and the check use the stored form.
-   */
-  async insertOpenTradeRecordIfNoneOpen(mode: TradingMode, symbol: string, assetClass: string, record: ClosedTradeWrite<Omit<InsertClosedTrade, 'mode'>>): Promise<{ status: 'inserted'; record: ClosedTrade } | { status: 'exists'; ids: string[] }> {
-    const canonicalSymbol = normalizeToInternalSymbol(symbol);
+  async restoreOpenTradeRecordForPosition(
+    mode: TradingMode,
+    position: Pick<ActiveOpenPosition, 'id' | 'symbol'>,
+    assetClass: string,
+    buildRecord: (position: ActiveOpenPosition) => RestoredRecordWrite | null,
+  ): Promise<RestoreRecordWriteResult> {
+    const canonicalSymbol = normalizeToInternalSymbol(position.symbol);
+    const positionKey = and(
+      eq(activeOpenPositions.id, position.id), eq(activeOpenPositions.mode, mode),
+      eq(activeOpenPositions.symbol, position.symbol), eq(activeOpenPositions.assetClass, assetClass),
+    );
     return await db.transaction(async (tx) => {
+      // Take the mode lock before the per-symbol and row locks. A reset must see either the complete link or no restore.
+      await tx.execute(sql`SELECT pg_advisory_xact_lock_shared(hashtext(${`engine-reset:${mode}`}))`);
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`open-record:${mode}:${canonicalSymbol}:${assetClass}`}))`);
+      const [current] = await tx.select().from(activeOpenPositions).where(positionKey).for('update');
+      if (!current) return { status: 'position_missing' as const };
       const open = await tx.select({ id: closedTradesTable.id })
         .from(closedTradesTable)
         .where(and(
@@ -3881,10 +3896,24 @@ export class DatabaseStorage implements IStorage {
         ))
         .limit(4);
       if (open.length > 0) return { status: 'exists' as const, ids: open.map((r) => r.id) };
+      const metadata = current.metadata as Record<string, unknown> | null;
+      const linkedId = metadata?.tradeId;
+      if (typeof linkedId === 'string' && linkedId) {
+        const [linked] = await tx.select({ id: closedTradesTable.id }).from(closedTradesTable)
+          .where(eq(closedTradesTable.id, linkedId));
+        if (linked) return { status: 'linked' as const, id: linked.id };
+      }
+      const record = buildRecord(current);
+      if (!record) return { status: 'missing_cost' as const };
       const [inserted] = await tx.insert(closedTradesTable)
-        .values({ ...(record as Omit<InsertClosedTrade, 'mode'>), symbol: canonicalSymbol, assetClass, mode })
+        .values({ ...record, symbol: canonicalSymbol, assetClass, mode })
         .returning();
-      return { status: 'inserted' as const, record: inserted };
+      const [updated] = await tx.update(activeOpenPositions)
+        .set({ metadata: { ...metadata, tradeId: inserted.id } })
+        .where(positionKey)
+        .returning({ id: activeOpenPositions.id });
+      if (!updated) throw new Error(`Restore could not link record to position ${position.id}`);
+      return { status: 'inserted' as const, record: inserted, pending: current.state === 'pending' };
     });
   }
 

@@ -25,7 +25,7 @@ const st = vi.hoisted(() => ({
   getActiveOpenPositions: vi.fn(),
   getClosedTradesCount: vi.fn(),
   getRunningEngineSession: vi.fn(),
-  insertOpenTradeRecordIfNoneOpen: vi.fn(),
+  restoreOpenTradeRecordForPosition: vi.fn(),
   updateActiveOpenPosition: vi.fn(async () => ({})),
   getLatestClosedTradeForKey: vi.fn(),
 }));
@@ -87,7 +87,7 @@ describe('C — the client premise', () => {
 });
 
 const POSITION = {
-  id: 'pos-1', symbol: 'ETH/USD', assetClass: 'crypto_spot', exchange: 'kraken', strategyName: 'momentum', side: 'buy',
+  id: 'pos-1', mode: 'paper', symbol: 'ETH/USD', assetClass: 'crypto_spot', exchange: 'kraken', strategyName: 'momentum', side: 'buy',
   quantity: '0.5', avgPrice: '2000', intendedEntryPrice: '1999', stopLoss: '1900', takeProfit: '2200', entryFee: '4',
   entrySlippage: '0.2', confidence: '61', openedAt: new Date('2026-11-05T10:00:00Z'), signalType: 'QUANT', patternType: null,
   patternStrength: null, sourcePool: 'quant', balanceRatioAtOpen: '0.1', anchorBalanceAtOpen: '3000', anchorVersionAtOpen: 9,
@@ -164,7 +164,7 @@ describe('S — the restore service', () => {
     st.getActiveOpenPosition.mockResolvedValue(POSITION);
     st.findOpenTradeRecord.mockResolvedValue({ status: 'one', record: { id: 'r-1' } });
     expect(await restoreOpenTradeRecord('paper', 'pos-1', 'cc-a')).toMatchObject({ ok: false, code: 409, recordId: 'r-1' });
-    expect(st.insertOpenTradeRecordIfNoneOpen).not.toHaveBeenCalled();
+    expect(st.restoreOpenTradeRecordForPosition).not.toHaveBeenCalled();
   });
   it('S-4 several open records → 409 naming them', async () => {
     st.getActiveOpenPosition.mockResolvedValue(POSITION);
@@ -176,17 +176,18 @@ describe('S — the restore service', () => {
     st.findOpenTradeRecord.mockResolvedValue({ status: 'none' });
     st.getClosedTrade.mockResolvedValue({ id: 'gone-1', closedAt: new Date() });
     expect(await restoreOpenTradeRecord('paper', 'pos-1', 'cc-a')).toMatchObject({ ok: false, code: 409, recordId: 'gone-1' });
-    expect(st.insertOpenTradeRecordIfNoneOpen).not.toHaveBeenCalled();
+    expect(st.restoreOpenTradeRecordForPosition).not.toHaveBeenCalled();
   });
   it('S-6 success: the open-time fields copied (incl. the maker/taker stamps and trade mode), both fee columns, the stamps', async () => {
     st.getActiveOpenPosition.mockResolvedValue(POSITION);
     st.findOpenTradeRecord.mockResolvedValue({ status: 'none' });
     st.getClosedTrade.mockResolvedValue(undefined);
-    st.insertOpenTradeRecordIfNoneOpen.mockResolvedValue({ status: 'inserted', record: { id: 'new-1' } });
+    st.restoreOpenTradeRecordForPosition.mockResolvedValue({ status: 'inserted', record: { id: 'new-1' }, pending: false });
     const r = await restoreOpenTradeRecord('paper', 'pos-1', 'cc-a');
     expect(r).toMatchObject({ ok: true, recordId: 'new-1', pending: false });
-    const [mode, sym, cls, rec] = st.insertOpenTradeRecordIfNoneOpen.mock.calls[0] as [string, string, string, Record<string, unknown>];
-    expect([mode, sym, cls]).toEqual(['paper', 'ETH/USD', 'crypto_spot']);
+    const [mode, position, cls, buildRecord] = st.restoreOpenTradeRecordForPosition.mock.calls[0];
+    expect([mode, position.symbol, cls]).toEqual(['paper', 'ETH/USD', 'crypto_spot']);
+    const rec = buildRecord(POSITION);
     expect(rec).toMatchObject({
       entryPrice: '2000', actualEntryPrice: '2000', intendedEntryPrice: '1999', fees: '4', entryFee: '4', slippage: '0.2', entrySlippage: '0.2',
       chosenEntryMode: 'taker', entryFillPolicy: 'walk', entryFeeRate: '0.004', tradeMode: 'TRAILING_TAKE',
@@ -195,27 +196,28 @@ describe('S — the restore service', () => {
     expect(rec).not.toHaveProperty('exitPrice');
     expect(rec).not.toHaveProperty('closedAt');
   });
-  it('S-7 success points the position at its new record', async () => {
+  it('S-7 success delegates record and link to the atomic writer', async () => {
     st.getActiveOpenPosition.mockResolvedValue(POSITION);
     st.findOpenTradeRecord.mockResolvedValue({ status: 'none' });
-    st.insertOpenTradeRecordIfNoneOpen.mockResolvedValue({ status: 'inserted', record: { id: 'new-1' } });
+    st.restoreOpenTradeRecordForPosition.mockResolvedValue({ status: 'inserted', record: { id: 'new-1' }, pending: false });
     await restoreOpenTradeRecord('paper', 'pos-1', 'cc-a');
-    expect(st.updateActiveOpenPosition).toHaveBeenCalledWith('paper', 'pos-1', { metadata: { tradeId: 'new-1', origin: 'x' } });
+    expect(st.restoreOpenTradeRecordForPosition).toHaveBeenCalledWith('paper', POSITION, 'crypto_spot', expect.any(Function));
+    expect(st.updateActiveOpenPosition).not.toHaveBeenCalled();
   });
   it('S-8 a PENDING maker is restored explicitly (no fill asserted; its zero fee is legitimate), flagged in metadata', async () => {
     st.getActiveOpenPosition.mockResolvedValue({ ...POSITION, state: 'pending', entryFee: '0', entrySlippage: '0', metadata: {} });
     st.findOpenTradeRecord.mockResolvedValue({ status: 'none' });
-    st.insertOpenTradeRecordIfNoneOpen.mockResolvedValue({ status: 'inserted', record: { id: 'new-2' } });
+    st.restoreOpenTradeRecordForPosition.mockResolvedValue({ status: 'inserted', record: { id: 'new-2' }, pending: true });
     const r = await restoreOpenTradeRecord('paper', 'pos-1', 'cc-a');
     expect(r).toMatchObject({ ok: true, pending: true });
-    const rec = st.insertOpenTradeRecordIfNoneOpen.mock.calls[0][3] as Record<string, any>;
+    const rec = st.restoreOpenTradeRecordForPosition.mock.calls[0][3](await st.getActiveOpenPosition.mock.results[0].value);
     expect(rec.metadata).toEqual({ restoredWhilePending: true });
     expect(rec.entryFee).toBe('0');
   });
   it('S-9 the atomic insert finds a record appeared meanwhile → 409, the position not repointed', async () => {
     st.getActiveOpenPosition.mockResolvedValue(POSITION);
     st.findOpenTradeRecord.mockResolvedValue({ status: 'none' });
-    st.insertOpenTradeRecordIfNoneOpen.mockResolvedValue({ status: 'exists', ids: ['raced-1'] });
+    st.restoreOpenTradeRecordForPosition.mockResolvedValue({ status: 'exists', ids: ['raced-1'] });
     expect(await restoreOpenTradeRecord('paper', 'pos-1', 'cc-a')).toMatchObject({ ok: false, code: 409, recordIds: ['raced-1'] });
     expect(st.updateActiveOpenPosition).not.toHaveBeenCalled();
   });
@@ -224,14 +226,14 @@ describe('S — the restore service', () => {
     st.findOpenTradeRecord.mockResolvedValue({ status: 'none' });
     st.getClosedTrade.mockResolvedValue(undefined);
     expect(await restoreOpenTradeRecord('paper', 'pos-1', 'cc-a')).toMatchObject({ ok: false, code: 409 });
-    expect(st.insertOpenTradeRecordIfNoneOpen).not.toHaveBeenCalled();
+    expect(st.restoreOpenTradeRecordForPosition).not.toHaveBeenCalled();
   });
   it('S-11 a position with no entry slippage → 409, nothing inserted', async () => {
     st.getActiveOpenPosition.mockResolvedValue({ ...POSITION, entrySlippage: undefined });
     st.findOpenTradeRecord.mockResolvedValue({ status: 'none' });
     st.getClosedTrade.mockResolvedValue(undefined);
     expect(await restoreOpenTradeRecord('paper', 'pos-1', 'cc-a')).toMatchObject({ ok: false, code: 409 });
-    expect(st.insertOpenTradeRecordIfNoneOpen).not.toHaveBeenCalled();
+    expect(st.restoreOpenTradeRecordForPosition).not.toHaveBeenCalled();
   });
   it('S-12 the six regime stamps are promoted from metadata; malformed or absent values stay NULL', async () => {
     st.getActiveOpenPosition.mockResolvedValue({ ...POSITION, metadata: {
@@ -240,16 +242,16 @@ describe('S — the restore service', () => {
     } });
     st.findOpenTradeRecord.mockResolvedValue({ status: 'none' });
     st.getClosedTrade.mockResolvedValue(undefined);
-    st.insertOpenTradeRecordIfNoneOpen.mockResolvedValue({ status: 'inserted', record: { id: 'new-3' } });
+    st.restoreOpenTradeRecordForPosition.mockResolvedValue({ status: 'inserted', record: { id: 'new-3' }, pending: false });
     await restoreOpenTradeRecord('paper', 'pos-1', 'cc-a');
-    expect(st.insertOpenTradeRecordIfNoneOpen.mock.calls[0][3]).toMatchObject({
+    expect(st.restoreOpenTradeRecordForPosition.mock.calls[0][3](await st.getActiveOpenPosition.mock.results.at(-1)?.value)).toMatchObject({
       regimeConfidenceRaw: 0.71, macroModifierValue: 1.05, phase: 'PRIME', phaseAgeSeconds: 420,
       strategyPhaseWeight: 0.9, regimeConfidenceModulated: 0.64,
     });
-    st.insertOpenTradeRecordIfNoneOpen.mockClear();
+    st.restoreOpenTradeRecordForPosition.mockClear();
     st.getActiveOpenPosition.mockResolvedValue({ ...POSITION, metadata: { macroModifierValue: 1.0, phase: 'BOGUS', phaseAgeSeconds: 1.5 } });
     await restoreOpenTradeRecord('paper', 'pos-1', 'cc-a');
-    expect(st.insertOpenTradeRecordIfNoneOpen.mock.calls[0][3]).toMatchObject({
+    expect(st.restoreOpenTradeRecordForPosition.mock.calls[0][3](await st.getActiveOpenPosition.mock.results.at(-1)?.value)).toMatchObject({
       regimeConfidenceRaw: null, macroModifierValue: 1.0, phase: null, phaseAgeSeconds: null,
       strategyPhaseWeight: null, regimeConfidenceModulated: null,
     });
@@ -261,7 +263,7 @@ describe('L — the restore names the latest CLOSED record for the key (P-14, La
     st.getActiveOpenPosition.mockResolvedValue(POSITION);
     st.findOpenTradeRecord.mockResolvedValue({ status: 'none' });
     st.getClosedTrade.mockResolvedValue(undefined);
-    st.insertOpenTradeRecordIfNoneOpen.mockResolvedValue({ status: 'inserted', record: { id: 'new-1' } });
+    st.restoreOpenTradeRecordForPosition.mockResolvedValue({ status: 'inserted', record: { id: 'new-1' }, pending: false });
   };
   it('L-1 the success result carries the latest closed record, read by mode, symbol and class', async () => {
     ready();
@@ -311,7 +313,7 @@ describe('K — the record id is stamped back when a record resolves by key (Lan
     st.findOpenTradeRecord.mockResolvedValue({ status: 'none' });
     st.getClosedTrade.mockResolvedValue({ id: 'rec-9', closedAt: new Date() });
     expect(await restoreOpenTradeRecord('paper', 'pos-1', 'cc-a')).toMatchObject({ ok: false, code: 409, recordId: 'rec-9' });
-    expect(st.insertOpenTradeRecordIfNoneOpen).not.toHaveBeenCalled();
+    expect(st.restoreOpenTradeRecordForPosition).not.toHaveBeenCalled();
   });
 });
 

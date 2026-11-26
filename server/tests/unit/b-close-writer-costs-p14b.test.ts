@@ -111,17 +111,17 @@ describe('P-14b — the rollback restores the 16 and is never applied by db:migr
 });
 
 describe('P-14b — the restore writer is type-checked end to end (Langston Step 4 C, re-review)', () => {
-  // A cast on either side of insertOpenTradeRecordIfNoneOpen takes the restore's field list out of the compile fence:
+  // A cast on either side of restoreOpenTradeRecordForPosition takes the restore's field list out of the compile fence:
   // with `as any` on the caller's literal, deleting `assetClass` from it compiles (tsc 324); without, it fails (325).
-  it('storage spreads the record typed, and the restore caller passes its literal uncast', () => {
+  it('storage spreads the record typed, and the builder returns its literal uncast', () => {
     const storageSrc = read('server/storage.ts');
-    expect(storageSrc).toContain("...(record as Omit<InsertClosedTrade, 'mode'>), symbol: canonicalSymbol, assetClass, mode })");
+    expect(storageSrc).toContain('...record, symbol: canonicalSymbol, assetClass, mode })');
     const restore = read('server/services/trade-record-restore.ts');
-    const start = restore.indexOf('storage.insertOpenTradeRecordIfNoneOpen(');
+    const start = restore.indexOf('function makeRestoredRecord(');
     expect(start).toBeGreaterThan(-1);
-    const call = restore.slice(start, restore.indexOf('\n  });', start) + 6);
-    expect(call).toMatch(/\n  \}\);$/);
-    expect(call).not.toMatch(/as any/);
+    const builder = restore.slice(start);
+    expect(builder).toContain('): RestoredRecordWrite | null {');
+    expect(builder).not.toMatch(/as any/);
   });
 });
 

@@ -660,6 +660,13 @@
       }
     },
     {
+      "path": "server/tests/unit/b-xstock-paper-reset-routes.test.ts",
+      "markers": {
+        "database_url": 1,
+        "node_postgres_constructor": 2
+      }
+    },
+    {
       "path": "server/tests/unit/b-xstock-snapshot-retention.test.ts",
       "markers": {
         "database_url": 1

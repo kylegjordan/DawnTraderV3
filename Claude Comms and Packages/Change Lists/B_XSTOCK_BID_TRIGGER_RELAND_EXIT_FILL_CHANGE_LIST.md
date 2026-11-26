@@ -88,3 +88,43 @@ const dbResult = await storage.hardResetActiveEngineTables(mode, permit);
 - REVIEWER: claim-only · same judged genuine bid supplies all units · HIT: Boolean `bid_qty:true` was normalized to a bookable quantity of 1 · re-derived y at `19274197d` with the real socket parser and grade, numeric 1 as the positive control. The candidate now rejects Boolean, string and array sizes and a string price, even where legacy readers still see the normalized value. A restarted replay refuses an earlier connection and holds only a new episode. Two controls distinguish a price trailing stop from a moonbag timeout at the actual caller boundary, with the full TEC path verified in its separate suite. See Progress Report §5d.
 - Historical candidate interval `[2026-11-21T01:00:00Z, 2026-11-26T02:32:06.222Z)`. The 65 stored taker stop closes with archive-depth evidence are a positive control for old depth. The actual price-triggered attempt and eligible-frame populations are unknown. The archive cannot establish frame type, delivering connection, monotonic age at consumption or hold duration. No retrospective policy acceptance rate is claimed. The age and count of 15,000 ms and 60 are offline comparison inputs only.
 - Attack the same-frame contract, the storage transition and winner guarantees across the two operator routes and both stop routes, and exclusive quiescence over Reset and Start New. Confirm the candidate remains offline for quote enforcement and name any load-bearing missing controls before Step 5. Preserve the existing Phase A restart fence and Phase B dependency. The writer's full multi-route exclusivity and legacy repair behavior are **NOT RE-READ** by the one-pass helper, whose scope was exact quote lineage and size.
+
+## Step 4 correction — failed startup and restore/reset
+
+Coltrane returned exact `5ce00e63038660d7e6128e30168395774304516a` on November 26 at 13:45:42 UTC. An injected startup fault after opening entry admission left no usable manager, and a paused `restore-record` could publish an open trade after either destructive route removed its position. That ref's four CI jobs had passed (`45828012169`).
+
+### Modified — failed start stops its exact manager
+
+Before, the Continue reconciliation and idle-manager paths reached the outer catch, which cleared the map directly. The fresh-start path had its own local stop, and internal boot resume lacked the stop on a failed start. Now every failed start has an exact teardown owner. Close admission before awaiting stop. Clear the map only while the same manager is still present. The API rollback targets the exact session it created or attempted to resume. Existing registered writers retain their accounting until they settle.
+
+```ts
+// Before — outer API rollback after the start path fails
+clearGlobalActiveEngineManager();
+const existingSession = await storage.getRunningEngineSession('paper');
+if (existingSession) await storage.updateActiveEngineSession(existingSession.id, { status: 'failed' });
+
+// After — rollback is bound to the start attempt
+if (startingManager) await stopFailedPaperStart(startingManager);
+if (startingSession) await storage.updateActiveEngineSession(startingSession.id, { status: 'failed' });
+// The helper closes admission, awaits this manager's stop and clears only this map entry.
+```
+
+### Modified — reset serializes with the restore, whose two writes are atomic
+
+Previously, storage only protected the insert against another restore. The service updated the position separately and treated an empty update result as success. Now the reset takes an exclusive transaction lock for the mode before closing trades. A restore takes a shared lock for the same mode before locking its trade key and exact position. It re-reads that position's costs, state and link, then inserts and writes the link in the same transaction. This also protects the separately invoked operator script. A missing position yields 404. A lost link write aborts the transaction. An existing or finished linked record still refuses, and fresh fill proof is still absent on restored xStock records.
+
+```ts
+// Before — insert committed without the update attached to it
+const result = await storage.insertOpenTradeRecordIfNoneOpen(mode, symbol, cls, record);
+await storage.updateActiveOpenPosition(mode, id, { metadata: { ...meta, tradeId: record.id } });
+
+// After — both writes under mode and exact position locks in one transaction
+await tx.execute(sql`SELECT pg_advisory_xact_lock_shared(hashtext(${modeLock}))`);
+const [current] = await tx.select().from(activeOpenPositions).where(positionKey).for('update');
+if (!current) return { status: 'position_missing' };
+// Re-check record and costs, then insert and link. An empty link result throws.
+```
+
+**Evidence.** Three signed recovery controls failed at the prior startup path and pass with the correction. On standalone PostgreSQL 17, five signed restore controls cover Reset first, Start New first, a normal restore and duplicate, a restore ahead of a waiting Reset, and a failed link that rolls back the trade. With the exact prior storage and restore sources, all four fault cases failed while the normal control passed. All 59 tests in the route, operator and storage-contract suites passed with the corrected sources. The local database used the three typed table definitions in a disposable database. The fixture's one URL check and two isolated harness connections are enrolled by exact path. CI retests against migrated PostgreSQL. These lifecycle corrections are `NOT RE-READ` by the earlier fresh reader.
+
+**Question.** Re-run the two returned paths, the reverse interleaving and a failed link. Confirm whether the exact diff is clear for Step 5. The registered pricing comparisons stay offline and Phase A restart 716 stays fenced.
