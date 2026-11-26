@@ -1973,7 +1973,8 @@ export class ActiveExecutionEngine {
       quoteArrivedAtMs: _quoteArrivedAtMs,
     });
     const guardedMaker = this.mode === 'paper' && _isXstockPending;
-    if (outcome !== 'rest' && !guardedMaker) this._entryFillLooked.delete(position.id);
+    const guardedCryptoMaker = this.mode === 'paper' && _isCryptoPending;
+    if (outcome !== 'rest' && !guardedMaker && !guardedCryptoMaker) this._entryFillLooked.delete(position.id);
     if (outcome === 'fill') {
       // `8a-P3` — what DROVE the fill, for the durable stamp below.
       const _fillQuote = _fillTouch !== null && _fillTouch.ok ? _fillTouch.quote : null;
@@ -2012,6 +2013,24 @@ export class ActiveExecutionEngine {
         });
         if (!filled) {
           await this._reportUnmatchedPaperXstockPendingMaker(position, 'qualified for a resting maker fill');
+          return;
+        }
+        this._entryFillLooked.delete(position.id);
+      } else if (guardedCryptoMaker) {
+        if (typeof _fillTradeId !== 'string' || !_fillTradeId) {
+          await this._refuseUnresolvedRecord(position, 'its durable trade link is missing', 'qualified for a resting maker fill');
+          return;
+        }
+        const filled = await storage.transitionPaperCryptoPendingMaker(position, {
+          kind: 'fill', tradeId: _fillTradeId, currentPrice: currentPrice.toString(), stamp: entryStamp,
+          evaluatedAtMs: makerEvaluatedAtMs, quoteArrivedAtMs: _quoteArrivedAtMs, side,
+          observedAgeMs: typeof provenance.observedAtMs === 'number' && Number.isFinite(provenance.observedAtMs)
+            ? Math.max(0, Math.round(makerEvaluatedAtMs - provenance.observedAtMs)) : null,
+        });
+        if (filled.status !== 'committed') {
+          if (filled.status === 'unresolved') {
+            await this._refuseUnresolvedRecord(position, filled.reason, 'qualified for a resting maker fill');
+          }
           return;
         }
         this._entryFillLooked.delete(position.id);
@@ -2063,7 +2082,7 @@ export class ActiveExecutionEngine {
       if ((position.assetClass ?? 'crypto_spot') === 'xstock_spot' && !isXstockMarketOpenUTC(position.symbol, new Date())) {
         return; // market shut — wait for the first open tick
       }
-      await this._dropUnfilledMaker(position, `pending maker at ${limit} hit the hard-drop deadline unfilled`);
+      await this._dropUnfilledMaker(position, `pending maker at ${limit} hit the hard-drop deadline unfilled`, makerEvaluatedAtMs);
     }
     // 'rest' — still resting; nothing to do this tick.
   }
@@ -2315,7 +2334,7 @@ export class ActiveExecutionEngine {
     }
   }
 
-  private async _dropUnfilledMaker(position: any, why: string): Promise<boolean> {
+  private async _dropUnfilledMaker(position: any, why: string, evaluatedAtMs?: number): Promise<boolean> {
     if (this.mode === 'paper' && position.assetClass === 'xstock_spot') {
       const tradeId = position.metadata?.tradeId;
       const action = `was due to be dropped as never filled (${why})`;
@@ -2336,6 +2355,24 @@ export class ActiveExecutionEngine {
         console.error(`[P19-B7.2c][MAKER_CANCEL_RELEASE_FAILED:${this.mode}] ${position.symbol} trade=${tradeId}`, error);
       }
       console.log(`[P19-B7.2c][MAKER_NEVER_FILLED:${this.mode}] ${position.symbol}: ${why} — dropped (slot freed, never-filled record ${tradeId})`);
+      return true;
+    }
+    if (this.mode === 'paper' && position.assetClass === 'crypto_spot') {
+      const cancelled = await storage.transitionPaperCryptoPendingMaker(position, { kind: 'cancel', reason: why, evaluatedAtMs });
+      if (cancelled.status !== 'committed') {
+        if (cancelled.status === 'unresolved') {
+          await this._refuseUnresolvedRecord(position, cancelled.reason, `was due to be dropped as never filled (${why})`);
+        }
+        return false;
+      }
+      this._entryFillLooked.delete(position.id);
+      this._reportMakerWouldCancel(position, 'drop');
+      try {
+        krakenWebSocketAdapter.releaseIntentReason(position.symbol, 'open');
+      } catch (error) {
+        console.error(`[P19-B7.2c][MAKER_CANCEL_RELEASE_FAILED:${this.mode}] ${position.symbol} trade=${cancelled.tradeId}`, error);
+      }
+      console.log(`[P19-B7.2c][MAKER_NEVER_FILLED:${this.mode}] ${position.symbol}: ${why} — dropped (slot freed, never-filled record ${cancelled.tradeId})`);
       return true;
     }
     this._reportMakerWouldCancel(position, 'drop');
@@ -2394,7 +2431,7 @@ export class ActiveExecutionEngine {
       if (!position) return { success: false, error: 'position not found' };
       if ((position as any).state !== 'pending') return { success: false, error: `position is ${(position as any).state ?? 'open'}, not pending` };
       const cancelled = await this._dropUnfilledMaker(position, 'pending maker cancelled by the engine stop, unfilled');
-      if (this.mode === 'paper' && position.assetClass === 'xstock_spot' && !cancelled) {
+      if (!cancelled && this.mode === 'paper' && (position.assetClass === 'xstock_spot' || position.assetClass === 'crypto_spot')) {
         return { success: false, error: 'exact pending maker cancellation did not commit' };
       }
       return { success: true };
