@@ -257,3 +257,9 @@ The corrected token check also refuses whitespace before creating a CSV:
 The local replay reproduced the ten 401 results and false PASS with the prior ref. The correction preserved the previous CSV on all seventeen refused responses, including five tokens with blank, leading, trailing, interior or nonbreaking whitespace. All four missing or empty setting cases also preserved the CSV and made no request. Four successful token-field cases each retained all ten benchmark reads and CSV rows. The tests ran with Bash tracing requested and a planted curl config. The corrected runs displayed no fixture values and created no trace file.
 
 Re-review is for exact source placement. The P6/P7a Step 6 return and both Token Watch reads stay recorded.
+
+### Phase 3C Step 4 approval and Step 5 placement check
+
+Coltrane gave Step 4 PROCEED for source placement on `47a427bb6bf5b4765726d332cf5d10f05b936c3e` at 2026-11-26 14:26:04 UTC. He independently reproduced the prior false PASS. The approved candidate handled seventeen rejected login responses and four missing or empty settings without changing the preceding CSV. Each of four valid login field cases produced all ten ordered CSV rows, including the planted HTTP 503. His trace control fired on the baseline and the approved candidate's twenty-five runs contained no trace file or fixture values in captured output.
+
+The exact three-path diff, including modes and old and new blobs, was unchanged after replay from base `db049d82b56971b1713215ad622d51e798234018` onto `59bfa6d49cbc83ed2b9988311d200ae04ae8ebcf` at `a827845462b6de9aa716d65aa46842ac412b2b29`. The shared advance touched six disjoint paths. The next record commit changes only this receipt and INFRA's position. Step 5 needs placement continuity and green CI. P6/P7a Step 6 remains held and both November 27 Token Watch reads remain armed.
