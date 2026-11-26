@@ -92,6 +92,30 @@ const state: ArchiverState = {
 let equitySocketGeneration = 0;
 let rawTickerFrameId = 0;
 
+interface EquityTickerSubscriptionReceipt {
+  readonly generation: number;
+  readonly requestId: number;
+  readonly symbol: string;
+  readonly receivedMonotonicMs: number;
+}
+
+interface EquityTickerSubscription {
+  readonly generation: number;
+  readonly requestId: number;
+  readonly requested: ReadonlySet<string>;
+  readonly receipts: Map<string, EquityTickerSubscriptionReceipt | null>;
+}
+
+let tickerSubscription: EquityTickerSubscription | null = null;
+
+/** A receipt attests symbol membership on the current socket. Freshness and venue hours require separate evidence. */
+export function getEquityTickerSubscriptionReceipt(symbol: string): EquityTickerSubscriptionReceipt | null {
+  if (!state.enabled || state.ws?.readyState !== WebSocket.OPEN || tickerSubscription?.generation !== equitySocketGeneration) {
+    return null;
+  }
+  return tickerSubscription.receipts.get(symbol) ?? null;
+}
+
 export function getEquitySpotStats(): {
   connected: boolean;
   configuredSymbols: number;
@@ -435,6 +459,24 @@ export function _resetDiagNonDataState(): void {
 
 export { logDiagNonDataMessage as _logDiagNonDataMessageForTests };
 
+function recordTickerSubscriptionReceipt(
+  msg: { method?: unknown; req_id?: unknown; success?: unknown; result?: { channel?: unknown; symbol?: unknown } },
+  receipt: { generation: number; monotonicMs: number },
+): void {
+  const subscription = tickerSubscription;
+  if (!subscription || subscription.generation !== receipt.generation || msg.method !== 'subscribe'
+    || msg.req_id !== subscription.requestId || msg.result?.channel !== 'ticker') return;
+  const symbol = msg.result.symbol;
+  if (typeof symbol !== 'string' || !subscription.requested.has(symbol)) return;
+  if (msg.success === false) {
+    subscription.receipts.set(symbol, null);
+  } else if (msg.success === true && !subscription.receipts.has(symbol)) {
+    subscription.receipts.set(symbol, Object.freeze({
+      symbol, generation: receipt.generation, requestId: subscription.requestId, receivedMonotonicMs: receipt.monotonicMs,
+    }));
+  }
+}
+
 function handleMessage(raw: WebSocket.RawData, generation?: number): void {
   const receipt = generation === undefined ? undefined : { generation, monotonicMs: performance.now() };
   state.lastMsgAt = Date.now();
@@ -452,6 +494,7 @@ function handleMessage(raw: WebSocket.RawData, generation?: number): void {
   } else if (msg.channel === 'ticker' && Array.isArray(msg.data)) {
     for (const snap of msg.data) parseTickerSnap(snap, msg.type, receipt);
   } else {
+    if (receipt) recordTickerSubscriptionReceipt(msg, receipt);
     // B-NEW-44: route everything that isn't an ohlc/ticker data message into
     // the diagnostic logger. Includes subscribe-ack, errors, status updates,
     // and any future channels Kraken introduces.
@@ -459,14 +502,17 @@ function handleMessage(raw: WebSocket.RawData, generation?: number): void {
   }
 }
 
-function subscribe(ws: WebSocket): void {
+function subscribe(ws: WebSocket, generation: number): void {
   ws.send(JSON.stringify({
     method: 'subscribe',
     params: { channel: 'ohlc', symbol: state.symbols, interval: 1 },
   }));
+  const requestId = generation;
+  tickerSubscription = { generation, requestId, requested: new Set(state.symbols), receipts: new Map() };
   ws.send(JSON.stringify({
     method: 'subscribe',
     params: { channel: 'ticker', symbol: state.symbols },
+    req_id: requestId,
   }));
   console.log(`[B74][equity-spot] subscribed to ohlc(1) + ticker for ${state.symbols.length} symbols`);
 }
@@ -475,6 +521,7 @@ async function connect(): Promise<void> {
   if (!state.enabled) return;
   const previous = state.ws;
   state.ws = null;
+  tickerSubscription = null;
   const generation = ++equitySocketGeneration;
   try { previous?.close(); } catch { /* retired */ }
   const ws = new WebSocket(WS_URL);
@@ -493,7 +540,7 @@ async function connect(): Promise<void> {
     // marks, then repeat. "Never had data" and "had data, then stopped" are DIFFERENT STATES;
     // seeding here keeps the watchdog measuring the second one only.
     state.lastDataMsgAt = Date.now();
-    subscribe(ws);
+    subscribe(ws, generation);
   });
 
   ws.on('message', (raw) => {
@@ -503,6 +550,7 @@ async function connect(): Promise<void> {
   ws.on('close', (code, reason) => {
     if (!isCurrent()) return;
     state.ws = null;
+    tickerSubscription = null;
     console.warn(`[B74][equity-spot] disconnected code=${code} reason=${reason.toString()}`);
     scheduleReconnect(generation);
   });
@@ -670,6 +718,7 @@ export function stopEquitySpotArchiver(): void {
   state.enabled = false;
   const socket = state.ws;
   state.ws = null;
+  tickerSubscription = null;
   try { socket?.close(); } catch { /* retired */ }
 }
 

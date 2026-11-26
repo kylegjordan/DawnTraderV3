@@ -17,14 +17,15 @@ vi.mock('ws', async () => {
   return { default: Socket };
 });
 vi.mock('../../services/passive-archive/universe-loader.js', () => ({
-  loadEquitySpotUniverse: vi.fn(async () => ['RTLY/USD']),
+  loadEquitySpotUniverse: vi.fn(async () => ['RTLY/USD', 'PGR/USD']),
 }));
 vi.mock('../../services/passive-archive/ticker-batch-writer.js', () => ({
   bufferTickerSnap: vi.fn(),
 }));
 
 import {
-  getLatestEquityTick, isCurrentEquityTickerFrame, startEquitySpotArchiver, stopEquitySpotArchiver,
+  getEquityTickerSubscriptionReceipt, getLatestEquityTick, isCurrentEquityTickerFrame,
+  startEquitySpotArchiver, stopEquitySpotArchiver,
 } from '../../services/passive-archive/equity-spot-archiver.js';
 import { gradePaperXstockExitQuote } from '../../services/execution/paper-xstock-exit-quote.js';
 
@@ -110,5 +111,65 @@ describe('#961 — immutable xStock raw quote lineage', () => {
     expect(update).toMatchObject({ bid: 96, frame: { kind: 'update', generation: snapshot?.frame?.generation } });
     stopEquitySpotArchiver();
     expect(isCurrentEquityTickerFrame(update?.frame!)).toBe(false);
+  });
+});
+
+describe('#1191 — exact xStock ticker subscription evidence', () => {
+  const other = 'PGR/USD';
+
+  function deliverAck(socket: EventEmitter, reqId: number, result: unknown, success = true, method = 'subscribe') {
+    socket.emit('message', Buffer.from(JSON.stringify({ method, req_id: reqId, success, result })));
+  }
+
+  it('credits both requested symbols even with shared diagnostic throttling', async () => {
+    await startEquitySpotArchiver();
+    const socket = sockets.instances[0];
+    socket.emit('open');
+    const ohlc = JSON.parse(socket.send.mock.calls[0][0]);
+    const ticker = JSON.parse(socket.send.mock.calls[1][0]);
+    expect(ohlc).toEqual({ method: 'subscribe', params: { channel: 'ohlc', symbol: [symbol, other], interval: 1 } });
+    expect(ticker).toMatchObject({ method: 'subscribe', params: { channel: 'ticker', symbol: [symbol, other] } });
+    expect(Number.isInteger(ticker.req_id)).toBe(true);
+
+    deliver(socket, 'snapshot', 90);
+    expect(getEquityTickerSubscriptionReceipt(symbol)).toBeNull();
+    deliverAck(socket, ticker.req_id, undefined, false);
+    for (const requested of [symbol, other]) {
+      deliverAck(socket, ticker.req_id, { channel: 'ticker', symbol: requested });
+      expect(getEquityTickerSubscriptionReceipt(requested)).toMatchObject({ symbol: requested, requestId: ticker.req_id });
+    }
+  });
+
+  it('refuses mismatched, declined and prior-socket receipts', async () => {
+    await startEquitySpotArchiver();
+    const oldSocket = sockets.instances[0];
+    oldSocket.emit('open');
+    const oldId = JSON.parse(oldSocket.send.mock.calls[1][0]).req_id;
+    const response = { channel: 'ticker', symbol };
+    deliverAck(oldSocket, oldId + 1, response);
+    deliverAck(oldSocket, oldId, { channel: 'ohlc', symbol });
+    deliverAck(oldSocket, oldId, response, true, 'unsubscribe');
+    deliverAck(oldSocket, oldId, { channel: 'ticker', symbol: 'UNREQUESTED/USD' });
+    expect(getEquityTickerSubscriptionReceipt(symbol)).toBeNull();
+    expect(getEquityTickerSubscriptionReceipt('UNREQUESTED/USD')).toBeNull();
+
+    deliverAck(oldSocket, oldId, response);
+    expect(getEquityTickerSubscriptionReceipt(symbol)).toMatchObject({ requestId: oldId });
+    deliverAck(oldSocket, oldId, response, false);
+    deliverAck(oldSocket, oldId, response);
+    expect(getEquityTickerSubscriptionReceipt(symbol)).toBeNull();
+
+    await startEquitySpotArchiver();
+    const replacement = sockets.instances[1];
+    replacement.emit('open');
+    const newId = JSON.parse(replacement.send.mock.calls[1][0]).req_id;
+    expect(newId).not.toBe(oldId);
+    deliverAck(oldSocket, newId, response);
+    deliverAck(replacement, oldId, response);
+    expect(getEquityTickerSubscriptionReceipt(symbol)).toBeNull();
+    deliverAck(replacement, newId, response);
+    expect(getEquityTickerSubscriptionReceipt(symbol)).toMatchObject({ requestId: newId, generation: newId });
+    stopEquitySpotArchiver();
+    expect(getEquityTickerSubscriptionReceipt(symbol)).toBeNull();
   });
 });
