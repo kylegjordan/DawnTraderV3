@@ -14,7 +14,7 @@
 
 - **`B-LANGSTON-CONTEXT`:** chunk 1 CLOSED; Step 7 waits on its scheduled index/size/privacy runs (never close on my own runs). Queue: P-6b → P-2 → retrofit → P-1b.
   - Langston's loaded-set ceiling, the struck A/B and the shelved journal: `B_LANGSTON_CONTEXT_PRE_AUDIT.md` §17-§18 and plan rows 2.8a/2.8b; live numbers from `langston-size-watch --status`, never from here.
-- **S7 CODEX SHIFT RESUMED 11-23 under Kyle/PM release.** Watcher off. Immediate: 5a1 Step 8; P6 days 4-7; birth-cap band; `88fc097f` 11-27.
+- **S7 CODEX SHIFT RESUMED 11-23 under Kyle/PM release.** Watcher off.
 - ⭐⭐ **`B-LANGSTON-TWO-WORKERS` — STEP: 9 of 11 · NEXT: 4 of 11 on fold (b) drop-arm hold release, then 7/8.** 2nd worker ON 11-20 18:36:29Z; report `f679d4c98`; fold `021d015d4` LIVE 11-21 00:13:33Z = T'. True day-3 DONE 11-24: 88 invokes, 0 dropped; q5/q6 stops both NO; alert `94c24825` RESOLVED by codex-infra with `aa5d83fb7`; one-worker flag stays off while Langston is off. Next readers: day 7 `1bb7196a` due 11-28; day 21 `12875bf3` due 12-12. Owed: (c) §6b corrections + pair-count criterion; proposal (a) to PM; Step 10 SIM hold-contract row + SPRINT 4a.
 - ⭐ **B-TOKEN-ECONOMY amd-1 P1–P3 — STEP: 6 of 11 · NEXT STEP: 7 of 11.** P1 keep restored `46bd1b710352`; Coltrane PROCEED 11-25 22:49:23Z `9ef3f9df3`, shared `4dba562e4` CI `45718502944` 4/4. Helsinki bundle waits for authorized window and R2-8c decision. Drain old writers, set fresh limits. Phase A restart 716 P10 freshness PASS 11-26 02:45Z. Next Token Watch read `88fc097f` 11-27 00:05Z. Preserve holds.
 - ⭐ **B-TOKEN-ECONOMY amd-1 P6 — STEP: 9 of 11 · NEXT: 10 after day 7 (11-28 00:13Z).** Day 1 `c44048b08`: 33/34; F-3 critical no-rule/lane question for Step 10. Day 2 `4f345478f`: 17/17. Days 3–5 NOT RUN (Langston/bridge off); days 6–7 owed in `B_TOKEN_ECONOMY_AMD1_P6_STEP7_VERIFY.md`. T'=11-21 00:13:33Z; rollback `27ef0d3f7`.
@@ -30,6 +30,7 @@
 - 🔁 **Older owned items (crew-switch resume 2026-10-16):**
   0. **B-CREW-ACCESS-HARDEN (`#1092`, `#924`) — F-2 STEP: 3 of 11 (C-7..C-12 increment: code `b45df59fe` + `da2076bc8` (C-10 withdrawn, :171), change list `55c269da0`; self-test 37, M1-M6 killed) · NEXT: 4 of 11 dispatch AFTER the birth-cap verdict, then install script only.** Live install `eca5607f7` 11-20 12:48Z. Drift pin on #1004. P3a r2 open; disposable keys stay.
   1. **B-CREDENTIALS-PRIVATE-REPO (#1023):** OBJ-1 CLOSED (Coltrane confirmed 10-13 at `680e87b8d`); parent open in Governance for GB-8, OBJ-2, OBJ-3, OBJ-4 readers, OBJ-6 and the private-repo flip.
+     - **Deployer pin — STEP: 7 of 11 · NEXT STEP: 8 of 11 with parent.** Reconciled `f288ca4ff`, alert `7953f97f` resolved 11-26. Phase A 716.
      - **GB-8 bridges increment — STEP: 7 of 11 · NEXT: 8.** Installed 11-13 with B-AGENT-INVOKE (same `--only bridges` run); discord.py 2.7.1 unchanged.
   2. **Alert `aaf0b2b5` DUE — Kyle APPROVED removing `is_admin` from crew row `testuser123`** (#1092: its 4 costs listed there); Plans A/B: settle with the reviewer, one gate each (detail on #1092). ⚠️ Langston's bridge is now inactive/disabled (crew mode CODEX) — who reviews is the new crew's call.
   3. **Kyle 2026-10-08, plan §0 Infra row (`SPRINT_TO_LIVE_PLAN.md`):** Langston+Coltrane memory auto-trim (eviction by supersession); the alert lane (built, B-LANGSTON-RELIEF); #1057 reconcile-verb notes live on #1057.

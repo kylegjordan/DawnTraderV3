@@ -70,3 +70,15 @@ The reader path stays within the fixture and fails closed if the ordinary-path s
 Review whether putting the exact deployer blob, its two classification rows and its sandbox compatibility update on the shared branch gives the manifest a valid source while preserving the diagnostic and the literal Phase A return arrangement. Verify that the review commit adds neither the migration, its SQL and verifier, nor an ancestry link to the Phase B commit. The deploy script is the only production executable change in the increment.
 
 After approval and green exact CI, land the script source separately. Read the installed digest, owner and mode and the checker's shared ancestor and blob before updating the per-file pin. Record the previous manifest and preserve its other entries. Read back a fresh successful checker run that names the exact file and pin, then resolve the alert with evidence. Verify staging still serves the recorded same process. This lane carries no authority to deploy the application, restart it, change the rollout or return, or release Phase B, Entry Gate D or Universe Refresh P10.
+
+## Staging verification — 2026-11-26
+
+Coltrane approved the source placement at 06:37:46 UTC on exact ref `f288ca4ff0ebd36abb038c62af6e0b8b992eaafc`. GitHub Actions run `45769059064` passed TypeScript Check, Test Suite, Build and Docker Build on that ref before the shared branch was fast-forwarded.
+
+The staging checker confirmed the new source was on the shared branch. Only the last, effective manifest entry for `scripts/dt-deploy.sh` was updated, from `7429799c94ff34e1afac6269659331771ee6606e` to the approved ref. The manifest stayed root-owned and mode `0644`. Its SHA-256 went from `190824dadf0b5c98a86854a2417a5a8adeb6a95a2d4bdce46666afb8b3ba6530` to `080eae5d8c297fdc7d146f5beb5b792865e4a5b86cd3f62650d880f29d6100d9`. The root-only previous copy is `/var/backups/dt-install-drift-installed.sha-before-7953f97f-v_y0q2ic`. The installed deployer still matched its approved digest, owner and mode.
+
+The checker invocation `194696dab66d42fd8d0b7015f593490c` named the deployer and new pin, exited zero and logged PASS at 06:53:08 UTC. The earlier 05:16:59 UTC mismatch serves as the positive control. The deployed build and running-process readback still showed literal Phase A `5ecd7ee24fb7a741e8e015e0e6a262a464e7d016`, restart 716, PID 235604, started at 02:32:06.222 UTC. The change affects the staging tool's monitoring record and has no app UI surface. The System Impact Map already describes this checker and its source contract.
+
+Alert `7953f97f-976d-49d9-a05e-9e37e594535a` was resolved by `codex-infra` at 06:53:36.006 UTC with the approved ref as evidence. The preflight disposition was addressed to OLD, ANALYST and PM in Discord message `1575404197501866166`. The crew will recheck drift before each leg. Independent Step 8 remains with the parent batch.
+
+REVIEWER: claim-only · does the installed checker pass with the new effective pin, the alert resolve, and the Phase A process remain the same? · CLEAN · re-derived from the checker journal, alert ledger and process readback.
