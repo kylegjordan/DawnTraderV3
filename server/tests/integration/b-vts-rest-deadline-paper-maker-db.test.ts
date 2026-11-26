@@ -3,6 +3,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { activeOpenPositions, closedTradesTable } from '@shared/schema';
 import { eq, sql } from 'drizzle-orm';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { observePaperMakerRefusal } from '../../core/trading/paper-maker-refusal-evidence.js';
 import { db, pool } from '../../db.js';
 import { ActiveExecutionEngine } from '../../services/active-execution-engine.js';
 import { ActivePortfolioManager } from '../../services/active-portfolio-manager.js';
@@ -121,6 +122,51 @@ describe('#1073 paper crypto pending maker pair on Postgres', () => {
         },
       } });
       expect(Number((trade?.metadata as { paperMakerPlacement: { limitPrice: string } }).paperMakerPlacement.limitPrice)).toBe(100);
+    });
+  });
+
+  it('keeps refusal evidence linked to the newer slot and exact pending rest through terminal transition', async (ctx) => {
+    if (!reachable) ctx.skip();
+    await withRest({ linked: true }, async (position, tradeId) => {
+      const epoch = { id: 'engine-a', wallAnchorMs: evaluatedAtMs - 20_000, monotonicAnchorMs: 1_000, periodMs: 4_000 };
+      const placement = { placedAtMs: evaluatedAtMs - 40_000, deadlineAtMs: epoch.wallAnchorMs + 6_000 };
+      const makerPlacedAt = new Date(placement.placedAtMs);
+      const makerDeadline = new Date(placement.deadlineAtMs);
+      await db.update(activeOpenPositions).set({ makerPlacedAt, makerDeadline, makerLimitPrice: '100' })
+        .where(eq(activeOpenPositions.id, position.id));
+      const pending = (await storage.getActiveOpenPosition('paper', position.id))!;
+      const first = observePaperMakerRefusal(epoch, placement, {
+        observation: 'upstream_refusal', slot: 1, callbackNumber: 1, wallAtMs: epoch.wallAnchorMs + 4_100, monotonicAtMs: 5_100,
+      });
+      const second = observePaperMakerRefusal(epoch, placement, {
+        observation: 'upstream_refusal', slot: 2, callbackNumber: 2, wallAtMs: epoch.wallAnchorMs + 8_100, monotonicAtMs: 9_100,
+      }, first);
+      const record = storage.recordPaperMakerRefusal.bind(storage);
+      expect(await record({ ...pending, id: 'other-rest' }, tradeId, second)).toBe(false);
+      expect(await record(pending, `${tradeId}-other`, second)).toBe(false);
+      expect(await record(pending, tradeId, { ...second, deadlineAtMs: placement.deadlineAtMs - 1 })).toBe(false);
+      expect(await record(pending, tradeId, second)).toBe(true);
+      expect(await record(pending, tradeId, second)).toBe(false);
+      expect(await record(pending, tradeId, { ...second, sample: { ...second.sample, slot: 1 } })).toBe(false);
+      expect(await record(pending, tradeId, { ...second, epochId: 'old', epochAnchorAtMs: epoch.wallAnchorMs - 1 })).toBe(false);
+      const nextEpoch = { ...epoch, id: 'engine-b', wallAnchorMs: epoch.wallAnchorMs + 1 };
+      const restartedFirst = observePaperMakerRefusal(nextEpoch, placement, { ...first.sample, wallAtMs: first.sample.wallAtMs + 1 });
+      const newer = observePaperMakerRefusal(nextEpoch, placement, { ...second.sample, wallAtMs: second.sample.wallAtMs + 1 }, restartedFirst);
+      expect(await record(pending, tradeId, newer)).toBe(true);
+      const terminalLook = observePaperMakerRefusal(nextEpoch, placement, {
+        observation: 'evaluated_side', slot: 3, callbackNumber: 3, wallAtMs: nextEpoch.wallAnchorMs + 12_100, monotonicAtMs: 13_100,
+      }, newer);
+      expect(terminalLook.recovered?.count).toBe(2);
+      expect(await storage.transitionPaperCryptoPendingMaker(position, {
+        ...fill, tradeId, refusalEvidence: terminalLook, evaluatedAtMs: terminalLook.sample.wallAtMs,
+        quoteArrivedAtMs: placement.deadlineAtMs - 1,
+      })).toMatchObject({ status: 'committed', tradeId });
+      expect(await record(pending, tradeId, { ...newer, sample: { ...newer.sample, slot: 3 } })).toBe(false);
+      const trade = await storage.getClosedTrade('paper', tradeId);
+      expect(trade).toMatchObject({ metadata: { tradeOnlyEvidence: 'retain',
+        paperMakerRefusal: { positionId: position.id, tradeId, epochId: 'engine-b', sample: { slot: 2 } },
+        paperMakerTerminal: { positionId: position.id, outcome: 'fill', refusalEvidence: { recovered: { count: 2 } } },
+      } });
     });
   });
 

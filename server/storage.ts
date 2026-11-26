@@ -187,6 +187,7 @@ import {
 } from "@shared/schema";
 import { db } from "./db";
 import { PaperEntryDrainIncomplete, paperEntryPublication } from './services/paper-entry-publication.js';
+import type { PaperMakerRefusalEvidence } from './core/trading/paper-maker-refusal-evidence.js';
 import { eq, desc, asc, and, gte, gt, lte, inArray, sql, isNotNull, isNull } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { NON_OUTCOME_CLOSE_REASONS, BOOKED_CLOSE_REASONS } from "./services/trade-close-reason";
@@ -241,7 +242,7 @@ function paperXstockPositionKey(position: PaperXstockPositionKey, tradeId: strin
   );
 }
 
-type PaperXstockPendingMakerTransition =
+type PaperXstockPendingMakerTransition = (
   | {
       kind: 'fill';
       currentPrice: string;
@@ -250,16 +251,18 @@ type PaperXstockPendingMakerTransition =
       observedAgeMs: number | null;
       side: 'buy' | 'sell';
     }
-  | { kind: 'cancel'; reason: string; evaluatedAtMs?: number };
+  | { kind: 'cancel'; reason: string; evaluatedAtMs?: number }
+) & { refusalEvidence?: PaperMakerRefusalEvidence };
 
-type PaperCryptoPendingMakerTransition =
+type PaperCryptoPendingMakerTransition = (
   | (Pick<Extract<PaperXstockPendingMakerTransition, { kind: 'fill' }>, 'kind' | 'currentPrice' | 'stamp' | 'observedAgeMs'> & {
       tradeId: string;
       evaluatedAtMs: number;
       quoteArrivedAtMs: number | null;
       side: 'buy' | 'sell';
     })
-  | { kind: 'cancel'; reason: string; evaluatedAtMs?: number };
+  | { kind: 'cancel'; reason: string; evaluatedAtMs?: number }
+) & { refusalEvidence?: PaperMakerRefusalEvidence };
 
 type PaperCryptoPendingMakerResult =
   | { status: 'committed'; tradeId: string }
@@ -269,6 +272,11 @@ type PaperCryptoPendingMakerResult =
 type PaperCryptoPendingMakerPosition = Pick<ActiveOpenPosition, 'id' | 'symbol' | 'quantity' | 'metadata'>;
 type PaperMakerPlacementPosition = Pick<ActiveOpenPosition,
   'id' | 'symbol' | 'quantity' | 'mode' | 'assetClass' | 'state' | 'makerPlacedAt' | 'makerDeadline' | 'makerLimitPrice'>;
+
+const paperMakerTerminalPosition = {
+  id: activeOpenPositions.id, makerPlacedAt: activeOpenPositions.makerPlacedAt,
+  makerDeadline: activeOpenPositions.makerDeadline,
+};
 
 function positionTradeId(metadata: ActiveOpenPosition['metadata']): string | null {
   const id = (metadata as Record<string, unknown> | null)?.tradeId;
@@ -284,6 +292,7 @@ function linkedMakerTerminal(
   outcome: 'fill' | 'cancel',
   evaluatedAt: number | undefined,
   crossing?: { quoteArrivedAtMs: number | null; side: 'buy' | 'sell' },
+  refusalEvidence?: PaperMakerRefusalEvidence,
 ) {
   const evaluatedAtMs = makerAuditTime(evaluatedAt);
   const quoteArrivedAtMs = makerAuditTime(crossing?.quoteArrivedAtMs);
@@ -292,7 +301,33 @@ function linkedMakerTerminal(
     version: 1, positionId, outcome, link: 'linked', evaluatedAtMs,
     ...(crossing ? { quoteArrivedAtMs, quoteSide: crossing.side === 'buy' ? 'ask' : 'bid' } : {}),
     ...(hasTiming ? {} : { timing: 'unknown' }),
+    ...(refusalEvidence ? { refusalEvidence } : {}),
   };
+}
+
+function terminalMakerRefusal(
+  pending: Pick<ActiveOpenPosition, 'id' | 'makerPlacedAt' | 'makerDeadline'>,
+  metadata: ClosedTrade['metadata'],
+  evidence?: PaperMakerRefusalEvidence,
+): PaperMakerRefusalEvidence | undefined {
+  if (!evidence || pending.makerPlacedAt?.getTime() !== evidence.placedAtMs
+    || pending.makerDeadline?.getTime() !== evidence.deadlineAtMs) return;
+  const prior = (metadata as { paperMakerRefusal?: PaperMakerRefusalEvidence & { positionId: string } } | null)?.paperMakerRefusal;
+  if (!prior) return evidence.recovered ? undefined : evidence;
+  if (prior.positionId !== pending.id) return;
+  if (prior.epochId === evidence.epochId) {
+    if (!Number.isSafeInteger(prior.sample?.slot) || prior.sample.slot >= evidence.sample.slot) return;
+    const allowance = Math.min(1_000, evidence.periodMs / 4);
+    if (evidence.recovered) {
+      const last = prior.refusing?.last;
+      if (!last || prior.refusing?.first?.slot !== evidence.recovered.first.slot
+        || !Number.isSafeInteger(last.slot) || last.slot > evidence.recovered.last.slot
+        || !Number.isFinite(last.wallAtMs) || last.wallAtMs <= evidence.deadlineAtMs + allowance) return;
+    }
+    return evidence;
+  }
+  // An older epoch cannot supply the committed boundary for a recovered span.
+  if (!evidence.recovered && prior.epochAnchorAtMs < evidence.epochAnchorAtMs) return evidence;
 }
 
 async function lockOpenTradeRecord(executor: Pick<typeof db, 'execute'>, mode: TradingMode, symbol: string, assetClass: string) {
@@ -663,6 +698,7 @@ export interface IStorage {
     change: PaperCryptoPendingMakerTransition,
   ): Promise<PaperCryptoPendingMakerResult>;
   recordPaperMakerPlacement(position: PaperMakerPlacementPosition, tradeId: string): Promise<boolean>;
+  recordPaperMakerRefusal(position: PaperMakerPlacementPosition, tradeId: string, evidence: PaperMakerRefusalEvidence): Promise<boolean>;
   closePaperXstockTrade(
     trade: PaperXstockTradeKey,
     position: PaperXstockPositionKey | null,
@@ -3340,7 +3376,7 @@ export class DatabaseStorage implements IStorage {
         eq(closedTradesTable.chosenEntryMode, 'maker'),
         isNull(closedTradesTable.closedAt),
       );
-      const [trade] = await tx.select({ id: closedTradesTable.id })
+      const [trade] = await tx.select({ id: closedTradesTable.id, metadata: closedTradesTable.metadata })
         .from(closedTradesTable).where(tradeKey).for('update');
       if (!trade) return false;
       const positionKey = and(
@@ -3351,21 +3387,22 @@ export class DatabaseStorage implements IStorage {
       const [changed] = change.kind === 'fill'
         ? await tx.update(activeOpenPositions)
             .set({ state: 'open', currentPrice: change.currentPrice, lastUpdated: now })
-            .where(positionKey).returning({ id: activeOpenPositions.id })
-        : await tx.delete(activeOpenPositions).where(positionKey).returning({ id: activeOpenPositions.id });
+            .where(positionKey).returning(paperMakerTerminalPosition)
+        : await tx.delete(activeOpenPositions).where(positionKey).returning(paperMakerTerminalPosition);
       if (!changed) return false;
 
+      const refusal = terminalMakerRefusal(changed, trade.metadata, change.refusalEvidence);
       const patch = change.kind === 'fill'
         ? {
             paperXstockEntryFill: change.proof,
             paperMakerTerminal: linkedMakerTerminal(position.id, 'fill', change.proof.filledAtMs, {
               quoteArrivedAtMs: change.proof.quoteArrivedAtMs, side: change.side,
-            }),
+            }, refusal),
             ...(change.observedAgeMs === null ? {} : { entryObservedAgeMs: change.observedAgeMs }),
           }
         : {
             neverFilledReason: change.reason,
-            paperMakerTerminal: linkedMakerTerminal(position.id, 'cancel', change.evaluatedAtMs),
+            paperMakerTerminal: linkedMakerTerminal(position.id, 'cancel', change.evaluatedAtMs, undefined, refusal),
           };
       const update: ClosedTradeWrite<Partial<ClosedTrade>> = change.kind === 'fill'
         ? change.stamp
@@ -3414,6 +3451,49 @@ export class DatabaseStorage implements IStorage {
     return Boolean(written);
   }
 
+  async recordPaperMakerRefusal(
+    position: PaperMakerPlacementPosition,
+    tradeId: string,
+    evidence: PaperMakerRefusalEvidence,
+  ): Promise<boolean> {
+    const { assetClass, id: positionId, quantity } = position;
+    if (position.mode !== 'paper' || position.state !== 'pending'
+      || (assetClass !== 'crypto_spot' && assetClass !== 'xstock_spot')) return false;
+    if (makerAuditTime(position.makerPlacedAt?.getTime()) !== evidence.placedAtMs
+      || makerAuditTime(position.makerDeadline?.getTime()) !== evidence.deadlineAtMs) return false;
+
+    const symbol = normalizeToInternalSymbol(position.symbol);
+    const pending = db.select({ id: activeOpenPositions.id }).from(activeOpenPositions).where(and(
+      eq(activeOpenPositions.id, positionId), eq(activeOpenPositions.mode, 'paper'), eq(activeOpenPositions.assetClass, assetClass),
+      eq(activeOpenPositions.symbol, symbol), eq(activeOpenPositions.quantity, quantity), eq(activeOpenPositions.state, 'pending'),
+      eq(activeOpenPositions.makerPlacedAt, new Date(evidence.placedAtMs)),
+      eq(activeOpenPositions.makerDeadline, new Date(evidence.deadlineAtMs)),
+      sql`${activeOpenPositions.metadata}->>'tradeId' = ${tradeId}`,
+    ));
+    const oldEvidence = sql`(${closedTradesTable.metadata}->'paperMakerRefusal')`;
+    const patch = { paperMakerRefusal: { ...evidence, positionId, tradeId } };
+    const [written] = await db.update(closedTradesTable).set({
+      metadata: sql`COALESCE(${closedTradesTable.metadata}, '{}'::jsonb) || ${JSON.stringify(patch)}::jsonb`,
+    }).where(and(
+      eq(closedTradesTable.id, tradeId), eq(closedTradesTable.mode, 'paper'), eq(closedTradesTable.assetClass, assetClass),
+      eq(closedTradesTable.symbol, symbol), eq(closedTradesTable.quantity, quantity),
+      eq(closedTradesTable.chosenEntryMode, 'maker'), isNull(closedTradesTable.closedAt),
+      sql`NOT (COALESCE(${closedTradesTable.metadata}, '{}'::jsonb) ? 'paperMakerTerminal')`,
+      sql`(${oldEvidence} IS NULL OR (
+        ${oldEvidence}->>'positionId' = ${positionId} AND (
+          (${oldEvidence}->>'epochId' = ${evidence.epochId}
+            AND jsonb_typeof(${oldEvidence}#>'{sample,slot}') = 'number'
+            AND ${oldEvidence}#>'{sample,slot}' < to_jsonb(${evidence.sample.slot}::bigint))
+          OR (${oldEvidence}->>'epochId' <> ${evidence.epochId}
+            AND jsonb_typeof(${oldEvidence}->'epochAnchorAtMs') = 'number'
+            AND ${oldEvidence}->'epochAnchorAtMs' < to_jsonb(${evidence.epochAnchorAtMs}::bigint))
+        )
+      ))`,
+      sql`EXISTS (${pending})`,
+    )).returning({ id: closedTradesTable.id });
+    return Boolean(written);
+  }
+
   async transitionPaperCryptoPendingMaker(
     position: PaperCryptoPendingMakerPosition,
     change: PaperCryptoPendingMakerTransition,
@@ -3442,7 +3522,7 @@ export class DatabaseStorage implements IStorage {
         eq(closedTradesTable.symbol, symbol), isNull(closedTradesTable.closedAt),
         linkedId === null ? undefined : and(eq(closedTradesTable.id, linkedId), eq(closedTradesTable.quantity, position.quantity)),
       );
-      const candidates = await tx.select({ id: closedTradesTable.id }).from(closedTradesTable)
+      const candidates = await tx.select({ id: closedTradesTable.id, metadata: closedTradesTable.metadata }).from(closedTradesTable)
         .where(tradeKey).limit(2).for('update');
       if (candidates.length !== 1) {
         return { status: 'unresolved', reason: candidates.length === 0 ? 'its open trade does not match the pending position'
@@ -3452,13 +3532,14 @@ export class DatabaseStorage implements IStorage {
       const now = new Date();
       const [changed] = change.kind === 'fill'
         ? await tx.update(activeOpenPositions).set({ state: 'open', currentPrice: change.currentPrice, lastUpdated: now })
-            .where(pendingKey).returning({ id: activeOpenPositions.id })
-        : await tx.delete(activeOpenPositions).where(pendingKey).returning({ id: activeOpenPositions.id });
+            .where(pendingKey).returning(paperMakerTerminalPosition)
+        : await tx.delete(activeOpenPositions).where(pendingKey).returning(paperMakerTerminalPosition);
       if (!changed) return { status: 'not_pending' };
 
       const evidence = linkedId === null ? {
         version: 1, positionId: position.id, outcome: 'cancel', timing: 'unknown', refusal: 'unknown', link: 'legacy_unique',
-      } : linkedMakerTerminal(position.id, change.kind, change.evaluatedAtMs, change.kind === 'fill' ? change : undefined);
+      } : linkedMakerTerminal(position.id, change.kind, change.evaluatedAtMs, change.kind === 'fill' ? change : undefined,
+        terminalMakerRefusal(changed, candidates[0].metadata, change.refusalEvidence));
       const pendingMetadata = pending.metadata as Record<string, unknown> | null;
       const patch = change.kind === 'fill'
         ? { paperMakerTerminal: evidence, ...(change.observedAgeMs === null ? {} : { entryObservedAgeMs: change.observedAgeMs }) }

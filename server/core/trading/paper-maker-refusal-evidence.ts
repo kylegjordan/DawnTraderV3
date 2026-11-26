@@ -12,12 +12,20 @@ export interface PaperMakerMonitorEpoch {
   periodMs: number;
 }
 
+export interface PaperMakerMonitorAttempt {
+  epoch: PaperMakerMonitorEpoch;
+  slot: number;
+  callbackNumber: number;
+}
+
 export interface PaperMakerMonitorSample {
   /** Zero is the immediate start pass, which does not count as a scheduled slot. */
   slot: number;
+  callbackNumber: number;
   wallAtMs: number;
   monotonicAtMs: number;
   observation: PaperMakerObservation;
+  reason?: string;
 }
 
 type ContinuityBreak = 'epoch' | 'slot_gap' | 'repeated_slot' | 'slot_time' | 'clock' | 'placement';
@@ -47,13 +55,14 @@ function clockAllowanceMs(periodMs: number): number {
 
 function sampleBreak(epoch: PaperMakerMonitorEpoch, sample: PaperMakerMonitorSample): ContinuityBreak | null {
   const { periodMs, wallAnchorMs, monotonicAnchorMs } = epoch;
-  const { slot, wallAtMs, monotonicAtMs } = sample;
+  const { slot, callbackNumber, wallAtMs, monotonicAtMs } = sample;
   if (!Number.isFinite(periodMs) || periodMs <= 0 || !Number.isFinite(wallAnchorMs)
     || !Number.isFinite(monotonicAnchorMs) || !Number.isFinite(wallAtMs) || !Number.isFinite(monotonicAtMs)) return 'clock';
 
   const elapsed = monotonicAtMs - monotonicAnchorMs;
   const slotStart = slot * periodMs;
-  if (!Number.isSafeInteger(slot) || slot < 1 || elapsed < slotStart || elapsed >= slotStart + periodMs) return 'slot_time';
+  if (!Number.isSafeInteger(slot) || slot < 1 || !Number.isSafeInteger(callbackNumber) || callbackNumber < 1
+    || elapsed < slotStart || elapsed >= slotStart + periodMs) return 'slot_time';
   return Math.abs(wallAtMs - wallAnchorMs - elapsed) > clockAllowanceMs(periodMs) ? 'clock' : null;
 }
 
@@ -67,12 +76,15 @@ export function observePaperMakerRefusal(
   const { placedAtMs, deadlineAtMs } = placement;
   const samePlacement = previous?.placedAtMs === placedAtMs && previous.deadlineAtMs === deadlineAtMs;
   const sameEpoch = previous?.epochId === epoch.id && previous.periodMs === epoch.periodMs;
-  const adjacent = samePlacement && sameEpoch && previous.sample.slot + 1 === sample.slot;
+  const adjacent = samePlacement && sameEpoch && previous.sample.slot + 1 === sample.slot
+    && previous.sample.callbackNumber + 1 === sample.callbackNumber;
   let discontinuity = sampleBreak(epoch, sample);
   if (!Number.isFinite(placedAtMs) || !Number.isFinite(deadlineAtMs) || deadlineAtMs <= placedAtMs
     || sample.wallAtMs <= placedAtMs) discontinuity = 'placement';
-  if (samePlacement && sameEpoch && sample.slot <= previous.sample.slot) discontinuity = 'repeated_slot';
-  if (adjacent && sample.wallAtMs < previous.sample.wallAtMs) discontinuity = 'clock';
+  if (samePlacement && sameEpoch && (sample.slot <= previous.sample.slot
+    || sample.callbackNumber <= previous.sample.callbackNumber)) discontinuity = 'repeated_slot';
+  if (samePlacement && sameEpoch && (sample.wallAtMs < previous.sample.wallAtMs
+    || sample.monotonicAtMs < previous.sample.monotonicAtMs)) discontinuity = 'clock';
   const validSample = discontinuity === null;
   if (validSample && previous) {
     if (!samePlacement) discontinuity = 'placement';

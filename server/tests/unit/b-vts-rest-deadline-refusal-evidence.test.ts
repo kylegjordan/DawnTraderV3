@@ -17,7 +17,7 @@ function observe(
 ) {
   const elapsedMs = slot * epoch.periodMs + 100;
   return observePaperMakerRefusal({ ...epoch, id: options.epochId ?? epoch.id }, placement, {
-    slot, observation, wallAtMs: epoch.wallAnchorMs + elapsedMs + (options.wallOffset ?? 0),
+    slot, callbackNumber: slot, observation, wallAtMs: epoch.wallAnchorMs + elapsedMs + (options.wallOffset ?? 0),
     monotonicAtMs: epoch.monotonicAnchorMs + elapsedMs + (options.monotonicOffset ?? 0),
   }, previous);
 }

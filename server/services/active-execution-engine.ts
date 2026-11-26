@@ -280,7 +280,8 @@ import { recordActiveRtbRefresh } from '../core/observability/active-funnel-trac
 import { StrategyEngine, type StrategySignal, type TechnicalIndicators } from './strategy-engine';
 import { checkGuardrailRisk, type TradeCandidate, type TradeSafetyResultCode } from './trade-safety';
 import { buildSettingsFromGuardrails, getMoneyHeld, MoneyHeldUnavailable } from './guardrail-settings';
-import type { TradingSettings, PriceData, InsertExecutionAttemptAudit } from '@shared/schema';
+import { randomUUID } from 'node:crypto';
+import type { ActiveOpenPosition, TradingSettings, PriceData, InsertExecutionAttemptAudit } from '@shared/schema';
 import { contextBridge } from './context-bridge';
 import { activeFilterPool, type ActiveFilteredPair } from './active-filter-pool';
 import { validateActivePortfolioValue, nextBookFullLog, type BookFullState, type StrategyType } from './active-position-sizing';
@@ -375,6 +376,10 @@ import type { FillPolicy } from '../core/math/maker-taker-decision.js';
 import { isXstockMarketOpenUTC } from '../asset_classes/xstock_spot/market-hours.js';
 // P19-B7.2c: the shared PURE pending-maker fill/drop decision (paper+VTS parity — R2).
 import { decideTargetRestExpiry, evaluatePendingMaker, makerFillPrice, isMarketableAtPlacement, permitsTargetTakerFallback, resolveTargetExitPolicyForClose } from '../core/trading/pending-maker-logic.js';
+import {
+  observePaperMakerRefusal, shouldPersistPaperMakerRefusal,
+  type PaperMakerMonitorAttempt, type PaperMakerMonitorEpoch, type PaperMakerObservation, type PaperMakerRefusalEvidence,
+} from '../core/trading/paper-maker-refusal-evidence.js';
 import {
   selectCryptoTouch,
   transactableSide,
@@ -572,6 +577,8 @@ export class ActiveExecutionEngine {
   private krakenService: KrakenService;
   private strategyEngine: StrategyEngine;
   private monitoringInterval: NodeJS.Timeout | null = null;
+  private paperMakerMonitorEpoch?: PaperMakerMonitorEpoch;
+  private paperMakerRefusals = new Map<string, { tradeId: string; evidence: PaperMakerRefusalEvidence; writePending: boolean }>();
   private priceHistory: Map<string, PriceData[]> = new Map();
   private lastCycleSummary: any = {}; // Phase 27.F.14.DIAG: Cache last cycle for telemetry
   // P19-B3a: typed order-placement boundary (paper = atomic slippage+fee fill). The ONLY
@@ -1473,10 +1480,19 @@ export class ActiveExecutionEngine {
       }
     });
 
-    // Start monitoring loop
+    // Number attempts before monitoringCycle can skip one. The first immediate pass is separate.
+    const periodMs = this.MONITOR_INTERVAL_MS;
+    const epoch = this.mode === 'paper'
+      ? { id: randomUUID(), wallAnchorMs: Date.now(), monotonicAnchorMs: performance.now(), periodMs }
+      : undefined;
+    this.paperMakerRefusals.clear();
+    this.paperMakerMonitorEpoch = epoch;
+    let callbackNumber = 0;
     this.monitoringInterval = setInterval(async () => {
-      await this.monitoringCycle();
-    }, this.MONITOR_INTERVAL_MS);
+      callbackNumber++;
+      const attempt = epoch && { epoch, slot: Math.floor((performance.now() - epoch.monotonicAnchorMs) / periodMs), callbackNumber };
+      await this.monitoringCycle(attempt);
+    }, periodMs);
 
     // Run initial cycle
     await this.monitoringCycle();
@@ -1496,6 +1512,8 @@ export class ActiveExecutionEngine {
     
     this.closePaperEntryAdmission();
     this.isRunning = false;
+    this.paperMakerMonitorEpoch = undefined;
+    this.paperMakerRefusals.clear();
 
     // ── row `8a-P1`: FLUSH EVERY LADDER ACCUMULATOR UNCONDITIONALLY, BEFORE ANYTHING ELSE. ──────
     // ⛔ THIS IS WHAT MAKES THE STATED BOUND REAL RATHER THAN ASPIRATIONAL. The wall-clock leg is
@@ -1740,6 +1758,8 @@ export class ActiveExecutionEngine {
     // Clear running state
     this.isRunning = false;
     this.isCycleRunning = false;
+    this.paperMakerMonitorEpoch = undefined;
+    this.paperMakerRefusals.clear();
     // B-PROMOTION-RACE-FIX (#508, Langston N1): the promotion latch is running state too — clear
     // it here as well as in stop(), so a session reset cannot carry re-run residue forward.
     this.promotionInProgress = false;
@@ -1793,7 +1813,7 @@ export class ActiveExecutionEngine {
     console.log(`[B7.A][ENGINE] Session state reset complete for mode=${this.mode}`);
   }
 
-  private async monitoringCycle(): Promise<void> {
+  private async monitoringCycle(attempt?: PaperMakerMonitorAttempt): Promise<void> {
     // Re-entrancy guard: skip if previous cycle is still running
     if (this.isCycleRunning) {
       console.log(`[PaperExecution:${this.mode}] Skipping cycle - previous cycle still running`);
@@ -1817,7 +1837,7 @@ export class ActiveExecutionEngine {
       console.log(`[I7-PM-FOCUS][ENGINE_TICK] mode=${this.mode} positions=${openPositions.length} ts=${new Date().toISOString()}`);
       
       // Step 1: Check open positions for exit conditions
-      await this.checkOpenPositions();
+      await this.checkOpenPositions(attempt);
 
       // Note: Signal scanning removed by Directive 8.8.4-A3.R9.3
       // Trade creation flows through: FX5 → SignalOrchestrator → SQE → RTB → TCL
@@ -1841,6 +1861,53 @@ export class ActiveExecutionEngine {
     }
   }
 
+  /** Record a completed paper maker look without waiting on an audit write. */
+  private observePendingMaker(
+    position: ActiveOpenPosition,
+    attempt: PaperMakerMonitorAttempt | undefined,
+    observation: PaperMakerObservation,
+    finishing = false,
+    reason?: string,
+  ): PaperMakerRefusalEvidence | undefined {
+    if (!attempt || attempt.epoch !== this.paperMakerMonitorEpoch || position.state !== 'pending'
+      || (position.assetClass !== 'crypto_spot' && position.assetClass !== 'xstock_spot')) return;
+    const tradeId = (position.metadata as { tradeId?: unknown } | null)?.tradeId;
+    const placedAtMs = position.makerPlacedAt?.getTime();
+    const deadlineAtMs = position.makerDeadline?.getTime();
+    if (typeof tradeId !== 'string' || !tradeId || placedAtMs === undefined || deadlineAtMs === undefined
+      || !Number.isFinite(placedAtMs) || !Number.isFinite(deadlineAtMs)) return;
+
+    const existing = this.paperMakerRefusals.get(position.id);
+    const previous = existing?.tradeId === tradeId ? existing : undefined;
+    if (previous?.writePending) return; // The later sample cannot extend an unconfirmed boundary.
+    const wallAtMs = Date.now();
+    const monotonicAtMs = performance.now();
+    if (position.assetClass === 'xstock_spot' && !isXstockMarketOpenUTC(position.symbol, new Date(wallAtMs))) {
+      observation = 'venue_quiet_or_cold';
+      reason = 'venue_closed';
+    }
+    const evidence = observePaperMakerRefusal(attempt.epoch, { placedAtMs, deadlineAtMs }, {
+      slot: attempt.slot, callbackNumber: attempt.callbackNumber, wallAtMs, monotonicAtMs, observation, reason,
+    }, previous?.evidence);
+    if (finishing) return evidence;
+
+    const writePending = shouldPersistPaperMakerRefusal(evidence, previous?.evidence);
+    const record = { tradeId, evidence, writePending };
+    this.paperMakerRefusals.set(position.id, record);
+    if (writePending) {
+      const finishWrite = (confirmed: boolean) => {
+        if (this.paperMakerRefusals.get(position.id) !== record) return;
+        if (confirmed) record.writePending = false;
+        else this.paperMakerRefusals.delete(position.id);
+      };
+      void storage.recordPaperMakerRefusal(position, tradeId, evidence).then(finishWrite, (error: unknown) => {
+        finishWrite(false);
+        console.warn(`[B-VTS-REST-DEADLINE][PAPER_REFUSAL_WRITE_FAILED] position=${position.id}`, error);
+      });
+    }
+    return evidence;
+  }
+
   /**
    * P19-B7.2c — process one PENDING maker position per monitor tick (Kyle model,
    * SIMPLIFIED 2026-07-02). A pending is a resting maker order: it holds a slot but has
@@ -1860,7 +1927,7 @@ export class ActiveExecutionEngine {
    *     first open tick (conservative approximation, documented in the scope).
    */
   private async _processPendingMaker(
-    position: any,
+    position: ActiveOpenPosition,
     currentPrice: number,
     // ⛔ B-EXIT-PROVENANCE LINE 3 — REQUIRED, NEVER OPTIONAL. An optional parameter would let a
     // future call site omit the stamp, and that absence is indistinguishable from a missed stamp
@@ -1873,6 +1940,7 @@ export class ActiveExecutionEngine {
     // ⛔ `8a-P4b` X1 — the xStock sides the book-state guard judged THIS tick (J1), or the unjudged raw sides with
     // the guard off (J2). REQUIRED, never re-read here: a later frame would be unjudged. Ignored on other classes.
     xstockSides: { bid: number | null; ask: number | null; basis: 'raw_guarded' | 'raw_unguarded' | null; arrivedAtMs: number | null; bidQty: number | null; askQty: number | null },
+    attempt?: PaperMakerMonitorAttempt,
   ): Promise<void> {
     const _placedAtMs = position.makerPlacedAt ? new Date(position.makerPlacedAt).getTime() : null;
     const _entryFillPolicy = position.entryFillPolicy as FillPolicy | null | undefined;
@@ -1974,6 +2042,11 @@ export class ActiveExecutionEngine {
     });
     const guardedMaker = this.mode === 'paper' && _isXstockPending;
     const guardedCryptoMaker = this.mode === 'paper' && _isCryptoPending;
+    const venueDefersDrop = outcome === 'drop' && _isXstockPending && !isXstockMarketOpenUTC(position.symbol, new Date());
+    const observedSide = fillPrice !== null && Number.isFinite(fillPrice) && Number.isFinite(_quoteArrivedAtMs);
+    const refusalEvidence = this.observePendingMaker(position, attempt,
+      venueDefersDrop ? 'venue_quiet_or_cold' : observedSide ? 'evaluated_side' : 'null_side',
+      outcome !== 'rest' && !venueDefersDrop);
     if (outcome !== 'rest' && !guardedMaker && !guardedCryptoMaker) this._entryFillLooked.delete(position.id);
     if (outcome === 'fill') {
       // `8a-P3` — what DROVE the fill, for the durable stamp below.
@@ -1990,7 +2063,7 @@ export class ActiveExecutionEngine {
       // included in any holding-duration analytic (cosmetic; EV/expectancy unaffected
       // since entry price is the limit either way). A true in-market duration needs a
       // filledAt stamp — Phase-25 fill-rate report card decides if it wants one.
-      const _fillTradeId = position.metadata?.tradeId;
+      const _fillTradeId = (position.metadata as { tradeId?: string } | null)?.tradeId;
       const entryStamp = {
         entryPriceProducer: provenance.producer,
         entryPriceSource: _fillSource,
@@ -2004,7 +2077,7 @@ export class ActiveExecutionEngine {
           return;
         }
         const filled = await storage.transitionPaperXstockPendingMaker(position, _fillTradeId, {
-          kind: 'fill',
+          kind: 'fill', refusalEvidence,
           currentPrice: currentPrice.toString(),
           proof: { method: 'maker', filledAtMs: makerEvaluatedAtMs, quoteArrivedAtMs: _quoteArrivedAtMs },
           stamp: entryStamp,
@@ -2023,7 +2096,7 @@ export class ActiveExecutionEngine {
           return;
         }
         const filled = await storage.transitionPaperCryptoPendingMaker(position, {
-          kind: 'fill', tradeId: _fillTradeId, currentPrice: currentPrice.toString(), stamp: entryStamp,
+          kind: 'fill', tradeId: _fillTradeId, currentPrice: currentPrice.toString(), stamp: entryStamp, refusalEvidence,
           evaluatedAtMs: makerEvaluatedAtMs, quoteArrivedAtMs: _quoteArrivedAtMs, side,
           observedAgeMs: typeof provenance.observedAtMs === 'number' && Number.isFinite(provenance.observedAtMs)
             ? Math.max(0, Math.round(makerEvaluatedAtMs - provenance.observedAtMs)) : null,
@@ -2080,10 +2153,10 @@ export class ActiveExecutionEngine {
     }
     if (outcome === 'drop') {
       // R3: xStock — never fire the drop inside the weekend-closed window.
-      if ((position.assetClass ?? 'crypto_spot') === 'xstock_spot' && !isXstockMarketOpenUTC(position.symbol, new Date())) {
+      if (venueDefersDrop) {
         return; // market shut — wait for the first open tick
       }
-      await this._dropUnfilledMaker(position, `pending maker at ${limit} hit the hard-drop deadline unfilled`, makerEvaluatedAtMs);
+      await this._dropUnfilledMaker(position, `pending maker at ${limit} hit the hard-drop deadline unfilled`, makerEvaluatedAtMs, refusalEvidence);
     }
     // 'rest' — still resting; nothing to do this tick.
   }
@@ -2335,7 +2408,7 @@ export class ActiveExecutionEngine {
     }
   }
 
-  private async _dropUnfilledMaker(position: any, why: string, evaluatedAtMs?: number): Promise<boolean> {
+  private async _dropUnfilledMaker(position: any, why: string, evaluatedAtMs?: number, refusalEvidence?: PaperMakerRefusalEvidence): Promise<boolean> {
     if (this.mode === 'paper' && position.assetClass === 'xstock_spot') {
       const tradeId = position.metadata?.tradeId;
       const action = `was due to be dropped as never filled (${why})`;
@@ -2343,7 +2416,7 @@ export class ActiveExecutionEngine {
         await this._refuseUnresolvedRecord(position, 'its durable trade link is missing', action);
         return false;
       }
-      const cancelled = await storage.transitionPaperXstockPendingMaker(position, tradeId, { kind: 'cancel', reason: why, evaluatedAtMs });
+      const cancelled = await storage.transitionPaperXstockPendingMaker(position, tradeId, { kind: 'cancel', reason: why, evaluatedAtMs, refusalEvidence });
       if (!cancelled) {
         await this._reportUnmatchedPaperXstockPendingMaker(position, action);
         return false;
@@ -2359,7 +2432,7 @@ export class ActiveExecutionEngine {
       return true;
     }
     if (this.mode === 'paper' && position.assetClass === 'crypto_spot') {
-      const cancelled = await storage.transitionPaperCryptoPendingMaker(position, { kind: 'cancel', reason: why, evaluatedAtMs });
+      const cancelled = await storage.transitionPaperCryptoPendingMaker(position, { kind: 'cancel', reason: why, evaluatedAtMs, refusalEvidence });
       if (cancelled.status !== 'committed') {
         if (cancelled.status === 'unresolved') {
           await this._refuseUnresolvedRecord(position, cancelled.reason, `was due to be dropped as never filled (${why})`);
@@ -2441,12 +2514,19 @@ export class ActiveExecutionEngine {
     }
   }
 
-  private async checkOpenPositions(): Promise<void> {
+  private async checkOpenPositions(attempt?: PaperMakerMonitorAttempt): Promise<void> {
     // I7-ROOT-FIX: Track evaluation timing
     this.lastEvaluateAt = Date.now();
     this.lastExitChecks = [];
     
     const openPositions = await storage.getActiveOpenPositions(this.mode);
+
+    if (attempt && attempt.epoch === this.paperMakerMonitorEpoch && this.paperMakerRefusals.size) {
+      const pendingIds = new Set(openPositions.filter((position) => position.state === 'pending').map((position) => position.id));
+      for (const id of this.paperMakerRefusals.keys()) {
+        if (!pendingIds.has(id)) this.paperMakerRefusals.delete(id);
+      }
+    }
 
     if (this.xstockExitReplayPolicy && this.xstockReplayRefusals.size > 0) {
       const openIds = new Set(openPositions.map((position) => position.id));
@@ -2631,6 +2711,7 @@ export class ActiveExecutionEngine {
           }
           if (!_eqTick || !Number.isFinite(_eqTick.price) || _eqTick.price <= 0) {
             withoutPrice++;
+            this.observePendingMaker(position, attempt, 'upstream_refusal', false, 'equity_tick_missing');
             await this._recordPriceSkip(position, 'equity_tick_missing');
             continue;
           }
@@ -2660,6 +2741,7 @@ export class ActiveExecutionEngine {
             // below `floor_ms`, so at the seed (= floor_ms) the min() is constant; it binds only if the knob is raised.
             const _allowMs = Math.min(_coldMaxMs, _ceiling.ceilingMs);
             if (_eqAge <= _allowMs) {
+              this.observePendingMaker(position, attempt, 'venue_quiet_or_cold', false, 'replay_only_cold');
               this._coldMarkTicks++;
               const _cp = this._coldMarkPending.get(position.id);
               if (_cp) _cp.ticks++;
@@ -2675,6 +2757,7 @@ export class ActiveExecutionEngine {
             withoutPrice++;
             // Its OWN reason (Langston Step-4 gate 1, BLOCKER-2): sharing a ceiling basis would record a cold refusal as
             // that basis in every per-basis count. The `equity_tick_stale_` prefix keeps it in the quiet-market family.
+            this.observePendingMaker(position, attempt, 'venue_quiet_or_cold', false, 'equity_tick_stale_cold_unobserved');
             await this._recordPriceSkip(position, 'equity_tick_stale_cold_unobserved',
               `no update since subscribe, ≥${Math.round(_eqAge / 1000)}s (allowance ${Math.round(_allowMs / 1000)}s, ceiling ${Math.round(_ceiling.ceilingMs / 1000)}s)`);
             continue;
@@ -2694,10 +2777,10 @@ export class ActiveExecutionEngine {
             // A floor-bound near-stop skip gets its OWN countable reason — otherwise it is
             // indistinguishable from an ordinary calm-symbol floor, and #563's exposure stays
             // an argument instead of a number.
+            const staleReason = _ceiling.floorBoundNearStop ? 'equity_tick_stale_floor_bound_near_stop' : `equity_tick_stale_${_ceiling.basis}`;
+            this.observePendingMaker(position, attempt, 'upstream_refusal', false, staleReason);
             await this._recordPriceSkip(position,
-              _ceiling.floorBoundNearStop
-                ? 'equity_tick_stale_floor_bound_near_stop'
-                : `equity_tick_stale_${_ceiling.basis}`,
+              staleReason,
               // The two numbers Langston asked for, so the alert reader can judge without
               // re-querying: how old the mark is, and the ceiling it crossed.
               `mark ${Math.round(_eqAge / 1000)}s old, ceiling ${Math.round(_ceiling.ceilingMs / 1000)}s`);
@@ -2869,6 +2952,7 @@ export class ActiveExecutionEngine {
                   //    that it did.
                   withoutPrice++;
                   this._noteExitRefusal(position, 'yield_refused', _r.reasons.includes('spread_blown'), _r.inputs.bid ?? null);
+                  this.observePendingMaker(position, attempt, 'upstream_refusal', false, 'book_state_yield_refused');
                   await this._recordPriceSkip(position, 'book_state_yield_refused');
                   continue;
                 } else {
@@ -2890,6 +2974,7 @@ export class ActiveExecutionEngine {
                       (_sbOnly ? ' (spread_blown run: further ticks are counted and summarised when it ends)' : ''));
                     if (_sbOnly) this._spreadBlownSkipAcc.set(position.id, { n: 0, min: Infinity, max: -Infinity });
                   }
+                  this.observePendingMaker(position, attempt, 'upstream_refusal', false, 'book_state_hollow');
                   await this._recordBookStateEvent(position, { kind: 'skip', streak: _next, reasons: _r.reasons, inputs: _r.inputs });
                   // ⛔ NO `updateCache` ON THIS BRANCH (Langston C1) — the same as the two skips above.
                   continue;
@@ -3022,6 +3107,7 @@ export class ActiveExecutionEngine {
                   // Typed, uncast (Langston nit a): a rename must fail the build, not print `stop none`.
                   const _stop = position.stopLoss ? parseFloat(position.stopLoss) : NaN;
                   const _target = position.takeProfit ? parseFloat(position.takeProfit) : NaN;
+                  this.observePendingMaker(position, attempt, 'upstream_refusal', false, 'book_state_unvalidated');
                   await this._recordPriceSkip(
                     position,
                     'book_state_unvalidated',
@@ -3216,6 +3302,7 @@ export class ActiveExecutionEngine {
                 console.warn(`[B9.PRICING][SKIP_DUE_TO_NO_PRICE] ${position.symbol}: Kraken REST failed (${_rest.reason}), skipping position check`, _rest.error);
               }
               withoutPrice++;
+              this.observePendingMaker(position, attempt, 'upstream_refusal', false, _rest.reason);
               await this._recordPriceSkip(position, _rest.reason);
               continue;
             }
@@ -3270,6 +3357,7 @@ export class ActiveExecutionEngine {
             if (_reason === 'rest_venue_rate_limited') restVenueRateLimited++;
             console.warn(`[B9.PRICING][SKIP_DUE_TO_NO_PRICE] ${position.symbol}: Kraken REST failed (${_reason}), skipping position check`, krakenError);
             withoutPrice++;
+            this.observePendingMaker(position, attempt, 'upstream_refusal', false, _reason);
             await this._recordPriceSkip(position, _reason);
             continue;
           }
@@ -3305,7 +3393,7 @@ export class ActiveExecutionEngine {
             producer: priceProducer,
             source: priceSource,
             observedAtMs: priceObservedAtMs,
-          }, { bid: xsBid, ask: xsAsk, basis: xsSideBasis, arrivedAtMs: xsArrivedAtMs, bidQty: xsBidQty, askQty: xsAskQty }); // `8a-P4b` X1: same judged frame's sides + receipt (+ sizes, row 2 inc B)
+          }, { bid: xsBid, ask: xsAsk, basis: xsSideBasis, arrivedAtMs: xsArrivedAtMs, bidQty: xsBidQty, askQty: xsAskQty }, attempt); // `8a-P4b` X1: same judged frame's sides + receipt (+ sizes, row 2 inc B)
           positionsEvaluated++;
           continue;
         }
