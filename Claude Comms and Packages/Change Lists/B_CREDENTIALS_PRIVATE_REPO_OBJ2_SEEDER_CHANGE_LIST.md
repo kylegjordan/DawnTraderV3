@@ -373,3 +373,9 @@ Six synthetic CLI cases compared the held and corrected scanner. For each of ZIP
 Coltrane approved `fb89bfc0ee949485e0201b45d23f6d26d10dadbd` at 2026-11-26 20:06:06 UTC in reply to Discord `1575602832550133992`. He reran both corrupt early-match fixtures through the CLI. The held version returned 1 and the approved version returned 2 with empty stdout, even with an independent tracked-file match. Valid matches still returned 1 and damage without a match still returned 2.
 
 The exact-ref check found 349 matching files out of 9,938 tracked files and 64 matching direct members in 10 of 22 recognized archives. It used no exclusions. A matching filename confirmed that reporting redacts the name, and neither pinned value appeared in the exact-ref output. Step 5 holds shared placement for all four jobs on [the approved exact ref](https://github.com/kylegjordan/DawnTraderV3/actions/runs/45888108671) and exact shared-base confirmation. The separate exclusions and CI activation gates and protected staging and Token Watch return points still apply.
+
+### Scanner Step 5 shared CI
+
+The approved candidate `fb89bfc0ee949485e0201b45d23f6d26d10dadbd` and its exact shared base `39bd9d03f5e16d1a33288efd236d2d9c4ce3e479` passed all four jobs in runs `45888108671` and `45882211617`. The exact candidate then landed unchanged on the shared branch and passed TypeScript Check, Test Suite, Build and Docker Build in [45890478117](https://github.com/kylegjordan/DawnTraderV3/actions/runs/45890478117). The placement notice was Discord `1575607579609006131`.
+
+The scanner is available for on-demand, read-only repository checks with an empty exclusions list. The existing policy decisions on legacy files and outside archives govern populating the list, and CI integration stays in OBJ-3. Return to the parent Step 6 staging gate for the already held increments. The natural follow-up retry and both 00:00 and 00:05 UTC Token Watch reads stay on their existing schedule.
