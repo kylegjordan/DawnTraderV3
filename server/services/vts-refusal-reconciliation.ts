@@ -2,7 +2,7 @@ import {
   isProvedVtsRefusalCrossing, VTS_REFUSAL_RECEIPT_PREFIX, vtsRefusalReceiptField,
   type VtsRefusalCrossing, type VtsRefusalEvidence,
 } from '../core/trading/vts-refusal-evidence.js';
-import { railKey, railRowTradeId, RAIL_KEY_PREFIX, VTS_STANDING_KEY } from '../core/trading/vts-rail.js';
+import { isVtsFeedIncidentAlert, railKey, railRowTradeId, RAIL_KEY_PREFIX, VTS_STANDING_KEY } from '../core/trading/vts-rail.js';
 import type { AlertStoreDraft, SystemAlert } from './system-alerts.js';
 
 const receiptKey = (field: string, tradeId: string) => JSON.stringify([field, tradeId]);
@@ -39,11 +39,12 @@ export function reconcileVtsRefusals(
 ): void {
   const receipts = new Map<string, Readonly<SystemAlert>>();
   for (const row of draft.rows) {
-    if (row.dedupe_key !== VTS_STANDING_KEY && !row.dedupe_key?.startsWith(RAIL_KEY_PREFIX)) continue;
-    const trade = row.dedupe_key === VTS_STANDING_KEY ? null : railRowTradeId(row);
+    const shared = row.dedupe_key === VTS_STANDING_KEY || isVtsFeedIncidentAlert(row);
+    if (!shared && !row.dedupe_key?.startsWith(RAIL_KEY_PREFIX)) continue;
+    const trade = shared ? null : railRowTradeId(row);
     for (const [field, tradeId] of Object.entries(row.metadata ?? {})) {
       if (!field.startsWith(VTS_REFUSAL_RECEIPT_PREFIX) || typeof tradeId !== 'string') continue;
-      if (row.dedupe_key === VTS_STANDING_KEY || trade === tradeId) receipts.set(receiptKey(field, tradeId), row);
+      if (shared || trade === tradeId) receipts.set(receiptKey(field, tradeId), row);
     }
   }
 
@@ -64,7 +65,10 @@ export function reconcileVtsRefusals(
       if (receipt) {
         draft.recordVtsRefusal({
           ...identity, kind: 'disposition', pageSinceMs: crossing.pageSinceMs,
-          disposition: { alertId: receipt.id, route: receipt.dedupe_key === VTS_STANDING_KEY ? 'joined' : 'individual' },
+          disposition: {
+            alertId: receipt.id,
+            route: isVtsFeedIncidentAlert(receipt) ? 'incident' : receipt.dedupe_key === VTS_STANDING_KEY ? 'joined' : 'individual',
+          },
         });
         continue;
       }

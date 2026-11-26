@@ -15,7 +15,7 @@ interface FirstRefusal {
 
 interface RefusalDisposition {
   alertId: string;
-  route: 'joined' | 'individual';
+  route: 'joined' | 'incident' | 'individual';
 }
 
 export interface VtsRefusalCrossing {

@@ -6,6 +6,10 @@ import {
 import { vtsRefusalReceiptField } from '../core/trading/vts-refusal-evidence.js';
 import type { VtsFeedIncidentEvidence } from './vts-feed-incident-windows.js';
 import type { AddAlertOptions, AlertStoreDraft, SystemAlert } from './system-alerts.js';
+import {
+  closeVtsIncidentMembers, joinVtsFeedIncident, markVtsIncidentDecision, openVtsFeedIncidents,
+  outstandingVtsIncidentTrades, vtsIncidentReasonExits,
+} from './vts-feed-incident-members.js';
 
 export const decidedField = (tradeId: string) => `decided_${tradeId}`;
 
@@ -81,8 +85,8 @@ export function standingJoin(c: Crossing, nowMs: number, metadata: Record<string
   };
 }
 
-export type LiveWarning = { crossing: Crossing; nowMs: number; action: 'join' | 'page' | 'leave' };
-export type LiveWarningResult = { alertId: string; route: 'joined' | 'individual'; minted: boolean };
+export type LiveWarning = { crossing: Crossing; nowMs: number; action: 'join' | 'page' | 'leave'; leaveStanding?: boolean };
+export type LiveWarningResult = { alertId: string; route: 'joined' | 'incident' | 'individual'; minted: boolean };
 
 function warningObservedAt(row: Readonly<SystemAlert>): number {
   const observedAt = row.metadata?.vtsWarningObservedAtMs;
@@ -90,7 +94,7 @@ function warningObservedAt(row: Readonly<SystemAlert>): number {
 }
 
 /** The warning and its exact crossing evidence commit together. The queue retries a failed publication. */
-export function writeLiveWarning(draft: AlertStoreDraft, { crossing: c, nowMs, action }: LiveWarning): LiveWarningResult | null {
+export function writeLiveWarning(draft: AlertStoreDraft, { crossing: c, nowMs, action, leaveStanding }: LiveWarning): LiveWarningResult | null {
   const saved = c.streakId ? draft.vtsRefusals.get(c.streakId) : undefined;
   const identity = saved?.tradeId === c.tradeId ? saved : undefined;
   const disposition = identity?.crossings.find(item => item.pageSinceMs === c.pageSinceMs)?.disposition;
@@ -98,34 +102,77 @@ export function writeLiveWarning(draft: AlertStoreDraft, { crossing: c, nowMs, a
 
   const standing = draft.rows.find(row => row.dedupe_key === VTS_STANDING_KEY && row.state !== 'resolved');
   const member = standing?.metadata?.[memberField(c.tradeId)] as RailMember | null | undefined;
-  if (action === 'leave' && (!member || !standing || nowMs < member.joinedAtMs)) return null;
+  const leaveMember = member && standing && nowMs >= member.joinedAtMs && leaveStanding !== false;
+  const reasonExits = action === 'leave' ? vtsIncidentReasonExits(draft, c, nowMs) : [];
+  if (action === 'leave' && !leaveMember && !reasonExits.length) return null;
 
   if (action === 'join') {
     const row = standing ?? draft.add(standingWarning(nowMs));
     draft.mergeMetadata(row.id, current => standingJoin(c, nowMs, current));
-    saveDisposition(row, 'joined');
+    saveDisposition(row.id, 'joined');
     return { alertId: row.id, route: 'joined', minted: !standing };
   }
 
-  const warning = ownWarning(c, nowMs);
+  if (reasonExits.length && leaveStanding === false) {
+    const row = standing ?? draft.add(standingWarning(nowMs));
+    const pageSinceMs = Math.min(...reasonExits.map(({ member }) => member.pageSinceMs));
+    // Keep the first incident's receipt on that incident. The standing row takes over the continuing exposure.
+    draft.mergeMetadata(row.id, current => standingJoin({ ...c, pageSinceMs, streakId: undefined }, nowMs, current));
+    for (const { rowId, field, member: origin } of reasonExits) {
+      draft.mergeMetadata(rowId, { [field]: { ...origin, fallbackAlertId: row.id } });
+    }
+    return { alertId: row.id, route: 'joined', minted: !standing };
+  }
+
+  const ownCrossing = reasonExits.length ? { ...c, streakId: undefined } : c;
+  const warning = ownWarning(ownCrossing, nowMs);
   const active = draft.rows.find(row => row.dedupe_key === warning.dedupe_key && row.state !== 'resolved');
-  const row = active ?? draft.add({ ...warning, metadata: { ...warning.metadata, vtsWarningObservedAtMs: nowMs } });
+  if (action === 'page' && !active) {
+    const group = joinVtsFeedIncident(draft, c, nowMs);
+    if (group) {
+      if (member && standing && nowMs >= member.joinedAtMs) {
+        draft.mergeMetadata(standing.id, { [memberField(c.tradeId)]: null, [decidedField(c.tradeId)]: null });
+      }
+      saveDisposition(group.alertId, 'incident');
+      return { ...group, route: 'incident' };
+    }
+  }
+  const episodeExit = reasonExits[0]?.member;
+  const row = active ?? draft.add({
+    ...warning,
+    ...(episodeExit ? {
+      title: `VTS exit decisions unavailable — ${c.symbol} now has a separate refusal`,
+      body: `Open virtual trade ${c.tradeId} in ${c.symbol} started refusing at ${new Date(episodeExit.firstAtMs).toISOString()} `
+        + `and now has a separate reason (${c.lastReason}). This warning clears when the trade decides or closes.`,
+    } : {}),
+    metadata: { ...warning.metadata, vtsWarningObservedAtMs: nowMs },
+  });
   if (railRowTradeId(row) !== c.tradeId) throw new Error('VTS warning dedupe key belongs to a different trade');
-  if (member && standing && nowMs >= member.joinedAtMs) {
+  if (leaveMember) {
     draft.mergeMetadata(standing.id, { [memberField(c.tradeId)]: null, [decidedField(c.tradeId)]: null });
   }
-  const exactReceipt = receipt(c);
+  if (reasonExits.length) {
+    const sources: Record<string, unknown> = {};
+    for (const { rowId, field, member: origin } of reasonExits) {
+      draft.mergeMetadata(rowId, { [field]: { ...origin, fallbackAlertId: row.id } });
+      sources[field] = { incidentAlertId: rowId, ...origin, nextReason: c.lastReason };
+    }
+    draft.mergeMetadata(row.id, current => ({ vtsIncidentReasonExits: {
+      ...(typeof current.vtsIncidentReasonExits === 'object' ? current.vtsIncidentReasonExits : {}), ...sources,
+    } }));
+  }
+  const exactReceipt = receipt(ownCrossing);
   if (Object.entries(exactReceipt).some(([field, tradeId]) => row.metadata[field] !== tradeId)) {
     draft.mergeMetadata(row.id, exactReceipt);
   }
-  if (action === 'page') saveDisposition(row, 'individual');
+  if (action === 'page') saveDisposition(row.id, 'individual');
   return { alertId: row.id, route: 'individual', minted: !active };
 
-  function saveDisposition(row: Readonly<SystemAlert>, route: LiveWarningResult['route']): void {
+  function saveDisposition(alertId: string, route: LiveWarningResult['route']): void {
     if (!identity) return;
     draft.recordVtsRefusal({
       tradeId: c.tradeId, streakId: identity.streakId, kind: 'disposition', pageSinceMs: c.pageSinceMs,
-      disposition: { alertId: row.id, route },
+      disposition: { alertId, route },
     });
   }
 }
@@ -151,6 +198,9 @@ export function writeLiveDecision(draft: AlertStoreDraft, tradeId: string, atMs:
       if (typeof prior !== 'number' || atMs > prior) draft.mergeMetadata(row.id, { decidedAtMs: atMs });
       stored = true;
     }
+  }
+  for (const incident of openVtsFeedIncidents(draft.rows)) {
+    if (markVtsIncidentDecision(draft, incident, tradeId, atMs)) stored = true;
   }
   return stored;
 }
@@ -183,6 +233,7 @@ export type LiveRailSweep = { regular: boolean; precedingFailures: number };
 export interface LiveRailSweepResult {
   rowIds: [tradeId: string, alertId: string][];
   memberIds: [tradeId: string, alertId: string][];
+  incidentTradeIds: string[];
   openWarnings: number;
   members: number;
   resolved: number;
@@ -197,9 +248,13 @@ export function sweepLiveWarnings(
   const { warnings, standing } = openVtsRail(draft.rows);
   const members = standingMembers(standing);
   const result: LiveRailSweepResult = {
-    rowIds: [], memberIds: [], openWarnings: warnings.length, members: members.length, resolved: 0, escalated: 0, minted: 0,
+    rowIds: [], memberIds: [], incidentTradeIds: [], openWarnings: warnings.length, members: members.length,
+    resolved: 0, escalated: 0, minted: 0,
   };
   if (closed) {
+    for (const incident of openVtsFeedIncidents(draft.rows)) {
+      if (closeVtsIncidentMembers(draft, incident, closed, nowMs)) result.resolved++;
+    }
     for (const row of warnings) {
       const tradeId = railRowTradeId(row);
       if (!tradeId) continue;
@@ -250,6 +305,7 @@ export function sweepLiveWarnings(
   if (current.standing) {
     for (const [tradeId] of standingMembers(current.standing)) result.memberIds.push([tradeId, current.standing.id]);
   }
+  result.incidentTradeIds = openVtsFeedIncidents(draft.rows).flatMap(outstandingVtsIncidentTrades);
   return result;
 }
 

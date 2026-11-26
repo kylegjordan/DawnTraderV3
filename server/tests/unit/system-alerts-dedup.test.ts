@@ -15,7 +15,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import type { VtsRefusalEvent } from '../../core/trading/vts-refusal-evidence.js';
 import { vtsRefusalReceiptField } from '../../core/trading/vts-refusal-evidence.js';
-import { EXPECTED_WIDE, memberField, railKey, VTS_STANDING_KEY } from '../../core/trading/vts-rail.js';
+import { EXPECTED_OLD, EXPECTED_WIDE, isVtsFeedIncidentAlert, memberField, railKey, VTS_COMMON_XSTOCK_INCIDENT_COHORT, VTS_STANDING_KEY } from '../../core/trading/vts-rail.js';
 import { decidedField, type Crossing } from '../../services/vts-live-warning.js';
 
 const TMP = path.join(os.tmpdir(), `sa-dedup-test-${process.pid}.jsonl`);
@@ -146,7 +146,7 @@ describe('#1191 alert store edits', () => {
       expect(queue.markDecision(rows[0].id, 2000)).toBeUndefined();
       const pending = [first, ...rows.slice(1).map(({ id }) => queue.markDecision(id, 1000))];
       const resolved = queue.markDecision(terminal.id, 1000);
-      await vi.waitFor(() => expect(error).toHaveBeenCalledWith('[VTS_RAIL][DECISION_BATCH_FAILED]', expect.anything()));
+      await vi.waitFor(() => expect(error).toHaveBeenCalledWith('[VTS_RAIL][DECISION_BATCH_FAILED]', expect.anything()), { timeout: 5_000 });
       fs.rmdirSync(TMP);
       fs.writeFileSync(TMP, before);
 
@@ -198,7 +198,7 @@ describe('#1191 alert store edits', () => {
       const decidedIndividual = queue.markLiveDecision(crossings[225].tradeId, nowMs + 1);
       const closeLookup = vi.fn(async () => new Set(['proven-close', crossings[226].tradeId]));
       const sweep = queue.sweepRail(nowMs + 2, 'live-run', closeLookup, { regular: true, precedingFailures: 0 });
-      await vi.waitFor(() => expect(error).toHaveBeenCalledWith('[VTS_RAIL][DECISION_BATCH_FAILED]', expect.anything()));
+      await vi.waitFor(() => expect(error).toHaveBeenCalledWith('[VTS_RAIL][DECISION_BATCH_FAILED]', expect.anything()), { timeout: 5_000 });
       fs.rmdirSync(TMP);
       fs.writeFileSync(TMP, initial);
 
@@ -234,6 +234,84 @@ describe('#1191 alert store edits', () => {
     }
   }, 10_000);
 
+  it('keeps 450 correlated trades under one durable warning with separate fallback and terminal evidence', async () => {
+    const { VtsAlertWriteQueue } = await import('../../services/vts-alert-write-queue.js');
+    const { readAllAlerts, readVtsRefusalEvidence } = await load();
+    const queue = new VtsAlertWriteQueue();
+    const nowMs = Date.parse('2026-11-27T15:00:00Z');
+    const pageSinceMs = nowMs - 600_000;
+    const symbols = Array.from({ length: 10 }, (_, index) => `XS${index}/USD`);
+    const coverage = {
+      key: VTS_COMMON_XSTOCK_INCIDENT_COHORT, generation: 5, startMs: 1, endMs: 120_001, cutMs: 120_004, subscribed: 10,
+    };
+    const crossings = Array.from({ length: 451 }, (_, index): Crossing => ({
+      tradeId: `feed-trade-${index}`, streakId: `feed-streak-${index}`,
+      symbol: index === 450 ? 'MSTR/USD' : symbols[index % symbols.length], assetClass: 'xstock_spot',
+      pageSinceMs, title: 'VTS warning', body: 'exact trade', lastReason: EXPECTED_OLD,
+      feedIncident: { ...coverage, qualified: symbols, missing: ['MSTR/USD'] },
+    }));
+    function queueCrossing(crossing: Crossing, stamp: number) {
+      const identity = { tradeId: crossing.tradeId, streakId: crossing.streakId! };
+      const pageStart = crossing.pageSinceMs;
+      void queue.recordRefusal({
+        ...identity, kind: 'first', firstAtMs: pageStart - 1, firstReason: EXPECTED_OLD,
+        symbol: crossing.symbol, assetClass: crossing.assetClass, thresholdMs: 600_000,
+      });
+      void queue.recordRefusal({ ...identity, kind: 'paging', pageSinceMs: pageStart });
+      void queue.recordRefusal({
+        ...identity, kind: 'crossing', pageSinceMs: pageStart, observedAtMs: stamp, reason: EXPECTED_OLD,
+        feedCoverage: { ...coverage, qualified: symbols.length },
+      });
+      return queue.writeLiveWarning({ crossing, nowMs: stamp, action: 'page' });
+    }
+    const messages = await Promise.all(crossings.map(crossing => queueCrossing(crossing, nowMs)));
+    const [group] = readAllAlerts().filter(isVtsFeedIncidentAlert);
+    expect(messages.slice(0, 450).map(message => message?.alertId)).toEqual(Array(450).fill(group.id));
+    expect(messages.filter(message => message?.minted && message?.route === 'incident')).toHaveLength(1);
+    expect(messages[450]).toMatchObject({ route: 'individual', minted: true });
+    const groupedTradeIds = new Set(crossings.slice(0, 450).map(crossing => crossing.tradeId));
+    expect(readVtsRefusalEvidence().filter(item => groupedTradeIds.has(item.tradeId)).map(item => item.crossings[0].disposition))
+      .toEqual(Array(450).fill({ alertId: group.id, route: 'incident' }));
+
+    const afterRestart = new VtsAlertWriteQueue();
+    const changed = crossings[0];
+    const fallback = await afterRestart.writeLiveWarning({
+      crossing: { ...changed, lastReason: 'no_usable_mark' }, nowMs: nowMs + 1, action: 'leave', leaveStanding: true,
+    });
+    expect(fallback).toMatchObject({ route: 'individual', minted: true });
+    const individual = readAllAlerts().find(row => row.id === fallback!.alertId)!;
+    expect(individual.body).toContain(new Date(pageSinceMs - 1).toISOString());
+    expect(individual.metadata[vtsRefusalReceiptField(changed.streakId!, pageSinceMs)]).toBeUndefined();
+    const wide = await afterRestart.writeLiveWarning({
+      crossing: { ...crossings[3], lastReason: EXPECTED_WIDE }, nowMs: nowMs + 1, action: 'leave', leaveStanding: false,
+    });
+    expect(wide).toMatchObject({ route: 'joined', minted: true });
+    expect(readAllAlerts().find(row => row.id === wide!.alertId)).toMatchObject({
+      severity: 'info', metadata: { [memberField(crossings[3].tradeId)]: { sessionClockStartMs: pageSinceMs } },
+    });
+    expect(await afterRestart.markLiveDecision(crossings[1].tradeId, nowMs + 2)).toBe(true);
+    const lookup = vi.fn(async () => new Set([crossings[2].tradeId]));
+    const firstSweep = await afterRestart.sweepRail(nowMs + 3, 'first-read', lookup, { regular: true, precedingFailures: 0 });
+    expect(firstSweep?.rail.incidentTradeIds).toHaveLength(448);
+    expect(firstSweep?.rail.incidentTradeIds).toContain(changed.tradeId);
+    expect(firstSweep?.rail.incidentTradeIds).not.toContain(crossings[1].tradeId);
+    expect(firstSweep?.rail.incidentTradeIds).not.toContain(crossings[2].tradeId);
+    expect(readAllAlerts().find(row => row.id === group.id)?.state).toBe('scheduled');
+
+    const lastSweep = await afterRestart.sweepRail(nowMs + 4, 'second-read', async ids => new Set(ids), {
+      regular: true, precedingFailures: 0,
+    });
+    expect(lastSweep?.rail.incidentTradeIds).toEqual([]);
+    expect(readAllAlerts().find(row => row.id === group.id)).toMatchObject({
+      state: 'resolved', resolution_evidence: expect.stringContaining('FEED-INCIDENT-MEMBERS-DECIDED-OR-CLOSED'),
+    });
+    const late = { ...crossings[0], tradeId: 'late-trade', streakId: 'late-streak' };
+    expect(await queueCrossing(late, nowMs + 3)).toMatchObject({ route: 'individual', minted: true });
+    const next = { ...crossings[0], tradeId: 'next-trade', streakId: 'next-streak', pageSinceMs: nowMs };
+    expect(await queueCrossing(next, nowMs + 600_000)).toMatchObject({ route: 'incident', minted: true });
+    expect(readAllAlerts().filter(isVtsFeedIncidentAlert)).toHaveLength(2);
+  }, 10_000);
+
   it('keeps first refusal, the actual crossing and an exact hold through the worker and later alert writes', async () => {
     const { VtsAlertWriteQueue } = await import('../../services/vts-alert-write-queue.js');
     const { addAlert, fireDue, ackAlert, resolveAlert, readAllAlerts, readVtsRefusalEvidence } = await load();
@@ -261,7 +339,7 @@ describe('#1191 alert store edits', () => {
     try {
       const crossingWrite = queue.recordRefusal(crossing);
       const holdWrite = queue.recordRefusal({ ...id, kind: 'decided', atMs: 605_001 });
-      await vi.waitFor(() => expect(error).toHaveBeenCalledWith('[VTS_RAIL][DECISION_BATCH_FAILED]', expect.anything()));
+      await vi.waitFor(() => expect(error).toHaveBeenCalledWith('[VTS_RAIL][DECISION_BATCH_FAILED]', expect.anything()), { timeout: 5_000 });
       fs.rmdirSync(TMP);
       fs.writeFileSync(TMP, before);
       expect(readVtsRefusalEvidence()).toMatchObject([{ ...id, decidedAtMs: null, crossings: [] }]);

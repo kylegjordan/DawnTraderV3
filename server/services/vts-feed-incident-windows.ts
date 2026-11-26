@@ -2,6 +2,7 @@ import {
   EQUITY_TICKER_MAX_TRANSPORT_GAP_MS,
   type getEquityTickerFeedEvidence,
 } from './passive-archive/equity-spot-archiver.js';
+import { VTS_COMMON_XSTOCK_INCIDENT_COHORT } from '../core/trading/vts-rail.js';
 
 export const VTS_FEED_INCIDENT_SAMPLE_MS = 5_000;
 const WINDOW_MS = 60_000;
@@ -20,8 +21,8 @@ export interface VtsFeedIncidentCohort {
 export function vtsEquityIncidentCohort(monitored: Iterable<string>, verifiedWeekendClosure: boolean): VtsFeedIncidentCohort {
   const symbols = new Set<string>();
   for (const symbol of monitored) if (!UNVERIFIED_ALIASES.has(symbol)) symbols.add(symbol);
-  const session = verifiedWeekendClosure ? 'known-weekend-closure' : 'common-session';
-  return { key: `kraken-equities/ticker/${session}`, symbols };
+  const key = verifiedWeekendClosure ? 'kraken-equities/ticker/known-weekend-closure' : VTS_COMMON_XSTOCK_INCIDENT_COHORT;
+  return { key, symbols };
 }
 
 interface WindowPair {

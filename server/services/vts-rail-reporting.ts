@@ -81,6 +81,7 @@ const state = {
   rowByTrade: new Map<string, Set<string>>(),
   /** tradeId of each standing-record member → the record's id. */
   memberRecord: new Map<string, string>(),
+  incidentTrades: new Set<string>(),
   pendingCrossings: new Map<string, number>(),
   loaded: false,
   sweepInFlight: false,
@@ -92,7 +93,7 @@ const state = {
 
 /** Test seam only. */
 export function _resetVtsRailState(): void {
-  state.rowByTrade.clear(); state.memberRecord.clear(); state.pendingCrossings.clear();
+  state.rowByTrade.clear(); state.memberRecord.clear(); state.incidentTrades.clear(); state.pendingCrossings.clear();
   state.loaded = false; state.sweepInFlight = false; state.lastSweepMs = 0; state.sweepFailures = 0; state.closedMemberSweeps.clear();
   for (const k of Object.keys(railCounts) as Array<keyof typeof railCounts>) railCounts[k] = 0;
 }
@@ -144,7 +145,9 @@ export function markDecided(
 ): void {
   const rowIds = [...(state.rowByTrade.get(tradeId) ?? [])];
   if (deps.markLiveDecision) {
-    if (!state.loaded || rowIds.length || isStandingMember(tradeId)) void deps.markLiveDecision(tradeId, nowMs);
+    if (!state.loaded || rowIds.length || isStandingMember(tradeId) || state.incidentTrades.has(tradeId)) {
+      void deps.markLiveDecision(tradeId, nowMs);
+    }
     return;
   }
   // r5 (Langston condition 3): `mergeAlertMetadata` RETURNS null (it does not throw) when the row is missing or already
@@ -206,6 +209,11 @@ export async function onCrossing(c: Crossing, nowMs: number, deps: VtsRailDeps):
         countJoin(c.lastReason);
         return 'joined';
       }
+      if (result?.route === 'incident') {
+        state.memberRecord.delete(c.tradeId);
+        state.incidentTrades.add(c.tradeId);
+        return 'paged';
+      }
       if (result) countLivePage(c.tradeId, result);
       return 'paged';
     } finally {
@@ -262,7 +270,7 @@ export function isStandingMember(tradeId: string): boolean {
 }
 
 export function shouldCheckMemberReason(tradeId: string): boolean {
-  return !state.loaded || isStandingMember(tradeId);
+  return !state.loaded || isStandingMember(tradeId) || state.incidentTrades.has(tradeId);
 }
 
 /**
@@ -277,14 +285,24 @@ export async function onMemberReason(c: Crossing, nowMs: number, deps: VtsRailDe
   if (c.lastReason.startsWith('no_transactable_side (too_old')) {
     try { verdict = deps.xstockVerdict(nowMs); } catch { verdict = null; }
   }
-  if (vtsXstockJoinsStandingRecord(c.lastReason, verdict)) return false;
+  const leaveStanding = !vtsXstockJoinsStandingRecord(c.lastReason, verdict);
   if (deps.writeLiveWarning) {
-    const result = await deps.writeLiveWarning({ crossing: c, nowMs, action: 'leave' });
+    const mayBeStanding = !state.loaded || isStandingMember(c.tradeId);
+    const mayBeIncident = (!state.loaded || state.incidentTrades.has(c.tradeId) || state.pendingCrossings.has(c.tradeId))
+      && c.lastReason !== EXPECTED_OLD;
+    if (!(leaveStanding && mayBeStanding) && !mayBeIncident) return false;
+    const result = await deps.writeLiveWarning({ crossing: c, nowMs, action: 'leave', leaveStanding });
     if (!result) return false;
+    if (result.route === 'joined') {
+      state.memberRecord.set(c.tradeId, result.alertId);
+      countJoin(c.lastReason);
+      return false;
+    }
     railCounts.reasonExits++;
     countLivePage(c.tradeId, result);
     return true;
   }
+  if (!leaveStanding) return false;
   railCounts.reasonExits++;
   await leaveStandingRecord(c.tradeId, deps);
   await pageOwnKey(c, nowMs, deps);
@@ -304,8 +322,10 @@ export async function runVtsRailSweep(nowMs: number, deps: VtsRailDeps): Promise
       const { rail } = result;
       state.rowByTrade.clear();
       state.memberRecord.clear();
+      state.incidentTrades.clear();
       for (const [tradeId, alertId] of rail.rowIds) indexRow(tradeId, alertId);
       for (const [tradeId, alertId] of rail.memberIds) state.memberRecord.set(tradeId, alertId);
+      for (const tradeId of rail.incidentTradeIds) state.incidentTrades.add(tradeId);
       state.loaded = true;
       railCounts.escalations += rail.escalated;
       railCounts.pagesAttempted += rail.escalated;

@@ -7,6 +7,7 @@ import {
   type LiveRailSweep, type LiveRailSweepResult, type LiveWarning, type LiveWarningResult,
 } from './vts-live-warning.js';
 import { railRowTradeId } from '../core/trading/vts-rail.js';
+import { openVtsFeedIncidents, outstandingVtsIncidentTrades } from './vts-feed-incident-members.js';
 
 export type VtsAlertWrite =
   | { kind: 'individual-decision'; rowId: string; atMs: number }
@@ -49,6 +50,9 @@ port.on('message', async (request: VtsAlertWorkerRequest) => {
         if (tradeId) requestedIds.add(tradeId);
       }
       for (const [tradeId] of standingMembers(standing)) requestedIds.add(tradeId);
+      for (const incident of openVtsFeedIncidents(stored.rows)) {
+        for (const tradeId of outstandingVtsIncidentTrades(incident)) requestedIds.add(tradeId);
+      }
     }
     const closedIds = requestedIds.size ? await new Promise<string[] | null>((resolve) => {
       receiveClosedTrades = resolve;

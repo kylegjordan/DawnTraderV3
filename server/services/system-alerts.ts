@@ -42,6 +42,8 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as crypto from 'node:crypto';
 import { applyVtsRefusalEvidence, type VtsRefusalEvent, type VtsRefusalEvidence } from '../core/trading/vts-refusal-evidence.js';
+import { isVtsFeedIncidentAlert } from '../core/trading/vts-rail.js';
+export { isVtsFeedIncidentAlert, VTS_FEED_INCIDENT_KEY_PREFIX } from '../core/trading/vts-rail.js';
 
 // B-NEW-51: env-overridable for unit tests (defaults to the staging path —
 // SYSTEM_ALERTS_FILE is never set in staging/prod, so behavior is unchanged).
@@ -717,14 +719,8 @@ export async function fireDue(nowMs: number = Date.now()): Promise<SystemAlert[]
   return promoted;
 }
 
-export const VTS_FEED_INCIDENT_KEY_PREFIX = 'vts-xstock-feed-incident:';
 const VTS_FEED_NOTICE_SEND_MS = 45_000;
 const VTS_FEED_NOTICE_LEASE_MS = 60_000;
-
-export function isVtsFeedIncidentAlert(alert: Readonly<SystemAlert>): boolean {
-  return alert.dedupe_key?.startsWith(VTS_FEED_INCIDENT_KEY_PREFIX) === true
-    && alert.metadata?.vtsFeedIncidentVersion === 1;
-}
 
 function vtsIncidentNoticeOwed(alert: Readonly<SystemAlert>, nowMs: number): boolean {
   return isVtsFeedIncidentAlert(alert) && alert.severity === 'warning' && alert.category === 'breakage'

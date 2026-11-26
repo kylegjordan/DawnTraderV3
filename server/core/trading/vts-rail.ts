@@ -37,6 +37,12 @@ export const STUCK_SWEEP_FAILURES = 10;
 export const STUCK_CLOSED_MEMBER_SWEEPS = 3;
 /** The xStock standing record (one per class; info, never delivered to Discord). */
 export const VTS_STANDING_KEY = 'vts-quiet-xstock_spot';
+export const VTS_FEED_INCIDENT_KEY_PREFIX = 'vts-xstock-feed-incident:';
+export const VTS_COMMON_XSTOCK_INCIDENT_COHORT = 'kraken-equities/ticker/common-session';
+
+export function isVtsFeedIncidentAlert(row: { dedupe_key?: string | null; metadata?: Record<string, unknown> | null }): boolean {
+  return row.dedupe_key?.startsWith(VTS_FEED_INCIDENT_KEY_PREFIX) === true && row.metadata?.vtsFeedIncidentVersion === 1;
+}
 /** Real-lane unpriced close: one warning per trade (a unique key cannot block a later trade). */
 export const unpricedCloseKey = (tradeId: string) => `vts-unpriced-close-${tradeId}`;
 /** Shadow-lane unpriced closes: one standing count row per class. */
