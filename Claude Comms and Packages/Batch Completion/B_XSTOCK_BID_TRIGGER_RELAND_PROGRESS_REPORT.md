@@ -374,6 +374,8 @@ The staging equity recorder saw a silent stall at 03:37:07 UTC, reconnected at 0
 
 **Independent-lane handoff to OLD.** For #441, read-only Step 2 is available now. The scope is the four dispatch, depth, liveness and consumption sites and the common attempt/age evidence. The weekly grade needs those accepted/refused writes, reconciliation, its registered verifier and post-deploy data. Discord `1575455963266285682` replies to `1575448126528163964`; it changes no slot.
 
+**Exact Step 2 r1 review, 10:52:38Z November 26.** CHANGES NEEDED at `ae0ba6c3f98c77cb5d63b29e97721206ca554bea`, dispatch `1575462910321496137`. Coltrane supported the same judged raw update and a strict full displayed size at fill. r2 adds retired-socket and final-consumption checks, a single winning close and atomic position cleanup, operator-route and maker policy controls, an offline attempt coverage denominator, and the architecture doc set. The two thresholds remain comparisons. Step 2 r2 needs exact review before implementation.
+
 ## 6d. Governance files changed — the C-P5 retirement (Step 10, 2026-11-20)
 CHANGE-CLASS: sub_batch (row 2's C-P5 outcome; declared in the C-P5 pre-audit header)
 | tier | document | verdict | what changed / why not |
