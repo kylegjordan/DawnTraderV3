@@ -2,7 +2,10 @@
 # Phase 3C: API Latency Benchmark
 # Tests key API endpoints and measures response times
 
-set -e
+set -e -o pipefail
+
+: "${USERNAME:?Set USERNAME for the benchmark account}"
+: "${PASSWORD:?Set PASSWORD for the benchmark account}"
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "🔍 Phase 3C: API Latency Benchmark"
@@ -11,30 +14,23 @@ echo ""
 
 # Configuration
 BASE_URL="${BASE_URL:-http://localhost:5000}"
-USERNAME="${USERNAME:-testuser123}"
-PASSWORD="${PASSWORD:-SecurePass123!}"
 OUTPUT_FILE="logs/phase3c-api-latency.csv"
 
-# Clear previous results
-> "$OUTPUT_FILE"
-echo "endpoint,time_total_ms,http_code" >> "$OUTPUT_FILE"
-
 echo "🔐 Authenticating..."
-# Login and get token
-AUTH_RESPONSE=$(curl -s -X POST "$BASE_URL/api/auth/login" \
-  -H "Content-Type: application/json" \
-  -d "{\"username\":\"$USERNAME\",\"password\":\"$PASSWORD\"}")
-
-TOKEN=$(echo "$AUTH_RESPONSE" | jq -r '.accessToken // .token // empty')
-
-if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
-  echo "❌ Authentication failed. Response:"
-  echo "$AUTH_RESPONSE"
+if ! TOKEN=$(
+  jq -cn '{username: env.USERNAME, password: env.PASSWORD}' |
+    curl -fsS --header 'Content-Type: application/json' --data-binary @- "$BASE_URL/api/auth/login" |
+    jq -ers 'select(length == 1) | .[0] | (.accessToken // .token) | strings |
+             select(length > 0 and (test("[\r\n]") | not))' 2>/dev/null
+); then
+  echo "❌ Authentication failed" >&2
   exit 1
 fi
 
 echo "✅ Authentication successful"
 echo ""
+
+echo "endpoint,time_total_ms,http_code" > "$OUTPUT_FILE"
 
 # Test endpoints with their actual paths
 ENDPOINTS=(
@@ -61,10 +57,11 @@ MAX_TIME=0
 
 for ENDPOINT in "${ENDPOINTS[@]}"; do
   # Make request and capture timing
-  RESPONSE=$(curl -s -w "\n%{http_code}\n%{time_total}" -o /tmp/response_body.txt \
-    -H "Authorization: Bearer $TOKEN" \
-    "$BASE_URL$ENDPOINT")
-  
+  RESPONSE=$(
+    printf '%s\n' "Authorization: Bearer $TOKEN" |
+      curl -sS --header @- -w '\n%{http_code}\n%{time_total}' -o /dev/null "$BASE_URL$ENDPOINT"
+  )
+
   HTTP_CODE=$(echo "$RESPONSE" | tail -n 2 | head -n 1)
   TIME_TOTAL=$(echo "$RESPONSE" | tail -n 1)
   
