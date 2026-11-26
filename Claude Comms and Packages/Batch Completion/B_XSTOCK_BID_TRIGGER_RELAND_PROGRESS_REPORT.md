@@ -265,6 +265,25 @@ DISPOSITION: folded into this batch — the scoped removal plan goes to Langston
 - **Shadow-lane unpriced-close row `9798d24f`: expected standing record, not a page.** Its metadata records exactly two xStock shadow trades, RKT/USD and VZ/USD, both closed `timeout_unpriced` at the max-hold valve. That is objective 12's intended operator-visible running count (`vts-shadow-unpriced-xstock_spot`), so the row remains active and unacknowledged for future metadata updates; the two archive rows remain the trade record.
 - **Quiet/closed venue row `e67b2638`: event-driven clear.** It remains active and unacknowledged; its own writer resolves it when pricing resumes.
 
+## 3k. Six paper exit freshness warnings and reconnect recurrence (2026-11-26)
+
+Staging build `e3a96a812`, read at 01:46–01:47 UTC. The alert ledger returned all six warnings below, active and unacknowledged. The positions read returned all six exact IDs open in paper mode, all long. Each last stored monitor price preceded its warning. The exit monitor still refused the mark on all six at 01:46:57 UTC: age 1,917 seconds against the per-position ceilings below. The latest archived bid and ask were sampled at 01:43:40 UTC.
+
+| xStock | Warning | Position | Ceiling (s) | Last stored monitor price vs stop | Archived bid vs stop | Archived bid/ask spread |
+|---|---|---|---:|---:|---:|---:|
+| NVO/USD | `fd9eef34-6005-4104-9c98-094c73b2d411` | `f0ed25da-6ea2-4d4f-806e-f4a25356f6c9` | 49 | +3.47% | −6.35% | 10.26% |
+| NKE/USD | `53b38915-3add-4925-bfcd-d6a133a1f0fb` | `2f674348-58a1-424b-90d2-a580548233fa` | 56 | +6.53% | −7.23% | 17.14% |
+| MGM/USD | `548f63ed-41f5-4ee5-af13-1c0a94411722` | `ab4d5642-fb4c-48a9-9ec5-0d1506e47a0c` | 113 | +4.20% | −16.10% | 37.78% |
+| HPQ/USD | `56317268-34b5-4c15-9fac-7280a2d29e25` | `63e1da6b-b56b-4407-8dfe-db93ae405dad` | 263 | +8.57% | +0.40% | 9.57% |
+| AMD/USD | `7b5cb035-ad05-4fc0-aa25-932a15a0c78d` | `ca3a395b-53e1-4ce0-9399-4d92b95b8643` | 300 | +0.80% | −35.14% | 55.32% |
+| XBI/USD | `093a17ba-b8cf-4da5-b063-b1069d8da7b8` | `6e2982b0-9c33-454e-a7e1-1167c29b18f6` | 300 | +3.97% | −66.88% | 123.66% |
+
+Distances use the position's own stop as denominator. Spread is the ask minus bid as a percentage of their midpoint. Archive receipt time alone cannot establish a usable exit price. At 01:44:05 UTC the archiver reported 469 snapshot frames and zero update frames in the prior minute, and the exit monitor's 01:46:50 UTC sweep still counted zero distinct xStocks with an actual update in its one-minute window. AMD had the least room on its last stored monitor price. The five bids below their stops were from the reconnect replay and do not establish a stop crossing on a usable quote.
+
+**Disposition for all six:** leave active and unacknowledged. Keep the freshness ceiling in force. The exit monitor can clear the warning after accepted pricing or position closure, or hand the warning back to the regular-session rules at the transition. The standing venue-quiet record `e80d1129` was also active and unacknowledged.
+
+**Related critical recurrence `186e8711-236c-4ba8-a782-788e893f9264`:** logs show two outside-liquid-window forced reconnects at 01:30:38 and 01:43:38 UTC after 753 and 778 seconds without data, respectively, against the 750-second limit. Both reconnected two seconds later. The second reconnect replayed the 469 snapshots above. Through 01:47:05 UTC the timed samples after that reconnect showed no symbol updates. Keep the critical alert active and unacknowledged until actual update flow and pricing recovery can be demonstrated. The previously resolved `a446f715` is the alert-ledger and recovery-procedure control (§3j). This read does not change the separate 8c Phase A Step 6 deploy gates.
+
 ## 4. PRE-REGISTERED close criteria (written before the data)
 **(4a), objective 11 — WINDOW: the first three full weekday US regular sessions after the deploy (2026-10-19, 10-20, 10-21).** Quoted from the pre-audit (r5e, Langston's reading): *"crossings conserved against A3 · joins taking the too_wide/quiet share · pagesAttempted falling · `dedupeHits == 0` as a SEPARATE tripwire, never a term (non-zero = FAIL)."* Also PASS requires `markMissedRowMarks` near zero and zero `no-trigger-vts-*` rows resolved by `cli`. **FAIL:** any `no_usable_mark` or isolated-staleness crossing that joins instead of paging; minted down with `dedupeHits` up; or `alertFileBytes` growing faster than ~1 MB/day. Source: the `[VTS_RAIL][SWEEP]` lines (cumulative since start).
 **Objective 6 — S6 (the stop-hold cost) — QUANTITY WINDOW: the first `spread_blown` refused tick with the bid at or below the stop.** PASS: `spreadBlownFirstStopRefusedBid` and `spreadBlownStopHeldMs` are populated for that position and its release or close records the bid against the stop. Until then S6 is **UNEXERCISED** and no silence may be cited as a pass (Langston, Step 8).
