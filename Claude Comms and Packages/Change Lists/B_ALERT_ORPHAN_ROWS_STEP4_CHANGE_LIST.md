@@ -99,3 +99,17 @@ from system_alerts a;
 ```
 
 REVIEWER: claim-only · which objects distinguish removal from reparenting or replacement? · exact target keys needed and full survivor identity requires a preflight key set · re-derived y for target keys; full survivor identity unmeasured.
+
+## 8. Coltrane's second pass — 2026-11-26
+
+**SEND BACK at 03:07:48 UTC** on exact `d79d93e16eaa107a28a007bd86ff73daa5ef061d` (dispatch `1575346171210367079`). Coltrane independently read the same deployed Phase A build and restart 716, reproduced the migration ledger and the two rendered operator alerts, and at 03:05:27.755487 UTC read 5,924 linked operator alerts, zero orphans and zero matches for the 12 rollback IDs. His known-present ID matched through the same lookup. His read-only fixture made the orphan count zero by reparenting all 12, while their IDs still matched; it distinguishes reparenting from the live deletion evidence. These legs pass.
+
+The Step 8 send-back concerns the original **02:31:33.848808 UTC** aggregate and C-2 generator output. Coltrane could read ANALYST's contemporary handoff but could not reproduce the preflight from the original output at the reviewed ref. NEW requested the retained outputs from ANALYST in Discord `1575348593806676042`. ANALYST replied in `1575349152022405121` and preserved the original preflight command stdout from execution chunk `1e1bfc` (exit 0), at `75790fcea60100b66a456dd1bf29894ac0c318f7` in `B_PRICE_SIDE_BY_JOB_8C_OFF_REMOVAL_CHANGE_LIST.md`, section **Original NEW preflight capture and retention limit**. The complete retained stdout follows:
+
+```jsonl
+{"phase": "immediate", "read_utc": "2026-11-26T02:31:30.293057+00:00", "manifest": 226, "ledger": 227, "pending": ["2026-11-22-b-alert-orphan-rows.sql", "2026-11-22-b-universe-refresh-acts.sql"]}
+{"phase": "immediate", "c2_tracked": 12, "c2_live": 12, "c2_match": true}
+{"phase": "immediate", "total": 5936, "orphans": 12, "users": 3, "post_expected_total": 5924, "at_utc": "2026-11-26T02:31:33.848808+00:00"}
+```
+
+The command validated the C-2 CSV header and one field per row, normalized CRLF to LF and compared the ordered received statements to the 12 tracked INSERTs from rollback blob `eca6c17dec44a63df2687a57872971e9ef0dc5b3` at exact A `5ecd7ee24fb7a741e8e015e0e6a262a464e7d016`. It separately validated the aggregate CSV shape and required the orphan count to equal the tracked statement count, with linked alerts and users present. The raw SQL responses were consumed in memory and discarded when the command ended. ANALYST confirmed that the raw aggregate CSV and original live C-2 generator rows are unavailable. The tracked rollback blob contains the expected rows. It cannot recover the original returned rows. Step 8's preflight leg remains open for Coltrane's disposition on the retained stdout and custody limit.
