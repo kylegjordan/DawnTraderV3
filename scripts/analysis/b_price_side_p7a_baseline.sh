@@ -14,11 +14,10 @@ echo "=== live subscription audit: [I8C-AUDIT][SUMMARY], last 5 lines (kraken-we
 grep -F "[I8C-AUDIT][SUMMARY]" "$LOG" | tail -5
 
 echo "=== eventLoopLag from /api/metrics/snapshot, 5 samples 10 s apart ==="
-TOKEN=$(curl -s -X POST http://localhost:5000/api/auth/login -H "Content-Type: application/json" \
-  -d '{"username":"testuser123","password":"SecurePass123!"}' \
-  | python3 -c 'import json,sys; print(json.load(sys.stdin)["accessToken"])')
+# The loopback metrics route is the same credential-free read used by the observation logger.
 for i in 1 2 3 4 5; do
-  curl -s -H "Authorization: Bearer $TOKEN" http://localhost:5000/api/metrics/snapshot | python3 -c '
+  snapshot=$(curl --fail --silent --show-error http://localhost:5000/api/metrics/snapshot) || exit $?
+  printf '%s' "$snapshot" | python3 -c '
 import json, sys
 def walk(o, path=""):
     if isinstance(o, dict):
@@ -30,12 +29,14 @@ def walk(o, path=""):
     elif isinstance(o, list):
         for i, v in enumerate(o[:20]):
             walk(v, path + "[" + str(i) + "]")
-raw = sys.stdin.read()
 try:
-    walk(json.loads(raw))
-except Exception as e:
-    print("unparseable response:", raw[:200])
-'
+    metrics = json.load(sys.stdin)
+except json.JSONDecodeError:
+    sys.exit("Invalid metrics snapshot JSON")
+if not isinstance(metrics, dict) or "eventLoopLag" not in metrics:
+    sys.exit("Metrics snapshot missing eventLoopLag")
+walk(metrics)
+' || exit $?
   echo "--- sample $i at $(date -u +%FT%TZ)"
   sleep 10
 done
