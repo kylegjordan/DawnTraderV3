@@ -129,7 +129,7 @@ Installed together with `B-AGENT-INVOKE-FAILURE-NOTICE`'s bridge files: `deploy.
 ## Step 7 — historical first invocation and review-source verification (2026-11-26)
 
 - The Step 6 receipt verified 17/17 installed bridge-group paths at `5215c529d77f8f48063fdfa38c0d128a752a851b`. The Langston bridge blob was `faa03f4195ca38eb6c6b590a56b7416090757802`. The installer reported the same imported `discord.py` 2.7.1 before and after that install. Step 3 exercised the mismatched-version refusal in the isolated 66-assertion suite, before any bridge file replacement.
-- The historical journal for `discord-langston-bridge.service`, invocation `344aeeda54324f9bab5a35c3a087bd54`, recorded start at 13:19:47.223923 UTC on November 13. The first call on that process (PID 2462976) resolved ref `fd3d9c9fc595300bfa2ef89999926c540e0e1894` and entered the Claude child path at 13:19:49.285421 UTC. It returned at 13:26:03.527806 UTC and delivered the reply at 13:26:06.799338 UTC. The resolved ref descends from the install ref and contains the same bridge blob. This journal records the ref and invocation metadata. The exact historical prompt text and the recipient's subsequent tool choices remain unverified.
+- The historical journal for `discord-langston-bridge.service`, invocation `344aeeda54324f9bab5a35c3a087bd54`, recorded start at 13:19:47.224523 UTC on November 13. The first call on that process (PID 2462976) resolved ref `fd3d9c9fc595300bfa2ef89999926c540e0e1894` and entered the Claude child path at 13:19:49.285421 UTC. It returned at 13:26:03.527806 UTC and delivered the reply at 13:26:06.799338 UTC. The resolved ref descends from the install ref and contains the same bridge blob. This journal records the ref and invocation metadata. The exact historical prompt text and the recipient's subsequent tool choices remain unverified.
 - The invocation replay below runs the entire exact reviewed `invoke_claude` against a synthetic request and captures the prompt at its stubbed child boundary. The predecessor emits the same journal stamp while requesting a raw-GitHub single-file read. The reviewed source passes the full resolved ref to `dt-review show`. The pre-audit's literal raw-host check also finds the reviewed note's express prohibition. The replay tests the affirmative read instruction and preserves that prohibition.
 - Current readback used the configured service interpreter as the Langston user, with Python bytecode writes disabled. The import and distribution metadata both reported 2.7.1. Langston's service is disabled and inactive on the Codex shift. The currently installed bridge is a later revision, so the historical file claim uses the install receipt, linked process and exact source. The check concerns the bridge and has no staging UI surface.
 
@@ -175,3 +175,73 @@ print("PASS: exact old and reviewed invoke reach the stub child. Shared journal 
 ```
 
 Step 7 evidence is ready for Coltrane. Step 8 must judge the historical record and the discriminating prompt replay. `#463` remains open pending that ruling.
+
+## Step 8 — requested Helsinki readbacks (November 26)
+
+At 09:54:17 UTC Coltrane independently passed the exact-ref replay and release-label mechanism at `17ad4e083394f0471f8c4122a0578bb6c371b63c`. He sent back the two host-only readbacks and asked for the literal raw-host check to be dispositioned. Authorized INFRA read the exact journal window and confirmed the manager and bridge rows identify the same systemd invocation, `344aeeda54324f9bab5a35c3a087bd54`. Only metadata was read back.
+
+| Event on November 13 | UTC | Journal PID | Metadata |
+| --- | --- | --- | --- |
+| Systemd start complete | 13:19:47.224523 | 1 | `discord-langston-bridge.service` |
+| First resolved ref stamp | 13:19:49.284594 | 2462976 | `fd3d9c9fc` |
+| First child entry | 13:19:49.285421 | 2462976 | 2,291 characters, session prefix `a9f7b220` |
+| Return | 13:26:03.527806 | 2462976 | 8,027 characters in 374.2 seconds |
+| Reply delivery | 13:26:06.799338 | 2462976 | Discord source message `1570766184318771271` |
+
+The configured interpreter reported effective user `langston`, bytecode writes disabled, imported version `2.7.1` and distribution version `2.7.1`. INFRA returned the readbacks in Discord `1575449968108507307`. The claim covers the release label in the configured environment.
+
+**Pre-audit line 533 disposition.** The reviewed source has one raw-host mention across the single bridge file, the explicit prohibition at line 217, and zero affirmative raw-host read instructions. The predecessor has an affirmative raw-host read and serves as the positive control. The child-boundary replay captures the new pinned `dt-review show` instruction. This replaces the literal-host-count condition for this proof with a check of the instruction Langston can actually follow.
+
+### Reviewer-readable Helsinki capture
+
+Coltrane accepted the raw-host disposition at 09:59:18 UTC. He requested a reviewable derivation for the two host-only legs. The exact read-only operator command follows. It filters the journal to the five metadata records above and checks that the manager and bridge records correspond to the same invocation. It invokes the configured Python interpreter for the package read without invoking the bridge or Claude.
+
+```bash
+set -eu
+journalctl -u discord-langston-bridge.service --since "2026-11-13 13:19:43 UTC" --until "2026-11-13 13:27:00 UTC" --utc --no-pager -o json | python3 -c '
+import datetime as dt,json,re,sys
+invocation="344aeeda54324f9bab5a35c3a087bd54"
+match={
+"first_ref_stamp":r"review ref resolved to [0-9a-f]{9}$",
+"first_child_entry":r"invoking claude \(prompt=\d+ chars, session=[0-9a-f]{8}\.\.\.\)$",
+"return":r"claude returned \d+ chars in [0-9.]+s$",
+"reply_delivery":r"responded to msg \d+$",
+}
+seen={}
+for row in map(json.loads,sys.stdin):
+    message=row.get("MESSAGE","")
+    if row.get("_PID")=="1" and message.startswith("Started discord-langston-bridge.service"):
+        name="start"
+        linked=[key for key in ("INVOCATION_ID","OBJECT_SYSTEMD_INVOCATION_ID","_SYSTEMD_INVOCATION_ID") if row.get(key)==invocation]
+        assert linked, "start not linked to requested invocation"
+    elif row.get("_PID")=="2462976" and row.get("_SYSTEMD_INVOCATION_ID")==invocation:
+        name=next((key for key, value in match.items() if re.search(value,message)),None)
+        if name is None: continue
+        message=re.search(match[name],message)[0]
+    else:
+        continue
+    if name in seen: continue
+    utc=dt.datetime.fromtimestamp(int(row["__REALTIME_TIMESTAMP"])/1_000_000,dt.timezone.utc)
+    seen[name]={"event":name,"timestamp_utc":utc.isoformat(timespec="microseconds"),"journal_pid":row.get("_PID"),"invocation_id":invocation,"message":message}
+assert seen.keys()==({"start"} | match.keys()),seen.keys()
+print(json.dumps(list(seen.values()),indent=2))
+'
+runuser -u langston -- env PYTHONDONTWRITEBYTECODE=1 /opt/discord-bridges/venv/bin/python3 -c 'import os,pwd,discord,importlib.metadata as md,json; print(json.dumps({"effective_user":pwd.getpwuid(os.geteuid()).pw_name,"bytecode_writes_disabled":os.environ.get("PYTHONDONTWRITEBYTECODE")=="1","import_version":discord.__version__,"distribution_version":md.version("discord.py")}))'
+systemctl show discord-langston-bridge.service -p ActiveState -p UnitFileState
+```
+
+| Captured event | Trimmed journal message |
+| --- | --- |
+| Start | `Started discord-langston-bridge.service - Langston Discord gateway bridge (Claude Code via discord.py).` |
+| Ref | `review ref resolved to fd3d9c9fc` |
+| Child | `invoking claude (prompt=2291 chars, session=a9f7b220...)` |
+| Return | `claude returned 8027 chars in 374.2s` |
+| Delivery | `responded to msg 1570766184318771271` |
+
+Configured interpreter stdout:
+
+```json
+{"effective_user": "langston", "bytecode_writes_disabled": true, "import_version": "2.7.1", "distribution_version": "2.7.1"}
+```
+
+The unit readback was `ActiveState=inactive`, `UnitFileState=disabled`. The systemd start row has the same `INVOCATION_ID` with `_SOURCE_REALTIME_TIMESTAMP=2026-11-13T13:19:47.223923Z` and `__REALTIME_TIMESTAMP=2026-11-13T13:19:47.224523Z`. The original Step 7 display used the source timestamp. The table uses the journal-receipt timestamp from the same row. The timestamps differ by 600 microseconds.
