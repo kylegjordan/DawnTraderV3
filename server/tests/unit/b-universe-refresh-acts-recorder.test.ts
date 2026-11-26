@@ -16,6 +16,7 @@ vi.mock('ws', async () => {
   class FakeWs extends EventEmitter {
     static OPEN = 1;
     static CONNECTING = 0;
+    static CLOSED = 3;
     readyState = 0;
     terminated = false;
     sent: string[] = [];
@@ -28,6 +29,14 @@ vi.mock('ws', async () => {
     _close(code = 1006) { this.readyState = 3; this.emit('close', code, Buffer.from('')); }
   }
   return { default: FakeWs, WebSocket: FakeWs };
+});
+vi.mock('node:fs', async importOriginal => {
+  const fs = await importOriginal<typeof import('node:fs')>();
+  return {
+    ...fs,
+    readFileSync: (...args: Parameters<typeof fs.readFileSync>) =>
+      args[0] === 'dist/BUILD_SHA' ? '1'.repeat(40) : fs.readFileSync(...args),
+  };
 });
 
 const CFG = vi.hoisted(() => ({ rows: {} as Record<string, number> }));
@@ -106,9 +115,16 @@ function openAndAnswer(s: any) {
   }
 }
 const ok = (s: any, sym: string, reqId: number) => s._msg({ method: 'subscribe', success: true, result: { symbol: sym }, req_id: reqId });
+const ack = (socket: any, method: string, symbol: string, channel: string, reqId?: number) => {
+  socket._msg({ method, success: true, result: { channel, symbol }, req_id: reqId });
+};
+const bothChannels = (socket: any, method: string, symbol: string, reqId?: number) => {
+  ack(socket, method, symbol, 'ticker', reqId);
+  ack(socket, method, symbol, 'ohlc', reqId);
+};
 
 beforeEach(() => {
-  vi.useFakeTimers();
+  vi.useFakeTimers({ toFake: ['Date', 'performance', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] });
   vi.setSystemTime(T0);
   sockets.length = 0;
   socketOfShard.clear();
@@ -133,7 +149,195 @@ afterEach(() => {
   _resetRecorderRegistryForTests();
   _resetCryptoRecorderClockForTests();
   _setRecorderAlertDepsForTests(null);
+  vi.restoreAllMocks();
   vi.useRealTimers();
+});
+
+describe('natural refresh readback proof', () => {
+  const prefix = '[B-UNIVERSE-REFRESH-ACTS][OBJ-1] ';
+  const occurrenceId = 'natural-proof';
+
+  function captureReport() {
+    const log = vi.spyOn(console, 'log');
+    return async () => {
+      await vi.advanceTimersByTimeAsync(30_000);
+      const reports = log.mock.calls.map(([value]) => String(value)).filter(value => value.startsWith(prefix));
+      expect(reports).toHaveLength(1);
+      return JSON.parse(reports[0].slice(prefix.length));
+    };
+  }
+
+  async function incremental(computed = ['KEPT/USD', 'NEW/USD']) {
+    const readReport = captureReport();
+    await boot(['DROP/USD', 'KEPT/USD']);
+    const socket = sockets[0];
+    openAndAnswer(socket);
+    await applyCryptoUniverseChange({
+      occurrenceId, add: ['NEW/USD'], drop: ['DROP/USD'],
+      proof: { computed, pins: [], bounded: false },
+    });
+    const addRequest = reqFrames(socket, 'subscribe')[0].req_id;
+    const dropRequest = reqFrames(socket, 'unsubscribe')[0].req_id;
+    return { socket, addRequest, dropRequest, readReport };
+  }
+
+  it('proves the actual settled set and both channels for each change, including bounded retention and pins', async () => {
+    const readReport = captureReport();
+    await boot(['DROP/USD', 'KEPT/USD', 'PIN/USD', 'BOUNDED/USD']);
+    const socket = sockets[0];
+    openAndAnswer(socket);
+    await applyCryptoUniverseChange({
+      occurrenceId, add: ['NEW/USD'], drop: ['DROP/USD'],
+      proof: { computed: ['KEPT/USD', 'NEW/USD'], pins: ['PIN/USD', 'ABSENT/USD'], bounded: true },
+    });
+    bothChannels(socket, 'subscribe', 'NEW/USD', reqFrames(socket, 'subscribe')[0].req_id);
+    bothChannels(socket, 'unsubscribe', 'DROP/USD', reqFrames(socket, 'unsubscribe')[0].req_id);
+    const report = await readReport();
+    expect(report).toMatchObject({
+      occurrenceId, buildSha: '1'.repeat(40), pid: process.pid, complete: true,
+      before: ['BOUNDED/USD', 'DROP/USD', 'KEPT/USD', 'PIN/USD'],
+      settled: ['BOUNDED/USD', 'KEPT/USD', 'NEW/USD', 'PIN/USD'],
+      boundedRetained: ['BOUNDED/USD'], retainedPins: ['PIN/USD'],
+      missing: [], extra: [], rejected: [],
+    });
+    expect(Date.parse(report.settledAt) - Date.parse(report.beforeAt)).toBe(30_000);
+    expect(report.adds[0].receipt).toMatchObject({ tickerAt: expect.any(String), ohlcAt: expect.any(String) });
+  });
+
+  it('leaves proof open on an equal-count symbol substitution', async () => {
+    const { socket, addRequest, dropRequest, readReport } = await incremental(['KEPT/USD', 'OTHER/USD']);
+    bothChannels(socket, 'subscribe', 'NEW/USD', addRequest);
+    bothChannels(socket, 'unsubscribe', 'DROP/USD', dropRequest);
+    expect(await readReport()).toMatchObject({
+      complete: false, missing: ['OTHER/USD'], extra: ['NEW/USD'],
+    });
+  });
+
+  it('leaves proof open when another apply overlaps the measurement', async () => {
+    const { socket, addRequest, dropRequest, readReport } = await incremental();
+    bothChannels(socket, 'subscribe', 'NEW/USD', addRequest);
+    bothChannels(socket, 'unsubscribe', 'DROP/USD', dropRequest);
+    await applyCryptoUniverseChange({ occurrenceId: 'another-occurrence', add: [], drop: ['GONE/USD'] });
+    expect(await readReport()).toMatchObject({ complete: false, overlapped: true, missing: [], extra: [] });
+  });
+
+  it.each(['duplicate', 'missing', 'wrong request', 'rejection', 'late'] as const)(
+    'leaves proof open for an add with %s evidence',
+    async scenario => {
+      const { socket, addRequest, dropRequest, readReport } = await incremental();
+      bothChannels(socket, 'unsubscribe', 'DROP/USD', dropRequest);
+      ack(socket, 'subscribe', 'NEW/USD', 'ticker', addRequest);
+      if (scenario === 'duplicate' || scenario === 'late') ack(socket, 'subscribe', 'NEW/USD', 'ticker', addRequest);
+      if (scenario === 'wrong request') ack(socket, 'subscribe', 'NEW/USD', 'ohlc', addRequest + 2);
+      if (scenario === 'rejection') socket._msg({ method: 'subscribe', success: false, symbol: 'NEW/USD', req_id: addRequest });
+      if (scenario === 'late') {
+        await vi.advanceTimersByTimeAsync(15_001);
+        ack(socket, 'subscribe', 'NEW/USD', 'ohlc', addRequest);
+      }
+      expect(await readReport()).toMatchObject({
+        complete: false, adds: [{ symbol: 'NEW/USD', complete: false, receipt: { ohlcAt: null } }],
+      });
+    },
+  );
+
+  it('keeps a partial drop open while the old socket still serves', async () => {
+    const { socket, addRequest, dropRequest, readReport } = await incremental();
+    bothChannels(socket, 'subscribe', 'NEW/USD', addRequest);
+    ack(socket, 'unsubscribe', 'DROP/USD', 'ticker', dropRequest);
+    ack(socket, 'unsubscribe', 'DROP/USD', 'ticker', dropRequest);
+    expect(await readReport()).toMatchObject({
+      complete: false, drops: [{ symbol: 'DROP/USD', complete: false, old: [{ closed: false, ohlcAt: null }] }],
+    });
+  });
+
+  it('expires a receipt by elapsed time despite a backward wall-clock step', async () => {
+    const { socket, addRequest, dropRequest, readReport } = await incremental();
+    bothChannels(socket, 'unsubscribe', 'DROP/USD', dropRequest);
+    ack(socket, 'subscribe', 'NEW/USD', 'ticker', addRequest);
+    ack(socket, 'subscribe', 'NEW/USD', 'ticker', addRequest);
+    await vi.advanceTimersByTimeAsync(15_001);
+    vi.setSystemTime(T0 + 1);
+    ack(socket, 'subscribe', 'NEW/USD', 'ohlc', addRequest);
+    expect(await readReport()).toMatchObject({
+      complete: false, missing: [], adds: [{ complete: false, receipt: { ohlcAt: null } }],
+    });
+  });
+
+  it.each([false, true])('requires requestless replies from the open replacement, fresh replies = %s', async fresh => {
+    const { socket, addRequest, readReport } = await incremental();
+    bothChannels(socket, 'subscribe', 'NEW/USD', addRequest);
+    socket._close();
+    await vi.advanceTimersByTimeAsync(5_000);
+    const replacement = sockets[1];
+    replacement._open();
+    bothChannels(replacement, 'subscribe', 'KEPT/USD');
+    bothChannels(socket, 'subscribe', 'NEW/USD');
+    ack(replacement, 'subscribe', 'NEW/USD', 'ticker');
+    ack(replacement, 'subscribe', 'NEW/USD', fresh ? 'ohlc' : 'ticker');
+    expect(await readReport()).toMatchObject({
+      complete: fresh,
+      adds: [{ complete: fresh, receipt: { generation: 2, requestId: null } }],
+      drops: [{ complete: true, old: [{
+        generation: 1, closed: true, replacementGeneration: 2,
+        replacementTickerIncluded: false, replacementOhlcIncluded: false, absentFromReplacement: true,
+      }] }],
+    });
+  });
+
+  it.each(['ticker', 'ohlc'])('rejects a drop sent again in only the replacement %s payload', async channel => {
+    const { socket, addRequest, readReport } = await incremental();
+    bothChannels(socket, 'subscribe', 'NEW/USD', addRequest);
+    socket._close();
+    await vi.advanceTimersByTimeAsync(5_000);
+    const replacement = sockets[1];
+    const stringify = JSON.stringify;
+    const wireMutation = vi.spyOn(JSON, 'stringify').mockImplementation(value => {
+      if (value?.method !== 'subscribe' || value.params?.channel !== channel) return stringify(value);
+      return stringify({ ...value, params: { ...value.params, symbol: [...value.params.symbol, 'DROP/USD'] } });
+    });
+    openAndAnswer(replacement);
+    wireMutation.mockRestore();
+
+    const dropFrames = frames(replacement).filter((frame: any) => frame.params.symbol.includes('DROP/USD'));
+    expect(dropFrames.map((frame: any) => frame.params.channel)).toEqual([channel]);
+    expect(await readReport()).toMatchObject({
+      complete: false, missing: [], extra: [], adds: [{ complete: true }],
+      drops: [{ symbol: 'DROP/USD', complete: false, old: [
+        {
+          generation: 1, closed: true, replacementGeneration: 2,
+          replacementTickerIncluded: channel === 'ticker', replacementOhlcIncluded: channel === 'ohlc',
+          absentFromReplacement: false, complete: false,
+        },
+        { generation: 2, closed: false, replacementGeneration: null, complete: false },
+      ] }],
+    });
+  });
+
+  it('leaves an old-socket closure open while its replacement is still connecting', async () => {
+    const { socket, readReport } = await incremental();
+    socket._close();
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(sockets[1].readyState).toBe(0);
+    expect(await readReport()).toMatchObject({
+      complete: false, drops: [{ complete: false, old: [{ closed: true, absentFromReplacement: false }] }],
+    });
+  });
+
+  it('requires both requestless replies from a newly opened overflow shard', async () => {
+    const readReport = captureReport();
+    await boot(['DROP/USD', 'FILL/USD'], 1);
+    openAndAnswer(sockets[0]);
+    openAndAnswer(sockets[1]);
+    await applyCryptoUniverseChange({
+      occurrenceId, add: ['NEW/USD'], drop: ['DROP/USD'],
+      proof: { computed: ['FILL/USD', 'NEW/USD'], pins: [], bounded: false },
+    });
+    openAndAnswer(sockets[2]);
+    expect(await readReport()).toMatchObject({
+      complete: true, adds: [{ complete: true, receipt: { requestId: null } }],
+      drops: [{ complete: true, old: [{ closed: true, retired: true, replacementGeneration: null }] }],
+    });
+  });
 });
 
 describe('an add to a running shard — incremental, with its own req_id, never a reconnect', () => {

@@ -42,8 +42,10 @@ import { bufferOhlcBar } from './ohlc-batch-writer.js';
 import { bufferTickerSnap } from './ticker-batch-writer.js';
 import { validateOhlcFrame } from './ohlc-frame-validator.js';
 import { noteOhlcFrameAccepted, noteOhlcFrameRejected } from './ohlc-frame-skip-tracker.js';
+import { getCachedNumberRequired, GLOBAL_KEY } from '../module-constants-service.js';
+import { CryptoUniverseRefreshProof, type RefreshProofInput } from './crypto-universe-refresh-proof.js';
 import {
-  RecorderConnection, startRecorderWatch, type AddOutcome, type RecorderConnectionLiveness,
+  RECORDER_HANDSHAKE_TIMEOUT_MS, RecorderConnection, startRecorderWatch, type AddOutcome, type RecorderConnectionLiveness,
 } from './recorder-connection.js';
 
 const WS_URL = 'wss://ws.kraken.com/v2';
@@ -101,6 +103,9 @@ let nextShardId = 0;
 /** §2.4: adds that failed confirmation since the refresh last collected them — written by `onAddResult`, read and
  *  cleared by the refresh into its run record (`rejected_adds` / `unconfirmed_adds`). */
 const addFailures = { rejected: [] as string[], unconfirmed: [] as string[] };
+let refreshProof: CryptoUniverseRefreshProof | null = null;
+let refreshProofStarted = false;
+let refreshProofTimer: ReturnType<typeof setTimeout> | undefined;
 
 export function getCryptoSpotStats(nowMs: number = Date.now()): {
   /** SOCKET state: every shard's readyState is OPEN. Not a liveness signal — `connections` carries that, beside it. */
@@ -303,6 +308,13 @@ function handleMessage(shard: Shard, raw: WebSocket.RawData): { data: boolean; k
   } catch {
     return { data: false, kind: 'unparsable' };
   }
+  if (refreshProof && shard.conn?.ws && (msg.method === 'subscribe' || msg.method === 'unsubscribe')) {
+    const success = msg.success === true;
+    const symbol = success ? msg.result?.symbol : replySymbol(msg);
+    if (typeof symbol === 'string' && (msg.req_id === undefined || Number.isSafeInteger(msg.req_id))) {
+      refreshProof.noteReply(shard.conn.ws, msg.method, symbol, msg.req_id ?? null, msg.result?.channel, success);
+    }
+  }
   if (msg.method === 'subscribe') {
     // Wire capture 2026-11-04: one reply per symbol per channel; success:false carries `error` and a top-level `symbol`,
     // success:true carries it at `result.symbol`. A `req_id` is echoed when one was sent (an incremental add, P4).
@@ -386,14 +398,17 @@ function onShardAddResult(shard: Shard, symbol: string, outcome: AddOutcome, now
 }
 
 function subscribe(shard: Shard, ws: WebSocket): void {
-  ws.send(JSON.stringify({
+  const ohlc = JSON.stringify({
     method: 'subscribe',
     params: { channel: 'ohlc', symbol: shard.symbols, interval: 1 },
-  }));
-  ws.send(JSON.stringify({
+  });
+  ws.send(ohlc);
+  const ticker = JSON.stringify({
     method: 'subscribe',
     params: { channel: 'ticker', symbol: shard.symbols },
-  }));
+  });
+  ws.send(ticker);
+  refreshProof?.noteOpen(shard.id, ws, { ohlc, ticker });
   console.log(`[B74][crypto-spot][shard${shard.id}] subscribed to ohlc(1) + ticker for ${shard.symbols.length} symbols`);
 }
 
@@ -514,6 +529,70 @@ export interface CryptoUniverseChangeResult {
  * `onShardAddResult`; a rejected or unconfirmed add is withdrawn there and surfaces via `takeCryptoAddFailures`.
  */
 export async function applyCryptoUniverseChange(
+  input: {
+    add: string[];
+    drop: string[];
+    occurrenceId: string;
+    proof?: Pick<RefreshProofInput, 'computed' | 'pins' | 'bounded'>;
+  },
+): Promise<CryptoUniverseChangeResult> {
+  refreshProof?.noteOverlappingApply();
+  if (!input.proof || refreshProofStarted || !input.add.length || !input.drop.length) {
+    return applyDecidedUniverseChange(input);
+  }
+
+  let replyTimeoutMs: number;
+  try {
+    replyTimeoutMs = getCachedNumberRequired('passive_archive', 'recorder_subscribe_reply_timeout_ms', {
+      ...GLOBAL_KEY, assetClass: ASSET_CLASS,
+    });
+  } catch {
+    console.warn(`[B-UNIVERSE-REFRESH-ACTS][OBJ-1] ${input.occurrenceId}: recorder reply window unavailable`);
+    return applyDecidedUniverseChange(input);
+  }
+  if (!Number.isFinite(replyTimeoutMs) || replyTimeoutMs <= 0) {
+    console.warn(`[B-UNIVERSE-REFRESH-ACTS][OBJ-1] ${input.occurrenceId}: recorder reply window invalid`);
+    return applyDecidedUniverseChange(input);
+  }
+
+  const observationMs = RECORDER_HANDSHAKE_TIMEOUT_MS + replyTimeoutMs;
+  const proof = new CryptoUniverseRefreshProof(
+    { ...input.proof, occurrenceId: input.occurrenceId, add: input.add, drop: input.drop },
+    getCryptoRecorderRunningSymbols(),
+    replyTimeoutMs,
+    observationMs,
+  );
+  refreshProofStarted = true;
+  refreshProof = proof;
+  const dropping = new Set(input.drop);
+  for (const shard of state.shards) {
+    const socket = shard.conn?.ws;
+    if (!socket) continue;
+    for (const symbol of shard.symbols) {
+      if (dropping.has(symbol)) proof.noteDropSocket(shard.id, socket, symbol);
+    }
+  }
+
+  let applied: CryptoUniverseChangeResult | undefined;
+  // The observation is bounded independently of the run and cannot delay the occurrence or drive a reconnect.
+  refreshProofTimer = setTimeout(() => {
+    refreshProof = null;
+    refreshProofTimer = undefined;
+    const report = proof.finish(
+      getCryptoRecorderRunningSymbols(),
+      new Map(state.shards.map(shard => [shard.id, shard.conn?.ws ?? null])),
+      applied?.added ?? [],
+      applied?.dropped ?? [],
+    );
+    console.log(`[B-UNIVERSE-REFRESH-ACTS][OBJ-1] ${JSON.stringify(report)}`);
+  }, observationMs);
+  refreshProofTimer.unref();
+
+  applied = await applyDecidedUniverseChange(input);
+  return applied;
+}
+
+async function applyDecidedUniverseChange(
   { add, drop, occurrenceId }: { add: string[]; drop: string[]; occurrenceId: string },
 ): Promise<CryptoUniverseChangeResult> {
   const out: CryptoUniverseChangeResult = {
@@ -533,6 +612,10 @@ export async function applyCryptoUniverseChange(
   for (const [id, syms] of dropsByShard) {
     const shard = state.shards.find(s => s.id === id);
     if (!shard) continue;
+    const socket = shard.conn?.ws;
+    if (refreshProof && socket) {
+      for (const symbol of syms) refreshProof.noteDropSocket(shard.id, socket, symbol);
+    }
     for (const sym of syms) forgetSymbol(shard, sym);
     out.dropped.push(...syms);
     if (shard.symbols.length === 0) {
@@ -544,7 +627,8 @@ export async function applyCryptoUniverseChange(
       state.shards = state.shards.filter(s => s !== shard);
       out.shardsStopped.push(id);
     } else {
-      shard.conn?.sendUnsubscribe(syms, unsubscribeFrames(syms));
+      const result = shard.conn?.sendUnsubscribe(syms, unsubscribeFrames(syms));
+      if (socket && result?.sent) refreshProof?.noteRequest(id, socket, 'unsubscribe', syms, result.reqId);
     }
   }
 
@@ -570,7 +654,9 @@ export async function applyCryptoUniverseChange(
   }
   for (const [id, syms] of addsByShard) {
     const shard = state.shards.find(s => s.id === id)!;
-    shard.conn?.sendAdd(syms, subscribeFrames(syms), 2, now);
+    const socket = shard.conn?.ws;
+    const result = shard.conn?.sendAdd(syms, subscribeFrames(syms), 2, now);
+    if (socket && result?.sent) refreshProof?.noteRequest(id, socket, 'subscribe', syms, result.reqId);
     out.added.push(...syms);
   }
   // Every shard full (or none running): open new shards. Their symbols subscribe on open, like boot symbols, but
@@ -616,6 +702,10 @@ export function _installShardsForTests(shards: Shard[]): void {
 }
 /** Test-only: clear the per-symbol update clock and the warmth clock. */
 export function _resetCryptoRecorderClockForTests(): void {
+  clearTimeout(refreshProofTimer);
+  refreshProofTimer = undefined;
+  refreshProofStarted = false;
+  refreshProof = null;
   lastTickerUpdateAt.clear();
   firstTickerUpdateAtMs = null;
   state.shards = [];
