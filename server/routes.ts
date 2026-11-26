@@ -3844,7 +3844,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       if (currentMode === 'paper') {
         // Stop paper trading simulation
         const { stopActiveEngine } = await import('./services/active-engine-service.js');
-        await stopActiveEngine(userId);
+        const stopped = await stopActiveEngine(userId);
+        if (stopped.refusal) return res.status(409).json({ error: stopped.message });
         console.log(`[TradingStop] Paper simulation stopped for user ${userId}`);
       } else {
         // Phase 27.F.15.B.3: Stop global live trading engine
@@ -3942,7 +3943,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       if (mode === 'paper') {
         try {
           const { stopActiveEngine, clearGlobalActiveEngineManager } = await import('./services/active-engine-service.js');
-          await stopActiveEngine(userId); // Use current user for manager lookup
+          const stopped = await stopActiveEngine(userId);
+          if (stopped.refusal) return res.status(409).json({ error: stopped.message });
           clearGlobalActiveEngineManager();
           console.log(`[ForceStop] Paper simulation force-stopped`);
         } catch (err) {
@@ -11052,222 +11054,220 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         received: mode
       });
     }
+
+    if (mode === 'new' && initialBalance !== undefined && initialBalance !== null) {
+      return res.status(400).json({
+        error: 'initialBalance is no longer accepted. A new paper session starts at your real Kraken balance (fetched automatically).'
+      });
+    }
     
     try {
       console.log(`[41D-ROUTE-3] Entering try block (t+${Date.now()-t0}ms)`);
       
-      // Phase 8.8.3-B7.1: Hard reset ONLY on mode='new'
-      // Continue mode preserves existing state (trades, positions, portfolio)
-      if (mode === 'new') {
-        console.log(`[B7.1][HARD_RESET] Running hardResetActiveEngineTables + resetPaper() before new simulation...`);
-        const { activeSessionResetService } = await import('./services/active-session-reset.js');
-        const resetResult = await activeSessionResetService.hardResetActiveEngine('paper');
-        console.log(`[B7.1][HARD_RESET] Complete:`, {
-          success: resetResult.success,
-          closedTrades: resetResult.details.closedTrades,
-          clearedPositions: resetResult.details.clearedPositions,
-          elapsed: resetResult.message
-        });
-        
-        // Broadcast reset completion to invalidate UI caches immediately
-        const { contextBridge } = await import('./services/context-bridge.js');
-        await contextBridge.broadcast({
-          type: 'active_engine_reset',
-          payload: {
-            mode: 'paper',
-            resetResult: resetResult.details,
-            timestamp: new Date().toISOString(),
-            reason: 'new_simulation_hard_reset'
-          },
-          mode: 'paper'
-        });
-        
-        // Directive 12.2.3: Bob Core cache invalidation removed (Batch 7B)
-        console.log(`[B7.1][HARD_RESET] Simulation reset complete`);
-      } else {
-        console.log(`[B7.1][CONTINUE] Preserving existing state (no hard reset)`);
-      }
-      
-      // Phase 27.F.14.J: Handle "Start New Simulation" mode
-      if (mode === 'new') {
-        console.log(`[41D-ROUTE-4] Mode is 'new' (t+${Date.now()-t0}ms)`);
-
-        // P19-B8.2 (OBJ-1): the start-new balance is the Kraken-mirror figure,
-        // fetched server-side — NEVER a client-supplied or invented number.
-        // A supplied initialBalance is refused loudly (no silent ignore); a
-        // failed mirror fetch refuses the start (no fallback; 'continue' is
-        // unaffected — it never calls Kraken).
-        if (initialBalance !== undefined && initialBalance !== null) {
-          return res.status(400).json({
-            error: 'initialBalance is no longer accepted. A new paper session starts at your real Kraken balance (fetched automatically).'
-          });
-        }
-        let balance: number;
+      const { runPaperStartRequest } = await import('./services/active-engine-service.js');
+      const response = await runPaperStartRequest(userId, mode, async (start) => {
+        const { PAPER_ENTRY_DRAIN_REASON, paperEntryPublication } = await import('./services/paper-entry-publication.js');
+        let paperResetPermit: symbol | undefined;
         try {
-          const { getKrakenMirrorBalance } = await import('./services/kraken-mirror-balance.js');
-          const mirror = await getKrakenMirrorBalance();
-          balance = mirror.mirrorBalanceUsd;
-        } catch (mirrorErr: any) {
-          console.error(`[B8.2][START] Kraken-mirror fetch failed — start REFUSED: ${mirrorErr?.message}`);
-          return res.status(502).json({
-            error: 'Could not fetch your real Kraken balance, so the new session was NOT started. Resolve the Kraken connection and try again (Continue is unaffected).',
-            detail: mirrorErr?.message
-          });
-        }
-        if (!(balance > 0)) {
-          return res.status(409).json({
-            error: `Your Kraken account has no free USD cash (mirror figure $${balance.toFixed(2)}), so a new paper session cannot start at the mirrored balance.`
-          });
-        }
-        console.log(`[B8.2][START] Starting NEW simulation at the Kraken-mirror balance $${balance}`);
-        
-        // Stop paper simulation if running (gracefully handle if already stopped)
-        const { stopActiveEngine } = await import('./services/active-engine-service.js');
-        const stopResult = await stopActiveEngine(userId);
-        if (!stopResult.success && !stopResult.message?.includes('not running')) {
-          console.warn('[Phase-27.F.14.J] Stop failed but continuing:', stopResult.message);
-        }
-        
-        // Reset baseline and portfolio state
-        const systemContext = await storage.getSystemContext('paper');
-        console.log('[ActiveEngineReset] Retrieved system context for mode: paper');
-        
-        // P19-B8.2 (OBJ-3/OBJ-4): the start-new balance write is an ANCHOR EVENT
-        // (reason 'start_new') — balance + anchor_version + ledger row, written
-        // atomically BEFORE the engine can open anything, so the first at-open
-        // ratio stamp always has an anchor to reference.
-        const { executeReanchor } = await import('./services/portfolio-anchor-service.js');
-        await executeReanchor({ mode: 'paper', newBalance: balance, reason: 'start_new' });
-        console.log(`[ActiveEngine] Started simulation (Kraken-mirror balance=$${balance})`);
-        
-        // Phase 27.F.14.M: Broadcast portfolio balance update to all clients
-        const { contextBridge } = await import('./services/context-bridge.js');
-        await contextBridge.broadcast({
-          type: 'portfolio_balance_updated',
-          payload: {
-            balance,
-            mode: 'paper',
-            reason: 'new_simulation_started',
-            timestamp: new Date().toISOString()
-          },
-          mode: 'paper'
-        });
-        
-        // Phase 27.F.15.C: Reset MetricsCore for paper mode (enforces MSI)
-        const { metricsCore } = await import('./services/metrics-core.js');
-        await metricsCore.reset('paper');
-        console.log('[27.F.15.C][MSI] ✅ Paper mode metrics reset complete');
-        
-        // Phase 27.F.14.J: Reset LATTI baseline for paper mode (per_simulation baseline)
-        await storage.updateSystemContext('paper', {
-          baselineMode: 'per_simulation',
-          lattiLastAnchorTime: new Date()
-        });
-        console.log('[LATTI][Paper] Baseline mode: per_simulation');
-        console.log('[LATTI][Paper] Baseline reset successfully');
-        
-        // Phase 27.F.14.J: Reset trading pace to defaults (guardrails and filters preserved)
-        console.log('[LATTI][Paper] Resetting trading pace to baseline (preserving user guardrails and filters)...');
-        
-        // Reset trading pace to baseline
-        await storage.updateSystemContext('paper', {
-          tradingPace: 'baseline'
-        });
-        
-        console.log('[LATTI][Paper] Trading pace reset to baseline (guardrails and filters preserved)');
-        
-        // Start the simulation
-        const { startActiveEngine } = await import('./services/active-engine-service.js');
-        // REB 2.8.13: Pass startingBalance to startActiveEngine (required after REB 2.8.12)
-        const result = await startActiveEngine(userId, { startingBalance: balance });
-        
-        // Directive 12.2.3: Bob Core cache invalidation removed (Batch 7B)
+          if (mode === 'new') {
+            console.log(`[B7.1][HARD_RESET] Running hardResetActiveEngineTables + resetPaper() before new simulation...`);
+            const { activeSessionResetService } = await import('./services/active-session-reset.js');
+            const resetResult = await activeSessionResetService.hardResetActiveEngine('paper', true);
+            if (!resetResult.success) {
+              return { status: resetResult.refusal ? 409 : 500, body: { error: resetResult.message } };
+            }
+            paperResetPermit = resetResult.paperResetPermit;
+            console.log(`[B7.1][HARD_RESET] Complete:`, {
+              success: resetResult.success,
+              closedTrades: resetResult.details.closedTrades,
+              clearedPositions: resetResult.details.clearedPositions,
+              elapsed: resetResult.message
+            });
 
-        if (!result.success) {
-          return res.status(400).json({ error: result.message || result.error });
+            // Broadcast reset completion to invalidate UI caches immediately
+            const { contextBridge } = await import('./services/context-bridge.js');
+            await contextBridge.broadcast({
+              type: 'active_engine_reset',
+              payload: {
+                mode: 'paper',
+                resetResult: resetResult.details,
+                timestamp: new Date().toISOString(),
+                reason: 'new_simulation_hard_reset'
+              },
+              mode: 'paper'
+            });
+
+            // Directive 12.2.3: Bob Core cache invalidation removed (Batch 7B)
+            console.log(`[B7.1][HARD_RESET] Simulation reset complete`);
+            // P19-B8.2 (OBJ-1): the start-new balance is the Kraken-mirror figure,
+            // fetched server-side — NEVER a client-supplied or invented number.
+            // A failed mirror fetch refuses the start; Continue does not call Kraken.
+            let balance: number;
+            try {
+              const { getKrakenMirrorBalance } = await import('./services/kraken-mirror-balance.js');
+              const mirror = await getKrakenMirrorBalance();
+              balance = mirror.mirrorBalanceUsd;
+            } catch (mirrorErr: any) {
+              console.error(`[B8.2][START] Kraken-mirror fetch failed — start REFUSED: ${mirrorErr?.message}`);
+              return { status: 502, body: {
+                error: 'Could not fetch your real Kraken balance, so the new session was NOT started. Resolve the Kraken connection and try again (Continue is unaffected).',
+                detail: mirrorErr?.message
+              } };
+            }
+            if (!(balance > 0)) {
+              return { status: 409, body: {
+                error: `Your Kraken account has no free USD cash (mirror figure $${balance.toFixed(2)}), so a new paper session cannot start at the mirrored balance.`
+              } };
+            }
+            console.log(`[B8.2][START] Starting NEW simulation at the Kraken-mirror balance $${balance}`);
+
+            // P19-B8.2 (OBJ-3/OBJ-4): the start-new balance write is an ANCHOR EVENT
+            // (reason 'start_new') — balance + anchor_version + ledger row, written
+            // atomically BEFORE the engine can open anything, so the first at-open
+            // ratio stamp always has an anchor to reference.
+            const { executeReanchor } = await import('./services/portfolio-anchor-service.js');
+            await executeReanchor({ mode: 'paper', newBalance: balance, reason: 'start_new' });
+            console.log(`[ActiveEngine] Started simulation (Kraken-mirror balance=$${balance})`);
+
+            // Phase 27.F.14.M: Broadcast portfolio balance update to all clients
+            await contextBridge.broadcast({
+              type: 'portfolio_balance_updated',
+              payload: {
+                balance,
+                mode: 'paper',
+                reason: 'new_simulation_started',
+                timestamp: new Date().toISOString()
+              },
+              mode: 'paper'
+            });
+
+            // Phase 27.F.15.C: Reset MetricsCore for paper mode (enforces MSI)
+            const { metricsCore } = await import('./services/metrics-core.js');
+            await metricsCore.reset('paper');
+            console.log('[27.F.15.C][MSI] ✅ Paper mode metrics reset complete');
+
+            // Phase 27.F.14.J: Reset LATTI baseline for paper mode (per_simulation baseline)
+            await storage.updateSystemContext('paper', {
+              baselineMode: 'per_simulation',
+              lattiLastAnchorTime: new Date()
+            });
+            console.log('[LATTI][Paper] Baseline mode: per_simulation');
+            console.log('[LATTI][Paper] Baseline reset successfully');
+
+            // Phase 27.F.14.J: Reset trading pace to defaults (guardrails and filters preserved)
+            console.log('[LATTI][Paper] Resetting trading pace to baseline (preserving user guardrails and filters)...');
+
+            // Reset trading pace to baseline
+            await storage.updateSystemContext('paper', {
+              tradingPace: 'baseline'
+            });
+
+            console.log('[LATTI][Paper] Trading pace reset to baseline (guardrails and filters preserved)');
+
+            // Start the simulation
+            // REB 2.8.13: Pass startingBalance to startActiveEngine (required after REB 2.8.12)
+            const result = await start({ startingBalance: balance }, paperResetPermit);
+
+            // Directive 12.2.3: Bob Core cache invalidation removed (Batch 7B)
+
+            if (!result.success) {
+              return { status: result.refusal ? 409 : 400, body: { error: result.message || result.error } };
+            }
+
+            console.log('[41D-FIX] Engine start completed, preparing HTTP response...');
+
+            // Phase 41D: Non-blocking WebSocket broadcast to prevent HTTP timeout
+            const { tradingStateSync } = await import('./services/trading-state-sync.js');
+            tradingStateSync.broadcastUserUpdate(userId)
+              .then(() => console.log('[41D-FIX] Broadcast completed asynchronously (new simulation)'))
+              .catch(err => console.warn('[41D-FIX] Broadcast error:', err.message));
+
+            console.log('[41D-FIX] Broadcast triggered asynchronously');
+
+            return { status: 200, body: { success: true, message: `New simulation started with $${balance.toFixed(2)}` } };
+          }
+
+          if (!paperEntryPublication.allowsStart()) {
+            return { status: 409, body: { error: PAPER_ENTRY_DRAIN_REASON } };
+          }
+          console.log(`[B7.1][CONTINUE] Preserving existing state (no hard reset)`);
+
+          // Phase 27.F.14.J: Handle "Continue Previous Simulation" mode (default)
+          console.log('[Phase-27.F.14.J] Continuing previous simulation');
+
+          // Phase 27.F.14.J: Check baseline mode and apply policy
+          const context = await storage.getSystemContext('paper');
+          const baselineMode = context?.baselineMode || 'per_simulation';
+
+          console.log(`[LATTI][Paper] Baseline mode: ${baselineMode}`);
+
+          if (baselineMode === 'per_simulation') {
+            // Reset baseline for new simulation
+            await storage.updateSystemContext('paper', {
+              lattiLastAnchorTime: new Date()
+            });
+            console.log('[LATTI][Paper] Baseline reset for per_simulation mode');
+          } else if (baselineMode === 'cumulative') {
+            // Reload previous baseline, append new metrics
+            console.log('[LATTI][Paper] Baseline resumed successfully (cumulative mode)');
+          } else if (baselineMode === 'persistent') {
+            // Continue fully without reset
+            console.log('[LATTI][Paper] Baseline continued without reset (persistent mode)');
+          }
+
+          // Phase 41D: Balance confirmation removed - continue directly
+          console.log('[41D] Continuing simulation without balance confirmation gate');
+
+          // REB 2.8.13: Fetch existing portfolio balance for continue mode.
+          // P19-B8.5 (soak fix D — the $800 clobber, found live 2026-07-15): this call
+          // passed a bare string where getPortfolioState takes a { mode } params object
+          // (the same positional-args bug B-NEW-43 chunk-14 fixed at the reset route),
+          // so the lookup returned undefined on EVERY continue and fell to a hardcoded
+          // $800 — which the REB 2.8.11 start-sync then wrote back over the anchored
+          // Kraken-mirror balance ($824.11 → $800 at the 02:47Z continue). Fix: correct
+          // call shape + FAIL-HARD on a missing/invalid stored balance (§11 / B8.2: no
+          // silent balance fallbacks — start-new is the only path that mints a balance).
+          const portfolioState = await storage.getPortfolioState({ globalContextId: 'default', mode: 'paper' });
+          const existingBalance = portfolioState?.balance ? parseFloat(portfolioState.balance) : NaN;
+          if (!Number.isFinite(existingBalance) || existingBalance <= 0) {
+            console.error(`[P19-B8.5][CONTINUE_REFUSED] No valid stored paper balance (row=${portfolioState ? `$${portfolioState.balance}` : 'MISSING'}) — continue cannot invent one. Start a NEW session (Kraken-mirror) instead.`);
+            return { status: 409, body: {
+              error: 'No valid stored paper balance to continue from. Start a new session (it anchors to your real Kraken balance automatically).'
+            } };
+          }
+          console.log(`[REB 2.8.13] Continue simulation with existing balance: $${existingBalance}`);
+
+          // Continue with existing baseline
+          // REB 2.8.13: Pass startingBalance to startActiveEngine (required after REB 2.8.12)
+          const result = await start({ startingBalance: existingBalance });
+
+          // Directive 12.2.3: Bob Core cache invalidation removed (Batch 7B)
+
+          // Return success/error based on service result
+          if (!result.success) {
+            return { status: result.refusal ? 409 : 400, body: { error: result.message || result.error } };
+          }
+
+          console.log('[41D-FIX] Engine start completed, preparing HTTP response...');
+
+          // Phase 41D: Non-blocking WebSocket broadcast to prevent HTTP timeout
+          const { tradingStateSync } = await import('./services/trading-state-sync.js');
+          tradingStateSync.broadcastUserUpdate(userId)
+            .then(() => console.log('[41D-FIX] Broadcast completed asynchronously (continue simulation)'))
+            .catch(err => console.warn('[41D-FIX] Broadcast error:', err.message));
+
+          console.log('[41D-FIX] Broadcast triggered asynchronously');
+
+          return { status: 200, body: { success: true, message: result.message } };
+        } catch (error: any) {
+          // The queue must not repeat a partially completed reset or reanchor.
+          console.error('Error starting paper trading simulation:', error);
+          return { status: 500, body: { error: error.message || 'Failed to start paper trading simulation' } };
+        } finally {
+          if (paperResetPermit) paperEntryPublication.releaseResetPermit(paperResetPermit);
         }
-        
-        console.log('[41D-FIX] Engine start completed, preparing HTTP response...');
-        
-        // Phase 41D: Non-blocking WebSocket broadcast to prevent HTTP timeout
-        const { tradingStateSync } = await import('./services/trading-state-sync.js');
-        tradingStateSync.broadcastUserUpdate(userId)
-          .then(() => console.log('[41D-FIX] Broadcast completed asynchronously (new simulation)'))
-          .catch(err => console.warn('[41D-FIX] Broadcast error:', err.message));
-        
-        console.log('[41D-FIX] Broadcast triggered asynchronously');
-        
-        return res.json({ success: true, message: `New simulation started with $${balance.toFixed(2)}` });
-      }
-      
-      // Phase 27.F.14.J: Handle "Continue Previous Simulation" mode (default)
-      console.log('[Phase-27.F.14.J] Continuing previous simulation');
-      
-      // Phase 27.F.14.J: Check baseline mode and apply policy
-      const context = await storage.getSystemContext('paper');
-      const baselineMode = context?.baselineMode || 'per_simulation';
-      
-      console.log(`[LATTI][Paper] Baseline mode: ${baselineMode}`);
-      
-      if (baselineMode === 'per_simulation') {
-        // Reset baseline for new simulation
-        await storage.updateSystemContext('paper', {
-          lattiLastAnchorTime: new Date()
-        });
-        console.log('[LATTI][Paper] Baseline reset for per_simulation mode');
-      } else if (baselineMode === 'cumulative') {
-        // Reload previous baseline, append new metrics
-        console.log('[LATTI][Paper] Baseline resumed successfully (cumulative mode)');
-      } else if (baselineMode === 'persistent') {
-        // Continue fully without reset
-        console.log('[LATTI][Paper] Baseline continued without reset (persistent mode)');
-      }
-      
-      // Phase 41D: Balance confirmation removed - continue directly
-      console.log('[41D] Continuing simulation without balance confirmation gate');
-      
-      // REB 2.8.13: Fetch existing portfolio balance for continue mode.
-      // P19-B8.5 (soak fix D — the $800 clobber, found live 2026-07-15): this call
-      // passed a bare string where getPortfolioState takes a { mode } params object
-      // (the same positional-args bug B-NEW-43 chunk-14 fixed at the reset route),
-      // so the lookup returned undefined on EVERY continue and fell to a hardcoded
-      // $800 — which the REB 2.8.11 start-sync then wrote back over the anchored
-      // Kraken-mirror balance ($824.11 → $800 at the 02:47Z continue). Fix: correct
-      // call shape + FAIL-HARD on a missing/invalid stored balance (§11 / B8.2: no
-      // silent balance fallbacks — start-new is the only path that mints a balance).
-      const portfolioState = await storage.getPortfolioState({ globalContextId: 'default', mode: 'paper' });
-      const existingBalance = portfolioState?.balance ? parseFloat(portfolioState.balance) : NaN;
-      if (!Number.isFinite(existingBalance) || existingBalance <= 0) {
-        console.error(`[P19-B8.5][CONTINUE_REFUSED] No valid stored paper balance (row=${portfolioState ? `$${portfolioState.balance}` : 'MISSING'}) — continue cannot invent one. Start a NEW session (Kraken-mirror) instead.`);
-        return res.status(409).json({
-          error: 'No valid stored paper balance to continue from. Start a new session (it anchors to your real Kraken balance automatically).'
-        });
-      }
-      console.log(`[REB 2.8.13] Continue simulation with existing balance: $${existingBalance}`);
-      
-      // Continue with existing baseline
-      const { startActiveEngine } = await import('./services/active-engine-service.js');
-      // REB 2.8.13: Pass startingBalance to startActiveEngine (required after REB 2.8.12)
-      const result = await startActiveEngine(userId, { startingBalance: existingBalance });
-      
-      // Directive 12.2.3: Bob Core cache invalidation removed (Batch 7B)
-      
-      // Return success/error based on service result
-      if (!result.success) {
-        return res.status(400).json({ error: result.message || result.error });
-      }
-      
-      console.log('[41D-FIX] Engine start completed, preparing HTTP response...');
-      
-      // Phase 41D: Non-blocking WebSocket broadcast to prevent HTTP timeout
-      const { tradingStateSync } = await import('./services/trading-state-sync.js');
-      tradingStateSync.broadcastUserUpdate(userId)
-        .then(() => console.log('[41D-FIX] Broadcast completed asynchronously (continue simulation)'))
-        .catch(err => console.warn('[41D-FIX] Broadcast error:', err.message));
-      
-      console.log('[41D-FIX] Broadcast triggered asynchronously');
-      
-      res.json({ success: true, message: result.message });
+      });
+      return res.status(response.status).json(response.body);
     } catch (error: any) {
       console.error('Error starting paper trading simulation:', error);
       // P19-B4b D5: vestigial operation-lock / busy-flag clears removed (mechanism deleted —
@@ -11295,7 +11295,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       // Return success/error based on service result
       if (!result.success) {
-        return res.status(400).json({ error: result.message || result.error });
+        return res.status(result.refusal ? 409 : 400).json({ error: result.message || result.error });
       }
       
       console.log('[41D-FIX] Engine stop completed, preparing HTTP response...');
@@ -11367,26 +11367,21 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       // Phase 8.8.3-B7.A: Use hard reset service for complete cleanup
       const { activeSessionResetService } = await import('./services/active-session-reset.js');
-      const resetResult = await activeSessionResetService.hardResetActiveEngine(mode);
+      const { activeOperationQueue } = await import('./utils/operation-queue.js');
+      const resetResult = await activeOperationQueue.enqueue(
+        () => activeSessionResetService.hardResetActiveEngine(mode),
+        { userId, mode, action: 'reset' },
+      );
       
       if (!resetResult.success) {
         console.error(`[B7.A] Hard reset failed:`, resetResult.message);
-        // Continue with legacy cleanup as fallback
-        // Directive 12.2.3: Bob Core cache invalidation removed (Batch 7B)
+        return res.status(resetResult.refusal ? 409 : 500).json({ success: false, error: resetResult.message });
       }
       
       console.log(`[B7.A] Hard reset result:`, resetResult.details);
       
-      // Phase 8.8.3-I9-RESET-FIX + P19-B8.5 (Langston Step-4 (a)): every reset is the
-      // SOFT cleanup — positions cleared, trade history preserved, balance untouched.
-      // The hard-cleanup branch (history wipe) was provably unreachable once newBalance
-      // 400-refuses (isSoftReset was always true) and was DELETED on the spot per rule 15
-      // — resurrecting a raw destructive history-wipe on the route we just narrowed to
-      // cleanup-only would contradict the cut. A first-class "wipe paper history" op, if
-      // ever wanted, is its own named item (deleteAllClosedTrades survives at its two
-      // other call sites).
-      await storage.deleteAllActiveOpenPositions('paper');
-      console.log(`[ActiveEngine] Soft reset: cleared open positions, trade history preserved`);
+      // The reset transaction already removed this mode's positions. Preserve the
+      // existing trade history and ledger-governed balance.
       
       // 8.8.4-C.14.C: RTB signals already cleared via hardResetActiveEngine -> clearReadyToBuy
       // Note: Removed duplicate storage.deleteAllTradingSignals call as clearReadyToBuy provides WebSocket broadcast
@@ -12533,8 +12528,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         return res.status(nr.http).json(nr.body);
       }
       const r = await manager.closeOnePositionByOperator(req.params.id, 'manual_close');
-      if (r.status === 'closed') {
-        contextBridge.broadcast({ type: 'active_trade_closed', payload: { id: req.params.id, symbol: r.symbol, reason: 'manual_stop' } });
+      if (r.status === 'closed' && r.committed !== false) {
+        contextBridge.broadcast({ type: 'active_trade_closed', payload: { id: req.params.id, symbol: r.symbol, reason: r.closeReason ?? 'manual_stop' } });
       }
       const out = manualCloseResponse(req.params.id, r);
       return res.status(out.http).json(out.body);

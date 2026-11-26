@@ -95,7 +95,7 @@ describe('3 — the call graph P-1 rests on (§17.4 C2)', () => {
   it('executeSimulatedTrade has exactly one caller, inside processSignal, after the B6 sizing block', () => {
     const calls = engine.match(/this\.executeSimulatedTrade\(/g) ?? [];
     expect(calls.length).toBe(1);
-    const start = engine.indexOf('async processSignal(signal: StrategySignal)');
+    const start = engine.indexOf('async processSignal(signal: StrategySignal,');
     const b6 = engine.indexOf('[B-SIZING-DEC-RESTORE][UNSIZED_SIGNAL_REFUSED:', start);
     const call = engine.indexOf('this.executeSimulatedTrade(', start);
     expect(start).toBeGreaterThan(-1);

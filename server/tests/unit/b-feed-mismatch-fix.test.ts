@@ -7,10 +7,9 @@
 //   A-4 — the signed predicate is exercised on the measured rows: the three harmful stale walks refuse, the
 //        harmless ones and a deep crypto walk (−3.79 %) do not.
 //
-// THE PASSED-THE-FILL-CONTRACT MARKER: `storage.findOpenTradeRecord` (the keyed open trade-record lookup, B-CLOSE-WRITER-COSTS
-// P-1) runs right after the fill, the witness and the gate — ABOVE the write block, not inside it (Langston Step-4 record
-// item i: R-none is the counterexample, marker called and nothing persisted). A refused close must never reach it; an
-// accepted one always does. The persistence leg is `h.updateClosedTrade`, asserted where the tests need it.
+// THE PASSED-THE-FILL-CONTRACT MARKER: the open-trade lookup (exact-link getPaperXstockTrade for paper xStock,
+// findOpenTradeRecord elsewhere) runs after the fill, the witness and the gate. A refused close cannot reach it.
+// The respective persistence legs are closePaperXstockTrade and updateClosedTrade.
 // (The accepted path then runs far past this unit's mocks — learning capture, archives — so it is allowed to throw
 // AFTER the marker; the marker, not the delete, is what these tests assert.)
 //
@@ -28,6 +27,9 @@ const h = vi.hoisted(() => ({
   updateClosedTrade: vi.fn(async () => ({})),
   deleteActiveOpenPosition: vi.fn(async () => undefined),
   findOpenTradeRecord: vi.fn(async () => ({ status: 'one', record: { id: 't-1', openedAt: new Date(), closedAt: null, metadata: {} } })),
+  getPaperXstockTrade: vi.fn(async () => ({ id: 't-1', openedAt: new Date(), closedAt: null, metadata: {} })),
+  getActiveOpenPositions: vi.fn(async () => []),
+  closePaperXstockTrade: vi.fn(async () => ({ committed: true, trade: {} })),
   getDepthSnapshot: vi.fn(),
   getTickerWitness: vi.fn(),
   resolveFillDepthGateConfig: vi.fn(),
@@ -48,6 +50,9 @@ vi.mock('../../storage', async (orig) => {
         if (prop === 'updateClosedTrade') return h.updateClosedTrade;
         if (prop === 'deleteActiveOpenPosition') return h.deleteActiveOpenPosition;
         if (prop === 'findOpenTradeRecord') return h.findOpenTradeRecord;
+        if (prop === 'getPaperXstockTrade') return h.getPaperXstockTrade;
+        if (prop === 'getActiveOpenPositions') return h.getActiveOpenPositions;
+        if (prop === 'closePaperXstockTrade') return h.closePaperXstockTrade;
         return (target as any)[prop];
       },
     }),
@@ -97,6 +102,7 @@ function fakeEngine() {
     feePercentFor: () => 0.1,
     orderPlacer: new PaperOrderPlacer(() => 0.1),
     _closeRefusalStreak: new Map<string, number>(),
+    _exitRefusalTally: new Map(),
     _countCloseRefusal: proto._countCloseRefusal,
     // B-CLOSE-WRITER-COSTS P-16: the record resolve + refusal, shared by the close and the never-filled drop.
     _resolveOpenTradeRecord: (proto as any)._resolveOpenTradeRecord,
@@ -105,8 +111,8 @@ function fakeEngine() {
 }
 function position(symbol: string, assetClass: string) {
   return {
-    id: `pos-${symbol}`, symbol, assetClass, strategyName: 'test', side: 'buy', quantity: '1', avgPrice: '100',
-    intendedEntryPrice: '100', entryFee: '0', entrySlippage: '0', openedAt: new Date(), metadata: {},
+    id: `pos-${symbol}`, symbol, assetClass, state: 'open', strategyName: 'test', side: 'buy', quantity: '1', avgPrice: '100',
+    intendedEntryPrice: '100', entryFee: '0', entrySlippage: '0', openedAt: new Date(), metadata: { tradeId: 't-1' },
   };
 }
 const snap = (bid: number, ageMs: number) => ({ asks: [{ price: bid * 1.1, qty: 10 }], bids: [{ price: bid, qty: 10 }], ageMs, source: 'test' });
@@ -138,7 +144,8 @@ describe('B-FEED-MISMATCH-FIX — closePosition at runtime', () => {
     h.getDepthSnapshot.mockResolvedValue(snap(89.59, 19_700));          // 19.7 s > 15 s warmth
     h.getTickerWitness.mockResolvedValue({ bid: 81.26, ask: 94.88, capturedAtMs: Date.now() });
     await proto.closePosition.call(eng, 'pos-CTVA/USD', 90, STOP, 'test', {});
-    expect(h.findOpenTradeRecord).not.toHaveBeenCalled();
+    expect(h.getPaperXstockTrade).not.toHaveBeenCalled();
+    expect(h.closePaperXstockTrade).not.toHaveBeenCalled();
     expect(h.updateClosedTrade).not.toHaveBeenCalled();
     expect(h.deleteActiveOpenPosition).not.toHaveBeenCalled();
     expect(eng._closeRefusalStreak.get('pos-CTVA/USD')).toBe(1);
@@ -150,7 +157,7 @@ describe('B-FEED-MISMATCH-FIX — closePosition at runtime', () => {
     h.getDepthSnapshot.mockResolvedValue(snap(89.59, 19_700));
     h.getTickerWitness.mockResolvedValue({ bid: 81.26, ask: 94.88, capturedAtMs: Date.now() });
     for (let i = 0; i < 2; i++) await proto.closePosition.call(eng, 'pos-CTVA/USD', 90, STOP, 'test', {});
-    expect(h.findOpenTradeRecord).not.toHaveBeenCalled();
+    expect(h.getPaperXstockTrade).not.toHaveBeenCalled();
     expect(h.addAlert).not.toHaveBeenCalled();
     await proto.closePosition.call(eng, 'pos-CTVA/USD', 90, STOP, 'test', {}).catch(() => {});
     // Exactly ONE refusal alert. (Langston Step-4 R-2: `mockReset` restores the `vi.fn(impl)` default, so the lookup returns
@@ -158,7 +165,8 @@ describe('B-FEED-MISMATCH-FIX — closePosition at runtime', () => {
     // lookup's default cannot turn a different alert into a false pass.)
     const refusalAlerts = h.addAlert.mock.calls.filter((c) => String((c[0] as { title?: string }).title).includes('Close refused'));
     expect(refusalAlerts).toHaveLength(1);
-    expect(h.findOpenTradeRecord).toHaveBeenCalled();                  // it yielded and proceeded to persist
+    expect(h.getPaperXstockTrade).toHaveBeenCalledWith({ id: 't-1', symbol: 'CTVA/USD', quantity: '1' });
+    expect(h.closePaperXstockTrade).toHaveBeenCalledTimes(1);
     expect(eng._closeRefusalStreak.has('pos-CTVA/USD')).toBe(false);       // cleared once the gate passed
   });
 

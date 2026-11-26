@@ -89,6 +89,8 @@ const state: ArchiverState = {
   ohlcFramesSkipped: 0,
   tickerSnapsByType60s: { update: 0, snapshot: 0, other: 0 },
 };
+let equitySocketGeneration = 0;
+let rawTickerFrameId = 0;
 
 export function getEquitySpotStats(): {
   connected: boolean;
@@ -182,6 +184,21 @@ export interface EquityTickRaw {
   bidQty: number | null; askQty: number | null;
   /** Our receipt time for THIS frame (the venue's ticker frame carries no timestamp, #943 §15.3). */
   atMs: number;
+  readonly frame?: EquityTickerFrame;
+}
+
+export interface EquityTickerFrame {
+  readonly id: number;
+  readonly symbol: string;
+  readonly kind: 'update' | 'snapshot' | 'other';
+  readonly generation: number;
+  readonly receivedMonotonicMs: number;
+  readonly numericPrices: boolean;
+  readonly numericBidQty: boolean;
+}
+
+export function isCurrentEquityTickerFrame(frame: EquityTickerFrame): boolean {
+  return state.enabled && state.ws?.readyState === WebSocket.OPEN && frame.generation === equitySocketGeneration;
 }
 export interface EquityTick {
   price: number; tsMs: number; kind: 'mid' | 'last';
@@ -265,7 +282,7 @@ export function _getTickerSnapsByTypeForTests(): { update: number; snapshot: num
   return { ...state.tickerSnapsByType60s };
 }
 
-function parseTickerSnap(data: any, frameType?: string): void {
+function parseTickerSnap(data: any, frameType?: string, receipt?: { generation: number; monotonicMs: number }): void {
   // *scanned* counts every snap RECEIVED, so it is bumped before the guard (#1029). Nothing else here changes.
   state.cumulativeTickerSnaps++;
   if (frameType === 'update') state.tickerSnapsByType60s.update++;
@@ -290,14 +307,25 @@ function parseTickerSnap(data: any, frameType?: string): void {
     // An absent side lands `null` (NaN → null), a sent 0 stays 0. The book-state guard reads THIS.
     const _sym = String(data.symbol).toUpperCase();
     const _now = Date.now();
-    const _raw: EquityTickRaw = {
+    const frame = receipt && Object.freeze({
+      id: ++rawTickerFrameId,
+      symbol: _sym,
+      kind: frameType === 'update' || frameType === 'snapshot' ? frameType : 'other' as const,
+      generation: receipt.generation,
+      receivedMonotonicMs: receipt.monotonicMs,
+      // Record wire types before the legacy pricing and archive normalization.
+      numericPrices: Number.isFinite(data.bid) && Number.isFinite(data.ask),
+      numericBidQty: Number.isFinite(data.bid_qty),
+    });
+    const _raw: EquityTickRaw = Object.freeze({
       bid: Number.isFinite(_bid) ? _bid : null,
       ask: Number.isFinite(_ask) ? _ask : null,
       last: Number.isFinite(_last) ? _last : null,
       bidQty: data.bid_qty != null && Number.isFinite(Number(data.bid_qty)) ? Number(data.bid_qty) : null,
       askQty: data.ask_qty != null && Number.isFinite(Number(data.ask_qty)) ? Number(data.ask_qty) : null,
       atMs: _now,
-    };
+      ...(frame ? { frame } : {}),
+    });
     // r4 (row 3a1): only a venue CHANGE counts toward the cohort's "ticking" measure — never a replayed snapshot.
     if (frameType === 'update') {
       lastTickerUpdateAt.set(_sym, _now);
@@ -407,7 +435,8 @@ export function _resetDiagNonDataState(): void {
 
 export { logDiagNonDataMessage as _logDiagNonDataMessageForTests };
 
-function handleMessage(raw: WebSocket.RawData): void {
+function handleMessage(raw: WebSocket.RawData, generation?: number): void {
+  const receipt = generation === undefined ? undefined : { generation, monotonicMs: performance.now() };
   state.lastMsgAt = Date.now();
   let msg: any;
   try {
@@ -421,7 +450,7 @@ function handleMessage(raw: WebSocket.RawData): void {
       parseOhlcBar(bar);
     }
   } else if (msg.channel === 'ticker' && Array.isArray(msg.data)) {
-    for (const snap of msg.data) parseTickerSnap(snap, msg.type);
+    for (const snap of msg.data) parseTickerSnap(snap, msg.type, receipt);
   } else {
     // B-NEW-44: route everything that isn't an ohlc/ticker data message into
     // the diagnostic logger. Includes subscribe-ack, errors, status updates,
@@ -444,14 +473,16 @@ function subscribe(ws: WebSocket): void {
 
 async function connect(): Promise<void> {
   if (!state.enabled) return;
-  if (state.ws) {
-    try { state.ws.close(); } catch { /* ignore */ }
-    state.ws = null;
-  }
+  const previous = state.ws;
+  state.ws = null;
+  const generation = ++equitySocketGeneration;
+  try { previous?.close(); } catch { /* retired */ }
   const ws = new WebSocket(WS_URL);
   state.ws = ws;
+  const isCurrent = () => state.enabled && state.ws === ws && equitySocketGeneration === generation;
 
   ws.on('open', () => {
+    if (!isCurrent()) return;
     console.log(`[B74][equity-spot] connected (attempt ${state.backoff.attempts() + 1})`);
     state.backoff.reset();
     state.reconnectPending = false; // P19-B4a (C3): connection restored.
@@ -465,24 +496,33 @@ async function connect(): Promise<void> {
     subscribe(ws);
   });
 
-  ws.on('message', handleMessage);
+  ws.on('message', (raw) => {
+    if (isCurrent()) handleMessage(raw, generation);
+  });
 
   ws.on('close', (code, reason) => {
+    if (!isCurrent()) return;
+    state.ws = null;
     console.warn(`[B74][equity-spot] disconnected code=${code} reason=${reason.toString()}`);
-    scheduleReconnect();
+    scheduleReconnect(generation);
   });
 
   ws.on('error', (err) => {
+    if (!isCurrent()) return;
     console.warn(`[B74][equity-spot] ws error: ${err.message}`);
   });
 }
 
-function scheduleReconnect(): void {
+function scheduleReconnect(generation: number): void {
   if (!state.enabled) return;
   state.reconnectPending = true; // P19-B4a (C3): so the stall watchdog doesn't race an in-flight reconnect.
   const delay = state.backoff.nextDelayMs();
   console.warn(`[B74][equity-spot] reconnecting in ${delay}ms (attempt ${state.backoff.attempts()})`);
-  setTimeout(() => { connect().catch(err => console.error('[B74][equity-spot] reconnect failed:', err)); }, delay);
+  setTimeout(() => {
+    if (state.enabled && state.ws === null && equitySocketGeneration === generation) {
+      connect().catch(err => console.error('[B74][equity-spot] reconnect failed:', err));
+    }
+  }, delay);
 }
 
 // 60-second health log
@@ -600,13 +640,16 @@ export async function runStallWatchdogTick(now: Date = new Date()): Promise<void
     now,
   );
   const threshold = inLiquid ? safety.stallReconnectMsRth : safety.stallReconnectMsOffrth;
-  const open = state.ws?.readyState === WebSocket.OPEN;
+  const socket = state.ws;
+  const open = socket?.readyState === WebSocket.OPEN;
   if (open && !state.reconnectPending && ageMs > threshold) {
     console.error(
       `[B74][equity-spot][STALL] open socket silent ${Math.round(ageMs)}ms > ${threshold}ms (inLiquid=${inLiquid}) — forcing reconnect`,
     );
     await raiseStallAlert(ageMs, threshold, inLiquid);
-    try { state.ws?.close(); } catch { /* close handler → scheduleReconnect (reuses backoff) */ }
+    if (state.ws === socket) {
+      try { socket?.close(); } catch { /* close handler schedules reconnect */ }
+    }
   }
 }
 
@@ -625,10 +668,9 @@ export async function startEquitySpotArchiver(): Promise<void> {
 
 export function stopEquitySpotArchiver(): void {
   state.enabled = false;
-  if (state.ws) {
-    try { state.ws.close(); } catch { /* ignore */ }
-    state.ws = null;
-  }
+  const socket = state.ws;
+  state.ws = null;
+  try { socket?.close(); } catch { /* retired */ }
 }
 
 // P19-B4a (C3) test-only: patch the watchdog-relevant archiver state so unit

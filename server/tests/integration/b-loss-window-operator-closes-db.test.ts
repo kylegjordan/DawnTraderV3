@@ -14,9 +14,10 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { db } from '../../db.js';
 import { sql } from 'drizzle-orm';
-import { closedTradesTable, portfolioAnchorEvents } from '@shared/schema';
+import { activeEngineSessions, activeOpenPositions, closedTradesTable, portfolioAnchorEvents } from '@shared/schema';
 import { selectLastAnchorAt, OPERATOR_REBASE_REASONS } from '../../services/portfolio-anchor-service.js';
-import { closeOpenTradesForHardReset } from '../../storage.js';
+import { closeOpenTradesForHardReset, resetActiveEngineTables } from '../../storage.js';
+import { PaperEntryDrainIncomplete, paperEntryPublication } from '../../services/paper-entry-publication.js';
 
 const RAW_DB_URL = process.env.DATABASE_URL ?? '';
 const isTestDb =
@@ -103,5 +104,34 @@ describe('B-LOSS-WINDOW-OPERATOR-CLOSES — database predicates', () => {
     expect(got.live?.closed_at ?? null).toBeNull();
     const left = rows(await db.execute(sql`SELECT count(*)::int AS n FROM closed_trades WHERE id IN (${paperId}, ${liveId})`))[0].n;
     expect(Number(left)).toBe(0); // rolled back: neither seed row exists, and no real open row was closed
+  });
+
+  it('a paper reset removes the paper position and stops the paper session while preserving both live rows', async (ctx) => {
+    if (!dbReachable || !isTestDb) ctx.skip();
+    const paperId = `${TAG}-reset-paper-${Date.now()}`;
+    const liveId = `${TAG}-reset-live-${Date.now()}`;
+    await inRolledBackTx(async (tx) => {
+      const base = { assetClass: 'crypto_spot', strategyName: 'strong_bull_trend', side: 'buy', quantity: '1', avgPrice: '100' };
+      await tx.insert(activeOpenPositions).values([
+        { id: paperId, mode: 'paper', symbol: 'PPRCTRL/USD', ...base },
+        { id: liveId, mode: 'live', symbol: 'LIVCTRL/USD', ...base },
+      ]);
+      await tx.insert(activeEngineSessions).values([
+        { sessionId: paperId, mode: 'paper', status: 'running', startingBalance: '500' },
+        { sessionId: liveId, mode: 'live', status: 'running', startingBalance: '500' },
+      ]);
+
+      await expect(resetActiveEngineTables(tx, 'paper')).rejects.toBeInstanceOf(PaperEntryDrainIncomplete);
+      const permit = paperEntryPublication.acquireResetPermit();
+      expect(permit).toBeDefined();
+      if (!permit) throw new Error('Test paper reset permit was unavailable');
+      await expect(resetActiveEngineTables(tx, 'live', permit)).rejects.toBeInstanceOf(PaperEntryDrainIncomplete);
+      const got = await resetActiveEngineTables(tx, 'paper', permit).finally(() => paperEntryPublication.releaseResetPermit(permit));
+      expect(got.clearedPositions).toBeGreaterThanOrEqual(1);
+      const positions = rows(await tx.execute(sql`SELECT id FROM active_open_positions WHERE id IN (${paperId}, ${liveId})`));
+      expect(positions).toEqual([{ id: liveId }]);
+      const sessions = rows(await tx.execute(sql`SELECT mode, status FROM active_engine_sessions WHERE session_id IN (${paperId}, ${liveId}) ORDER BY mode`));
+      expect(sessions).toEqual([{ mode: 'live', status: 'running' }, { mode: 'paper', status: 'stopped' }]);
+    });
   });
 });

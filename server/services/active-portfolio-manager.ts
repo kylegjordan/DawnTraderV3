@@ -1,5 +1,7 @@
 import { storage } from '../storage';
+import type { ActiveOpenPosition } from '../../shared/schema.js';
 import { ActiveExecutionEngine } from './active-execution-engine';
+import { PaperEntryDrainIncomplete, paperEntryPublication } from './paper-entry-publication.js';
 import { MicroExecutionService } from './micro-execution-service';
 import { KrakenService } from '../exchanges/kraken/kraken.js';
 import { registerEngine, registerMicroService } from './mode-registry';
@@ -8,6 +10,14 @@ import type { StrategySignal } from './strategy-engine';
 import { i1TradeLifecycleDiagnostics } from './i1-trade-lifecycle-diagnostics.js';
 import { livePricingAdapter, type PriceProducer } from './live-pricing-adapter.js';
 import type { FlattenCloseType } from './active-execution-engine';
+
+type FlattenPosition = Pick<ActiveOpenPosition, 'id' | 'symbol' | 'quantity' | 'assetClass' | 'state' | 'metadata'>;
+type FlattenOutcome = {
+  status: 'closed' | 'left_open' | 'failed';
+  reason?: string;
+  closeReason?: string | null;
+  committed?: boolean;
+};
 
 /** B-SIZING-DEC-RESTORE increment 3: one row of the read-only flatten pre-check (`GET /active-engine/flatten-precheck`). */
 export interface FlattenPrecheckRow {
@@ -103,6 +113,7 @@ export class ActivePortfolioManager {
   // Phase 8.8.3-I2: Hard-stop freeze flag accessors
   markStopInProgress(): void {
     this.isStopInProgress = true;
+    this.executionEngine.closePaperEntryAdmission();
     console.log(`[8.8.3-I2][STOP_FLAG_SET] Stop in progress flag set for mode=${this.mode}`);
   }
 
@@ -148,7 +159,7 @@ export class ActivePortfolioManager {
     };
   }
 
-  async start(source: 'api' | 'internal' | 'unknown' = 'unknown'): Promise<void> {
+  async start(source: 'api' | 'internal' | 'unknown' = 'unknown', paperResetPermit?: symbol): Promise<void> {
     // Phase 8.8.3-B9.FIX-WS-START: Diagnostic log on start
     console.log('[DEBUG-B9][MANAGER_START_CALLED]', {
       mode: this.mode,
@@ -186,6 +197,9 @@ export class ActivePortfolioManager {
       }
     }
 
+    if (this.mode === 'paper' && !paperEntryPublication.allowsStart(paperResetPermit)) {
+      throw new PaperEntryDrainIncomplete();
+    }
     this.isRunning = true;
     this.isStopInProgress = false; // Phase 8.8.3-I7-PM-FOCUS: Clear stop flag on start
     
@@ -197,7 +211,7 @@ export class ActivePortfolioManager {
     registerMicroService(this.mode, this.microExecutionService);
 
     // Start execution engine with provenance tracking (A3.R9.0.B)
-    await this.executionEngine.start(source);
+    await this.executionEngine.start(source, paperResetPermit);
 
     // Phase 27.F.14.MICRO: Start micro-execution service
     await this.microExecutionService.start();
@@ -239,6 +253,7 @@ export class ActivePortfolioManager {
       wasRunning: this.isRunning,
     });
     
+    this.executionEngine.closePaperEntryAdmission();
     if (!this.isRunning) {
       return;
     }
@@ -265,11 +280,11 @@ export class ActivePortfolioManager {
       console.log(`[PaperPortfolio:${this.userId}] Stopped watchlist refresh`);
     }
 
-    // Phase 27.F.14.MICRO: Stop micro-execution service
-    await this.microExecutionService.stop();
-
-    // Stop execution engine
-    await this.executionEngine.stop();
+    try {
+      await this.microExecutionService.stop();
+    } finally {
+      await this.executionEngine.stop();
+    }
   }
 
   /**
@@ -358,15 +373,33 @@ export class ActivePortfolioManager {
    * A close that returns without closing (C3) leaves the position in place — detected here by re-reading it,
    * because `closePosition` returns void.
    */
+  private async readPaperXstockFlattenOutcome(position: FlattenPosition, reason: string): Promise<FlattenOutcome> {
+    const remaining = await storage.getActiveOpenPosition('paper', position.id);
+    const tradeId = (position.metadata as { tradeId?: string } | null)?.tradeId;
+    const trade = !remaining && typeof tradeId === 'string' && tradeId
+      ? await storage.getPaperXstockTrade({ ...position, id: tradeId })
+      : undefined;
+    if (trade?.closedAt) {
+      return { status: 'closed', committed: false, closeReason: trade.closeReason, reason: trade.closeReason ?? 'already closed' };
+    }
+    return { status: 'left_open', committed: false, reason };
+  }
+
   private async _flattenOne(
-    position: { id: string; symbol: string; assetClass?: string | null; state?: string | null },
+    position: FlattenPosition,
     tag: string,
     closeType: FlattenCloseType,
-  ): Promise<{ status: 'closed' | 'left_open' | 'failed'; reason?: string }> {
+  ): Promise<FlattenOutcome> {
+    const guarded = this.mode === 'paper' && position.assetClass === 'xstock_spot';
     // ⛔ `#1100`: a PENDING maker is a resting buy that never filled — there is nothing to sell. It is DROPPED as
     // never-filled (the engine's one never-filled path), never flattened into a round trip that did not happen.
     if (position.state === 'pending') {
       const dropped = await this.executionEngine.dropPendingMakerOnFlatten(position.id);
+      if (guarded) {
+        return dropped.success
+          ? { status: 'closed', committed: true, closeReason: 'never_filled', reason: 'pending maker cancelled unfilled' }
+          : this.readPaperXstockFlattenOutcome(position, `pending maker not dropped: ${dropped.error}`);
+      }
       if (!dropped.success) return { status: 'failed', reason: `pending maker not dropped: ${dropped.error}` };
       const stillThere = await storage.getActiveOpenPosition(this.mode, position.id);
       if (stillThere) return { status: 'failed', reason: 'pending maker drop returned success but the position remains' };
@@ -378,6 +411,10 @@ export class ActivePortfolioManager {
     const label = resolved ? `${tag}_${resolved.sourceLabel}` : '';
 
     if (price === null || provenance === null) {
+      if (guarded) {
+        const outcome = await this.readPaperXstockFlattenOutcome(position, 'no observed price (no quote, no book)');
+        if (outcome.status === 'closed') return outcome;
+      }
       console.error(`[B-FEED-MISMATCH-FIX][FLATTEN_LEFT_OPEN] ${position.symbol} pos=${position.id} (${tag}): no quote and no book — NOT closed, NOT deleted`);
       try {
         const { addAlert } = await import('./system-alerts.js');
@@ -399,6 +436,11 @@ export class ActivePortfolioManager {
     }
 
     const result = await this.executionEngine.forceClosePosition(position.id, price, label, provenance, closeType);
+    if (guarded) {
+      return result.committed
+        ? { status: 'closed', committed: true, closeReason: result.closeReason }
+        : this.readPaperXstockFlattenOutcome(position, result.error ?? 'close refused by the fill contract or the trade-record check');
+    }
     if (!result.success) return { status: 'failed', reason: result.error };
     const stillOpen = await storage.getActiveOpenPosition(this.mode, position.id);
     if (stillOpen) {
@@ -414,7 +456,7 @@ export class ActivePortfolioManager {
     closedCount: number;
     failedCount: number;
     skippedCount: number;
-    details: Array<{ positionId: string; symbol: string; status: 'closed' | 'failed' | 'skipped' | 'left_open'; reason?: string }>;
+    details: Array<{ positionId: string; symbol: string; status: 'closed' | 'already_closed' | 'failed' | 'skipped' | 'left_open'; reason?: string }>;
   }> {
     console.log('[DEBUG-B9][MANAGER_FORCE_CLOSE_ON_STOP][START]', {
       mode: this.mode,
@@ -438,7 +480,7 @@ export class ActivePortfolioManager {
       symbols: openPositions.map(p => p.symbol),
     });
 
-    const details: Array<{ positionId: string; symbol: string; status: 'closed' | 'failed' | 'skipped' | 'left_open'; reason?: string }> = [];
+    const details: Array<{ positionId: string; symbol: string; status: 'closed' | 'already_closed' | 'failed' | 'skipped' | 'left_open'; reason?: string }> = [];
     let closedCount = 0;
     let failedCount = 0;
     let skippedCount = 0;
@@ -456,8 +498,12 @@ export class ActivePortfolioManager {
         // gross P&L with its sign inverted. `_flattenOne` resolves an OBSERVED price or leaves the position open.
         const outcome = await this._flattenOne(position, closeType, closeType);
         if (outcome.status === 'closed') {
-          closedCount++;
-          details.push({ positionId: position.id, symbol: position.symbol, status: 'closed', reason: outcome.reason });
+          if (outcome.committed !== false) closedCount++;
+          details.push({
+            positionId: position.id, symbol: position.symbol,
+            status: outcome.committed === false ? 'already_closed' : 'closed',
+            reason: outcome.closeReason ?? outcome.reason,
+          });
         } else if (outcome.status === 'left_open') {
           skippedCount++;
           details.push({ positionId: position.id, symbol: position.symbol, status: 'left_open', reason: outcome.reason });
@@ -472,8 +518,13 @@ export class ActivePortfolioManager {
           symbol: position.symbol,
           error: errorMessage,
         });
-        failedCount++;
-        details.push({ positionId: position.id, symbol: position.symbol, status: 'failed', reason: errorMessage });
+        if (this.mode === 'paper' && position.assetClass === 'xstock_spot') {
+          skippedCount++;
+          details.push({ positionId: position.id, symbol: position.symbol, status: 'left_open', reason: errorMessage });
+        } else {
+          failedCount++;
+          details.push({ positionId: position.id, symbol: position.symbol, status: 'failed', reason: errorMessage });
+        }
       }
     }
 
@@ -715,21 +766,25 @@ export class ActivePortfolioManager {
    */
   async closeOnePositionByOperator(positionId: string, tag: 'manual_close'): Promise<{
     status: 'closed' | 'left_open' | 'failed' | 'not_found'; reason?: string; symbol?: string;
+    committed?: boolean; closeReason?: string | null;
   }> {
     const position = await storage.getActiveOpenPosition(this.mode, positionId);
     if (!position) return { status: 'not_found' };
-    const outcome = await this._flattenOne(position as any, tag, 'manual_stop');
+    const outcome = await this._flattenOne(position, tag, 'manual_stop');
     return { ...outcome, symbol: position.symbol };
   }
 
-  async closeAllPositions(reason: string = 'manual_close'): Promise<{ closed: number; leftOpen: number; failed: number }> {
+  async closeAllPositions(reason: string = 'manual_close'): Promise<{ closed: number; leftOpen: number; failed: number; alreadyClosed?: number }> {
     const openPositions = await storage.getActiveOpenPositions(this.mode);
     console.log(`[PaperPortfolio:${this.userId}] Closing all ${openPositions.length} positions - ${reason}`);
-    let closed = 0, leftOpen = 0, failed = 0;
+    let closed = 0, leftOpen = 0, failed = 0, alreadyClosed = 0;
     for (const position of openPositions) {
       try {
         const outcome = await this._flattenOne(position, 'manual_close_all', 'manual_stop');
-        if (outcome.status === 'closed') closed++;
+        if (outcome.status === 'closed') {
+          if (outcome.committed === false) alreadyClosed++;
+          else closed++;
+        }
         else if (outcome.status === 'left_open') leftOpen++;
         else failed++;
         console.log(`[B-FEED-MISMATCH-FIX][CLOSE_ALL] ${position.symbol}: ${outcome.status}${outcome.reason ? ` - ${outcome.reason}` : ''}`);
@@ -738,7 +793,7 @@ export class ActivePortfolioManager {
         console.error(`[PaperPortfolio:${this.userId}] Error closing position ${position.symbol}:`, error);
       }
     }
-    return { closed, leftOpen, failed };
+    return { closed, leftOpen, failed, ...(alreadyClosed ? { alreadyClosed } : {}) };
   }
 
 

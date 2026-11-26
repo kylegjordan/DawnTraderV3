@@ -20,10 +20,13 @@ import { reset24hWindow, resetHourlyScanHistory } from './fx5-24h-window.js';
 import { krakenWebSocketAdapter } from '../exchanges/kraken/kraken-websocket-adapter.js';
 import { livePricingAdapter } from './live-pricing-adapter.js';
 import { clearReadyToBuy } from '../utils/clear-routines.js';
+import { PAPER_ENTRY_DRAIN_BUDGET_MS, PaperEntryDrainIncomplete, paperEntryPublication } from './paper-entry-publication.js';
 
 export interface HardResetResult {
   success: boolean;
   message: string;
+  refusal?: 'paper_entry_drain_incomplete';
+  paperResetPermit?: symbol;
   details: {
     engineReset: boolean;
     orchestratorReset: boolean;
@@ -137,7 +140,7 @@ class ActiveSessionResetService {
    * Clears ALL paper session state: engine, sizing, orchestrator,
    * filters/signals, diagnostics, and DB rows for open positions.
    */
-  async hardResetActiveEngine(mode: 'paper' | 'live' = 'paper'): Promise<HardResetResult> {
+  async hardResetActiveEngine(mode: 'paper' | 'live' = 'paper', holdPermit = false): Promise<HardResetResult> {
     console.log(`[8.8.3-A2R][HARD_RESET] Starting hard reset for mode=${mode}`);
     const startTime = Date.now();
 
@@ -156,26 +159,22 @@ class ActiveSessionResetService {
       },
     };
 
+    let permit: symbol | undefined;
     try {
       // 1) Stop and clear global paper portfolio manager (contains engine + orchestrator)
-      const manager = getGlobalActiveEngineManager();
+      const manager = getGlobalActiveEngineManager(mode);
       if (manager) {
-        try {
-          if (typeof manager.stop === 'function') {
-            await manager.stop();
-            console.log(`[8.8.3-A2R][HARD_RESET] Manager stopped for mode=${mode}`);
-          }
-          
-          if (typeof manager.resetSessionState === 'function') {
-            manager.resetSessionState();
-            result.details.engineReset = true;
-            console.log(`[8.8.3-A2R][HARD_RESET] Manager session state cleared`);
-          }
-        } catch (managerErr) {
-          console.warn(`[8.8.3-A2R][HARD_RESET] Manager stop warning:`, managerErr);
-        }
-        
-        clearGlobalActiveEngineManager();
+        await manager.stop();
+      }
+      if (mode === 'paper') {
+        if (!await paperEntryPublication.drain(PAPER_ENTRY_DRAIN_BUDGET_MS)) throw new PaperEntryDrainIncomplete();
+        permit = paperEntryPublication.acquireResetPermit();
+        if (!permit) throw new PaperEntryDrainIncomplete();
+      }
+
+      if (manager) {
+        manager.resetSessionState();
+        clearGlobalActiveEngineManager(mode);
         result.details.engineReset = true;
         result.details.orchestratorReset = true;
         console.log(`[8.8.3-A2R][HARD_RESET] Global manager cleared`);
@@ -281,7 +280,7 @@ class ActiveSessionResetService {
 
       // 4) Clear DB state for open paper positions and trades
       try {
-        const dbResult = await storage.hardResetActiveEngineTables(mode);
+        const dbResult = await storage.hardResetActiveEngineTables(mode, permit);
         result.details.closedTrades = dbResult.closedTrades;
         result.details.clearedPositions = dbResult.clearedPositions;
         result.details.databaseReset = true;
@@ -294,7 +293,7 @@ class ActiveSessionResetService {
       // 5) Clear global paper sim state (per-mode). P19-B4b D5: routed through the accessor;
       //    the vestigial operation-lock / busy-flag clears were removed (mechanism deleted —
       //    see DELETED_COMPONENTS_LOG.md).
-      clearGlobalActiveEngineManager('paper');
+      clearGlobalActiveEngineManager(mode);
 
       // Phase 8.8.3-A2R: Lightweight post-reset integrity audit
       await this.checkPostResetState(mode);
@@ -302,15 +301,23 @@ class ActiveSessionResetService {
       const elapsed = Date.now() - startTime;
       result.success = true;
       result.message = `Hard reset completed in ${elapsed}ms`;
+      if (holdPermit && permit) result.paperResetPermit = permit;
       
       console.log(`[8.8.3-A2R][HARD_RESET] ✅ Complete: ${result.message}`, result.details);
       
       return result;
     } catch (error) {
+      if (error instanceof PaperEntryDrainIncomplete) {
+        result.refusal = 'paper_entry_drain_incomplete';
+        result.message = error.message;
+        return result;
+      }
       const elapsed = Date.now() - startTime;
       result.message = `Hard reset failed after ${elapsed}ms: ${error instanceof Error ? error.message : 'Unknown error'}`;
       console.error(`[8.8.3-A2R][HARD_RESET] ❌ Failed:`, error);
       return result;
+    } finally {
+      if (permit && !result.paperResetPermit) paperEntryPublication.releaseResetPermit(permit);
     }
   }
 }

@@ -186,12 +186,70 @@ import {
   type InsertRtbSignal
 } from "@shared/schema";
 import { db } from "./db";
+import { PaperEntryDrainIncomplete, paperEntryPublication } from './services/paper-entry-publication.js';
 import { eq, desc, asc, and, gte, gt, lte, inArray, sql, isNotNull, isNull } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { NON_OUTCOME_CLOSE_REASONS, BOOKED_CLOSE_REASONS } from "./services/trade-close-reason";
 import type { TradeCloseReason } from "./services/trade-close-reason";
 /** A closed_trades write payload whose `closeReason`, when present, is a TradeCloseReason (B-CLOSE-WRITER-COSTS P-15). */
 type ClosedTradeWrite<T> = Omit<T, 'closeReason'> & { closeReason?: TradeCloseReason | null };
+export type RestoredRecordWrite = Omit<InsertClosedTrade, 'mode' | 'closeReason'>;
+type RestoreRecordWriteResult =
+  | { status: 'inserted'; record: ClosedTrade; pending: boolean }
+  | { status: 'exists'; ids: string[] }
+  | { status: 'linked'; id: string }
+  | { status: 'position_missing' }
+  | { status: 'missing_cost' };
+
+export type PaperXstockEntryFill =
+  | { method: 'maker'; filledAtMs: number; quoteArrivedAtMs: number | null }
+  | { method: 'taker'; filledAtMs: number };
+
+export function hasPaperXstockEntryFill(trade: Pick<ClosedTrade, 'metadata' | 'chosenEntryMode'>): boolean {
+  const proof = (trade.metadata as { paperXstockEntryFill?: Partial<PaperXstockEntryFill> } | null)?.paperXstockEntryFill;
+  return !!proof && (proof.method === 'maker' || proof.method === 'taker')
+    && proof.method === trade.chosenEntryMode
+    && typeof proof.filledAtMs === 'number' && Number.isSafeInteger(proof.filledAtMs) && proof.filledAtMs > 0;
+}
+
+type PaperXstockPositionKey = Pick<ActiveOpenPosition, 'id' | 'symbol' | 'quantity'>;
+type PaperXstockTradeKey = Pick<ClosedTrade, 'id' | 'symbol' | 'quantity'>;
+type PaperXstockCloseWrite = ClosedTradeWrite<Partial<Omit<ClosedTrade, 'id' | 'mode' | 'assetClass' | 'symbol' | 'quantity'>>>
+  & { closedAt: Date; closeReason: TradeCloseReason };
+type PaperXstockCloseResult =
+  | { committed: true; trade: ClosedTrade }
+  | { committed: false; trade: ClosedTrade | undefined };
+
+function paperXstockTradeKey(trade: PaperXstockTradeKey) {
+  return and(
+    eq(closedTradesTable.id, trade.id),
+    eq(closedTradesTable.mode, 'paper'),
+    eq(closedTradesTable.assetClass, 'xstock_spot'),
+    eq(closedTradesTable.symbol, trade.symbol),
+    eq(closedTradesTable.quantity, trade.quantity),
+  );
+}
+
+function paperXstockPositionKey(position: PaperXstockPositionKey, tradeId: string) {
+  return and(
+    eq(activeOpenPositions.id, position.id),
+    eq(activeOpenPositions.mode, 'paper'),
+    eq(activeOpenPositions.assetClass, 'xstock_spot'),
+    eq(activeOpenPositions.symbol, position.symbol),
+    eq(activeOpenPositions.quantity, position.quantity),
+    sql`${activeOpenPositions.metadata} ->> 'tradeId' = ${tradeId}`,
+  );
+}
+
+type PaperXstockPendingMakerTransition =
+  | {
+      kind: 'fill';
+      currentPrice: string;
+      proof: Extract<PaperXstockEntryFill, { method: 'maker' }>;
+      stamp: Pick<ClosedTrade, 'entryPriceProducer' | 'entryPriceSource' | 'entryObservedAtMs' | 'entryDecisionPrice' | 'entryBookAgeMs'>;
+      observedAgeMs: number | null;
+    }
+  | { kind: 'cancel'; reason: string };
 
 // B-CLOSE-WRITER-COSTS P-15 (C-4, C-10, C-13): the "not a trade outcome" rule, ONE source. Every SQL reader that
 // excluded `never_filled` by a hand-written literal now binds the list DERIVED from `TRADE_CLOSE_REASON_CLASS`, so
@@ -546,6 +604,18 @@ export interface IStorage {
   // guarantee is the leaf's `Record<TradeCloseReason, …>`: a new REASON is a compile error until it is CLASSED.
   createClosedTrade(mode: TradingMode, trade: ClosedTradeWrite<Omit<InsertClosedTrade, 'mode'>>): Promise<ClosedTrade>;
   updateClosedTrade(mode: TradingMode, id: string, updates: ClosedTradeWrite<Partial<ClosedTrade>>): Promise<ClosedTrade>;
+  transitionPaperXstockPendingMaker(
+    position: PaperXstockPositionKey,
+    tradeId: string,
+    change: PaperXstockPendingMakerTransition,
+  ): Promise<boolean>;
+  closePaperXstockTrade(
+    trade: PaperXstockTradeKey,
+    position: PaperXstockPositionKey | null,
+    updates: PaperXstockCloseWrite,
+  ): Promise<PaperXstockCloseResult>;
+  removeClosedPaperXstockPosition(trade: PaperXstockTradeKey, position: PaperXstockPositionKey): Promise<boolean>;
+  getPaperXstockTrade(trade: PaperXstockTradeKey): Promise<ClosedTrade | undefined>;
   /** #1250 P7: merge keys INTO `metadata` (jsonb `||`), never replacing it. Returns false when no row matched. */
   mergeClosedTradeMetadata(mode: TradingMode, id: string, patch: Record<string, unknown>): Promise<boolean>;
   getClosedTrade(mode: TradingMode, id: string): Promise<ClosedTrade | undefined>;
@@ -587,7 +657,7 @@ export interface IStorage {
     dateTo?: Date;
   }): Promise<{ trades: ClosedTrade[]; totalCount: number }>;
   findOpenTradeRecord(mode: TradingMode, symbol: string, assetClass: string): Promise<OpenTradeRecordLookup>;
-  insertOpenTradeRecordIfNoneOpen(mode: TradingMode, symbol: string, assetClass: string, record: ClosedTradeWrite<Omit<InsertClosedTrade, 'mode'>>): Promise<{ status: 'inserted'; record: ClosedTrade } | { status: 'exists'; ids: string[] }>;
+  restoreOpenTradeRecordForPosition(mode: TradingMode, position: Pick<ActiveOpenPosition, 'id' | 'symbol'>, assetClass: string, buildRecord: (position: ActiveOpenPosition) => RestoredRecordWrite | null): Promise<RestoreRecordWriteResult>;
   deleteClosedTrade(mode: TradingMode, id: string): Promise<void>; // B-PROMOTION-RACE-FIX (#508): single-row delete for the dup-race orphan compensation
 
   // Open positions
@@ -734,6 +804,30 @@ export async function closeOpenTradesForHardReset(executor: Pick<typeof db, 'upd
     .set({ closedAt: new Date(), closeReason: 'hard_reset' })
     .where(and(isNull(closedTradesTable.closedAt), eq(closedTradesTable.mode, mode)))
     .returning();
+}
+
+export async function resetActiveEngineTables(
+  executor: Pick<typeof db, 'execute' | 'update' | 'delete'>,
+  mode: 'paper' | 'live',
+  paperResetPermit?: symbol,
+) {
+  if ((mode === 'paper' && (!paperEntryPublication.holdsResetPermit(paperResetPermit) || !paperEntryPublication.isQuiescent()))
+    || (mode !== 'paper' && paperResetPermit !== undefined)) throw new PaperEntryDrainIncomplete();
+
+  // Exclude restores, including from the separate operator process, before closing trades or deleting positions.
+  await executor.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`engine-reset:${mode}`}))`);
+  const closed = await closeOpenTradesForHardReset(executor, mode);
+  const cleared = await executor
+    .delete(activeOpenPositions)
+    .where(eq(activeOpenPositions.mode, mode))
+    .returning({ id: activeOpenPositions.id });
+
+  await executor
+    .update(activeEngineSessions)
+    .set({ status: 'stopped', stoppedAt: new Date() })
+    .where(and(eq(activeEngineSessions.mode, mode), eq(activeEngineSessions.status, 'running')));
+
+  return { closedTrades: closed.length, clearedPositions: cleared.length };
 }
 
 export class DatabaseStorage implements IStorage {
@@ -3159,7 +3253,7 @@ export class DatabaseStorage implements IStorage {
     // floor, which is why seven readers could accept a mode and none could filter on one.
     // One of TWO physical INSERTs into closed_trades (census 2026-08-21 found one site, three
     // callers, all passing a correct mode; B-CLOSE-WRITER-COSTS P-12 added the second,
-    // `insertOpenTradeRecordIfNoneOpen`, the restore's atomic insert, which also stamps `mode`).
+    // `restoreOpenTradeRecordForPosition`, the atomic restore, which also stamps `mode`).
     const normalizedTrade = { ...trade, symbol: canonicalSymbol, mode };
     const [result] = await db.insert(closedTradesTable).values(normalizedTrade).returning();
     return result;
@@ -3171,6 +3265,121 @@ export class DatabaseStorage implements IStorage {
       .where(eq(closedTradesTable.id, id))
       .returning();
     return result;
+  }
+
+  async transitionPaperXstockPendingMaker(
+    position: PaperXstockPositionKey,
+    tradeId: string,
+    change: PaperXstockPendingMakerTransition,
+  ): Promise<boolean> {
+    return db.transaction(async (tx) => {
+      // Take the trade lock first so a fill and a cancellation serialize against the same pair.
+      const tradeKey = and(
+        paperXstockTradeKey({ ...position, id: tradeId }),
+        eq(closedTradesTable.chosenEntryMode, 'maker'),
+        isNull(closedTradesTable.closedAt),
+      );
+      const [trade] = await tx.select({ id: closedTradesTable.id })
+        .from(closedTradesTable).where(tradeKey).for('update');
+      if (!trade) return false;
+      const positionKey = and(
+        paperXstockPositionKey(position, tradeId),
+        eq(activeOpenPositions.state, 'pending'),
+      );
+      const now = new Date();
+      const [changed] = change.kind === 'fill'
+        ? await tx.update(activeOpenPositions)
+            .set({ state: 'open', currentPrice: change.currentPrice, lastUpdated: now })
+            .where(positionKey).returning({ id: activeOpenPositions.id })
+        : await tx.delete(activeOpenPositions).where(positionKey).returning({ id: activeOpenPositions.id });
+      if (!changed) return false;
+
+      const patch = change.kind === 'fill'
+        ? {
+            paperXstockEntryFill: change.proof,
+            ...(change.observedAgeMs === null ? {} : { entryObservedAgeMs: change.observedAgeMs }),
+          }
+        : { neverFilledReason: change.reason };
+      const update: ClosedTradeWrite<Partial<ClosedTrade>> = change.kind === 'fill'
+        ? change.stamp
+        : {
+            closedAt: now, closeReason: 'never_filled',
+            fees: '0', slippage: '0', entryFee: '0', exitFee: '0', totalFee: '0', entrySlippage: '0', exitSlippage: '0',
+            totalCost: '0', grossPnl: '0', netPnl: '0', netPnlPercent: '0',
+          };
+      const [written] = await tx.update(closedTradesTable).set({
+        ...update,
+        metadata: sql`COALESCE(${closedTradesTable.metadata}, '{}'::jsonb) || ${JSON.stringify(patch)}::jsonb`,
+      }).where(tradeKey).returning({ id: closedTradesTable.id });
+      if (!written) throw new Error(`Pending maker trade ${tradeId} changed during its position transition`);
+      return true;
+    });
+  }
+
+  async closePaperXstockTrade(
+    trade: PaperXstockTradeKey,
+    position: PaperXstockPositionKey | null,
+    updates: PaperXstockCloseWrite,
+  ): Promise<PaperXstockCloseResult> {
+    return db.transaction(async (tx) => {
+      const key = paperXstockTradeKey(trade);
+      const [current] = await tx.select().from(closedTradesTable).where(key).for('update');
+      if (!current || current.closedAt) return { committed: false, trade: current };
+
+      if (position) {
+        if (position.symbol !== trade.symbol) {
+          return { committed: false, trade: current };
+        }
+        const [removed] = await tx.delete(activeOpenPositions).where(and(
+          paperXstockPositionKey(position, trade.id),
+          eq(activeOpenPositions.quantity, current.quantity),
+          eq(activeOpenPositions.state, 'open'),
+        )).returning({ id: activeOpenPositions.id });
+        if (!removed) return { committed: false, trade: current };
+      } else {
+        // The stopped engine's lifecycle queue keeps entry publication closed through commit.
+        // A same-symbol legacy or replacement position is ambiguity, even if it has no tradeId.
+        if (!paperEntryPublication.isQuiescent() || !hasPaperXstockEntryFill(current)) {
+          return { committed: false, trade: current };
+        }
+        const [remaining] = await tx.select({ id: activeOpenPositions.id }).from(activeOpenPositions).where(and(
+          eq(activeOpenPositions.mode, 'paper'),
+          sql`(${activeOpenPositions.metadata} ->> 'tradeId' = ${trade.id} OR ${activeOpenPositions.symbol} = ${trade.symbol})`,
+        )).limit(1);
+        if (remaining) return { committed: false, trade: current };
+      }
+
+      const { metadata, ...close } = updates;
+      const [closed] = await tx.update(closedTradesTable).set({
+        ...close,
+        ...(metadata ? {
+          metadata: sql`COALESCE(${closedTradesTable.metadata}, '{}'::jsonb) || ${JSON.stringify(metadata)}::jsonb`,
+        } : {}),
+      }).where(and(key, isNull(closedTradesTable.closedAt))).returning();
+      if (!closed) throw new Error(`Trade ${trade.id} changed during its close transition`);
+      if (!position && !paperEntryPublication.isQuiescent()) throw new PaperEntryDrainIncomplete();
+      return { committed: true, trade: closed };
+    });
+  }
+
+  async removeClosedPaperXstockPosition(trade: PaperXstockTradeKey, position: PaperXstockPositionKey): Promise<boolean> {
+    if (trade.symbol !== position.symbol) return false;
+    return db.transaction(async (tx) => {
+      const [current] = await tx.select({ quantity: closedTradesTable.quantity }).from(closedTradesTable)
+        .where(and(paperXstockTradeKey(trade), isNotNull(closedTradesTable.closedAt))).for('update');
+      if (!current) return false;
+      const [removed] = await tx.delete(activeOpenPositions).where(and(
+        paperXstockPositionKey(position, trade.id),
+        eq(activeOpenPositions.quantity, current.quantity),
+        eq(activeOpenPositions.state, 'open'),
+      )).returning({ id: activeOpenPositions.id });
+      return !!removed;
+    });
+  }
+
+  async getPaperXstockTrade(trade: PaperXstockTradeKey): Promise<ClosedTrade | undefined> {
+    const [current] = await db.select().from(closedTradesTable).where(paperXstockTradeKey(trade));
+    return current;
   }
 
   async mergeClosedTradeMetadata(mode: TradingMode, id: string, patch: Record<string, unknown>): Promise<boolean> {
@@ -3660,17 +3869,23 @@ export class DatabaseStorage implements IStorage {
    * (`closed_trades.opened_at` is NOT NULL, so `closed_at IS NULL` alone is the faithful translation of the old
    * predicate; a `never_filled` row always carries `closed_at`, so it can never match here.)
    */
-  /**
-   * B-CLOSE-WRITER-COSTS P-12 (Langston Part B attack 2): the restore's insert, made ATOMIC. Under a transaction-scoped
-   * advisory lock on (mode, symbol, class), it re-checks that NO open record exists for the key and only then inserts —
-   * so two concurrent restores cannot both insert (the loser gets `exists`, never a duplicate the 'many' alert would then
-   * ask a human to remove by hand). Not a partial unique index: that would fail to create if any historical duplicate
-   * exists. The symbol is normalised the way `createClosedTrade` normalises it, so the lock and the check use the stored form.
-   */
-  async insertOpenTradeRecordIfNoneOpen(mode: TradingMode, symbol: string, assetClass: string, record: ClosedTradeWrite<Omit<InsertClosedTrade, 'mode'>>): Promise<{ status: 'inserted'; record: ClosedTrade } | { status: 'exists'; ids: string[] }> {
-    const canonicalSymbol = normalizeToInternalSymbol(symbol);
+  async restoreOpenTradeRecordForPosition(
+    mode: TradingMode,
+    position: Pick<ActiveOpenPosition, 'id' | 'symbol'>,
+    assetClass: string,
+    buildRecord: (position: ActiveOpenPosition) => RestoredRecordWrite | null,
+  ): Promise<RestoreRecordWriteResult> {
+    const canonicalSymbol = normalizeToInternalSymbol(position.symbol);
+    const positionKey = and(
+      eq(activeOpenPositions.id, position.id), eq(activeOpenPositions.mode, mode),
+      eq(activeOpenPositions.symbol, position.symbol), eq(activeOpenPositions.assetClass, assetClass),
+    );
     return await db.transaction(async (tx) => {
+      // Take the mode lock before the per-symbol and row locks. A reset must see either the complete link or no restore.
+      await tx.execute(sql`SELECT pg_advisory_xact_lock_shared(hashtext(${`engine-reset:${mode}`}))`);
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`open-record:${mode}:${canonicalSymbol}:${assetClass}`}))`);
+      const [current] = await tx.select().from(activeOpenPositions).where(positionKey).for('update');
+      if (!current) return { status: 'position_missing' as const };
       const open = await tx.select({ id: closedTradesTable.id })
         .from(closedTradesTable)
         .where(and(
@@ -3681,10 +3896,24 @@ export class DatabaseStorage implements IStorage {
         ))
         .limit(4);
       if (open.length > 0) return { status: 'exists' as const, ids: open.map((r) => r.id) };
+      const metadata = current.metadata as Record<string, unknown> | null;
+      const linkedId = metadata?.tradeId;
+      if (typeof linkedId === 'string' && linkedId) {
+        const [linked] = await tx.select({ id: closedTradesTable.id }).from(closedTradesTable)
+          .where(eq(closedTradesTable.id, linkedId));
+        if (linked) return { status: 'linked' as const, id: linked.id };
+      }
+      const record = buildRecord(current);
+      if (!record) return { status: 'missing_cost' as const };
       const [inserted] = await tx.insert(closedTradesTable)
-        .values({ ...(record as Omit<InsertClosedTrade, 'mode'>), symbol: canonicalSymbol, assetClass, mode })
+        .values({ ...record, symbol: canonicalSymbol, assetClass, mode })
         .returning();
-      return { status: 'inserted' as const, record: inserted };
+      const [updated] = await tx.update(activeOpenPositions)
+        .set({ metadata: { ...metadata, tradeId: inserted.id } })
+        .where(positionKey)
+        .returning({ id: activeOpenPositions.id });
+      if (!updated) throw new Error(`Restore could not link record to position ${position.id}`);
+      return { status: 'inserted' as const, record: inserted, pending: current.state === 'pending' };
     });
   }
 
@@ -4669,53 +4898,15 @@ export class DatabaseStorage implements IStorage {
 
   /**
    * Phase 8.8.3-B7.A: Hard reset paper simulation
-   * Closes all open trades and clears all open positions for a clean session start.
-   * Note: closedTradesTable carries `mode` (NOT NULL since B-BALANCE-TRUTH); activeOpenPositions has no mode column.
-   * activeEngineSessions has a mode column for session tracking.
+   * Closes open trades, clears positions and ends running sessions for this mode.
    */
-  async hardResetActiveEngineTables(mode: 'paper' | 'live' = 'paper'): Promise<{ closedTrades: number; clearedPositions: number }> {
+  async hardResetActiveEngineTables(mode: 'paper' | 'live' = 'paper', paperResetPermit?: symbol): Promise<{ closedTrades: number; clearedPositions: number }> {
     console.log(`[B7.A][DB] Starting hard reset for mode=${mode}`);
     
-    const { activeOpenPositions, activeEngineSessions } = await import('@shared/schema');
-    
-    let closedTrades = 0;
-    let clearedPositions = 0;
-    
     try {
-      // 1. Close this mode's open trades with hard_reset reason (the fenced update: closeOpenTradesForHardReset).
-      const closeTradesResult = await closeOpenTradesForHardReset(db, mode);
-      
-      closedTrades = closeTradesResult.length;
-      console.log(`[B7.A][DB] Closed ${closedTrades} open trades`);
-      
-      // 2. Delete all open positions snapshot
-      // Note: activeOpenPositions is single-tenant, no mode column
-      const deletePositionsResult = await db
-        .delete(activeOpenPositions)
-        .returning();
-      
-      clearedPositions = deletePositionsResult.length;
-      console.log(`[B7.A][DB] Cleared ${clearedPositions} open positions`);
-      
-      // 3. End any running paper sim sessions (this table HAS a mode column)
-      await db
-        .update(activeEngineSessions)
-        .set({
-          status: 'stopped',
-          stoppedAt: new Date(),
-          // P19-B3b: active_engine_sessions has no stoppedBy column (only startedAt/
-          // stoppedAt/startedBy). The stop is recorded by status='stopped' +
-          // stoppedAt; the 'hard_reset' provenance is in the [B7.A][DB] log line
-          // above. Removed the nonexistent-column reference.
-        })
-        .where(and(
-          eq(activeEngineSessions.mode, mode),
-          eq(activeEngineSessions.status, 'running')
-        ));
-      
-      console.log(`[B7.A][DB] Hard reset complete: ${closedTrades} trades closed, ${clearedPositions} positions cleared`);
-      
-      return { closedTrades, clearedPositions };
+      const result = await db.transaction((tx) => resetActiveEngineTables(tx, mode, paperResetPermit));
+      console.log(`[B7.A][DB] Hard reset complete: ${result.closedTrades} trades closed, ${result.clearedPositions} positions cleared`);
+      return result;
     } catch (error) {
       console.error(`[B7.A][DB] Hard reset error:`, error);
       throw error;

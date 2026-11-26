@@ -593,6 +593,12 @@
       }
     },
     {
+      "path": "server/tests/integration/b-xstock-paper-trade-transition-db.test.ts",
+      "markers": {
+        "database_url": 1
+      }
+    },
+    {
       "path": "server/tests/integration/b-xstock-snapshot-retention-db.test.ts",
       "markers": {
         "database_url": 2,
@@ -651,6 +657,13 @@
       "path": "server/tests/unit/b-disk-file-tiering.test.ts",
       "markers": {
         "database_url": 2
+      }
+    },
+    {
+      "path": "server/tests/unit/b-xstock-paper-reset-routes.test.ts",
+      "markers": {
+        "database_url": 1,
+        "node_postgres_constructor": 2
       }
     },
     {
