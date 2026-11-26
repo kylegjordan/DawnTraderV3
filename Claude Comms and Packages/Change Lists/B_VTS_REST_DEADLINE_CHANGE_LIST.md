@@ -110,3 +110,41 @@ The corrections are confined to the placement stamp and the offline reader. The 
   fixtures. No observation dates or staging settings changed.
 
 Please re-grade these two corrections on the exact candidate. Shared placement still requires the review and normal CI checks.
+
+## Step 4 r5 — writer epoch and surviving rest clocks
+
+Coltrane returned CHANGES NEEDED at 17:25:10Z on exact `7c623227490264f24dca9a7f80a355ff3cbd1a74`
+(`45864824472`, four green). The queued placement stamp passed all nine isolated PostgreSQL cases and its
+terminal-guard mutation. He withheld the offline verdict for impossible epoch slots and conflicting position clocks.
+On r4, four malformed epoch variants and four conflicting or missing position-clock variants each falsely
+produced a trigger. The exact records and both writer guards used in the earlier review still stand.
+
+**Clock proof modified.** The writer already checks the same half-open slots with its real monotonic anchor.
+The v1 summary now carries that additional anchor without rounding. The reader requires both anchors, the
+claimed slot and the original per-sample clock allowance. Existing v1 summaries without both anchors yield
+unknown attribution. Recovery also needs the separately committed through-deadline boundary on the same
+trade, position and epoch. This is the same precursor the terminal writer uses when it attaches recovery.
+
+```python
+elapsed = mono - mono_anchor
+return slot * period <= elapsed < (slot + 1) * period and abs(wall - wall_anchor - elapsed) <= allowance
+```
+
+**Position reconciliation modified.** The read uses the already exported position clock and deadline with
+the exact position and trade IDs. A conflicting surviving position withholds deadline timing and attribution
+for that rest. Its independently proved fill and raw clocks are retained. A well-linked and timed fill whose
+recovery summary is malformed still preserves the fill and its early/late quote timing.
+
+```python
+deadline_known = has_number(deadline) and deadline > placed
+position_clocks_conflict = position is not None and (
+    position.get("placed_at_ms") != placed or (
+        deadline_known and position.get("deadline_at_ms") != deadline))
+```
+
+REVIEWER: claim-only · r5_clock_fresh_reader · which objects can prove a possible recovery on the same rest ·
+found missing monotonic anchor, fractional performance-clock rejection, malformed sample crash, missing position
+clock checks and a missing corroboration of the committed refusal boundary · re-derived yes on writer, reader and export.
+The actual TypeScript writer to Python reader control credited 1/1 authentic fractional-clock recoveries. The
+same trace withheld attribution on 4/4 epoch mutations and 2/2 position-clock mutations. The checked-in Python
+reader suite passed 17/17. Six recorder controls passed, with the fractional anchor checked at the writer.

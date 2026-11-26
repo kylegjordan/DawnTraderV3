@@ -6,7 +6,7 @@ import {
   type PaperMakerRefusalEvidence,
 } from '../../core/trading/paper-maker-refusal-evidence.js';
 
-const epoch = { id: 'engine-start-a', periodMs: 4_000, wallAnchorMs: 100_000, monotonicAnchorMs: 1_000 };
+const epoch = { id: 'engine-start-a', periodMs: 4_000, wallAnchorMs: 100_000, monotonicAnchorMs: 1_000.125 };
 const placement = { placedAtMs: 101_000, deadlineAtMs: 110_000 };
 
 function observe(
@@ -29,6 +29,11 @@ describe('paper maker refusal evidence', () => {
     const third = observe(3, second);
     const recovery = observe(4, third, 'evaluated_side');
     expect(recovery.recovered).toEqual({ first: first.sample, last: third.sample, count: 3 });
+    expect(recovery).toMatchObject({
+      epochAnchorAtMs: epoch.wallAnchorMs,
+      epochMonotonicAnchorMs: epoch.monotonicAnchorMs,
+      sample: { monotonicAtMs: 17_100.125 },
+    });
     expect([shouldPersistPaperMakerRefusal(first), shouldPersistPaperMakerRefusal(second, first),
       shouldPersistPaperMakerRefusal(third, second), shouldPersistPaperMakerRefusal(recovery, third)])
       .toEqual([true, false, true, true]);

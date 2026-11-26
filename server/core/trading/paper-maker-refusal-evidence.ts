@@ -40,6 +40,7 @@ export interface PaperMakerRefusalEvidence {
   version: 1;
   epochId: string;
   epochAnchorAtMs: number;
+  epochMonotonicAnchorMs: number;
   periodMs: number;
   placedAtMs: number;
   deadlineAtMs: number;
@@ -101,7 +102,8 @@ export function observePaperMakerRefusal(
     && priorSpan.first.wallAtMs < deadlineAtMs - allowance && priorSpan.last.wallAtMs > deadlineAtMs + allowance
     ? priorSpan : null;
   return {
-    version: 1, epochId: epoch.id, epochAnchorAtMs: epoch.wallAnchorMs, periodMs: epoch.periodMs, placedAtMs, deadlineAtMs,
+    version: 1, epochId: epoch.id, epochAnchorAtMs: epoch.wallAnchorMs, epochMonotonicAnchorMs: epoch.monotonicAnchorMs,
+    periodMs: epoch.periodMs, placedAtMs, deadlineAtMs,
     sample, discontinuity, refusing, recovered,
   };
 }

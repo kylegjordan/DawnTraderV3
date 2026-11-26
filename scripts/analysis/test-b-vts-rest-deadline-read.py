@@ -27,7 +27,7 @@ def receipt_line(trade, position, clock):
 
 def filled(quote, *, trade_id="t", pos_id="p", outcome="fill"):
     evaluated = DEADLINE + 4_000
-    return {
+    row = {
         "trade_id": trade_id, "mode": "paper", "asset_class": ASSET, "symbol": "BTC/USD", "side": "buy",
         "closed_at": (START + timedelta(seconds=11)).isoformat() if outcome == "cancel" else None,
         "close_reason": "never_filled" if outcome == "cancel" else None, "exit_price": None,
@@ -41,22 +41,28 @@ def filled(quote, *, trade_id="t", pos_id="p", outcome="fill"):
                      "quoteArrivedAtMs": quote, "quoteSide": "ask", "evaluatedAtMs": evaluated,
                      "refusalEvidence": {
                          "version": 1, "epochId": "boot:timer", "placedAtMs": PLACED, "deadlineAtMs": DEADLINE,
-                         "periodMs": 2_000, "discontinuity": None,
+                         "periodMs": 2_000, "epochAnchorAtMs": PLACED, "epochMonotonicAnchorMs": 0.125,
+                         "discontinuity": None,
                          "sample": {"slot": 5, "callbackNumber": 5, "wallAtMs": evaluated + 1,
-                                    "monotonicAtMs": 10_001,
+                                    "monotonicAtMs": 10_001.125,
                                     "observation": "evaluated_side"},
                          "recovered": {"first": {"slot": 2, "callbackNumber": 2, "wallAtMs": PLACED + 4_000,
-                                                 "monotonicAtMs": 4_000,
+                                                 "monotonicAtMs": 4_000.125,
                                                  "observation": "upstream_refusal"},
                                        "last": {"slot": 4, "callbackNumber": 4, "wallAtMs": PLACED + 8_000,
-                                                "monotonicAtMs": 8_000,
+                                                "monotonicAtMs": 8_000.125,
                                                 "observation": "upstream_refusal"}, "count": 3},
                      }},
     }
+    saved = copy.deepcopy(row["terminal"]["refusalEvidence"])
+    saved["refusing"] = saved.pop("recovered")
+    saved.update(tradeId=trade_id, positionId=pos_id, sample=saved["refusing"]["last"])
+    row["refusal"] = saved
+    return row
 
 
-def open_position(trade_id="t", position_id="p", placed=PLACED):
-    return {"position_id": position_id, "state": "open", "placed_at_ms": placed,
+def open_position(trade_id="t", position_id="p", placed=PLACED, deadline=DEADLINE):
+    return {"position_id": position_id, "state": "open", "placed_at_ms": placed, "deadline_at_ms": deadline,
             "trade_id": trade_id, "mode": "paper", "asset_class": ASSET, "symbol": "BTC/USD"}
 
 
@@ -227,6 +233,49 @@ class P4Fixture(unittest.TestCase):
                 self.assertEqual(result["confirmed_trigger_ids"], [])
                 self.assertEqual(result["outcome"], {"filled": 1})
                 self.assertEqual(result["receipt_timing"], {"at_or_after_deadline": 1})
+
+    def test_recovery_requires_the_matching_committed_boundary(self):
+        for case in ("missing", "wrong_epoch", "wrong_pair", "different_first_sample"):
+            with self.subTest(case=case):
+                trade = filled(DEADLINE)
+                saved = trade["refusal"]
+                if case == "missing":
+                    trade["refusal"] = None
+                elif case == "wrong_epoch":
+                    saved["epochId"] = "another"
+                elif case == "wrong_pair":
+                    saved["positionId"] = "another"
+                else:
+                    saved["refusing"]["first"]["wallAtMs"] += 10
+                result = self.grade([trade])[ASSET]
+                self.assertEqual(result["verdict"], "NO-RESULT")
+                self.assertEqual(result["refusal"], {"unknown": 1})
+                self.assertEqual(result["outcome"], {"filled": 1})
+                self.assertEqual(result["receipt_timing"], {"at_or_after_deadline": 1})
+
+    def test_recovery_requires_samples_in_the_claimed_epoch_slots(self):
+        for field, value in (("periodMs", 1_000), ("epochAnchorAtMs", PLACED + 5_000),
+                             ("epochMonotonicAnchorMs", None), ("epochMonotonicAnchorMs", 2_000),
+                             ("sample", ["invalid"]), ("epochMonotonicAnchorMs", float("nan"))):
+            with self.subTest(field=field, value=value):
+                trade = filled(DEADLINE)
+                trade["terminal"]["refusalEvidence"][field] = value
+                result = self.grade([trade])[ASSET]
+                self.assertEqual(result["verdict"], "NO-RESULT")
+                self.assertEqual(result["refusal"], {"unknown": 1})
+                self.assertEqual(result["outcome"], {"filled": 1})
+                self.assertEqual(result["receipt_timing"], {"at_or_after_deadline": 1})
+
+    def test_surviving_position_must_agree_with_both_maker_clocks(self):
+        trade = filled(DEADLINE)
+        for position in (open_position(placed=PLACED + 1_000), open_position(deadline=DEADLINE + 1_000),
+                         open_position(placed=None), open_position(deadline=None)):
+            with self.subTest(position=position):
+                result = self.grade([trade], positions=[position])[ASSET]
+                self.assertEqual(result["verdict"], "NO-RESULT")
+                self.assertEqual(result["confirmed_trigger_ids"], [])
+                self.assertEqual(result["receipt_timing"], {"unknown": 1})
+                self.assertIn(("t", "position_clocks_unreconciled"), result["coverage_issues"])
 
 
 if __name__ == "__main__":

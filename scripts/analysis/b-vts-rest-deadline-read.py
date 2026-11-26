@@ -48,7 +48,7 @@ def sha256(file):
 
 
 def has_number(value):
-    return type(value) is int
+    return type(value) is int and -(2**53) < value < 2**53
 
 
 def capture_receipts(manifest, log_paths, history_dir):
@@ -141,14 +141,21 @@ def capture_receipts(manifest, log_paths, history_dir):
     }
 
 
-def advances_monitor_clock(earlier, later, allowance):
-    wall_start, wall_end = earlier.get("wallAtMs"), later.get("wallAtMs")
-    mono_start, mono_end = earlier.get("monotonicAtMs"), later.get("monotonicAtMs")
-    if not all(map(has_number, (wall_start, wall_end, mono_start, mono_end))):
+def monotonic_clock(value):
+    return type(value) in (int, float) and 0 <= value < 2**53
+
+
+def valid_monitor_sample(sample, wall_anchor, mono_anchor, period, allowance, placed):
+    if not isinstance(sample, dict):
         return False
-    wall_span, mono_span = wall_end - wall_start, mono_end - mono_start
-    # The writer permits one clock allowance at each endpoint of the retained span.
-    return wall_span >= 0 and mono_span > 0 and abs(wall_span - mono_span) <= 2 * allowance
+    wall, mono = sample.get("wallAtMs"), sample.get("monotonicAtMs")
+    slot, callback = sample.get("slot"), sample.get("callbackNumber")
+    if not has_number(wall) or wall <= placed or not monotonic_clock(mono):
+        return False
+    if not all(has_number(index) and 1 <= index < 2**53 for index in (slot, callback)):
+        return False
+    elapsed = mono - mono_anchor
+    return slot * period <= elapsed < (slot + 1) * period and abs(wall - wall_anchor - elapsed) <= allowance
 
 
 def refusal_evidence(terminal, deadline, placed):
@@ -157,46 +164,65 @@ def refusal_evidence(terminal, deadline, placed):
         return "unknown"
     if summary.get("placedAtMs") != placed or summary.get("deadlineAtMs") != deadline:
         return "unknown"
-    sample = summary.get("sample") or {}
+    epoch_id = summary.get("epochId")
+    wall_anchor, mono_anchor = summary.get("epochAnchorAtMs"), summary.get("epochMonotonicAnchorMs")
     period = summary.get("periodMs")
-    evaluated, observed = terminal.get("evaluatedAtMs"), sample.get("wallAtMs")
-    if not all(map(has_number, (period, evaluated, observed))) or period <= 0:
+    evaluated = terminal.get("evaluatedAtMs")
+    if (not isinstance(epoch_id, str) or not epoch_id or not monotonic_clock(mono_anchor)
+            or not all(map(has_number, (wall_anchor, evaluated))) or not monotonic_clock(period) or period <= 0):
         return "unknown"
     allowance = min(1000, period / 4)
-    if not evaluated <= observed <= evaluated + allowance:
+    sample = summary.get("sample")
+    if not valid_monitor_sample(sample, wall_anchor, mono_anchor, period, allowance, placed):
         return "unknown"
+    if not evaluated <= sample["wallAtMs"] <= evaluated + allowance:
+        return "unknown"
+    recovered, refusing = summary.get("recovered"), summary.get("refusing")
     if sample.get("observation") == "venue_quiet_or_cold":
-        return "venue_quiet_or_cold"
-    span = summary.get("recovered") or summary.get("refusing")
-    if not span or not summary.get("epochId"):
+        return "venue_quiet_or_cold" if recovered is None and refusing is None else "unknown"
+    span = recovered if recovered is not None else refusing
+    if not isinstance(span, dict) or (recovered is not None and refusing is not None) or summary.get("discontinuity") is not None:
         return "unknown"
-    first, last = span.get("first") or {}, span.get("last") or {}
-    slots = [first.get("slot"), last.get("slot"), first.get("callbackNumber"), last.get("callbackNumber")]
-    first_time, last_time = first.get("wallAtMs"), last.get("wallAtMs")
-    if not all(map(has_number, (*slots, first_time, last_time, span.get("count")))):
+    first, last, count = span.get("first"), span.get("last"), span.get("count")
+    if not all(valid_monitor_sample(point, wall_anchor, mono_anchor, period, allowance, placed) for point in (first, last)):
         return "unknown"
     if (first.get("observation") != "upstream_refusal" or last.get("observation") != "upstream_refusal"
-            or slots[0] < 1 or slots[2] < 1 or slots[1] - slots[0] + 1 != span["count"]
-            or slots[3] - slots[2] + 1 != span["count"] or span["count"] < 2
-            or not placed < first_time < deadline - allowance < deadline + allowance < last_time
-            or not advances_monitor_clock(first, last, allowance)):
+            or not has_number(count) or count < 2 or last["slot"] - first["slot"] + 1 != count
+            or last["callbackNumber"] - first["callbackNumber"] + 1 != count
+            or not first["wallAtMs"] < deadline - allowance < deadline + allowance < last["wallAtMs"]):
         return "unknown"
-    if summary.get("recovered") and (sample.get("observation") != "evaluated_side"
-            or sample.get("slot") != slots[1] + 1 or sample.get("callbackNumber") != slots[3] + 1
-            or sample["wallAtMs"] <= last_time or not advances_monitor_clock(last, sample, allowance)
-            or summary.get("discontinuity") is not None):
-        return "unknown"
-    return "recovered_across_deadline" if summary.get("recovered") else "refused_across_deadline"
+    if recovered is None:
+        return "refused_across_deadline" if sample == last else "unknown"
+    if (sample.get("observation") == "evaluated_side" and sample["slot"] == last["slot"] + 1
+            and sample["callbackNumber"] == last["callbackNumber"] + 1 and sample["wallAtMs"] > last["wallAtMs"]):
+        return "recovered_across_deadline"
+    return "unknown"
 
 
 def stored_refusal(trade, position_id, deadline, placed, before_ms):
-    summary = trade["refusal"] or {}
-    if summary.get("tradeId") != trade["trade_id"] or summary.get("positionId") != position_id:
+    summary = trade["refusal"]
+    if not isinstance(summary, dict) or summary.get("tradeId") != trade["trade_id"] or summary.get("positionId") != position_id:
         return "unknown"
-    observed = (summary.get("sample") or {}).get("wallAtMs")
+    sample = summary.get("sample")
+    observed = sample.get("wallAtMs") if isinstance(sample, dict) else None
     if not has_number(observed) or observed >= before_ms:
         return "unknown"
     return refusal_evidence({"refusalEvidence": summary, "evaluatedAtMs": observed}, deadline, placed)
+
+
+def committed_recovery_boundary(trade, position_id, deadline, placed, terminal):
+    recovered = terminal["refusalEvidence"]
+    recovered_at = recovered["sample"]["wallAtMs"]
+    if stored_refusal(trade, position_id, deadline, placed, recovered_at) != "refused_across_deadline":
+        return False
+    saved = trade["refusal"]
+    epoch_keys = ("epochId", "epochAnchorAtMs", "epochMonotonicAnchorMs", "periodMs")
+    through_deadline, before_recovery = saved["refusing"], recovered["recovered"]
+    saved_last, terminal_last = through_deadline["last"], before_recovery["last"]
+    return (all(saved[key] == recovered[key] for key in epoch_keys)
+            and through_deadline["first"] == before_recovery["first"]
+            and (saved_last == terminal_last or (
+                saved_last["slot"] < terminal_last["slot"] and saved_last["wallAtMs"] <= terminal_last["wallAtMs"])))
 
 
 def passes_rest_limit(trade, placement):
@@ -228,10 +254,17 @@ def grade_trade(receipt, trade, position, censor_at_ms, captured_at_ms):
         result["coverage_issue"] = "placement_stamp_unreconciled"
         deadline = None
 
+    deadline_known = has_number(deadline) and deadline > placed
+    position_clocks_conflict = position is not None and (
+        position.get("placed_at_ms") != placed or (
+            deadline_known and position.get("deadline_at_ms") != deadline))
+    if position_clocks_conflict:
+        result["coverage_issue"] = "position_clocks_unreconciled"
+
     if (terminal.get("version"), terminal.get("link"), terminal.get("positionId")) != (1, "linked", position_id):
-        if position and position["state"] == "pending" and not trade["closed_at"] and not terminal:
+        if position and position["state"] == "pending" and not trade["closed_at"] and not terminal and not position_clocks_conflict:
             result["outcome"] = "censored_pending"
-            if has_number(deadline) and deadline > placed:
+            if deadline_known:
                 result["refusal"] = stored_refusal(trade, position_id, deadline, placed, censor_at_ms)
         else:
             result.setdefault("coverage_issue", "winning_outcome_unreconciled")
@@ -240,14 +273,17 @@ def grade_trade(receipt, trade, position, censor_at_ms, captured_at_ms):
     evaluated = terminal.get("evaluatedAtMs")
     result["evaluated_at_ms"] = evaluated
     result["deadline_at_ms"] = deadline
-    if has_number(deadline) and deadline > placed:
+    if deadline_known and not position_clocks_conflict:
         result["refusal"] = refusal_evidence(terminal, deadline, placed)
+        if (result["refusal"] == "recovered_across_deadline"
+                and not committed_recovery_boundary(trade, position_id, deadline, placed, terminal)):
+            result["refusal"] = "unknown"
     if terminal.get("outcome") == "cancel" and trade["close_reason"] == "never_filled" and trade["closed_at"]:
         close_ms = utc_ms(utc(trade["closed_at"]))
         if (position is not None or not placed <= close_ms < censor_at_ms or trade["exit_price"] is not None
                 or has_number(evaluated) and not placed <= evaluated <= close_ms):
             return result | {"coverage_issue": "cancellation_unreconciled"}
-        if result["refusal"] == "unknown" and has_number(deadline) and deadline > placed:
+        if result["refusal"] == "unknown" and deadline_known:
             result["refusal"] = stored_refusal(trade, position_id, deadline, placed, close_ms)
         reason = trade["unfilled_reason"] or ""
         if ("engine stop" in reason or "reset" in reason or "flatten" in reason):
@@ -274,7 +310,7 @@ def grade_trade(receipt, trade, position, censor_at_ms, captured_at_ms):
     result["outcome"] = "filled"
     quote_arrived = terminal.get("quoteArrivedAtMs")
     result["quote_arrived_at_ms"] = quote_arrived
-    if (not has_number(deadline) or deadline <= placed or not has_number(quote_arrived)
+    if (position_clocks_conflict or not deadline_known or not has_number(quote_arrived)
             or not placed < quote_arrived <= evaluated
             or trade["side"] not in ("buy", "sell")
             or terminal.get("quoteSide") != {"buy": "ask", "sell": "bid"}[trade["side"]]):
