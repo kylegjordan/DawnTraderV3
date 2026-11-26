@@ -39,6 +39,7 @@ import json
 import os
 import re
 import sys
+import zlib
 from contextlib import contextmanager
 from datetime import datetime, time, timedelta, timezone
 
@@ -154,8 +155,11 @@ def open_log(p):
         reader = gzip.open if p.endswith('.gz') else open
         with reader(p, 'rt', errors='replace') as fh:
             yield fh
-    except (OSError, EOFError) as e:
-        die(f'cannot read {p}: {e}')
+    except (OSError, EOFError, zlib.error) as e:
+        start, end = START, END
+        if MIDNIGHT_FINAL_HOUR is not None and p in (midnight_predecessor, midnight_successor):
+            start, end = END, END + HOUR
+        die(f'cannot read {p}; required coverage [{start.isoformat()}, {end.isoformat()}) is unproven: {e}')
 
 
 # ── (b, continued) the window's FIRST content day is covered from START, judged on CONTENT (Langston, Step-4 r3).

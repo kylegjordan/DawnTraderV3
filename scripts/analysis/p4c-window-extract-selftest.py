@@ -81,10 +81,15 @@ def run(pm2_lines, s1=False, name='error__2026-01-06_00-00-00.log', extra=(), he
                 f.write(body)
         for x in extra:  # further rotation files, empty: only their NAMES matter to the cases that use them
             open(os.path.join(d, x), 'w').close()
-        for x, xl in (files or {}).items():  # further rotation files WITH content (CASE H-prepend)
-            open_file = gzip.open if x.endswith('.gz') else open
-            with open_file(os.path.join(d, x), 'wt', encoding='utf-8') as f:
-                f.write('\n'.join(xl) + '\n')
+        for x, content in (files or {}).items():  # further rotation files with lines or exact archive bytes
+            path = os.path.join(d, x)
+            if isinstance(content, bytes):
+                with open(path, 'wb') as f:
+                    f.write(content)
+            else:
+                open_file = gzip.open if x.endswith('.gz') else open
+                with open_file(path, 'wt', encoding='utf-8') as f:
+                    f.write('\n'.join(content) + '\n')
         with open(os.path.join(d, 'error.log'), 'w', encoding='utf-8') as f:
             f.writelines(line + '\n' for line in live_lines)
             f.write(live_fragment)
@@ -283,10 +288,19 @@ check_midnight('M-delayed final rollup in the dated-END rotation',
                    live_lines=['2026-01-06 00:01:31 +00:00: [boot] delayed successor', COMPLETE_STAMP],
                    window=MIDNIGHT_WINDOW),
                ['error__2026-01-06_00-01-30.log', 'error.log'])
+next_day_gzip = gzip.compress(('\n'.join(COMPLETE_ROLLUP) + '\n').encode())
 check_midnight('M-gzip final rollup in next-day archive',
-               run([BOOT], name=BOUNDARY_ARCHIVE, lines=PRE_BOUNDARY, files={LATE_ARCHIVE: COMPLETE_ROLLUP},
+               run([BOOT], name=BOUNDARY_ARCHIVE, lines=PRE_BOUNDARY, files={LATE_ARCHIVE: next_day_gzip},
                    live_lines=[LATER_HEAD], window=MIDNIGHT_WINDOW),
                [BOUNDARY_ARCHIVE, LATE_ARCHIVE, 'error.log'])
+# gzip.compress writes the fixed 10-byte header. Set the first DEFLATE block type to reserved.
+corrupt_gzip = next_day_gzip[:10] + bytes([next_day_gzip[10] | 0x06]) + next_day_gzip[11:]
+code, out, err = run([BOOT], name=BOUNDARY_ARCHIVE, lines=PRE_BOUNDARY, files={LATE_ARCHIVE: corrupt_gzip},
+                     live_lines=[LATER_HEAD], window=MIDNIGHT_WINDOW)
+missing_interval = '[2026-01-06T00:00:00+00:00, 2026-01-06T01:00:00+00:00)'
+check('M-corrupt selected gzip refuses with the source and open interval',
+      code == 2 and not out and LATE_ARCHIVE in err and missing_interval in err and 'Traceback' not in err,
+      (code, bool(out), err.strip()))
 late_plain = LATE_ARCHIVE.removesuffix('.gz')
 check_midnight('M-alias matching plain and gzip copies are read once',
                run([BOOT], name=BOUNDARY_ARCHIVE, lines=PRE_BOUNDARY,
