@@ -74,3 +74,13 @@ And the type is the first wall: with the entry type side-free, re-adding the `||
 - **FINDING-3:** the extract asserts the PM2 log reaches the window start and publishes its first stamp; re-run on staging unchanged.
 - **FINDING-4:** S28's stale line refs — Step-10 debt, listed.
 - **NIT-5:** the real lane's unread `symbol` dropped; both lanes declare `{ price; rawQuote }`.
+
+## Row 8a #1250 — midnight report repair, Step 3
+
+**Class:** architecture under the parent batch. **Step 2:** Coltrane PROCEED at 11:04:41 UTC on November 26 at `792a51f8743dd77dd95fa48f78010ad8ff520b71`. The approved draft is `B_PRICE_SIDE_BY_JOB_8A_P4C_MIDNIGHT_END_PRE_AUDIT.md`.
+
+- `scripts/analysis/p4c-window-extract.py` preserves the existing in-window source range. A midnight end also reads the next-date archive when present, with the existing split and alias treatment and chronological order. The live file remains a single source before delayed rotation. A missing required in-window archive cannot be inferred from a later file.
+- The reader checks exact lane and final-hour rollup coverage before producing JSON. A positive final-hour pass in a non-excluded lane requires that lane's rollup. A surviving date stamp, another lane's rollup or a later hour is insufficient. Restart exclusions, stream-order assignment at hour boundaries and the optional stamp cut retain their meaning.
+- `scripts/analysis/p4c-window-extract-selftest.py` runs 12 added assertions. The two-hour 4/9-look corpus covers live, delayed and next-date gzip, aliases/split and missing in-window file, lost rollup despite alternate evidence, restarts, quiet and straddled passes, and the nine-look stamp-control gap. The exact pre-fix extractor failed the new discovery and coverage cases. The implementation passed 38/38 total checks locally. Removing next-date discovery failed 3 controls, removing the coverage refusal failed 2, admitting the next hour failed the wrong-rollup control, and the date-bound-only variant failed the valid live case.
+
+**Judgment call for Step 4:** a lane with positive final-hour looks and no eligible rollup exits 2 before stdout. If some lines survive, existing per-cell equality still judges their count. Review the sibling/later-rollup interleaving and restart exclusion at the exact code ref. Run the controlled read before the next midnight-ended report. The #1250 issue amendment and plan row 17 carry close evidence at governance.

@@ -630,3 +630,7 @@ CHANGE-CLASS: architecture
 **NEXT: Step 11** — Langston (or Coltrane) confirms this increment's record; the parent stays open for `8c`, `#1250` and the KD-19 entry leg.
 
 **✅ STEP 11 CONFIRMED by Langston 2026-11-13 (Discord `1570834226595766403`), everything re-derived by him at `dc18a0228` and on staging** (1,652/1,652 priced selected rows carry `exitWalk`; 3/3 unpriced carry none; epochs live 8 and 11). His one condition, folded the same turn: the parent's `GOVERNANCE_EXCEPTIONS` open row amended in place (above). His two notes, folded: the completion-report cell reads SUSPENDED, not ✅; `MISTAKE_PATTERNS` carries the full correct sha. **At the parent's close: flip every `B-PRICE-SIDE-BY-JOB` open row to `open-retired` BEFORE resolving `1ae9a06b`.** The KD-19 exit increment is done; the parent stays open for `8c`, `#1250` and the KD-19 entry leg.
+
+## #1250 midnight report repair — Step 3, 2026-11-26
+
+Coltrane cleared the row 8a audit and plan at `792a51f8743dd77dd95fa48f78010ad8ff520b71` at 11:04:41 UTC. The reader now looks in both the live file and the correct archived file for the final hour. If a lane had looks and its final rollup is missing, the reader refuses with a clear error. Another lane's or hour's rollup cannot cover the gap. 38/38 local checks pass, and the four mutation controls confirmed the new tests discriminate. See the Midnight END Pre-Audit and the row 8a section in the 8a-P4c Increment 2 Change List. Step 4 review and a controlled read remain before the next midnight-ended report.

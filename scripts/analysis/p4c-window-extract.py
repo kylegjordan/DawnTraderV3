@@ -39,7 +39,7 @@ import json
 import os
 import re
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, time, timedelta, timezone
 
 ap = argparse.ArgumentParser()
 ap.add_argument('--dir', default='/var/log/dawntrader')
@@ -62,6 +62,7 @@ S1_FROZEN_BRACKET = [0.0044, 0.0232]
 TS = re.compile(r'^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) \+00:00: ')
 KV = re.compile(r'(\w+)=(\[[^\]]*\]|\S+)')
 HOUR = timedelta(hours=1)
+MIDNIGHT_FINAL_HOUR = END - HOUR if END.time() == time.min else None
 
 
 def die(msg):
@@ -80,10 +81,9 @@ def val(v):
 
 # ── (b) the rotations this range REQUIRES. `error__<D>_<HH-MM-SS>.log` is rotated at the first run after D 00:00Z and
 # holds day D-1 (content day C is read from the rotation dated C+1), so the window needs the rotations dated
-# day(start)+1 .. last_content+1, where last_content = day(end - 1 µs) — for a midnight-aligned end that is day(end), not
-# day(end)+1. The last one may not exist yet, in which case the live `error.log` holds it. The live file is always read
-# too, for the flush of the window's final hour (stamped after `end`); once that day rotates, a flush stamped on content
-# day day(end) sits in a rotation outside this set (Langston's second r3 residual, homed on row 8a, owner CC-C).
+# day(start)+1 .. last_content+1, where last_content = day(end - 1 µs). The last one may not exist yet, in which case the
+# live `error.log` holds it. A midnight END can put the last hour's rollup into the next content day's archive after that
+# day rotates. Include that source separately, so one live file can still cover both days before the first rotation.
 # B-DISK-FILE-TIERING P9: pm2-logrotate named every rotation `_00-00-00`; the system logrotate that replaced it names it
 # with the real run instant and compresses it one rotation later (.log -> .log.gz). So a day is found by a date glob,
 # keyed by its base name (.gz stripped, the plain file preferred while both exist).
@@ -105,6 +105,7 @@ def names(bs):
 
 
 required = []
+live = os.path.join(args.dir, 'error.log')
 c = START.date()
 last_content = (END - timedelta(microseconds=1)).date()
 while c <= last_content:
@@ -118,13 +119,25 @@ while c <= last_content:
             f'refused rather than read part of {c}')
     if dated_next:
         p = dated_next[0] if os.path.exists(dated_next[0]) else dated_next[0] + '.gz'
-    elif c == last_content and os.path.exists(os.path.join(args.dir, 'error.log')):
-        p = os.path.join(args.dir, 'error.log')
+    elif c == last_content and os.path.exists(live):
+        p = live
     else:
         die(f'required rotation for {nxt} (content day {c}) is missing in {args.dir} (neither .log nor .log.gz)')
     required.append(p)
     c = nxt
-live = os.path.join(args.dir, 'error.log')
+if MIDNIGHT_FINAL_HOUR is not None:
+    # The in-window loop already rejected competing rotations dated END. Apply the same split rule to END+1.
+    following_day = END.date() + timedelta(days=1)
+    following = bases(following_day)
+    if len(following) > 1:
+        die(f'content day {END.date()} is split: more than one rotation is dated {following_day} in {args.dir}: '
+            f'{names(following)} — refused rather than read part of the midnight rollup source')
+    if following:
+        if live in required:
+            die(f'required in-window rotation dated {END.date()} is missing in {args.dir}; '
+                f'live cannot replace it after the {following_day} rotation')
+        archived = following[0]
+        required.append(archived if os.path.exists(archived) else archived + '.gz')
 if live not in required:
     if not os.path.exists(live):
         die(f'{live} missing — it holds the flush of the window\'s final hour')
@@ -228,6 +241,8 @@ sym_by_hour = {}   # (lane, hour, session) -> looks
 first_line = {}    # lane -> first instrument-line stamp
 excluded = set()   # (lane, hour) excluded by a restart
 lost_touch = {}    # lane -> looks attributed to no hour (pending at a restart)
+final_hour_looks = set()    # lane with positive in-window looks not assigned to a preceding hour
+final_hour_rollups = set()  # lanes whose exact final-hour rollup was read, independent of the optional stamp cut
 ri = 0
 
 
@@ -278,11 +293,19 @@ for f in required:
                     p[kv['session']] = p.get(kv['session'], 0) + kv['looks']
                     cur_flush.pop(lane, None)
                 inside = START_S <= t < END
+                if MIDNIGHT_FINAL_HOUR is not None and inside and t >= MIDNIGHT_FINAL_HOUR and kv['looks'] > 0:
+                    final_hour_looks.add(lane)
             elif '[VTS_XS_SYM]' in line:
                 h = datetime.strptime(kv['hour'], '%Y-%m-%dT%HZ').replace(tzinfo=timezone.utc)
                 if h + HOUR > START and h < END + HOUR:
                     first_line.setdefault(lane, t)
                     if cur_flush.get(lane) != h:  # first line of this lane's flush block for hour h
+                        if MIDNIGHT_FINAL_HOUR is not None:
+                            # A pass can finish just after the hour boundary, before the prior hour's flush.
+                            if h < MIDNIGHT_FINAL_HOUR:
+                                final_hour_looks.discard(lane)
+                            elif h == MIDNIGHT_FINAL_HOUR:
+                                final_hour_rollups.add(lane)
                         for s, n in pend.get(lane, {}).items():
                             touch_by_hour[(lane, h, s)] = touch_by_hour.get((lane, h, s), 0) + n
                         pend[lane] = {}
@@ -314,6 +337,13 @@ for f in required:
 while ri < len(restarts):
     apply_restart(restarts[ri])
     ri += 1
+
+if MIDNIGHT_FINAL_HOUR is not None:
+    for lane in sorted(final_hour_looks - final_hour_rollups):
+        if (lane, MIDNIGHT_FINAL_HOUR) not in excluded:
+            source_names = [os.path.basename(path) for path in required]
+            die(f'final-hour rollup missing for {lane} at {MIDNIGHT_FINAL_HOUR.isoformat()} despite observed looks; '
+                f'read {source_names}')
 
 out = {'window': [START.isoformat(), END.isoformat()], 'sym_cut': args.sym_cut, 'first_line': str(first_ts),
        'last_line': str(last_ts), 'files': per_file, 'unparsed_ts': bad,

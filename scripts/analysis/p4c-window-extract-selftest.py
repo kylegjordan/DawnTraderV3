@@ -70,26 +70,28 @@ def corpus(s1=False):
 HEAD = '2026-01-05 00:01:41 +00:00: [boot] unrelated process output'
 
 
-def run(pm2_lines, s1=False, name='error__2026-01-06_00-00-00.log', extra=(), head=True, files=None, lines=None):
+def run(pm2_lines, s1=False, name='error__2026-01-06_00-00-00.log', extra=(), head=True, files=None, lines=None,
+        live_lines=(), window=(START, END), sym_cut='hour'):
     with tempfile.TemporaryDirectory() as d:
         src = corpus(s1) if lines is None else lines
         body = ('\n'.join(([HEAD] if head and lines is None else []) + src) + '\n').encode()
-        if name.endswith('.gz'):
-            with gzip.open(os.path.join(d, name), 'wb') as f:
-                f.write(body)
-        else:
-            with open(os.path.join(d, name), 'wb') as f:
+        if name:
+            open_file = gzip.open if name.endswith('.gz') else open
+            with open_file(os.path.join(d, name), 'wb') as f:
                 f.write(body)
         for x in extra:  # further rotation files, empty: only their NAMES matter to the cases that use them
             open(os.path.join(d, x), 'w').close()
         for x, xl in (files or {}).items():  # further rotation files WITH content (CASE H-prepend)
-            with open(os.path.join(d, x), 'w') as f:
+            open_file = gzip.open if x.endswith('.gz') else open
+            with open_file(os.path.join(d, x), 'wt', encoding='utf-8') as f:
                 f.write('\n'.join(xl) + '\n')
-        open(os.path.join(d, 'error.log'), 'w').close()
+        with open(os.path.join(d, 'error.log'), 'w', encoding='utf-8') as f:
+            f.writelines(line + '\n' for line in live_lines)
         pm2 = os.path.join(d, 'pm2.log')
         with open(pm2, 'w') as f:
             f.write('\n'.join(pm2_lines) + '\n')
-        r = subprocess.run([sys.executable, EXTRACT, '--dir', d, '--pm2-log', pm2, '--start', START, '--end', END],
+        r = subprocess.run([sys.executable, EXTRACT, '--dir', d, '--pm2-log', pm2,
+                            '--start', window[0], '--end', window[1], '--sym-cut', sym_cut],
                            capture_output=True, text=True)
         return r.returncode, r.stdout, r.stderr
 
@@ -227,6 +229,107 @@ code, out, err = run([BOOT, RS], head=False, files={'error__2026-01-05_00-01-40.
 check('H-gap exit 2: a prepended rotation whose content ends before START does not cover it',
       code == 2 and 'is not covered' in err and 'ends at 2026-01-05 00:01:39+00:00' in err and 'missing' in err
       and HS in err, (code, err.strip()[-300:]))
+
+# #1250: move an identical final-hour rollup between the three legitimate file layouts. A surviving UTC date stamp,
+# a different lane's final rollup and this lane's later rollup must not stand in for the required final-hour evidence.
+MIDNIGHT_WINDOW = ('2026-01-05T22:00:00Z', '2026-01-06T00:00:00Z')
+MIDNIGHT_HEAD = '2026-01-05 21:59:59 +00:00: [boot] evidence starts before the window'
+BOUNDARY_STAMP = '2026-01-06 00:00:01 +00:00: [boot] unrelated post-boundary line'
+LATER_HEAD = '2026-01-07 00:01:00 +00:00: [boot] later live file'
+BOUNDARY_ARCHIVE = 'error__2026-01-06_00-00-05.log'
+LATE_ARCHIVE = 'error__2026-01-07_00-00-03.log.gz'
+ZEROES = 'ageOver=[0,0,0,0,0] refused=[0,0,0,0,0]'
+
+
+def midnight_touch(receipt, looks):
+    return f'{receipt} +00:00: [8a-P4c][VTS_XS_TOUCH] lane=vts session=regular looks={looks} {ZEROES}'
+
+
+def midnight_sym(receipt, hour, looks, lane='vts'):
+    return (f'{receipt} +00:00: [8a-P4c][VTS_XS_SYM] lane={lane} hour={hour} session=regular '
+            f'symbol=AAA/USD looks={looks} {ZEROES}')
+
+
+EARLY_TOUCH = midnight_touch('2026-01-05 22:01:00', 4)
+EARLY_ROLLUP = midnight_sym('2026-01-05 23:00:06', '2026-01-05T22Z', 4)
+FINAL_TOUCH = midnight_touch('2026-01-05 23:02:00', 9)
+FINAL_ROLLUP = midnight_sym('2026-01-06 00:00:06', '2026-01-05T23Z', 9)
+PRE_BOUNDARY = [MIDNIGHT_HEAD, EARLY_TOUCH, EARLY_ROLLUP, FINAL_TOUCH, BOUNDARY_STAMP]
+
+
+def check_midnight(name, result, expected_files, cells=2, gap=0):
+    code, out, err = result
+    if code == 0:
+        report = json.loads(out)
+        lane = report['lanes']['vts']
+        equality = lane['hour_equality']
+        got = (code, [f['file'] for f in report['files']], equality['hours_in_window'], equality['cells_graded'],
+               equality['holds'], lane['looks_by_session']['regular']['touch_minus_sym'])
+    else:
+        got = (code, err.strip())
+    check(name, got == (0, expected_files, cells, cells, True, gap), got)
+
+
+check_midnight('M-live one unrotated file spans midnight',
+               run([BOOT], name=None, live_lines=PRE_BOUNDARY + [FINAL_ROLLUP], window=MIDNIGHT_WINDOW),
+               ['error.log'])
+check_midnight('M-delayed final rollup in the dated-END rotation',
+               run([BOOT], name='error__2026-01-06_00-01-30.log', lines=PRE_BOUNDARY + [FINAL_ROLLUP],
+                   live_lines=[LATER_HEAD], window=MIDNIGHT_WINDOW),
+               ['error__2026-01-06_00-01-30.log', 'error.log'])
+check_midnight('M-gzip final rollup in next-day archive',
+               run([BOOT], name=BOUNDARY_ARCHIVE, lines=PRE_BOUNDARY, files={LATE_ARCHIVE: [FINAL_ROLLUP]},
+                   live_lines=[LATER_HEAD], window=MIDNIGHT_WINDOW),
+               [BOUNDARY_ARCHIVE, LATE_ARCHIVE, 'error.log'])
+late_plain = LATE_ARCHIVE.removesuffix('.gz')
+check_midnight('M-alias matching plain and gzip copies are read once',
+               run([BOOT], name=BOUNDARY_ARCHIVE, lines=PRE_BOUNDARY,
+                   files={late_plain: [FINAL_ROLLUP], LATE_ARCHIVE: [FINAL_ROLLUP]},
+                   live_lines=[LATER_HEAD], window=MIDNIGHT_WINDOW),
+               [BOUNDARY_ARCHIVE, late_plain, 'error.log'])
+check_midnight('M-stamp control keeps source coverage and exposes the nine-look selection gap',
+               run([BOOT], name=BOUNDARY_ARCHIVE, lines=PRE_BOUNDARY, files={LATE_ARCHIVE: [FINAL_ROLLUP]},
+                   live_lines=[LATER_HEAD], window=MIDNIGHT_WINDOW, sym_cut='stamp'),
+               [BOUNDARY_ARCHIVE, LATE_ARCHIVE, 'error.log'], gap=9)
+
+code, out, err = run([BOOT], name=BOUNDARY_ARCHIVE, lines=PRE_BOUNDARY,
+                     live_lines=[LATER_HEAD], window=MIDNIGHT_WINDOW)
+check('M-missing exit 2 with no output when a date stamp survives but the final rollup is lost',
+      code == 2 and not out and 'final-hour rollup' in err and 'vts' in err, (code, bool(out), err.strip()))
+
+shadow_final = midnight_sym('2026-01-06 00:00:06', '2026-01-05T23Z', 9, lane='shadow')
+vts_next_hour = midnight_sym('2026-01-06 01:00:06', '2026-01-06T00Z', 9)
+code, out, err = run([BOOT], name=BOUNDARY_ARCHIVE, lines=PRE_BOUNDARY,
+                     live_lines=[shadow_final, vts_next_hour], window=MIDNIGHT_WINDOW)
+check('M-wrong-rollups exit 2 with no output despite sibling-lane and later-hour rollups',
+      code == 2 and not out and 'final-hour rollup' in err and 'vts' in err, (code, bool(out), err.strip()))
+
+code, out, err = run([BOOT], name=BOUNDARY_ARCHIVE, lines=PRE_BOUNDARY,
+                     files={LATE_ARCHIVE: [FINAL_ROLLUP]}, extra=('error__2026-01-07_01-00-00.log',),
+                     live_lines=[LATER_HEAD], window=MIDNIGHT_WINDOW)
+check('M-split exit 2 on multiple distinct next-day rotations',
+      code == 2 and not out and 'more than one rotation is dated 2026-01-07' in err, (code, bool(out), err.strip()))
+
+code, out, err = run([BOOT], name=None, files={LATE_ARCHIVE: [FINAL_ROLLUP]},
+                     live_lines=[LATER_HEAD], window=MIDNIGHT_WINDOW)
+check('M-missing-window refuses the lost in-window day even when the following archive is present',
+      code == 2 and not out and 'required in-window rotation dated 2026-01-06 is missing' in err,
+      (code, bool(out), err.strip()))
+
+midnight_restart = '2026-01-06T00:00:03: PM2 log: App [dawntrader:0] starting in -fork mode-'
+check_midnight('M-restart exclusion legitimately needs no final rollup',
+               run([BOOT, midnight_restart], name=BOUNDARY_ARCHIVE, lines=PRE_BOUNDARY,
+                   live_lines=[LATER_HEAD], window=MIDNIGHT_WINDOW),
+               [BOUNDARY_ARCHIVE, 'error.log'], cells=1, gap=9)
+check_midnight('M-quiet earlier activity does not require a final rollup',
+               run([BOOT], name=BOUNDARY_ARCHIVE, lines=[MIDNIGHT_HEAD, EARLY_TOUCH, EARLY_ROLLUP, BOUNDARY_STAMP],
+                   live_lines=[LATER_HEAD], window=MIDNIGHT_WINDOW),
+               [BOUNDARY_ARCHIVE, 'error.log'], cells=1)
+straddled = midnight_touch('2026-01-05 23:00:02', 4)
+check_midnight('M-straddle earlier pass stamped in final hour is attributed to its earlier flush',
+               run([BOOT], name=BOUNDARY_ARCHIVE, lines=[MIDNIGHT_HEAD, straddled, EARLY_ROLLUP, BOUNDARY_STAMP],
+                   live_lines=[LATER_HEAD], window=MIDNIGHT_WINDOW),
+               [BOUNDARY_ARCHIVE, 'error.log'], cells=1)
 
 print('SELFTEST ' + ('FAILED: ' + ', '.join(fails) if fails else 'OK — all expectations met'))
 sys.exit(1 if fails else 0)
