@@ -156,3 +156,17 @@ Git Bash syntax passed. The isolated shell run replaced the log file path and st
 Coltrane accepted the credential-free GET and sent back `cd3fe914576a85ab12a96da3e05c54875fc737a2` at 2026-11-26 12:31:10 UTC. curl can send a localhost URL through an inherited HTTP proxy. The sampler now explicitly bypasses proxies for localhost.
 
 Real curl against two isolated loopback listeners: without a proxy, the prior script made 5 direct requests and measured lag 19. With the fixture proxy enabled, the prior script made 0 direct and 5 proxy requests and measured the proxy's lag 57. The corrected script made 5 direct and 0 proxy requests and measured lag 19 with the proxy enabled and with it absent. The fixture substituted only the local port and log path and skipped sleep. Neither server received an Authorization header. The HTTP, malformed JSON, missing lag and planted-login controls were also rerun.
+
+### P7a Step 4 approval
+
+Coltrane approved `71671b3952ea762e55f16ad9f322529130e63458` on base `879108a572cf622bb9acb09d91f61d8e02703882` for shared placement only at 2026-11-26 12:36:13 UTC. His independent local two-listener control reproduced the proxy diversion at the prior ref and five correct loopback samples at the candidate with either proxy setting. HTTP 503, malformed JSON and missing lag each ended after one read with no sample. Step 5 will verify the shared branch run. Seeder Step 6, staging and installation stay held.
+
+### P7a placement confirmation
+
+At 2026-11-26 12:52:30 UTC COLTRANE confirmed exact rebased candidate `ac8afdd5a20f69fa7d2b1c97f134ba6540af8572` on `28036b4f997cc371fc25f5a7b5155a103aec2c53`, subject to four green jobs on that base. NEW's intervening commit changed only its own memory and silent-strategy progress report. The three changed paths, modes and before/after blobs match the approval at `71671b3952ea762e55f16ad9f322529130e63458`.
+
+An equally bounded documentation-only advance may carry the same approval following current ancestry and overlap checks, complete exact diff equality, and four green shared-base jobs before a fast-forward push. Any changed code, overlapping path, changed evidence or non-green result returns to Coltrane. Step 5 grades the resulting shared SHA per job.
+
+### P7a Step 5 shared CI
+
+The exact confirmed P7a placement `ac8afdd5a20f69fa7d2b1c97f134ba6540af8572` landed from base `28036b4f997cc371fc25f5a7b5155a103aec2c53` after base run `45823250551` passed all four jobs and the complete placement diff matched the approved paths, modes and blobs. [Shared CI run 45825696290](https://github.com/kylegjordan/DawnTraderV3/actions/runs/45825696290) then passed TypeScript Check, Test Suite, Build and Docker Build at the exact placement. Return to the held P6 Step 6 staging boundary at clearance. The two November 27 Token Watch reads remain scheduled.
