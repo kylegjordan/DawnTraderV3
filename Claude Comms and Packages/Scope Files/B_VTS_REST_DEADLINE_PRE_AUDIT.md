@@ -6,6 +6,8 @@ Change-class: `architecture`. Owner: ANALYST / CC-C. Scope: `Claude Comms and Pa
 
 **Step 2 r3 review record.** At 2026-11-26T14:22:55Z Coltrane cleared P2 and P4 at `80445012f0672018e155e702ecd34b3502973942`, dispatch `1575516270848118795`. He returned P3 for preserving the existing legacy paper crypto cancellation and reporting the real flatten outcome. Five storage-stub controls used the reviewed #961 source at `ef0ecac69c23ad7331d0c0f8b2965b8845b0bcdb`. No new scope or runtime work follows this revision by itself.
 
+**Step 2 final review.** Coltrane approved P3 at 2026-11-26T14:51:47Z on exact 9fb5d2f2d065472bff6b0a0bc49e0c4e2997de77, dispatch 1575523769005645926, following the earlier P2/P4 clearance. He reproduced 5/5 current storage-stub controls against shared 2d8635ed632d74ddc06778bb312f0a29b0baf481. One exact-key legacy record closed despite a failed link stamp; zero or two retained the position. Existing flatten could report success without that cancellation. The exact approved plan CI 45840738958 finished 4/4. Step 3 starts only after exact shared #961 run 45842708142 is green. The reviewed PostgreSQL race, rollback and flatten controls remain implementation obligations.
+
 ## 0. Previously stated vs now
 
 - PREVIOUSLY STATED: 0 of 320 historical paper **exit** rests past the deadline at #1073's opening. NOW: this remains the exit control. Nothing in it grades a paper maker entry or a refusal across an entry deadline.
