@@ -129,3 +129,24 @@ The approved source landed unchanged on `migration/aws-supabase`. The staging an
 ### Step 5 shared CI
 
 Shared branch run [45811996599](https://github.com/kylegjordan/DawnTraderV3/actions/runs/45811996599) passed all four jobs at `cdcac173f3366430c6f010e9c11159499e1506eb`: TypeScript Check, Test Suite, Build and Docker Build. OBJ-2 remains open beyond this increment. Step 6 waits for staging clearance. The Token Watch observation times and Token Economy install gates remain in force.
+
+## Independent OBJ-2/P6 increment: P7a price-side baseline
+
+**Scope and Step 2:** B-CREDENTIALS-PRIVATE-REPO, non_architecture. The same Scope, Pre-audit, Batch Catalog and Phase History rows above apply. The completion report is due at parent close. The Step 2 reference for this increment is the approved pre-audit section 2.3 item 3 and Group E/E5, which names the P7a helper.
+
+### P7a implementation
+
+The original helper performed one login using a retired pair, then read the loopback metrics snapshot five times. The route is registered at `server/routes.ts:511` and mounted at `server/index.ts:477-480`. Its existing observation logger uses the same GET without supplying authorization (`server/scripts/phase7-observation-logger.ts:8-9,29-33`). The P7a helper now uses that loopback GET directly. The route and its middleware are unchanged. The Group E reader listed dt-api or required environment input for authenticated reads. At this route, the narrower loopback GET avoids an unnecessary login entirely. Step 4 is asked to rule on that choice.
+
+**MODIFIED `scripts/analysis/b_price_side_p7a_baseline.sh`:** The explicit login and caller-held token are gone. The existing log reads, lag output and five samples spaced ten seconds apart are preserved. A failed request exits before parsing or labelling a sample. Malformed JSON or a response missing the requested lag exits without echoing the body or printing a sample marker.
+
+```bash
+for i in 1 2 3 4 5; do
+  snapshot=$(curl --fail --silent --show-error http://localhost:5000/api/metrics/snapshot) || exit $?
+  printf '%s' "$snapshot" | python3 -c '
+  # The existing lag formatter consumes the JSON from stdin.
+```
+
+Git Bash syntax passed. The isolated shell run replaced the log file path and stubbed curl and sleep. Success produced five exact GETs, five timestamped samples and both expected lag fields per sample. Injected HTTP failure, malformed JSON, and a valid response missing the lag field each stopped on the first request with no sample. A planted login call was caught before it could reach a server. The historical-value check found one match in the baseline helper and none in the candidate helper without printing the value. This is source verification with no staging run, app deploy or restart.
+
+`REVIEWER: claim-only | Can the existing endpoint and supported caller preserve genuine samples without a login? | Found that an empty JSON object could look like a completed sample if counted by timestamp alone | re-derived y`. The amended fixture requires the existing route's eventLoopLag field and verifies actual lag values as well as markers.
