@@ -852,13 +852,13 @@ export async function processResurface(
 ): Promise<ResurfaceResult[]> {
   const out: ResurfaceResult[] = [];
   for (const d of computeResurfaceStale(readAllAlerts(), nowMs)) {
-    if (defer?.(d.alert)) {
-      out.push({ id: d.alert.id, delivered: false, skipped: 'deferred' });
-      continue;
-    }
     const fresh = readAllAlerts().find((a) => a.id === d.alert.id);
     if (!fresh || fresh.state === 'resolved') {
       out.push({ id: d.alert.id, delivered: false, skipped: 'resolved' });
+      continue;
+    }
+    if (defer?.(fresh)) {
+      out.push({ id: d.alert.id, delivered: false, skipped: 'deferred' });
       continue;
     }
     const delivered = await deliver({ ...fresh }, d);

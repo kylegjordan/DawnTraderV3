@@ -152,6 +152,33 @@ describe('B-ALERT-PROTOCOL processResurface (delivery-gated back-off — the Ste
     expect(r.find((x: any) => x.id === a2.id)?.skipped).toBe('resolved');
     expect(r.find((x: any) => x.id === a2.id)?.delivered).toBe(false);
   });
+
+  it('applies delivery deferral to the current row after an acknowledgement or resolution', async () => {
+    const mod = await load();
+    const first = await staleAlert(mod);
+    const acknowledged = await staleAlert(mod);
+    const resolved = await staleAlert(mod);
+    const deferred = await staleAlert(mod);
+    const listed = new Set([acknowledged.id, resolved.id, deferred.id]);
+    const results = await mod.processResurface(NOW, async (alert) => {
+      if (alert.id === first.id) {
+        await mod.ackAlert(acknowledged.id, 'codex-c');
+        await mod.resolveAlert(resolved.id, 'codex-c', 'NO-EVIDENCE-GIVEN', 'cli');
+      }
+      return true;
+    }, (alert) => listed.has(alert.id) && alert.state === 'active');
+
+    expect(results).toEqual([
+      { id: first.id, delivered: true },
+      { id: acknowledged.id, delivered: true },
+      { id: resolved.id, delivered: false, skipped: 'resolved' },
+      { id: deferred.id, delivered: false, skipped: 'deferred' },
+    ]);
+    const byId = new Map(mod.readAllAlerts().map((alert) => [alert.id, alert]));
+    expect(byId.get(acknowledged.id)?.metadata.resurface_count).toBe(1);
+    expect(byId.get(resolved.id)?.metadata.resurface_count).toBeUndefined();
+    expect(byId.get(deferred.id)?.metadata.resurface_count).toBeUndefined();
+  });
 });
 
 describe('B-ALERT-PROTOCOL markResurfaced', () => {

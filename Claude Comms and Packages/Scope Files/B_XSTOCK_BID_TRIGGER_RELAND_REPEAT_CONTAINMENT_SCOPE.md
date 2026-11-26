@@ -19,6 +19,9 @@ Progress Report has the full incident evidence, crypto controls and source.
 The 450 recorded first deliveries preceded this hold. Of these, 83 became
 eligible to repeat at 21:12:26Z. Draining a running dispatcher invocation is
 ordinary service behavior and does not establish that containment works.
+The two ordinary runs eventually sent 449 of 450 original repeats and one
+original resolved. The next repeat eligibility is Nov 27 at 08:57:33Z for
+366 IDs and 09:12:33Z for 83, subject to the following timer tick.
 
 The permanent P3 plan groups future attempts only with positive incident
 evidence. The original alerts lack that evidence and need a separate,
@@ -29,6 +32,8 @@ newline. Its digest is
 The dispatcher reads it only if the deployment environment names it and the
 bytes match exactly. It can defer only resurface of active warning/breakage
 rows with the VTS no-decision key and an exact ID in the verified manifest.
+That decision uses the fresh row after the resolved check, so acknowledgement
+or resolution during an earlier send preserves ordinary handling.
 First promotions, other IDs including new VTS warnings, unpriced closes,
 acknowledgement, resolution, raw exposure and ordinary retry clocks retain
 their current treatment. Deferred IDs neither post nor advance their delivery
@@ -74,4 +79,8 @@ each posted once: first warning, unrelated no-decision repeat, PDD unpriced
 repeat and independent critical repeat. Separate one-ID fixtures for an
 absent manifest, changed manifest and the exact cutoff all used normal
 delivery, with the successful resurface recorded. The original resurface,
-actor allowlist and governance evidence suites passed 42 of 42.
+actor allowlist and governance evidence suites include a concurrency regression.
+In a four-row bundled replay, the first send changed two later records. A
+newly acknowledged warning delivered, a newly resolved warning was skipped,
+and the remaining listed active warning was deferred with its row unchanged.
+The preceding bundle deferred all three and failed the same regression.
