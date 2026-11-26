@@ -216,3 +216,30 @@ fi
 REVIEWER: claim-only · supplied caller sign-in and benchmark contract · HIT — the initial candidate lost the accessToken-only response · re-derived y, both previous names and their priority preserved.
 
 **Step 4 question.** Check the caller contract, the sign-in boundary and the unchanged benchmark result contract at the exact ref. The review scope is the Phase 3C source and its record. P6/P7a Step 6 waits for staging clearance. Both November 27 Token Watch reads stay armed.
+
+### Phase 3C Step 4 corrections
+
+Coltrane returned CHANGES NEEDED at 2026-11-26 14:11:50 UTC on `59a284498fc461b570febdec7098160f86de783e`. The first candidate accepted an HTTP 302 with a token, a token string equal to `null` and a NUL-only token. It also let curl read a local config that could turn on request tracing.
+
+The corrected login requires a 2xx status, one JSON body and a nonempty token without control characters or the old `null` sentinel. The two existing token field names and their preference still apply. Both curl commands put `-q` first to skip curl configuration files. The benchmark disables shell tracing before reading credential settings.
+
+```bash
+# Keep credentials out of shell traces.
+set +x
+set -e -o pipefail
+
+# ...
+
+jq -cn '{username: env.USERNAME, password: env.PASSWORD}' |
+  curl -q -fsS --header 'Content-Type: application/json' --data-binary @- \
+    --write-out '\n%{http_code}' "$BASE_URL/api/auth/login" |
+  jq -eRrs '
+    select(.[-4:-3] == "\n" and (.[-3:] | test("^2[0-9]{2}$")))
+    | .[:-4] | fromjson | (.accessToken // .token) | strings
+    | select(length > 0 and . != "null" and (test("[[:cntrl:]]") | not))
+  ' 2>/dev/null
+```
+
+A local fixture with real curl and jq reproduced all three bad acceptances on the first candidate. A planted curl config produced a trace on that candidate, and Bash tracing displayed synthetic credential and token values. On the correction, four successful login field cases each produced ten authenticated reads and ten ordered CSV rows. A separate login round-tripped a synthetic credential with quotes, a backslash and a line break. Four missing or empty setting cases made zero requests. Twelve rejected responses made only the sign-in attempt. All sixteen refusal cases preserved the prior CSV. The corrected runs created no curl trace and exposed no fixture values in the shell trace, normal output or curl arguments. Bash syntax passed.
+
+Re-review is for exact source placement. P6/P7a Step 6 and the two November 27 Token Watch reads remain recorded.

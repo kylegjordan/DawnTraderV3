@@ -2,6 +2,8 @@
 # Phase 3C: API Latency Benchmark
 # Tests key API endpoints and measures response times
 
+# Keep credentials out of shell traces.
+set +x
 set -e -o pipefail
 
 : "${USERNAME:?Set USERNAME for the benchmark account}"
@@ -19,9 +21,13 @@ OUTPUT_FILE="logs/phase3c-api-latency.csv"
 echo "🔐 Authenticating..."
 if ! TOKEN=$(
   jq -cn '{username: env.USERNAME, password: env.PASSWORD}' |
-    curl -fsS --header 'Content-Type: application/json' --data-binary @- "$BASE_URL/api/auth/login" |
-    jq -ers 'select(length == 1) | .[0] | (.accessToken // .token) | strings |
-             select(length > 0 and (test("[\r\n]") | not))' 2>/dev/null
+    curl -q -fsS --header 'Content-Type: application/json' --data-binary @- \
+      --write-out '\n%{http_code}' "$BASE_URL/api/auth/login" |
+    jq -eRrs '
+      select(.[-4:-3] == "\n" and (.[-3:] | test("^2[0-9]{2}$")))
+      | .[:-4] | fromjson | (.accessToken // .token) | strings
+      | select(length > 0 and . != "null" and (test("[[:cntrl:]]") | not))
+    ' 2>/dev/null
 ); then
   echo "❌ Authentication failed" >&2
   exit 1
@@ -59,7 +65,7 @@ for ENDPOINT in "${ENDPOINTS[@]}"; do
   # Make request and capture timing
   RESPONSE=$(
     printf '%s\n' "Authorization: Bearer $TOKEN" |
-      curl -sS --header @- -w '\n%{http_code}\n%{time_total}' -o /dev/null "$BASE_URL$ENDPOINT"
+      curl -q -sS --header @- -w '\n%{http_code}\n%{time_total}' -o /dev/null "$BASE_URL$ENDPOINT"
   )
 
   HTTP_CODE=$(echo "$RESPONSE" | tail -n 2 | head -n 1)
