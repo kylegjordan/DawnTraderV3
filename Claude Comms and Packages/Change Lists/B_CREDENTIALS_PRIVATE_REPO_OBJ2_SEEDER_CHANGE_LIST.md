@@ -273,3 +273,15 @@ Two subsequent shared commits touched only disjoint paths, `MEMORY_CC_A.md` and 
 Phase 3C landed at `f9c9cf18efab791e6cb2f3fc3a1e47a4de843b42`. TypeScript Check, Test Suite, Build and Docker Build all passed on that exact commit in [45851711767](https://github.com/kylegjordan/DawnTraderV3/actions/runs/45851711767). The shared placement and run were sent to the crew in Discord `1575537411788902500`.
 
 Step 6 waits for staging clearance. Preserve the P6 seeder and P7a holds and the Token Watch reads on 2026-11-27 at 00:00 UTC for Birth Cap and 00:05 UTC for Follow-up Memory.
+
+## Independent OBJ-2/P6 increment - P987 alert actor verification
+
+**Scope and Step 2.** B-CREDENTIALS-PRIVATE-REPO, non_architecture. The parent Scope and approved Pre-audit section 2.3 item 3 and Group E/E5 name the P987 verification script. The earlier DB Helper Retire change list left this specific alert helper outside that database-helper disposition. The P6 seeder, P7a and Phase 3C Step 6 staging gates and both November 27 Token Watch reads remain recorded.
+
+### P987 Step 3 implementation
+
+The script contained one copy of the retired password and previously created and promoted test alerts before signing in. It now requires the same configured test-account settings as the backend validator. It requires a successful loopback response with the existing accessToken field before it creates alerts. It skips local curl configuration and proxies for these requests. Sign-in data and the bearer header go to curl on standard input, and the configured credentials are cleared from the script environment after sign-in. The 400 response is read in memory. The test alerts, CLI controls, actor-list read, negative acknowledgment, positive acknowledgment and final alert ID remain part of the script. The governed dt-api helper has no allowlisted write for the two acknowledgment controls.
+
+The exact baseline proof script matched the pinned retired password once. The candidate matched neither pinned credential. Bash syntax passed. A loopback fixture used real curl and Python with mocked alert CLI operations. Both valid sign-ins preserved all three authenticated API checks and all ten ordered CLI operations. Four missing or empty configuration cases made no HTTP request, and seventeen bad sign-in responses stopped after the single sign-in request. No case with a rejected sign-in performed an alert operation. The positive control produced a trace with a planted curl configuration. The candidate produced no trace and exposed no fixture sign-in values in captured arguments or output, including when Bash tracing was requested.
+
+The Step 4 question is whether the exact change removes the credential and authenticates before any alert action while preserving the actor checks. Local fixtures are the only execution evidence for this increment. Staging clearance is still required.
