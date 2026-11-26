@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   vtsEquityIncidentCohort, VtsFeedIncidentWindows, VTS_FEED_INCIDENT_SAMPLE_MS,
 } from '../../services/vts-feed-incident-windows.js';
+import { VtsIncidentRecoveryWindows } from '../../services/vts-feed-incident-recovery.js';
+import type { SelectedXstockUpdate } from '../../asset_classes/xstock_spot/vts-xs-selected-update.js';
 
 vi.mock('../../services/passive-archive/equity-spot-archiver.js', () => ({
   EQUITY_TICKER_MAX_TRANSPORT_GAP_MS: 15_000,
@@ -76,5 +78,78 @@ describe('#1191 covered VTS feed-incident windows', () => {
     const interrupted = new VtsFeedIncidentWindows();
     observePair(interrupted, symbols.slice(0, 10), { skipSamples: true });
     expect(interrupted.evidenceAtCrossing(firstSymbol, common, feed, 120_000)).toBeNull();
+  });
+});
+
+describe('#1191 recovery uses two covered windows and frozen membership', () => {
+  const watched = symbols.slice(0, 10);
+  const incident = { alertId: 'episode', members: watched.map(symbol => ({ tradeId: `trade:${symbol}`, symbol })) };
+  const gapMs = 15_000;
+  const feedAt = (nowMs: number, generation = 1) => ({ generation, continuousFromMs: 0, lastTransportMs: nowMs, warmedUp: true });
+
+  function update(index: number, atMs: number): SelectedXstockUpdate {
+    return { rowId: String(atMs + index), bootId: 'boot', generation: 1, frameOrdinal: atMs, rowOrdinal: index,
+      receivedAtMs: atMs, selectedAtMs: atMs + 1, acceptedAtMs: atMs + 2 };
+  }
+
+  function pair(recovery: VtsIncidentRecoveryWindows, startMs: number, first: string[], second: string[], beforeSecond?: () => void) {
+    let proof: ReturnType<VtsIncidentRecoveryWindows['sample']> = [];
+    for (let offset = 0; offset <= 120_000; offset += VTS_FEED_INCIDENT_SAMPLE_MS) {
+      const nowMs = startMs + offset;
+      proof = recovery.sample(feedAt(nowMs), nowMs, gapMs);
+      if (offset === 10_000) first.forEach((symbol, index) => recovery.observe(symbol, update(index, nowMs)));
+      if (offset === 80_000) {
+        beforeSecond?.();
+        second.forEach((symbol, index) => recovery.observe(symbol, update(index, nowMs)));
+      }
+    }
+    return proof;
+  }
+
+  it('requires the same eight symbols twice, rather than two totals of eight', () => {
+    const recovery = new VtsIncidentRecoveryWindows();
+    recovery.snapshot([incident], 0);
+    expect(pair(recovery, 0, watched.slice(0, 8), watched.slice(2))).toEqual([]);
+    recovery.snapshot([incident], 125_000);
+    const [proof] = pair(recovery, 125_000, watched.slice(0, 8), watched.slice(0, 8));
+    expect(proof).toMatchObject({ alertId: incident.alertId, startMs: 125_000, boundaryMs: 185_000, endMs: 245_000,
+      members: incident.members, denominator: 10, required: 8, common: watched.slice(0, 8).sort() });
+    expect(proof.first.map(([symbol, look]) => [symbol, look.rowId])).toEqual(watched.slice(0, 8).map((symbol, i) => [symbol, String(135_000 + i)]));
+    expect(proof.second.map(([symbol, look]) => [symbol, look.rowId])).toEqual(watched.slice(0, 8).map((symbol, i) => [symbol, String(205_000 + i)]));
+  });
+
+  it('keeps terminals in the frozen denominator until another attempt and keeps siblings as exact trade IDs', () => {
+    const recovery = new VtsIncidentRecoveryWindows();
+    const sibling = { tradeId: 'same-symbol-sibling', symbol: watched[0] };
+    const withSibling = { ...incident, members: [...incident.members, sibling] };
+    const smaller = { ...incident, members: [...incident.members.slice(0, 8), sibling] };
+    recovery.snapshot([withSibling], 0);
+    expect(pair(recovery, 0, watched.slice(0, 7), watched.slice(0, 7), () => recovery.snapshot([smaller], 80_000))).toEqual([]);
+    recovery.snapshot([smaller], 125_000);
+    const [proof] = pair(recovery, 125_000, watched.slice(0, 7), watched.slice(0, 7));
+    expect(proof).toMatchObject({ denominator: 8, required: 7, members: smaller.members });
+    expect(proof.common).toHaveLength(7);
+  });
+
+  it('excludes reused source identities, timestamps spanning the boundary, and discontinuous coverage', () => {
+    const recovery = new VtsIncidentRecoveryWindows();
+    const one = { ...incident, members: incident.members.slice(0, 1) };
+    recovery.snapshot([one], 0);
+    let result: ReturnType<VtsIncidentRecoveryWindows['sample']> = [];
+    for (let ms = 0; ms <= 120_000; ms += VTS_FEED_INCIDENT_SAMPLE_MS) {
+      result = recovery.sample(feedAt(ms), ms, gapMs);
+      if (ms === 10_000) recovery.observe(watched[0], update(0, ms));
+      if (ms === 60_000) recovery.observe(watched[0], { ...update(0, ms - 1), selectedAtMs: ms + 1, acceptedAtMs: ms + 2 });
+      if (ms === 80_000) recovery.observe(watched[0], { ...update(1, ms), frameOrdinal: 10_000, rowOrdinal: 0 });
+    }
+    expect(result).toEqual([]);
+
+    recovery.snapshot([one], 125_000);
+    expect(pair(recovery, 125_000, [watched[0]], [watched[0]], () => recovery.sample(feedAt(205_000, 2), 205_000, gapMs))).toEqual([]);
+    recovery.snapshot([one], 250_000);
+    expect(recovery.sample(feedAt(250_000), 250_000, gapMs)).toEqual([]);
+    recovery.observe(watched[0], update(0, 255_000));
+    expect(recovery.sample(feedAt(270_000), 270_000, gapMs)).toEqual([]); // invalid gap, even with a current heartbeat
+    expect(recovery.sample(feedAt(370_000), 370_000, gapMs)).toEqual([]);
   });
 });

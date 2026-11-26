@@ -6,6 +6,7 @@ import {
 import { isProvedVtsRefusalCrossing, vtsRefusalReceiptField } from '../core/trading/vts-refusal-evidence.js';
 import type { AlertStoreDraft, SystemAlert } from './system-alerts.js';
 import type { Crossing } from './vts-live-warning.js';
+import { isCoveredVtsIncidentRecovery, type VtsIncidentRecoveryCandidate, type VtsIncidentRecoveryProof } from './vts-feed-incident-recovery.js';
 
 interface IncidentMember {
   tradeId: string;
@@ -38,6 +39,25 @@ function incidentMembers(row: IncidentRow): [field: string, member: IncidentMemb
 export function outstandingVtsIncidentTrades(row: IncidentRow): string[] {
   return incidentMembers(row).flatMap(([, member]) =>
     member.decidedAtMs === undefined && member.closeObservedAtMs === undefined ? [member.tradeId] : []);
+}
+
+export function vtsIncidentRecoveryCandidate(row: IncidentRow): VtsIncidentRecoveryCandidate | null {
+  if (row.metadata.vtsIncidentRecovery) return null;
+  const trades = new Map<string, string>();
+  for (const [, member] of incidentMembers(row)) {
+    if (member.decidedAtMs === undefined && member.closeObservedAtMs === undefined) trades.set(member.tradeId, member.symbol);
+  }
+  if (!trades.size) return null;
+  return { alertId: row.id, members: [...trades].map(([tradeId, symbol]) => ({ tradeId, symbol })) };
+}
+
+/** A positive grade is retained with its frozen population and each linked look. */
+export function saveVtsIncidentRecoveryProof(draft: AlertStoreDraft, proof: VtsIncidentRecoveryProof, atMs: number): boolean {
+  const row = openVtsFeedIncidents(draft.rows).find(incident => incident.id === proof.alertId);
+  if (!row || row.metadata.vtsIncidentRecovery || !isCoveredVtsIncidentRecovery(proof)) return false;
+  const members = new Map(incidentMembers(row).map(([, member]) => [member.tradeId, member.symbol]));
+  if (proof.members.some(member => members.get(member.tradeId) !== member.symbol)) return false;
+  return draft.mergeMetadata(row.id, { vtsIncidentRecovery: { ...proof, recordedAtMs: atMs } }) !== null;
 }
 
 export function vtsIncidentReasonExits(draft: AlertStoreDraft, c: Crossing, nowMs: number) {

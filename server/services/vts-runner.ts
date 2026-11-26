@@ -106,10 +106,11 @@ import { readXstockSigmaCacheConfig } from '../asset_classes/xstock_spot/mark-st
 import { selectExitTrigger, exitTriggerClass, type ExitTriggerRefusal } from '../core/trading/exit-trigger.js';
 import { selectVtsXstockExitBid, selectVtsXstockEntryAsk, vtsXstockSideSize } from '../asset_classes/xstock_spot/vts-xs-select.js';
 import { ensureSigmaFresh } from '../asset_classes/xstock_spot/sigma-rate-cache.js';
-import { markDecided, onCrossing, onMemberReason, shouldCheckMemberReason, ensureVtsRailIndex, runVtsRailSweep, onUnpricedClose, onShadowUnpriced, productionVtsRailDeps, recordVtsRefusal, type VtsRailDeps } from './vts-rail-reporting.js';
+import { markDecided, onCrossing, onMemberReason, shouldCheckMemberReason, ensureVtsRailIndex, runVtsRailSweep, onUnpricedClose, onShadowUnpriced, productionVtsRailDeps, recordVtsRefusal, recordVtsIncidentRecovery, type VtsRailDeps } from './vts-rail-reporting.js';
 import { EXPECTED_OLD } from '../core/trading/vts-rail.js';
-import { getEquityTickerFeedEvidence, getEquityTickerSourceIdentity } from './passive-archive/equity-spot-archiver.js';
+import { EQUITY_TICKER_MAX_TRANSPORT_GAP_MS, getEquityTickerFeedEvidence, getEquityTickerSourceIdentity } from './passive-archive/equity-spot-archiver.js';
 import { vtsEquityIncidentCohort, VtsFeedIncidentWindows, VTS_FEED_INCIDENT_SAMPLE_MS, type VtsFeedIncidentEvidence } from './vts-feed-incident-windows.js';
+import { vtsIncidentRecoveryWindows } from './vts-feed-incident-recovery.js';
 import { isInXstockWeekendClose, isXstockVenueTransitionPause, isXstockRailPagingTime } from '../asset_classes/xstock_spot/market-hours.js';
 
 /**
@@ -940,8 +941,14 @@ function currentVtsFeedIncidentCohort(atMs: number) {
 }
 
 function sampleVtsFeedIncidentWindows(): void {
-  const cohort = currentVtsFeedIncidentCohort(Date.now());
-  feedIncidentWindows.sample(cohort, getEquityTickerFeedEvidence(cohort.symbols), performance.now());
+  const atMs = Date.now();
+  const cohort = currentVtsFeedIncidentCohort(atMs);
+  const feed = getEquityTickerFeedEvidence(cohort.symbols);
+  const nowMs = performance.now();
+  feedIncidentWindows.sample(cohort, feed, nowMs);
+  for (const proof of vtsIncidentRecoveryWindows.sample(feed, nowMs, EQUITY_TICKER_MAX_TRANSPORT_GAP_MS)) {
+    recordVtsIncidentRecovery(proof, atMs);
+  }
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -4013,6 +4020,7 @@ async function resolveOpenVirtualTrades(): Promise<{
       const selected = selectedXstockTicker.get(trade.symbol);
       const linkedUpdate = _xsExit.bid !== null && selected
         ? linkSelectedXstockUpdate(selected, getEquityTickerSourceIdentity(trade.symbol), performance.now()) : null;
+      if (linkedUpdate) vtsIncidentRecoveryWindows.observe(trade.symbol, linkedUpdate);
       _xsVtsInstrument.recordLook(trade.symbol, _xsRow, Date.now(), trade.stopLoss ?? null, trade.takeProfit ?? null, _xsExit, linkedUpdate);
       _vtsExitBid = _xsExit.bid;
       _vtsExitRefusal = _xsExit.bid === null ? _xsExit.reason : null;
@@ -6446,6 +6454,7 @@ export async function startAutonomousSimulation(): Promise<{ success: boolean; m
 
   isAutonomousRunning = true;
   feedIncidentWindows.reset();
+  vtsIncidentRecoveryWindows.reset();
   sampleVtsFeedIncidentWindows();
   feedIncidentSampleInterval = setInterval(sampleVtsFeedIncidentWindows, VTS_FEED_INCIDENT_SAMPLE_MS);
   feedIncidentSampleInterval.unref();
@@ -6493,6 +6502,7 @@ export function stopAutonomousSimulation(): void {
     feedIncidentSampleInterval = null;
   }
   feedIncidentWindows.reset();
+  vtsIncidentRecoveryWindows.reset();
   isAutonomousRunning = false;
   console.log('[11.0E.1][VTS] Autonomous simulation stopped');
 }

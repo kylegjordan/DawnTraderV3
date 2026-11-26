@@ -17,6 +17,7 @@ import type { VtsRefusalEvent } from '../../core/trading/vts-refusal-evidence.js
 import { vtsRefusalReceiptField } from '../../core/trading/vts-refusal-evidence.js';
 import { EXPECTED_OLD, EXPECTED_WIDE, isVtsFeedIncidentAlert, memberField, railKey, VTS_COMMON_XSTOCK_INCIDENT_COHORT, VTS_STANDING_KEY } from '../../core/trading/vts-rail.js';
 import { decidedField, type Crossing } from '../../services/vts-live-warning.js';
+import { VtsIncidentRecoveryWindows } from '../../services/vts-feed-incident-recovery.js';
 
 const TMP = path.join(os.tmpdir(), `sa-dedup-test-${process.pid}.jsonl`);
 process.env.SYSTEM_ALERTS_FILE = TMP;
@@ -298,7 +299,25 @@ describe('#1191 alert store edits', () => {
     expect(firstSweep?.rail.incidentTradeIds).not.toContain(crossings[2].tradeId);
     expect(readAllAlerts().find(row => row.id === group.id)?.state).toBe('scheduled');
 
-    const lastSweep = await afterRestart.sweepRail(nowMs + 4, 'second-read', async ids => new Set(ids), {
+    const recovery = new VtsIncidentRecoveryWindows();
+    recovery.snapshot(firstSweep!.rail.recoveryCandidates, 1);
+    let grade: ReturnType<VtsIncidentRecoveryWindows['sample']> = [];
+    for (let atMs = 1; atMs <= 120_001; atMs += 5_000) {
+      grade = recovery.sample({ generation: 5, continuousFromMs: 1, lastTransportMs: atMs, warmedUp: true }, atMs, 15_000);
+      if (atMs === 10_001 || atMs === 80_001) symbols.slice(0, 8).forEach((symbol, index) => recovery.observe(symbol, {
+        rowId: String(atMs + index), bootId: 'boot', generation: 5, frameOrdinal: atMs, rowOrdinal: index,
+        receivedAtMs: atMs, selectedAtMs: atMs + 1, acceptedAtMs: atMs + 2,
+      }));
+    }
+    const [proof] = grade;
+    expect(proof.members).toHaveLength(448);
+    expect(await afterRestart.recordIncidentRecovery({ ...proof, common: proof.common.slice(1) }, nowMs + 121_000)).toBe(false);
+    expect(await afterRestart.recordIncidentRecovery(proof, nowMs + 121_001)).toBe(true);
+    expect(readAllAlerts().find(row => row.id === group.id)).toMatchObject({
+      state: 'scheduled', metadata: { vtsIncidentRecovery: { ...proof, recordedAtMs: nowMs + 121_001 } },
+    });
+
+    const lastSweep = await afterRestart.sweepRail(nowMs + 121_002, 'second-read', async ids => new Set(ids), {
       regular: true, precedingFailures: 0,
     });
     expect(lastSweep?.rail.incidentTradeIds).toEqual([]);

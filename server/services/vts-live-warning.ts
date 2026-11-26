@@ -5,10 +5,11 @@ import {
 } from '../core/trading/vts-rail.js';
 import { vtsRefusalReceiptField } from '../core/trading/vts-refusal-evidence.js';
 import type { VtsFeedIncidentEvidence } from './vts-feed-incident-windows.js';
+import type { VtsIncidentRecoveryCandidate } from './vts-feed-incident-recovery.js';
 import type { AddAlertOptions, AlertStoreDraft, SystemAlert } from './system-alerts.js';
 import {
   closeVtsIncidentMembers, joinVtsFeedIncident, markVtsIncidentDecision, openVtsFeedIncidents,
-  outstandingVtsIncidentTrades, vtsIncidentReasonExits,
+  outstandingVtsIncidentTrades, vtsIncidentReasonExits, vtsIncidentRecoveryCandidate,
 } from './vts-feed-incident-members.js';
 
 export const decidedField = (tradeId: string) => `decided_${tradeId}`;
@@ -234,6 +235,7 @@ export interface LiveRailSweepResult {
   rowIds: [tradeId: string, alertId: string][];
   memberIds: [tradeId: string, alertId: string][];
   incidentTradeIds: string[];
+  recoveryCandidates: VtsIncidentRecoveryCandidate[];
   openWarnings: number;
   members: number;
   resolved: number;
@@ -248,7 +250,7 @@ export function sweepLiveWarnings(
   const { warnings, standing } = openVtsRail(draft.rows);
   const members = standingMembers(standing);
   const result: LiveRailSweepResult = {
-    rowIds: [], memberIds: [], incidentTradeIds: [], openWarnings: warnings.length, members: members.length,
+    rowIds: [], memberIds: [], incidentTradeIds: [], recoveryCandidates: [], openWarnings: warnings.length, members: members.length,
     resolved: 0, escalated: 0, minted: 0,
   };
   if (closed) {
@@ -305,7 +307,11 @@ export function sweepLiveWarnings(
   if (current.standing) {
     for (const [tradeId] of standingMembers(current.standing)) result.memberIds.push([tradeId, current.standing.id]);
   }
-  result.incidentTradeIds = openVtsFeedIncidents(draft.rows).flatMap(outstandingVtsIncidentTrades);
+  for (const incident of openVtsFeedIncidents(draft.rows)) {
+    result.incidentTradeIds.push(...outstandingVtsIncidentTrades(incident));
+    const candidate = vtsIncidentRecoveryCandidate(incident);
+    if (candidate) result.recoveryCandidates.push(candidate);
+  }
   return result;
 }
 

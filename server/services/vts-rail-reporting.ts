@@ -20,6 +20,7 @@ import {
 import type { ClassVerdict } from './venue-quiet-alerting.js';
 import { vtsRefusalReceiptField, type VtsRefusalEvent } from '../core/trading/vts-refusal-evidence.js';
 import { VtsAlertWriteQueue } from './vts-alert-write-queue.js';
+import { vtsIncidentRecoveryWindows, type VtsIncidentRecoveryProof } from './vts-feed-incident-recovery.js';
 import {
   decidedField, memberEscalation, ownWarning, standingJoin, standingWarning, stuckWarning,
   type Crossing, type LiveRailSweepResult, type LiveWarning, type LiveWarningResult, type RailMember,
@@ -32,6 +33,14 @@ const refusalRunId = randomUUID();
 
 export function recordVtsRefusal(event: VtsRefusalEvent): void {
   void alertWrites.recordRefusal(event.kind === 'first' ? { ...event, runId: refusalRunId } : event);
+}
+
+export function recordVtsIncidentRecovery(proof: VtsIncidentRecoveryProof, atMs: number): void {
+  void alertWrites.recordIncidentRecovery(proof, atMs)?.then(stored => {
+    if (stored) console.log(`[VTS_RAIL][INCIDENT_RECOVERY_PROOF] alert=${proof.alertId} first=${proof.first.length} `
+      + `second=${proof.second.length} common=${proof.common.length} denominator=${proof.denominator} required=${proof.required}`);
+    else vtsIncidentRecoveryWindows.retry(proof.alertId);
+  });
 }
 
 export { decidedField, type Crossing, type RailMember } from './vts-live-warning.js';
@@ -326,6 +335,7 @@ export async function runVtsRailSweep(nowMs: number, deps: VtsRailDeps): Promise
       for (const [tradeId, alertId] of rail.rowIds) indexRow(tradeId, alertId);
       for (const [tradeId, alertId] of rail.memberIds) state.memberRecord.set(tradeId, alertId);
       for (const tradeId of rail.incidentTradeIds) state.incidentTrades.add(tradeId);
+      vtsIncidentRecoveryWindows.snapshot(rail.recoveryCandidates, performance.now());
       state.loaded = true;
       railCounts.escalations += rail.escalated;
       railCounts.pagesAttempted += rail.escalated;

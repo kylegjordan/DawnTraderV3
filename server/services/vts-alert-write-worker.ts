@@ -7,12 +7,14 @@ import {
   type LiveRailSweep, type LiveRailSweepResult, type LiveWarning, type LiveWarningResult,
 } from './vts-live-warning.js';
 import { railRowTradeId } from '../core/trading/vts-rail.js';
-import { openVtsFeedIncidents, outstandingVtsIncidentTrades } from './vts-feed-incident-members.js';
+import { openVtsFeedIncidents, outstandingVtsIncidentTrades, saveVtsIncidentRecoveryProof } from './vts-feed-incident-members.js';
+import type { VtsIncidentRecoveryProof } from './vts-feed-incident-recovery.js';
 
 export type VtsAlertWrite =
   | { kind: 'individual-decision'; rowId: string; atMs: number }
   | { kind: 'live-decision'; tradeId: string; atMs: number }
   | ({ kind: 'live-warning' } & LiveWarning)
+  | { kind: 'incident-recovery-proof'; proof: VtsIncidentRecoveryProof; atMs: number }
   | { kind: 'refusal'; event: VtsRefusalEvent };
 
 export type VtsAlertWriteResult = boolean | LiveWarningResult | null;
@@ -66,6 +68,7 @@ port.on('message', async (request: VtsAlertWorkerRequest) => {
         if (write.kind === 'refusal') return draft.recordVtsRefusal(write.event);
         if (write.kind === 'live-warning') return writeLiveWarning(draft, write);
         if (write.kind === 'live-decision') return writeLiveDecision(draft, write.tradeId, write.atMs);
+        if (write.kind === 'incident-recovery-proof') return saveVtsIncidentRecoveryProof(draft, write.proof, write.atMs);
         return draft.mergeMetadata(write.rowId, (current) => {
           const savedAtMs = current.decidedAtMs;
           return typeof savedAtMs === 'number' && savedAtMs >= write.atMs ? {} : { decidedAtMs: write.atMs };

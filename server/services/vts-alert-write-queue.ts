@@ -4,6 +4,7 @@ import { Worker } from 'node:worker_threads';
 import type { VtsRefusalEvent } from '../core/trading/vts-refusal-evidence.js';
 import type { VtsAlertWrite, VtsAlertWriteResult, VtsAlertWorkerMessage, VtsAlertWorkerRequest } from './vts-alert-write-worker.js';
 import type { LiveRailSweep, LiveRailSweepResult, LiveWarning, LiveWarningResult } from './vts-live-warning.js';
+import type { VtsIncidentRecoveryProof } from './vts-feed-incident-recovery.js';
 
 const COALESCE_MS = 10;
 const RETRY_MS = 1_000;
@@ -59,6 +60,11 @@ export class VtsAlertWriteQueue {
     const run = 'pageSinceMs' in event ? event.pageSinceMs : null;
     const key = JSON.stringify([event.streakId, event.tradeId, event.kind, run]);
     return this.enqueue(key, { kind: 'refusal', event })?.then(result => result === true);
+  }
+
+  recordIncidentRecovery(proof: VtsIncidentRecoveryProof, atMs: number): Promise<boolean> | undefined {
+    return this.enqueue(`incident-recovery:${proof.alertId}`, { kind: 'incident-recovery-proof', proof, atMs })
+      ?.then(result => result === true);
   }
 
   reconcileRefusals(
