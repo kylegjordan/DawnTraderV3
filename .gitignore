@@ -63,6 +63,8 @@ docs/backup/
 *.trace.json
 *.trace.ndjson
 *.trace.zip
+/test-results/
+/playwright-report/
 
 # ---- OS / Misc ----
 Thumbs.db

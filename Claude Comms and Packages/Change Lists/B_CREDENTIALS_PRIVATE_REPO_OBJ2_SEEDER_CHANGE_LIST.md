@@ -85,4 +85,23 @@ Coltrane sent back `9169bcd1a84dcb2547ef6258616337504e099f49` at 2026-11-26 11:0
 
 Four isolated Phase 41F-L cases passed. Each missing-input case stopped before navigation. The supplied synthetic pair reached the two login fields and submit action. The test harness stopped at the end of login, before the remaining stages. No browser or server was accessed. The full increment has 12 isolated cases across its three test entry points.
 
+### Step 4 follow-up — credential-bearing Playwright artifacts
+
+At 11:15:07 UTC Coltrane confirmed the corrected login inputs and found that Playwright captures the configured password in traces. The shared config now uses the terminal list reporter, with traces, screenshots and video off. The generated Phase 41F-L trace was removed from the current tree and both Playwright output folders are ignored. The historical trace is retained by Git history. The historical value matches the September 28 rotation record in scope OBJ-0 and was rejected after rotation. The comparison used existing records and printed no credential value.
+
+**MODIFIED Playwright recording policy**
+
+```ts
+  reporter: 'list',
+  use: {
+    baseURL: 'http://localhost:5000',
+    // These tests submit configured account credentials.
+    trace: 'off',
+    video: 'off',
+    screenshot: 'off',
+  },
+```
+
+Playwright 1.56.1 ran the Config Snapshot Developer-tab check and the Phase 41F-L login against a loopback login fixture with a fresh synthetic password. The Phase 41F-L copy stopped after login, before later stages. The trace-and-HTML control authenticated both tests and found the password in four members of each trace attachment and in both tests' embedded HTML report data. The HTML-only control also authenticated both tests and reproduced both embedded report hits with zero trace ZIPs. The candidate authenticated both tests and scanned all three generated files, including the Phase 41F-L reports, with no password hits, trace, image, video or HTML report. Both intentional missing-login-field failures also kept the synthetic password out of terminal output and all five generated files. These runs used the repository config with the browser executable and temporary output location supplied by the local fixture.
+
 **Staging:** this increment is a source review only. Apply the existing staging windows and release gates when a later install is approved. System Manual references belong to the OBJ-2 governance step.
