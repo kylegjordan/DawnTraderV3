@@ -361,3 +361,9 @@ REVIEWER: claim-only · Can a clean-looking scan conceal an archive read failure
 The scanner now requires the tar terminator and validates its trailing padding, suppresses raw Git diagnostics before the literal patterns are available, and redacts subsequent diagnostics. It refuses invalid arguments without echoing them. It scans standalone gzip streams as well as direct ZIP and tar members. This adds coverage for the two tracked compressed log files; archive members nested inside a second archive and alternate suffixes are outside the direct-member scope.
 
 Seven additional controls exercised a valid tar, a missing terminator, an invalid tar header, nonzero trailing data, a standalone gzip finding, a pre-pattern Git diagnostic containing a synthetic marker, and invalid arguments containing a marker. The three damaged tar cases refused. The two output cases refused without emitting the marker. The fixed scanner still finds 349 matching tracked files and 64 matching direct members in 10 archives on the original instrument ref `16ac5d518b72918dc81c0743b8e19cfef6eb6cb2`, while its tree-only mode reports the tracked-file findings alone.
+
+### Scanner Step 4 checksum correction
+
+Coltrane held `a142e5b64dc856e2eaacc5fc22cfcb65b5d47257` at 2026-11-26 20:00:34 UTC, in reply to Discord `1575601653795524881`. The matching ZIP or gzip member could stop reading before the end-of-stream checksum. The scanner now remembers the match and reads through EOF. Findings are reported after the read succeeds.
+
+Six synthetic CLI cases compared the held and corrected scanner. For each of ZIP and gzip, a valid match returned 1 in both versions and a damaged stream without a match returned 2 in both. With an early match and the same later checksum corruption, the held version returned 1 and the corrected version returned 2, without printing any partial findings or synthetic values. The change leaves exclusions, CI wiring and staging outside this increment.

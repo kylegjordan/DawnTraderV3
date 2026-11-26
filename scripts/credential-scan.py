@@ -124,12 +124,13 @@ def tree_hits(root, commit, tree, patterns, excluded):
 def contains_pattern(stream, patterns):
     carry = b""
     overlap = max(map(len, patterns)) - 1
+    matched = False
+    # The archive reader may only verify the checksum when it reaches EOF.
     while chunk := stream.read(64 * 1024):
         window = carry + chunk
-        if any(pattern in window for pattern in patterns):
-            return True
+        matched = matched or any(pattern in window for pattern in patterns)
         carry = window[-overlap:]
-    return False
+    return matched
 
 
 def tar_hits(stream, patterns):
