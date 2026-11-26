@@ -284,6 +284,28 @@ Distances use the position's own stop as denominator. Spread is the ask minus bi
 
 **Related critical recurrence `186e8711-236c-4ba8-a782-788e893f9264`:** logs show two outside-liquid-window forced reconnects at 01:30:38 and 01:43:38 UTC after 753 and 778 seconds without data, respectively, against the 750-second limit. Both reconnected two seconds later. The second reconnect replayed the 469 snapshots above. Through 01:47:05 UTC the timed samples after that reconnect showed no symbol updates. Keep the critical alert active and unacknowledged until actual update flow and pricing recovery can be demonstrated. The previously resolved `a446f715` is the alert-ledger and recovery-procedure control (§3j). This read does not change the separate 8c Phase A Step 6 deploy gates.
 
+### 02:11 UTC alert follow-up
+
+All eleven exact duration escalation alerts were active and unacknowledged at 02:12:36 UTC. All eleven named positions were open in paper mode at 02:13:08 UTC. None of their stored monitor prices had advanced after the escalation. The 02:09:40 UTC reconnect snapshot supplies the archived bids. Those bids reflect the replay, while the stored monitor prices are the last values saved before the warnings. All distances are relative to each position's stop.
+
+| xStock | Escalation alert | Last stored monitor price vs stop | Replay bid vs stop |
+|---|---|---:|---:|
+| PGR/USD | `9b9e0476-f65c-41e8-b463-bb44a3eb3e0b` | +0.40% | −9.57% |
+| UL/USD | `6ae588cc-2fc1-459a-987c-472527857e21` | +1.43% | −3.66% |
+| PPL/USD | `794bad84-72be-48e9-9d6e-151510767d47` | +0.62% | −14.64% |
+| TGT/USD | `ec61fa86-a4eb-4e60-a24d-6bb2693e9d52` | +7.97% | −81.92% |
+| EWL/USD | `381b6071-61b8-4df6-ae29-f50593a4f2da` | +1.60% | −4.00% |
+| CME/USD | `af34467e-4a32-4eb8-b6f5-13ff17c71305` | +0.81% | −7.85% |
+| PCG/USD | `772768f8-24ae-4160-ae3e-e41b7b7c0e64` | +1.54% | −8.21% |
+| AZN/USD | `913cb05e-e546-41aa-942b-031729e073bc` | +1.33% | +0.18% |
+| BAX/USD | `c812d749-719c-4c96-ac68-3c8e4f7f6413` | +2.86% | −49.74% |
+| CARR/USD | `8e3779d3-b05f-4b57-9408-e14532d68474` | +5.07% | −5.50% |
+| TJX/USD | `8e054af3-1803-4212-9b20-1e2c38a0e2e3` | +7.60% | +6.80% |
+
+Four overnight forced reconnects occurred from 01:30:38 through 02:09:39 UTC. The 02:10:05 sample saw 469 snapshots and zero update frames in 60 seconds. The 02:12:05 sample also saw zero updates. Positive control on the same carrier: 467 distinct symbols with updates in 60 seconds at 20:01:04 UTC on Nov 25. Nine replay bids were below their stops, with no evidence of an accepted price or a position close. PGR, PPL and CME were the closest of the eleven on their last stored monitor price. On the Thanksgiving holiday the quiet feed is consistent with limited availability, but the exact venue closure boundary is unverified. [Kraken market hours](https://support.kraken.com/articles/market-hours-explained) · [NYSE holiday calendar](https://www.nyse.com/trade/hours-calendars?ecid=EMOWNSGCBUEN4K05)
+
+**Disposition for all eleven:** leave active and unacknowledged under the existing writer rule. Leave the standing record and critical reconnect alert visible until their recovery evidence is present. The Phase A owner clearances and registered checks do not require fresh xStock quotes. The quiet feed limits what can be claimed about exit recovery across the restart. Preserve all Phase A timing and evidence gates.
+
 ## 4. PRE-REGISTERED close criteria (written before the data)
 **(4a), objective 11 — WINDOW: the first three full weekday US regular sessions after the deploy (2026-10-19, 10-20, 10-21).** Quoted from the pre-audit (r5e, Langston's reading): *"crossings conserved against A3 · joins taking the too_wide/quiet share · pagesAttempted falling · `dedupeHits == 0` as a SEPARATE tripwire, never a term (non-zero = FAIL)."* Also PASS requires `markMissedRowMarks` near zero and zero `no-trigger-vts-*` rows resolved by `cli`. **FAIL:** any `no_usable_mark` or isolated-staleness crossing that joins instead of paging; minted down with `dedupeHits` up; or `alertFileBytes` growing faster than ~1 MB/day. Source: the `[VTS_RAIL][SWEEP]` lines (cumulative since start).
 **Objective 6 — S6 (the stop-hold cost) — QUANTITY WINDOW: the first `spread_blown` refused tick with the bid at or below the stop.** PASS: `spreadBlownFirstStopRefusedBid` and `spreadBlownStopHeldMs` are populated for that position and its release or close records the bid against the stop. Until then S6 is **UNEXERCISED** and no silence may be cited as a pass (Langston, Step 8).
