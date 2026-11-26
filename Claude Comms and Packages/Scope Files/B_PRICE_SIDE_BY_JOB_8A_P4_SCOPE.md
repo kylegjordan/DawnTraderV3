@@ -6,6 +6,8 @@ change-class: architecture
 **Status (2026-09-22):** this scope was APPROVED at r2 by Langston (22:01Z 2026-09-18, `e9a6b7f68`). `8a-P4a` and `8a-P4b` (with Step 9 C1) are DEPLOYED and through Step 11 as a progress state (`Batch Completion/B_PRICE_SIDE_BY_JOB_8A_P3_PROGRESS_REPORT.md`). **`8a-P4c`: `STEP: 1 of 11` — covered by this approved scope plus three items Langston placed on 2026-09-22 (the no-ask lane asymmetry, the epoch re-stamp, the `aee:2806` comment) · `NEXT STEP: 2 of 11`.** *(This line read "STEP: 1 of 11 … `8a-P4a` is at Step 2" until 2026-09-22.)*
 **r2** — Langston r1 (21:35Z) CHANGES-NEEDED: BLOCKER-1 (X4 is VTS, the twin of X9), BLOCKER-2 (sides defaulted to zero), BLOCKER-3 (change-class), and the §5 provenance owed at Step 1. Each is folded below and marked *(r2)*. **Change-class re-declared `architecture`** — this adds a NEW component (the VTS xStock side guard, SIM-scope) and changes exit-decision math for a whole asset class on both lanes, the same reasoning `8a-P2` used when it re-declared itself up.
 
+**Row 8a #1250 report residual (2026-11-26).** The approved midnight-END pre-audit governs source coverage for the existing xStock VTS measurement. The Nov 25 22:00Z to Nov 26 00:00Z control matched all four after-hours lane/hour cells on the hour cut. See B_PRICE_SIDE_BY_JOB_8A_P3_PROGRESS_REPORT.md, #1250 controlled midnight END read. Scope is the report reader and its tests.
+
 ---
 
 ## 0. THE DIRECTIVE

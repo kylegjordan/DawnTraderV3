@@ -693,3 +693,45 @@ if [ -r "$archive" ]; then cat "$archive"; else gzip -cd "$archive.gz"; fi |
 ```
 
 **REVIEWER:** exact two output objects plus extractor claim · what else could give apparent agreement? · the stamp gap could hide opposite boundary effects and the shared per-hour counters cannot validate stamp membership · re-derived from the immutable archive above, isolating the 21Z gain and 23Z loss by lane. The complete sample supports using the reviewed extractor for this class of report, subject to its normal refusal rules. Coltrane's independent Step 8 controlled read is next.
+
+### #1250 midnight END — Steps 8–10 record
+
+**Step 8 PROCEED, 2026-11-26 14:37:31 UTC (Coltrane).** Reviewed exact shared 59bfa6d49cbc83ed2b9988311d200ae04ae8ebcf and approved blob 04adf09391e48ecf6a98f226798d61eada4d7a64. The mirror could read the shared executable. Evidence branch 71e9d9104cc87dfbfaa01372b0f943323ed8d215 was still fetching, so the reviewer independently ran both cuts, re-counted the two boundary movements, verified the source hash and checked restart exclusions against the separate stream. He reproduced four equal after-hours lane/hour cells for hour cut and a stamp-control deficit of 4,324 shadow and 9,932 VTS looks, with the missing final rollup and added preceding flush demonstrated separately. Same Phase A process, no restart. Dispatch 1575519885696442451.
+
+**Step 9 disposition.** The approved reader is the manual report path. The CI selftest is its second repository invocation. The source writer remains the paired xStock VTS instrument and its error stream. The real read covered one midnight and the synthetic cases separately exercised next-day archived data, split/missing or corrupt sources and early reads. The controlled sample supports the reviewed report, with future readers still required to prove their own source coverage.
+
+**Step 10 record.** This amendment carries the architecture parent's doc set. Only the row 8a report repair is being recorded as verified here. The original #1250 xStock level-basis item, 8c, the approved KD-121 replay sequence and the remaining KD-19 entry increment retain their recorded status. The scoped work has no new observation window. The shared reviewer handback memory was updated through its guarded writer; part 00-legacy.md 46bd1b710352 to d047eaaa65ac, reviewer ledger and retractions unchanged.
+
+| Tier | Document | Verdict | One line |
+|---|---|---|---|
+| T1 | BATCH_CATALOG.md | ✅ | Records the verified row 8a report repair under its open parent. |
+| T1 | PHASE_HISTORY.md | ✅ | Records the controlled hour-cut result and independent approval. |
+| T1 | SPRINT_TO_LIVE_PLAN.md | ✅ | Row 17 links the scoped result and retains the parent order. |
+| T1 | PHASE_19_PLAN.md | ✅ | The 3n.q2 row records the scoped report repair. |
+| T1 | MEMORY.md + MEMORY_CC_C.md | ✅ | Records the shared rollup rule and the ANALYST return point. |
+| T1 | B_PRICE_SIDE_BY_JOB_8A_P4_SCOPE.md | ✅ | Records the report reader residual and its verification. |
+| T1 | B_PRICE_SIDE_BY_JOB_8A_P4C_MIDNIGHT_END_PRE_AUDIT.md | ✅ | Appends the exact r5 and controlled-read rulings. |
+| T1 | B_PRICE_SIDE_BY_JOB_8A_P3_PROGRESS_REPORT.md | ✅ | Records the amendment disposition in the open parent's Progress Report. |
+| T1 | Observation column | N/A | The r5 controlled read is complete and defines no continuing observation window. |
+| T1 | CC_A, CC_B, CC_C and CC_INFRA SESSION_TASK_LIST.md | ✅ CC_C / N/A CC_A, CC_B, CC_INFRA | CC_C records row 17's verified report repair on the same working order. |
+| T1 | Langston MEMORY.md | ✅ | Updates the parent sprint-gate note; measured loaded set 139,402 to 139,370 bytes with 31 reviewer ledger bullets retained. |
+| T2 | SYSTEM_MANUAL.md | ✅ | Describes the VTS hour cut and coverage and refusal rules. |
+| T2 | SYSTEM_IMPACT_MAP.md | ✅ | Maps the VTS instrument, rotated inputs, reader and Test Suite. |
+| T2 | RUNNING_ISSUES.md | ✅ | Closes only the November 20 row 8a extractor amendment of #1250. |
+| T2 | CHANGES_AND_FIXES.md | ✅ | Records the silent rollup loss and the verified report repair. |
+| T2 | POST_AUDIT_ROADMAP.md | N/A | The extractor repair keeps its existing row 8a placement. |
+| T2 | ADJUSTMENT_FRAMEWORK.md | N/A | The reader changes report attribution, with no parameter or epoch changes. |
+| T2 | AUTHORITY_BASELINE.md | N/A | The reader keeps its existing read-only invocation and adds no authority. |
+| T2 | STORAGE_POLICY.md | N/A | The extractor reads existing files and changes no storage tier or retention. |
+| T2 | MULTI_ASSET_VTS_EXPANSION_PLAN.md | N/A | Reviewed 15-minute recalibration items A–F; the extractor changes no bar, outcome, epoch or threshold. |
+| T2 | ASSET_CLASS_ONBOARDING_WORKFLOW.md | N/A | The reader consumes the existing xStock VTS instrument only. |
+| T2 | BUILD_METHOD_PLAYBOOK.md | N/A | The repair uses the existing audit, CI and controlled-read gates. |
+| T2 | LANGSTON_ARCHITECTURE.md | N/A | The reader changes no reviewer infrastructure or invocation. |
+| T2 | CLAUDE.md / CONDUCT.md | N/A | Date attribution and coverage are extractor rules with no crew-rule change. |
+| T2 | _archive/CLAUDE_MD_RULE_HISTORY.md | N/A | CLAUDE.md has no change in this patch. |
+| T2 | DELETED_COMPONENTS_LOG.md | N/A | Both extractor files remain and the stamp control is retained. |
+| T2 | MISTAKE_PATTERNS.md | N/A | No mistake trailer or weekly pattern pass in this repair. |
+| T2 | GOVERNANCE_EXCEPTIONS.md | N/A | The read followed the normal control and reviewer gates without an exception. |
+| T2 | ALERT_HANDLING_PROTOCOL.md | N/A | No alert behavior or disposition changed in this report repair. |
+| T2 | DELIVERY_BOARD_PROTOCOL.md | N/A | The report repair changes no board field, stage definition or ownership. |
+| T2 | CLAUDE_CODE_FEATURE_WATCH.md | N/A | The reader repair uses no new Claude Code capability and ran no feature check. |

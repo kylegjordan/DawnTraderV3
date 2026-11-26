@@ -1060,6 +1060,8 @@ Plus: **zero `XBT/USD` history rejections post-deploy, zero history rejections f
 
 ## `B-PRICE-SIDE-BY-JOB` rows `8a-P3` + `8a-P4` — FILLS, VTS AND xSTOCK MOVE OFF THE MIDPOINT (2026-09-15 → 2026-09-22, CC-C) — ⏳ **OPEN**
 
+**2026-11-26, row 8a #1250 report repair.** A midnight report now checks the opening and successor logs through the last eligible flush. The Nov 25 22:00Z to Nov 26 00:00Z control matched all four after-hours lane/hour cells on the hour cut. See B_PRICE_SIDE_BY_JOB_8A_P3_PROGRESS_REPORT.md, #1250 controlled midnight END read. The parent batch remains open.
+
 **ONE BATCH WITH `8a-P2`, TWO HALVES (Kyle 2026-09-15: nothing is called done until both land).** **CHANGE-CLASS** `architecture` (`8a-P3`, `8a-P4`, `8a-P4b`); `8a-P4a` `sub_batch`.
 **Deployed:** `8a-P3` deploy 1 `7e3d64c842becab7d1ad7395919ceae02477e80d` (2026-09-15 11:59:22Z) and deploy 2 `91647c9b99e2c0c1c548bab6127134301fd5f6a0` (12:15:04Z) · `8a-P4a` + `8a-P4b` inside `323ae277641368acb057e8ffa7643894aa1c2799` (2026-09-19 00:02:33Z, jointly with CC-B's `B-FEED-MISMATCH-FIX`, an ancestor) · Step 9 C1 `084e6605ff9fc32bcd13843b610d22b3cec6f146` (00:54:06Z) · all carried by the current build `40f22a1bb` (restart 2026-09-20 21:19:29Z). **CI 4/4 per job on every graded head** — run ids in the record §1 and §5e (C1: `35410627494`).
 **Langston:** `8a-P3` Step 4 approved `aecb8b15d` → `91647c9b9`; Step 8 C1/C2 discharged 2026-09-18 · `8a-P4a` Step 4 approved `82a55bd00` · `8a-P4b` approved `00ba34873` (r2) · C1 approved 2026-09-19 00:53Z · `8a-P4` Step 8 part 2 confirmed 2026-09-22 06:38Z · the OBJ-5/OBJ-6 window-end record accepted at `7ae429f81` (r4).

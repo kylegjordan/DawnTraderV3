@@ -10,6 +10,8 @@
 
 **R4 ruling.** CHANGES NEEDED, Coltrane 12:02:49 UTC on `2f3e0a8d927bc8f55e4ffaa0828283fa70ad5f28` (dispatch `1575481352860598414`). His multi-day control lost the END archive while the live successor still began in the stamped END second. The incomplete source graded 1 of 2 cells with zero gap, versus 2 of 2 and a −9 gap in the restored pair and genuine straddling file. R5 requires the single source to start strictly before END. The verified pair can still have equal rotation and successor stamps at second precision.
 
+**R5 and controlled read.** Coltrane approved r5 at 12:17:10Z on 0e35edf8e01ca53d8194b4db4b82acad9d4c297c. Coltrane reproduced both cuts and approved Step 8 at 14:37:31Z on shared 59bfa6d49cbc83ed2b9988311d200ae04ae8ebcf. The Nov 25 22:00Z to Nov 26 00:00Z control matched all four after-hours lane/hour cells on the hour cut. Evidence 71e9d9104cc87dfbfaa01372b0f943323ed8d215. See B_PRICE_SIDE_BY_JOB_8A_P3_PROGRESS_REPORT.md, #1250 controlled midnight END read.
+
 ## Previously stated vs now
 
 **Previously stated:** extend the required sources through the END content day (evidence checkpoint `2802a4f9f`). **Now:** keep the old required-day calculation for in-window lines and add the sources that can carry the midnight flush. **Reason:** moving only the day boundary rejects a good live file before the first daily rotation. Both cases were reproduced below.

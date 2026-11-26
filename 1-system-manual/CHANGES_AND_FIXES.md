@@ -1,5 +1,9 @@
 # DawnTrader: Changes, Fixes & Improvements Registry
 
+## FIX-2026-11-26-A — B-PRICE-SIDE-BY-JOB row 8a (#1250, ANALYST Codex) — midnight VTS report could silently lose its final rollup
+
+The report now requires the opening archive or a genuine straddling source through the final eligible flush and refuses unreadable selected archives. It keeps the stamp cut as a comparison. The Nov 25 22:00Z to Nov 26 00:00Z control matched all four after-hours lane/hour cells on the hour cut. Coltrane reproduced both cuts and approved Step 8 at 14:37:31Z on shared 59bfa6d49cbc83ed2b9988311d200ae04ae8ebcf. This report-only amendment keeps the architecture parent open. See B_PRICE_SIDE_BY_JOB_8A_P3_PROGRESS_REPORT.md, #1250 controlled midnight END read.
+
 ## FIX-2026-11-20-A — `B-ENTRY-GATE` increment C (`#1224`, CC-B / NEW Codex): one class-wide birth switch would have enabled an unread crypto arm with the xStock decision
 
 **CLASS: `architecture`. RISK:** increment B kept EntryWindow in shadow at birth through one hard-coded flag shared by both classes. The registered xStock week supported live birth enforcement, but crypto's taker-judged arm was unexercised because crypto is `maker_only`; flipping the shared flag would therefore have promoted an unread crypto decision. xStock also had no promotion-price ceiling, so an overnight row could remain eligible without a recent priced refresh.
