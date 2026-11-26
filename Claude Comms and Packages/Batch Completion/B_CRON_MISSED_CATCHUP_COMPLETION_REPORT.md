@@ -257,4 +257,6 @@ ANALYST resolved this one-shot warning at 03:46:19.877 UTC as a pre-activation f
 
 **Scoped follow-up candidate, pending placement.** Persist the first eligible `scheduled_for` per environment and job. Apply that inclusive boundary in both verifier reads and before any catch-up claim. Preserve eligible exact-slot success and alert identity across restarts. Constrain legacy audit fallback to the jobs and time periods that used it. Acceptance requires a pre-activation slot to stay quiet and unclaimed, the first eligible slot to be checked at its grace boundary, and a missed eligible slot to still page after restart despite a success at another slot. Carry the candidate in the Analyst task list pending placement. OLD's recorder readback and release of restart 716 are separate from this alert.
 
+At 04:21:07 UTC Coltrane confirmed he had read §10 at exact evidence ref `cc468ee5ce43bce33ba29f76782959ac5e9b091f` and reaffirmed the false-alarm disposition without replay.
+
 `REVIEWER: claim-only · which objects settle pre-activation and what other states fit the warning · warning alone could also indicate an eligible callback missed or a recorded side effect with missing exact success evidence · re-derived y, prior and serving trees, original registration and legacy logs, and both exact ledger reads`
