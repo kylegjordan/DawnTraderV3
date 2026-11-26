@@ -186,6 +186,7 @@ import {
   type InsertRtbSignal
 } from "@shared/schema";
 import { db } from "./db";
+import { PaperEntryDrainIncomplete, paperEntryPublication } from './services/paper-entry-publication.js';
 import { eq, desc, asc, and, gte, gt, lte, inArray, sql, isNotNull, isNull } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { NON_OUTCOME_CLOSE_REASONS, BOOKED_CLOSE_REASONS } from "./services/trade-close-reason";
@@ -734,6 +735,23 @@ export async function closeOpenTradesForHardReset(executor: Pick<typeof db, 'upd
     .set({ closedAt: new Date(), closeReason: 'hard_reset' })
     .where(and(isNull(closedTradesTable.closedAt), eq(closedTradesTable.mode, mode)))
     .returning();
+}
+
+export async function resetActiveEngineTables(executor: Pick<typeof db, 'update' | 'delete'>, mode: 'paper' | 'live') {
+  if (mode === 'paper' && !paperEntryPublication.isQuiescent()) throw new PaperEntryDrainIncomplete();
+
+  const closed = await closeOpenTradesForHardReset(executor, mode);
+  const cleared = await executor
+    .delete(activeOpenPositions)
+    .where(eq(activeOpenPositions.mode, mode))
+    .returning({ id: activeOpenPositions.id });
+
+  await executor
+    .update(activeEngineSessions)
+    .set({ status: 'stopped', stoppedAt: new Date() })
+    .where(and(eq(activeEngineSessions.mode, mode), eq(activeEngineSessions.status, 'running')));
+
+  return { closedTrades: closed.length, clearedPositions: cleared.length };
 }
 
 export class DatabaseStorage implements IStorage {
@@ -4669,53 +4687,15 @@ export class DatabaseStorage implements IStorage {
 
   /**
    * Phase 8.8.3-B7.A: Hard reset paper simulation
-   * Closes all open trades and clears all open positions for a clean session start.
-   * Note: closedTradesTable carries `mode` (NOT NULL since B-BALANCE-TRUTH); activeOpenPositions has no mode column.
-   * activeEngineSessions has a mode column for session tracking.
+   * Closes open trades, clears positions and ends running sessions for this mode.
    */
   async hardResetActiveEngineTables(mode: 'paper' | 'live' = 'paper'): Promise<{ closedTrades: number; clearedPositions: number }> {
     console.log(`[B7.A][DB] Starting hard reset for mode=${mode}`);
     
-    const { activeOpenPositions, activeEngineSessions } = await import('@shared/schema');
-    
-    let closedTrades = 0;
-    let clearedPositions = 0;
-    
     try {
-      // 1. Close this mode's open trades with hard_reset reason (the fenced update: closeOpenTradesForHardReset).
-      const closeTradesResult = await closeOpenTradesForHardReset(db, mode);
-      
-      closedTrades = closeTradesResult.length;
-      console.log(`[B7.A][DB] Closed ${closedTrades} open trades`);
-      
-      // 2. Delete all open positions snapshot
-      // Note: activeOpenPositions is single-tenant, no mode column
-      const deletePositionsResult = await db
-        .delete(activeOpenPositions)
-        .returning();
-      
-      clearedPositions = deletePositionsResult.length;
-      console.log(`[B7.A][DB] Cleared ${clearedPositions} open positions`);
-      
-      // 3. End any running paper sim sessions (this table HAS a mode column)
-      await db
-        .update(activeEngineSessions)
-        .set({
-          status: 'stopped',
-          stoppedAt: new Date(),
-          // P19-B3b: active_engine_sessions has no stoppedBy column (only startedAt/
-          // stoppedAt/startedBy). The stop is recorded by status='stopped' +
-          // stoppedAt; the 'hard_reset' provenance is in the [B7.A][DB] log line
-          // above. Removed the nonexistent-column reference.
-        })
-        .where(and(
-          eq(activeEngineSessions.mode, mode),
-          eq(activeEngineSessions.status, 'running')
-        ));
-      
-      console.log(`[B7.A][DB] Hard reset complete: ${closedTrades} trades closed, ${clearedPositions} positions cleared`);
-      
-      return { closedTrades, clearedPositions };
+      const result = await db.transaction((tx) => resetActiveEngineTables(tx, mode));
+      console.log(`[B7.A][DB] Hard reset complete: ${result.closedTrades} trades closed, ${result.clearedPositions} positions cleared`);
+      return result;
     } catch (error) {
       console.error(`[B7.A][DB] Hard reset error:`, error);
       throw error;

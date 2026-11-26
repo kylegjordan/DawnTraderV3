@@ -9,6 +9,10 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('../../asset_classes/xstock_spot/price-liveness.js', () => ({
+  evaluateXstockPriceLiveness: async () => ({ live: true }),
+}));
+
 const h = vi.hoisted(() => ({
   nowMonoMs: 1_000,
   gate: null as any,
@@ -265,6 +269,7 @@ vi.mock('../../services/module-constants-service.js', async (orig) => {
 });
 
 import { ActiveExecutionEngine } from '../../services/active-execution-engine.js';
+import { paperEntryPublication } from '../../services/paper-entry-publication.js';
 
 type Stub = Record<string, any>;
 const proto = ActiveExecutionEngine.prototype as unknown as Stub;
@@ -321,7 +326,12 @@ function makeEngine(): Stub {
 }
 
 async function execute(eng: Stub, sig: ReturnType<typeof signal>) {
-  return proto.executeSimulatedTrade.call(eng, sig, { portfolioValue: '10000' });
+  const run = paperEntryPublication.startRun();
+  try {
+    return await proto.executeSimulatedTrade.call(eng, sig, { portfolioValue: '10000' }, run);
+  } finally {
+    paperEntryPublication.closeRun(run);
+  }
 }
 
 beforeEach(() => {
@@ -353,6 +363,52 @@ beforeEach(() => {
 });
 
 afterEach(() => vi.restoreAllMocks());
+
+describe('paper entry publication across stop and restart', () => {
+  it.each([
+    ['crypto_spot', 'BTC/USD'],
+    ['xstock_spot', 'AAPLX/USD'],
+  ])('waits for the linked %s position and rejects the old run thereafter', async (assetClass, symbol) => {
+    const candidate = signal('maker');
+    const order = { ...candidate, symbol, metadata: { ...candidate.metadata, assetClass } };
+    const run = paperEntryPublication.startRun();
+    const engine = makeEngine();
+    let positionStarted!: () => void;
+    let finishPosition!: () => void;
+    const atPosition = new Promise<void>((resolve) => { positionStarted = resolve; });
+    const positionWrite = new Promise<void>((resolve) => { finishPosition = resolve; });
+    h.createActiveOpenPosition.mockImplementationOnce(async () => {
+      positionStarted();
+      await positionWrite;
+      return { position: { id: 'position-1' }, created: true };
+    });
+    const opening = proto.executeSimulatedTrade.call(engine, order, { portfolioValue: '10000' }, run);
+    let replacement: symbol | undefined;
+    try {
+      const first = await Promise.race([atPosition.then(() => 'position'), opening]);
+      expect(first).toBe('position');
+      expect(h.createClosedTrade).toHaveBeenCalledTimes(1);
+      paperEntryPublication.closeRun(run);
+
+      expect(await paperEntryPublication.drain(0)).toBe(false);
+      expect(() => paperEntryPublication.startRun()).toThrow();
+
+      finishPosition();
+      expect(await paperEntryPublication.drain(1_000)).toBe(true);
+      expect(await opening).toMatchObject({ opened: true, tradeId: 'trade-1' });
+
+      replacement = paperEntryPublication.startRun();
+      const late = await proto.executeSimulatedTrade.call(engine, order, { portfolioValue: '10000' }, run);
+      expect(late).toMatchObject({ opened: false, stage: 'ENGINE_STOPPING' });
+      expect(h.createClosedTrade).toHaveBeenCalledTimes(1);
+    } finally {
+      finishPosition();
+      await opening;
+      paperEntryPublication.closeRun(run);
+      if (replacement) paperEntryPublication.closeRun(replacement);
+    }
+  });
+});
 
 describe('8c OFF removal — active open geometry', () => {
   it.each([

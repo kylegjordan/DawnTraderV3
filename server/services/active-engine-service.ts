@@ -13,6 +13,7 @@ import type { InsertActiveEngineSession } from '../../shared/schema.js';
 import { tradingStateSync } from './trading-state-sync.js';
 import { KrakenService } from '../exchanges/kraken/kraken.js';
 import { activeOperationQueue } from '../utils/operation-queue.js';
+import { PAPER_ENTRY_DRAIN_BUDGET_MS, PAPER_ENTRY_DRAIN_REASON, paperEntryPublication } from './paper-entry-publication.js';
 import { reset24hWindow, resetHourlyScanHistory } from './fx5-24h-window.js';
 import { b4Diagnostics } from './b4-diagnostics.js';
 import { i1TradeLifecycleDiagnostics } from './i1-trade-lifecycle-diagnostics.js';
@@ -55,6 +56,16 @@ export interface ActiveEngineResult {
   error?: string;
   requiresConfirmation?: boolean; // Phase 27.F.14.D-POST: Indicates balance confirmation needed
   currentBalance?: number; // Phase 27.F.14.D-POST: Current balance for confirmation prompt
+  refusal?: 'paper_entry_drain_incomplete';
+}
+
+function paperEntryDrainRefusal() {
+  return {
+    success: false,
+    message: PAPER_ENTRY_DRAIN_REASON,
+    refusal: 'paper_entry_drain_incomplete' as const,
+    shouldBroadcast: false,
+  };
 }
 
 // B-ENGINE-HEARTBEAT-DEAD-PATHS (#1158/#521, Langston Step 2): ONE orphan-manager rule, used everywhere a
@@ -336,6 +347,7 @@ export function setGlobalActiveEngineManager(manager: any, mode: ActiveEngineMod
 }
 
 export function clearGlobalActiveEngineManager(mode: ActiveEngineMode = 'paper'): void {
+  if (mode === 'paper') getGlobalActiveEngineManager(mode)?.getExecutionEngine?.()?.closePaperEntryAdmission?.();
   _activeEngineManagers().delete(mode);
   console.log(`[ActiveEngineService] Manager cleared from global scope (mode=${mode})`);
 }
@@ -642,25 +654,46 @@ async function closeLeftoverSessionRow(rowId: string, sessionId: string): Promis
   throw new Error(`leftover running session ${sessionId} could not be closed: ${lastErr?.message}`);
 }
 
-export async function startActiveEngine(
+type PaperStartOptions = {
+  startingBalance?: number;
+  startedBy?: string;
+  metadata?: any;
+  skipAutoWatchlist?: boolean;
+};
+
+type PaperStartJob = () => Promise<ActiveEngineResult & { shouldBroadcast?: boolean }>;
+
+export async function startActiveEngine(userId: string, options?: PaperStartOptions): Promise<ActiveEngineResult> {
+  return startActiveEngineWith(userId, options, (job) => activeOperationQueue.enqueue(job, {
+    userId, mode: 'paper', action: 'start',
+  }));
+}
+
+export async function runPaperStartRequest<T>(
   userId: string,
-  options?: {
-    startingBalance?: number;
-    // B-ENGINE-STOP-DURATION-COLUMN (#1067): `runForMs` (a requested time limit) is DELETED — specified
-    // 2025-10-19 with an enforcer that was never built; no caller ever passed it (Langston Step 2, Option B).
-    startedBy?: string;
-    metadata?: any;
-    skipAutoWatchlist?: boolean; // Phase 27.F.13.I: Skip slow Kraken API calls during startup
-  }
+  request: 'new' | 'continue',
+  run: (start: (options: PaperStartOptions) => Promise<ActiveEngineResult>) => Promise<T>,
+): Promise<T> {
+  return activeOperationQueue.enqueue(
+    () => run((options) => startActiveEngineWith(userId, options, (job) => job())),
+    { userId, mode: 'paper', action: request === 'new' ? 'start-new' : 'continue' },
+  );
+}
+
+async function startActiveEngineWith(
+  userId: string,
+  options: PaperStartOptions | undefined,
+  run: (job: PaperStartJob) => ReturnType<PaperStartJob>,
 ): Promise<ActiveEngineResult> {
   const t0 = Date.now();
   console.log(`[41F][QUEUE] startActiveEngine called (userId: ${userId}, balance: ${options?.startingBalance})`);
   
   // Phase 41F: Use operation queue instead of busy flag and operation lock
   try {
-    const queueResult = await activeOperationQueue.enqueue(
+    const queueResult = await run(
     async () => {
       try {
+        if (paperEntryPublication.hasDrainingWriters()) return paperEntryDrainRefusal();
         console.log(`[41D-DEBUG-5] Checking DB for existing session (t+${Date.now()-t0}ms)`);
         // Phase 27.F.9 + Phase 3D: Mode-based session lookup
         const mode = 'paper';
@@ -773,6 +806,7 @@ export async function startActiveEngine(
           // Orphaned manager exists without DB session — STOP then clear (B-ENGINE-HEARTBEAT-DEAD-PATHS; this
           // branch used to clear without stopping, leaving the old manager running unreferenced).
           await stopAndClearOrphanManager(mode, 'start');
+          if (!paperEntryPublication.isQuiescent()) return paperEntryDrainRefusal();
         }
 
         // No existing session - create new one atomically
@@ -974,15 +1008,9 @@ export async function startActiveEngine(
         console.error('[ActiveEngineService] Error during start, rollback complete:', error);
         throw error;
       }
-    },
-    {
-      userId,
-      mode: 'paper',
-      action: 'start',
-    }
-  );
+    });
     
-    // Phase 41F-B-2: Fire state sync & broadcasts OUTSIDE queue job (non-blocking)
+    // Publish the result after the start job returns (non-blocking).
     if (queueResult.shouldBroadcast) {
       console.log('[41F-B][BROADCAST] Firing engine state sync and broadcasts (async, non-blocking)');
       const mode = 'paper';
@@ -1050,6 +1078,7 @@ export async function stopActiveEngine(
             clearGlobalActiveEngineManager();
           }
           
+          if (!await paperEntryPublication.drain(PAPER_ENTRY_DRAIN_BUDGET_MS)) return paperEntryDrainRefusal();
           return {
             success: true,
             message: 'Paper trading simulation already stopped',
@@ -1060,6 +1089,9 @@ export async function stopActiveEngine(
 
         // Phase 27.F.9: Stop portfolio manager and clear both references
         const currentManager = getGlobalActiveEngineManager();
+        if (!currentManager && !await paperEntryPublication.drain(PAPER_ENTRY_DRAIN_BUDGET_MS)) {
+          return paperEntryDrainRefusal();
+        }
         const t0 = Date.now();
         // B-SIZING-DEC-RESTORE increment 3 (fresh-reader finding): what the stop's flatten ACTUALLY did, returned to the
         // caller. The reset script refuses on anything but a clean flatten; until now every outcome here was log-only,
@@ -1084,6 +1116,7 @@ export async function stopActiveEngine(
             const _deliberatelyOpen = new Map<string, string>(); // positionId -> symbol
             console.log('[8.8.3-I2][STOP_FLOW][3_STOPPING_EXECUTION_ENGINE]');
             await currentManager.stop();
+            if (!await paperEntryPublication.drain(PAPER_ENTRY_DRAIN_BUDGET_MS)) return paperEntryDrainRefusal();
             console.log('[8.8.3-I2][STOP_FLOW][4_EXECUTION_ENGINE_STOPPED]');
             
             // 3. Force-close all open positions AFTER engine is stopped

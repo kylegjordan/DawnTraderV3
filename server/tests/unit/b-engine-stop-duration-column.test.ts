@@ -80,7 +80,9 @@ import {
   startActiveEngine,
   resumeActiveEngines,
   clearGlobalActiveEngineManager,
+  setGlobalActiveEngineManager,
 } from '../../services/active-engine-service';
+import { paperEntryPublication, PAPER_ENTRY_DRAIN_BUDGET_MS } from '../../services/paper-entry-publication.js';
 
 const DAY = 86_400_000;
 const OLD_ROW = { id: 'row-uuid-old', sessionId: 'paper_OLD', status: 'running', startedBy: 'manual', startingBalance: '2250.00' };
@@ -111,6 +113,47 @@ describe('objective 1 — the stop writes status + stoppedAt and NO duration key
     expect(Object.keys(payload).sort()).toEqual(['status', 'stoppedAt']);
     expect(payload).not.toHaveProperty('runForMs');
     expect(payload.stoppedAt).toBeInstanceOf(Date);
+  });
+});
+
+describe('paper stop while an admitted entry is still publishing', () => {
+  it('skips flatten and session writes on timeout, even after manager teardown, then allows a drained retry', async () => {
+    vi.useFakeTimers();
+    const run = paperEntryPublication.startRun();
+    const finishWrite = paperEntryPublication.beginWrite(run)!;
+    const forceCloseAllOpenPositionsOnStop = vi.fn(async () => ({
+      closedCount: 0, failedCount: 0, skippedCount: 0, details: [],
+    }));
+    const manager = {
+      markStopInProgress: () => paperEntryPublication.closeRun(run),
+      stop: vi.fn(async () => {}),
+      clearStopInProgress: vi.fn(),
+      forceCloseAllOpenPositionsOnStop,
+    };
+    m.getRunningEngineSession.mockResolvedValue({ ...OLD_ROW, startedAt: new Date(Date.now() - DAY) });
+    setGlobalActiveEngineManager(manager);
+    try {
+      const stopped = stopActiveEngine('u1');
+      await vi.advanceTimersByTimeAsync(PAPER_ENTRY_DRAIN_BUDGET_MS);
+      expect(await stopped).toMatchObject({ success: false, refusal: 'paper_entry_drain_incomplete' });
+      expect(manager.stop).toHaveBeenCalledTimes(1);
+      expect(forceCloseAllOpenPositionsOnStop).not.toHaveBeenCalled();
+      expect(m.updateActiveEngineSession).not.toHaveBeenCalled();
+
+      clearGlobalActiveEngineManager('paper');
+      const retried = stopActiveEngine('u1');
+      await vi.advanceTimersByTimeAsync(PAPER_ENTRY_DRAIN_BUDGET_MS);
+      expect(await retried).toMatchObject({ success: false, refusal: 'paper_entry_drain_incomplete' });
+      expect(m.updateActiveEngineSession).not.toHaveBeenCalled();
+
+      finishWrite();
+      expect(await stopActiveEngine('u1')).toMatchObject({ success: true });
+      expect(m.updateActiveEngineSession).toHaveBeenCalledWith('row-uuid-old', expect.objectContaining({ status: 'stopped' }));
+    } finally {
+      paperEntryPublication.closeRun(run);
+      finishWrite();
+      vi.useRealTimers();
+    }
   });
 });
 

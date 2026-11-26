@@ -103,6 +103,7 @@ export class ActivePortfolioManager {
   // Phase 8.8.3-I2: Hard-stop freeze flag accessors
   markStopInProgress(): void {
     this.isStopInProgress = true;
+    this.executionEngine.closePaperEntryAdmission();
     console.log(`[8.8.3-I2][STOP_FLAG_SET] Stop in progress flag set for mode=${this.mode}`);
   }
 
@@ -239,6 +240,7 @@ export class ActivePortfolioManager {
       wasRunning: this.isRunning,
     });
     
+    this.executionEngine.closePaperEntryAdmission();
     if (!this.isRunning) {
       return;
     }
@@ -265,11 +267,11 @@ export class ActivePortfolioManager {
       console.log(`[PaperPortfolio:${this.userId}] Stopped watchlist refresh`);
     }
 
-    // Phase 27.F.14.MICRO: Stop micro-execution service
-    await this.microExecutionService.stop();
-
-    // Stop execution engine
-    await this.executionEngine.stop();
+    try {
+      await this.microExecutionService.stop();
+    } finally {
+      await this.executionEngine.stop();
+    }
   }
 
   /**

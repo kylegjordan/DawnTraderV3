@@ -305,6 +305,7 @@ import { i1TradeLifecycleDiagnostics } from './i1-trade-lifecycle-diagnostics.js
 import type { ExitConditionType } from './trade-close-reason';
 import type { AJ19BCloseBucket } from './aj19b-lifecycle-diagnostic';
 import { rtbMetricsService, type OpenFailStage } from './rtb-metrics-service.js';
+import { paperEntryPublication } from './paper-entry-publication.js';
 // [11.8B] shadow conversion: pure disposition routing, unit-fenced label integrity.
 import { resolveEvBlockDisposition } from './ev-block-disposition.js';
 import { emitEvReject } from './data-archive/switch-on-evidence-sink.js';
@@ -558,6 +559,7 @@ export function getEngineSessionStart(mode: 'live' | 'paper'): Date | null {
 export class ActiveExecutionEngine {
   private mode: 'live' | 'paper'; // Phase 27.F.15.B.2: Mode-based only, global per mode
   private isRunning: boolean = false;
+  private paperEntryRun: symbol | undefined;
   private isCycleRunning: boolean = false; // Re-entrancy guard
   private krakenService: KrakenService;
   private strategyEngine: StrategyEngine;
@@ -1311,6 +1313,7 @@ export class ActiveExecutionEngine {
       return;
     }
 
+    if (this.mode === 'paper') this.paperEntryRun = paperEntryPublication.startRun();
     this.isRunning = true;
     
     // Directive 8.8.4-A3.R9.0.B: Log valid activation with accurate provenance
@@ -1460,6 +1463,11 @@ export class ActiveExecutionEngine {
     await this.monitoringCycle();
   }
 
+  closePaperEntryAdmission(): void {
+    paperEntryPublication.closeRun(this.paperEntryRun);
+    this.paperEntryRun = undefined;
+  }
+
   async stop(): Promise<void> {
     // Phase 8.8.3-B9.FIX-WS-START: Diagnostic log on stop
     console.log('[DEBUG-B9][ENGINE_STOP_CALLED]', {
@@ -1467,6 +1475,7 @@ export class ActiveExecutionEngine {
       wasRunning: this.isRunning,
     });
     
+    this.closePaperEntryAdmission();
     this.isRunning = false;
 
     // ── row `8a-P1`: FLUSH EVERY LADDER ACCUMULATOR UNCONDITIONALLY, BEFORE ANYTHING ELSE. ──────
@@ -5495,6 +5504,7 @@ export class ActiveExecutionEngine {
    * B-PROMOTION-RACE-FIX (#508): single-flight (1b coalescing re-run) — guard below + finally.
    */
   private async checkRtbPromotion(): Promise<void> {
+    const admittingRun = this.paperEntryRun;
     // Single-flight: if a pass is already running, request a coalesced re-run and return. The
     // running pass re-runs once when it finishes (catches a slot freed mid-pass by a TRADE_CLOSED).
     if (this.promotionInProgress) {
@@ -5634,6 +5644,7 @@ export class ActiveExecutionEngine {
         // on `'deleted'`. This in-memory signal was selected before this point; a refresh may since have rejected and deleted
         // it (`'missing'`), be evaluating it now (`'refreshing'`), or the delete may have thrown (`'delete_failed'`) — none is
         // opened, and none is an open attempt. The last two stay queued for the next pass.
+        if (admittingRun !== this.paperEntryRun) return;
         const _claim = await readyToBuyService.promoteSignal(signal.id);
         if (_claim !== 'deleted') {
           console.warn(`[B-RTB-REFRESH-LIVE-PRICE][CLAIM_REFUSED] ${signal.symbol}/${signal.strategy} id=${signal.id} outcome=${_claim} — not opened`);
@@ -5643,7 +5654,7 @@ export class ActiveExecutionEngine {
         console.log(`[8.8.4-A3.R1][PROMOTION_ORDER] RTB signal ${signal.symbol} removed before trade creation`);
         
         // Step 2: Execute the promoted signal (create trade)
-        const tradeResult = await this.executePromotedSignal(signal);
+        const tradeResult = await this.executePromotedSignal(signal, admittingRun);
 
         if (tradeResult.success && tradeResult.tradeId) {
           // B-PROMOTION-RACE-FIX (#508): this symbol now holds a position — record it so a LATER
@@ -5686,19 +5697,14 @@ export class ActiveExecutionEngine {
     } catch (error) {
       console.error(`[RTB-Promotion:${this.mode}] Error during promotion check:`, error);
     } finally {
-      // B-PROMOTION-RACE-FIX (#508): release the single-flight latch on EVERY exit path (incl. the
-      // early returns above: TCL-warmup, guardrail-read-fail, at-capacity) or promotion wedges
-      // permanently. Then honour ONE coalesced re-run if a trigger arrived mid-pass.
-      this.promotionInProgress = false;
-      // ★ `isRunning` is REQUIRED here (Langston Step-4 blocker): the coalesced re-run is the only
-      // promotion trigger without one — the interval self-guards (its callback checks `isRunning`) and the two event handlers
-      // are unbound in stop(). Without it, a trigger arriving mid-pass while stop() lands fires a
-      // fresh pass on a STOPPED engine, which pulls ranked signals, REMOVES them from RTB, then
-      // fails at processSignal ('engine not running') — and a failed promotion leaves the signal
-      // removed and NOT restored. A coordinated deploy restart is exactly that interleaving.
-      if (this.promotionRerunRequested && this.isRunning) {
-        this.promotionRerunRequested = false;
-        void this.checkRtbPromotion();
+      // Release only this run's latch. An old pass must never release the replacement run's latch.
+      if (admittingRun === this.paperEntryRun) {
+        this.promotionInProgress = false;
+        // #508: coalesce once, and only while running. A stopped pass would claim RTB signals it cannot open.
+        if (this.promotionRerunRequested && this.isRunning) {
+          this.promotionRerunRequested = false;
+          void this.checkRtbPromotion();
+        }
       }
     }
   }
@@ -5706,7 +5712,7 @@ export class ActiveExecutionEngine {
   /**
    * Phase 8.8.4-B: Execute a promoted RTB signal
    */
-  private async executePromotedSignal(signal: any): Promise<{ success: boolean; tradeId?: string; error?: string }> {
+  private async executePromotedSignal(signal: any, admittingRun: symbol | undefined): Promise<{ success: boolean; tradeId?: string; error?: string }> {
     try {
       const entryPrice = parseFloat(signal.entryPrice);
       const stopPrice = parseFloat(signal.stopPrice);
@@ -5785,7 +5791,7 @@ export class ActiveExecutionEngine {
       // brittle trade-count-delta inference (which silently mapped EVERY post-guardrail
       // failure to a generic "no new trade created" and hid the actual stage). The
       // openFailed stage+reason now flow straight through to the promote-loop log.
-      const outcome = await this.processSignal(promotedSignal);
+      const outcome = await this.processSignal(promotedSignal, admittingRun);
       if (outcome.opened) {
         return { success: true, tradeId: outcome.tradeId };
       }
@@ -5811,6 +5817,7 @@ export class ActiveExecutionEngine {
     // → kernel documented defaults.
     signal: StrategySignal & { quantity?: number; estimatedValue?: number; signalId?: string; diAtQueue?: number | null; dbsScoreAtQueue?: number | null; chosenEntryMode?: 'taker' | 'maker'; entryFillPolicy?: FillPolicy; chosenNetEv?: number | null; takerNetEv?: number | null },
     settings: TradingSettings,
+    admittingRun: symbol | undefined,
   ): Promise<OpenOutcome> {
     // P19-B6.5e: returns a typed OpenOutcome. Every post-guardrail early-exit below
     // records an `openFailed` (so the I3 invariant reconciles) AND returns a labelled
@@ -6687,6 +6694,7 @@ export class ActiveExecutionEngine {
     // AJ10.3: Diagnostic logging for Open Trades vs Opened metrics mismatch
     console.log(`[AJ10.3][TRADE_CREATE_START] symbol=${signal.symbol} | strategy=${signal.strategy} | qty=${quantity.toFixed(8)} | estimatedValue=$${(signal.estimatedValue || 0).toFixed(2)}`);
     
+    let settlePaperEntry: (() => void) | undefined;
     try {
       // Directive 10.3: Extract signal type fields for persistence.
       // P19-B3b: signalType/patternType/patternStrength are not first-class on
@@ -6792,6 +6800,14 @@ export class ActiveExecutionEngine {
         console.error(`[B8.2][ratio-stamp] stamp failed (open proceeds, NULLs recorded): ${stampErr?.message}`);
       }
 
+      if (this.mode === 'paper') {
+        settlePaperEntry = paperEntryPublication.beginWrite(admittingRun);
+        if (!settlePaperEntry) {
+          const reason = 'Paper engine stopped before the entry could be written';
+          rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, 'ENGINE_STOPPING', reason);
+          return { opened: false, stage: 'ENGINE_STOPPING', reason };
+        }
+      }
       const trade = await storage.createClosedTrade(this.mode, {
         symbol: signal.symbol,
         baseCurrency,
@@ -7243,6 +7259,8 @@ export class ActiveExecutionEngine {
       // processSignal's swallowing catch. The open no longer vanishes on a DB error.
       rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, 'TRADE_INSERT_ERROR', err?.message || 'trade/position insert threw');
       return { opened: false, stage: 'TRADE_INSERT_ERROR', reason: err?.message || 'trade/position insert threw' };
+    } finally {
+      settlePaperEntry?.();
     }
   }
 
@@ -7321,7 +7339,7 @@ export class ActiveExecutionEngine {
    * REB 8.8.3-F: Restored execution using guardrails_v2 + risk-manager path
    * B6: Trust pre-sized signals from orchestrator, only fall back if missing
    */
-  async processSignal(signal: StrategySignal): Promise<OpenOutcome> {
+  private async processSignal(signal: StrategySignal, admittingRun: symbol | undefined): Promise<OpenOutcome> {
     // P19-B6.5e: returns the typed OpenOutcome threaded from executeSimulatedTrade so
     // executePromotedSignal can read success directly (no trade-count-delta inference).
     // The pre-attempt guard-returns below happen BEFORE checkGuardrailRisk's recordAttempt,
@@ -7590,7 +7608,7 @@ export class ActiveExecutionEngine {
       
       console.log(`[8.8.3-F][PROCESS] Processing signal for ${signal.symbol} via guardrails_v2 path`);
       // P19-B6.5e: thread the typed open outcome up to executePromotedSignal.
-      return await this.executeSimulatedTrade(signal, settings);
+      return await this.executeSimulatedTrade(signal, settings, admittingRun);
 
     } catch (error) {
       console.error(`[PaperExecution:${this.mode}] Error processing signal for ${signal.symbol}:`, error);

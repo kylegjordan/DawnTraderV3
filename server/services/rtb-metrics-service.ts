@@ -64,6 +64,7 @@ export type OpenFailStage =
   | 'FILL_ECONOMICS'      // B-ENTRY-GATE (#1224) P4: net EV at the price actually paid, for the arm that fills, is not positive (Reply A)
   | 'MAKER_MARKETABLE_DROPPED' // P19-B7.2c: maker limit already marketable at placement + stored taker EV not positive → dropped (non-trade)
   | 'DUP_POSITION'        // duplicate-position guard
+  | 'ENGINE_STOPPING'     // paper run stopped before the first durable entry write
   | 'TRADE_INSERT_ERROR'  // DB trade/position insert threw
   | 'OTHER';
 
@@ -166,7 +167,7 @@ class RtbMetricsService {
     // P19-B6.5e: initialize the open-stage failure breakdown
     const stages: OpenFailStage[] = [
       'DRY_RUN', 'EV_REJECT', 'SIZING_INVALID', 'UNCLASSIFIABLE', 'STAMP_MISSING', 'DEPTH_GATE', 'CONSUMPTION_FRESHNESS', 'POLICY_SNAPSHOT_MISSING',
-      'FILL_REJECTED', 'ENTRY_GEOMETRY', 'MAKER_MARKETABLE_DROPPED', 'DUP_POSITION', 'TRADE_INSERT_ERROR', 'OTHER'
+      'FILL_REJECTED', 'ENTRY_GEOMETRY', 'MAKER_MARKETABLE_DROPPED', 'DUP_POSITION', 'ENGINE_STOPPING', 'TRADE_INSERT_ERROR', 'OTHER'
     ];
     for (const stage of stages) {
       this.stats.openFailedByStage[stage] = 0;
