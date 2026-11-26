@@ -79,6 +79,12 @@ The staging checker confirmed the new source was on the shared branch. Only the 
 
 The checker invocation `194696dab66d42fd8d0b7015f593490c` named the deployer and new pin, exited zero and logged PASS at 06:53:08 UTC. The earlier 05:16:59 UTC mismatch serves as the positive control. The deployed build and running-process readback still showed literal Phase A `5ecd7ee24fb7a741e8e015e0e6a262a464e7d016`, restart 716, PID 235604, started at 02:32:06.222 UTC. The change affects the staging tool's monitoring record and has no app UI surface. The System Impact Map already describes this checker and its source contract.
 
-Alert `7953f97f-976d-49d9-a05e-9e37e594535a` was resolved by `codex-infra` at 06:53:36.006 UTC with the approved ref as evidence. The preflight disposition was addressed to OLD, ANALYST and PM in Discord message `1575404197501866166`. The crew will recheck drift before each leg. Independent Step 8 remains with the parent batch.
+Alert `7953f97f-976d-49d9-a05e-9e37e594535a` was resolved by `codex-infra` at 06:53:36.006 UTC with the approved ref as evidence. The preflight disposition was addressed to OLD, ANALYST and PM in Discord message `1575404197501866166`. The crew will recheck drift before each leg.
 
 REVIEWER: claim-only · does the installed checker pass with the new effective pin, the alert resolve, and the Phase A process remain the same? · CLEAN · re-derived from the checker journal, alert ledger and process readback.
+
+## Step 8 — independent verification
+
+Coltrane returned PROCEED at 09:46:09 UTC on November 26 for exact evidence ref `f50fbd358ca1181cbf0e62263b08328e513a045b`, in reply to Discord dispatch `1575446889514532885`. He independently verified the shared source and installed digest, the effective manifest pin, the before and after checker runs, the alert resolution, and the same Phase A process. His challenge found a historical duplicate pin with different bytes and confirmed that the checker uses the effective last one. His byte comparison identified exactly one changed line in the 33-line manifest.
+
+The single deployer reconciliation objective passed. The parent progress report carries its disposition. The parent, GB-8 verification and the staged rollout holds remain open.

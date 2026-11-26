@@ -99,6 +99,12 @@ CHANGE-CLASS: non_architecture
 | T2 | `DELIVERY_BOARD_PROTOCOL.md` | N/A | the card moved under the existing fields and ownership rules; the protocol did not change. |
 | T2 | `CLAUDE_CODE_FEATURE_WATCH.md` | N/A | no daily model or feature check ran in this increment. |
 
+### 2D. Deployer manifest reconciliation (November 26)
+
+The staging monitor's per-file pin lagged behind an independently reviewed version of the already-installed deployer. Shared ref `f288ca4ff0ebd36abb038c62af6e0b8b992eaafc` made that exact source reachable on shared, with all four CI jobs green. Only the effective deployer pin changed in the manifest. The staging monitor passed at 06:53:08 UTC and alert `7953f97f-976d-49d9-a05e-9e37e594535a` was resolved. Phase A stayed on restart 716.
+
+Coltrane independently confirmed Step 8 at 09:46:09 UTC on exact evidence ref `f50fbd358ca1181cbf0e62263b08328e513a045b`. He re-derived the effective pin and disproved the earlier duplicate as a match for the live deployer. See `B_CREDENTIALS_PRIVATE_REPO_DT_DEPLOY_SOURCE_CHANGE_LIST.md` for approval, CI, controls and the preflight disposition. The monitor's source contract is already in the System Impact Map. The remaining parent objectives and existing rollout holds continue.
+
 ### 3. WHAT IS STILL OPEN, AND WHAT CLOSES IT (written before the work)
 | objective | closes when | fails if |
 |---|---|---|
