@@ -40,8 +40,8 @@ If **Yes**, Replit MUST:
 
 ## Test User Credentials (Required)
 
-Username: testuser123
-Password: SecurePass123!
+Follow the approved staging access procedure in `CLAUDE.md` §7 or the batch's approved test-account procedure.
+Keep credentials and access tokens out of the directive.
 
 ## Explicit Instructions
 (Numbered, unambiguous instructions.)
