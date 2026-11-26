@@ -696,11 +696,19 @@ if [ -r "$archive" ]; then cat "$archive"; else gzip -cd "$archive.gz"; fi |
 
 ### #1250 midnight END — Steps 8–10 record
 
-**Step 8 PROCEED, 2026-11-26 14:37:31 UTC (Coltrane).** Reviewed exact shared 59bfa6d49cbc83ed2b9988311d200ae04ae8ebcf and approved blob 04adf09391e48ecf6a98f226798d61eada4d7a64. The mirror could read the shared executable. Evidence branch 71e9d9104cc87dfbfaa01372b0f943323ed8d215 was still fetching, so the reviewer independently ran both cuts, re-counted the two boundary movements, verified the source hash and checked restart exclusions against the separate stream. He reproduced four equal after-hours lane/hour cells for hour cut and a stamp-control deficit of 4,324 shadow and 9,932 VTS looks, with the missing final rollup and added preceding flush demonstrated separately. Same Phase A process, no restart. Dispatch 1575519885696442451.
+**Step 8 PROCEED, 2026-11-26 14:37:31 UTC (Coltrane).** Reviewed exact shared 59bfa6d49cbc83ed2b9988311d200ae04ae8ebcf and approved blob 04adf09391e48ecf6a98f226798d61eada4d7a64. The mirror could read the shared executable. Evidence branch 71e9d9104cc87dfbfaa01372b0f943323ed8d215 was still fetching, so the reviewer independently ran both cuts, re-counted the two boundary movements, verified the extractor blob and checked restart exclusions against the separate stream. Step 7 recorded the decoded archive SHA-256 in its Source coverage evidence above. He reproduced four equal after-hours lane/hour cells for hour cut and a stamp-control deficit of 4,324 shadow and 9,932 VTS looks, with the missing final rollup and added preceding flush demonstrated separately. Same Phase A process, no restart. Dispatch 1575519885696442451.
 
 **Step 9 disposition.** The approved reader is the manual report path. The CI selftest is its second repository invocation. The source writer remains the paired xStock VTS instrument and its error stream. The real read covered one midnight and the synthetic cases separately exercised next-day archived data, split/missing or corrupt sources and early reads. The controlled sample supports the reviewed report, with future readers still required to prove their own source coverage.
 
-**Step 10 record.** This amendment carries the architecture parent's doc set. Only the row 8a report repair is being recorded as verified here. The original #1250 xStock level-basis item, 8c, the approved KD-121 replay sequence and the remaining KD-19 entry increment retain their recorded status. The scoped work has no new observation window. The shared reviewer handback memory was updated through its guarded writer; part 00-legacy.md 46bd1b710352 to d047eaaa65ac, reviewer ledger and retractions unchanged.
+**Step 10 record.** This amendment carries the architecture parent's doc set. Only the row 8a report repair is being recorded as verified here. The original #1250 xStock level-basis item, the open #961 xStock exit booking dependency, 8c, the approved KD-121 replay sequence and the remaining KD-19 entry increment retain their recorded status. The scoped work has no new observation window. The shared reviewer handback memory was updated through its guarded writer; part 00-legacy.md 46bd1b710352 to d047eaaa65ac, reviewer ledger and retractions unchanged.
+
+Sanitized guarded writer receipt from the completed handback:
+
+```text
+WRITTEN part 00-legacy.md (46bd1b710352->d047eaaa65ac) [resolved: explicit]; MEMORY.md 115199c10d5c -> 41b881320630 (69202 -> 69170 B; retractions 0 -> 0; ledger bullets 31 -> 31); size 69170 B; loaded set 139370 B vs ceiling 143856 B (under by 4486 B; row 2.8b)
+```
+
+CHANGE-CLASS: architecture
 
 | Tier | Document | Verdict | One line |
 |---|---|---|---|
