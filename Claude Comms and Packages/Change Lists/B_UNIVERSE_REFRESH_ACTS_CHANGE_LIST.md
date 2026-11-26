@@ -10,65 +10,6 @@
 | ii | **DOC SET FOR `architecture`** | `SCOPE` **present** — `Claude Comms and Packages/Scope Files/B_UNIVERSE_REFRESH_ACTS_SCOPE.md` · `PRE_AUDIT` **present** — `Claude Comms and Packages/Scope Files/B_UNIVERSE_REFRESH_ACTS_PRE_AUDIT.md` · `COMPLETION_REPORT` **absent, due Step 11** · `BATCH_CATALOG.md` **absent, due Step 10** · `PHASE_HISTORY.md` **absent, due Step 10** · `SYSTEM_MANUAL.md` **absent, due Step 10** · `SYSTEM_IMPACT_MAP.md` **absent, due Step 10** · `DELETED_COMPONENTS_LOG.md` **present** (two entries, rode 40b52d8f2 + 3a85372e5) |
 | iii | **STEP-2 REFERENCE** | `Claude Comms and Packages/Scope Files/B_UNIVERSE_REFRESH_ACTS_PRE_AUDIT.md`, PROCEED on r3 with C1-C3 (Discord 1574123287120846969), folded at 257124874 |
 
-## Step 7 correction — OBJ-1 diagnostic code review
-
-**Base:** the literal Phase A staging build `5ecd7ee24fb7a741e8e015e0e6a262a464e7d016`. Coltrane approved the design for implementation at 03:47:56Z under `e1f465169504b61a0c7af7690dd17e6889c52d61`. The serving evidence, completed OBJ-5 reads and the alert disposition are in the shared Change List at `cddc0e7751d797485cb11e484102cc263982775c`. This candidate requires exact code review. Any restart still needs separate substitution authority, reviewed shared placement, green CI, renewed window and same-day B75 `DONE` checks, NEW/INFRA's slot agreement, and ANALYST's reviewed return to the literal Phase A build. The original OBJ-1 gate remains open.
-
-**R2 folded the 04:37:14Z SEND BACK on `afb61b056fada039a391adcdaf12b9155ffa0e16`.** Coltrane injected the dropped symbol into only the replacement OHLC frame and supplied the corresponding success. The old collector inferred omission from the shard's local list. R2 read the exact serialized strings supplied to both `ws.send` calls and reported inclusion separately for each channel. Both single-channel resend controls were falsely complete on R1 and incomplete on R2, with correct settled membership and add receipts throughout.
-
-**R3 folds the 04:49:55Z SEND BACK on `98ccb72cd710d0206219fec78f281a38e645431f`.** After the original shard retired, a surviving shard's reconnect sent a valid ticker subscription for the removed symbol in the send normally used for OHLC. R2 discarded that valid request due to its call position and reported a false completion. R3 classifies every actual outgoing frame by its encoded channel and accumulates all observed changed symbols on that channel. Any recognized frame naming a dropped symbol records its socket as a carrier, regardless of shard or call order. Omission requires both valid channels. Any unreadable outgoing subscription marks the observation incomplete across the entire recorder. Requestless add receipts still require one valid requestless frame per channel, both containing the symbol. The retired-shard tests hold the settled list and new symbol receipts fixed, and vary normal omission, a normal-position ticker resend, a ticker resend in the usual OHLC send, and an unrecognized outgoing channel.
-
-```ts
-ws.send(ohlc);
-const ticker = JSON.stringify({
-  method: 'subscribe',
-  params: { channel: 'ticker', symbol: shard.symbols },
-});
-ws.send(ticker);
-refreshProof?.noteOpen(shard.id, ws, [ohlc, ticker]);
-```
-
-**MODIFIED — natural refresh.** Before: the run passed only the selected adds, drops and occurrence ID into the recorder. After:
-
-```ts
-const r = await archiver.applyCryptoUniverseChange({
-  add: decision.add, drop: decision.drop, occurrenceId,
-  ...(triggerSource === 'cron' && decision.add.length > 0 && decision.drop.length > 0
-    ? { proof: { computed, pins, bounded: outcome === 'applied_confirmed' } }
-    : {}),
-});
-```
-
-**MODIFIED — crypto recorder only.** Before: channel identity was discarded before the connection counted successful replies. After: record raw method, symbol, channel and request ID against the socket accepting the frame before forwarding into the unchanged receipt handlers. Capture the actual sent incremental IDs and the requestless two-channel open frames, including overflow and reconnect. A stale socket's callback is already rejected by the connection. The collector can sample once per process, on the first eligible natural apply. It emits one structured `[B-UNIVERSE-REFRESH-ACTS][OBJ-1]` line in the app log. The timer uses the existing handshake allowance plus the recorder's resolved reply window and does not hold the occurrence open.
-
-```ts
-if (refreshProof && shard.conn?.ws && (msg.method === 'subscribe' || msg.method === 'unsubscribe')) {
-  const success = msg.success === true;
-  const symbol = success ? msg.result?.symbol : replySymbol(msg);
-  if (typeof symbol === 'string' && (msg.req_id === undefined || Number.isSafeInteger(msg.req_id))) {
-    refreshProof.noteReply(shard.conn.ws, msg.method, symbol, msg.req_id ?? null, msg.result?.channel, success);
-  }
-}
-```
-
-**NEW — readback proof.** Snapshot before and settled membership, computed symbols, retained pins, and retained symbols outside the bounded drop. Report both set differences and actual changes. An add needs distinct receipts on the current open socket. For a drop, every observed former carrier needs both unsubscribe receipts, or actual closure plus retired-shard or replacement-omission evidence. Log timestamps, process-start identity, and the build read at module load. The log's `complete` field covers observed set and wire evidence. Join it by occurrence ID to a successful natural occurrence and terminal apply row before using it to support any release.
-
-```ts
-const request = requests.get(symbol);
-if (!request || request.id !== id || performance.now() > request.deadline) return;
-if (!success) {
-  this.rejected.add(symbol);
-} else if (channel === 'ticker' || channel === 'ohlc') {
-  request.acceptedAt[channel] ??= Date.now();
-}
-```
-
-**Verification controls.** Exercise a complete apply with pins and a bounded retained symbol, equal-count substitution, missing/duplicate/delayed and wrong-request replies, explicit rejection, old-socket closure with a connecting replacement, matching requestless reconnect and overflow replies, single-channel resubscribe on each replacement channel, retired-shard resend through either call and unknown frames, stale generation, and interleaved apply. The refresh tests also check that missed catch-up has the same apply outcome without arming the diagnostic. R3 passed 178/178 across seven focused suites, covering refresh orchestration, recorder, loaders, cron catch-up and Feed Health.
-
-REVIEWER: claim-only · could another state give a falsely complete readback? · HIT: the initial wall-clock deadline let a backward clock step accept a late receipt · re-derived y with a 15,001 ms elapsed fake-socket test and a rolled-back wall clock. Deadline now uses monotonic elapsed time. Wall-clock timestamps are for the evidence record.
-
-**Attack point for code review:** Can this observer emit `complete` with a wrong same-count set, a stale socket, or only one distinct channel? In particular, check Crypto Spot's requestless replay and the current-versus-retired shard branch for drops. The collector does not drive business decisions or modify the existing subscription behavior.
-
 ## THE CHANGE SET — FOUR COMMITS, ALL MINE
 
 ⚠️ `257124874..HEAD` also holds other sessions' commits. **Review these four only:**
