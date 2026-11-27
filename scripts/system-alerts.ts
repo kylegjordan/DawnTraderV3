@@ -47,6 +47,9 @@ import {
   ackAlert,
   resolveAlert,
   resolveAlertsByDedupeKey,
+  resolveReceivedWatchdogAlert,
+  assertCategoryCreatable,
+  mergeAlertMetadata,
   AlertActorError,
   processResurface,
   shouldDeliverToDiscord,
@@ -56,6 +59,7 @@ import {
   type AlertState,
   type ResurfaceDecision,
 } from '../server/services/system-alerts.js';
+import { commitWatchdogAttempt, isWatchdogReceiptAlert } from '../server/services/watchdog-alert-store.mjs';
 import * as fs from 'node:fs';
 
 // ─── Argument parsing ──────────────────────────────────────────────────────
@@ -202,15 +206,22 @@ async function cmdAdd(args: string[]): Promise<void> {
       process.exit(1);
     }
   }
-  // B-STAGING-LIVENESS-WATCH: --dedupe-key exposes addAlert's existing B-NEW-51
-  // dedup to CLI callers (the watchdog's CLI path and its direct-append fallback
-  // converge on ONE alert per outage via the same key).
+  // Expose addAlert's existing dedupe to ordinary CLI callers.
   const dedupeKey = getFlag(args, 'dedupe-key');
   const entry = await addAlert({
     triggers_at, category, severity, title, body, metadata,
     ...(dedupeKey ? { dedupe_key: dedupeKey } : {}),
   });
   console.log(JSON.stringify(entry, null, 2));
+}
+
+async function cmdWatchdogAttempt(args: string[], command: 'commit' | 'recover'): Promise<void> {
+  const key = requireFlag(args, 'dedupe-key');
+  const id = requireFlag(args, 'id');
+  const row = command === 'commit'
+    ? await commitWatchdogAttempt(ALERTS_FILE, key, id, 'cli', assertCategoryCreatable)
+    : await resolveReceivedWatchdogAlert(key, id);
+  console.log(JSON.stringify({ row }));
 }
 
 async function cmdFireDue(): Promise<void> {
@@ -226,7 +237,15 @@ async function cmdFireDue(): Promise<void> {
       // Langston's bridge (webhook_id), which performs the §10.5 triage +
       // owner-routing. The §10.5 per-turn pull of the queue file remains the
       // push-independent backstop.
-      await pushToDiscord(alert);
+      if (await pushToDiscord(alert) && isWatchdogReceiptAlert(alert)) {
+        try {
+          await mergeAlertMetadata(alert.id, {
+            watchdog_first_receipt: { id: alert.id, delivered_at: new Date().toISOString() },
+          }, true);
+        } catch (error) {
+          console.warn(`[fire-due] Watchdog receipt marker write failed for ${alert.id}:`, error);
+        }
+      }
     }
   }
 
@@ -364,6 +383,12 @@ async function main(): Promise<void> {
   switch (cmd) {
     case 'add':
       await cmdAdd(args);
+      break;
+    case 'watchdog-commit':
+      await cmdWatchdogAttempt(args, 'commit');
+      break;
+    case 'watchdog-recover':
+      await cmdWatchdogAttempt(args, 'recover');
       break;
     case 'fire-due':
       await cmdFireDue();

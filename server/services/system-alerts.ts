@@ -15,14 +15,13 @@
  *   - Direct library importers: `scripts/b-new-40-soak-verify.ts` (ack) and the
  *     one-shot resolve-provenance backfill script
  *   - The liveness watchdog (`server/scripts/staging-liveness-watchdog.mjs`) —
- *     appends rows itself, outside this library and its lock (#647)
+ *     can add rows independently of this library, under the same lock (#647)
  *
  * Identity: every `by` that reaches ackAlert/resolveAlert must normalise into
  * ALERT_ACTORS (B-ALERT-ACTOR-ALLOWLIST, #987) — free text is refused before the lock.
  *
- * Concurrency model: O_EXCL-based file lock (`/var/log/dawntrader/system-
- * alerts.jsonl.lock`). Same primitive that `proper-lockfile` uses under the
- * hood; no new npm dep needed (per Kyle "no new npm deps" directive from B75).
+ * Concurrency model: shared file lock (`/var/log/dawntrader/system-alerts.jsonl.lock`)
+ * with exclusive token publication and guarded reclamation of proven dead owners.
  *
  * Parse resilience: malformed JSONL lines are skipped with a console.warn,
  * not abort-on-error. Operator can fix in place; reader keeps going.
@@ -41,14 +40,12 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as crypto from 'node:crypto';
+import { withAlertFileLock } from './system-alert-file-lock.mjs';
+import { recoverWatchdogAttempt, writeDurably } from './watchdog-alert-store.mjs';
 
 // B-NEW-51: env-overridable for unit tests (defaults to the staging path —
 // SYSTEM_ALERTS_FILE is never set in staging/prod, so behavior is unchanged).
 export const ALERTS_FILE = process.env.SYSTEM_ALERTS_FILE || '/var/log/dawntrader/system-alerts.jsonl';
-const LOCK_FILE = `${ALERTS_FILE}.lock`;
-const LOCK_RETRY_MAX = 50;       // 50 × 100ms = 5s max wait
-const LOCK_RETRY_DELAY_MS = 100;
-const LOCK_STALE_AFTER_MS = 30_000; // 30s — if lock is older than this, assume crashed holder and force-acquire
 
 export type AlertState = 'scheduled' | 'active' | 'acknowledged' | 'resolved';
 
@@ -248,7 +245,7 @@ export const ALERT_ACTORS = [
   { value: 'active-exit-monitor',           tag: 'machine', why: 'server/services/active-execution-engine.ts + venue-quiet-alerting.ts — resolves its own price-skip, venue-quiet and price-skip-config rows when the RE-MEASURED condition clears (B-VENUE-QUIET-ALERTING, #638/#526/#994), and its no-trigger-<mode> rows once the position decided after the mint or closed (server/services/paper-no-trigger-clear.ts, row 2 (4a) P1b), and its xstock-quote-size-unknown-<mode> row on the next clean hourly window (row 2 increment B, the size tripwire); transport `engine`' },
   { value: 'b75-retention-sweep',          tag: 'machine', why: 'server/scripts/b75-retention-sweep.ts (root cron 02:15 UTC): mints its own failure rows keyed b75-sweep:<parent>:<label>:<class> / b75-plain:<table>:<class> / b75-sweep:fatal and resolves them when a later run succeeds for that key; transport `timer-script`. A refused non-proven copy (`…:non-proven-existing`) is left for a human (B-B75-EXPORT-COMPLETENESS #1195).' },
   { value: 'passive-archive-watchdog',     tag: 'machine', why: 'server/services/passive-archive/recorder-connection.ts — resolves its own passive-archive-silent:<recorder> rows once data has flowed on that connection for the full clear window (B-CRYPTO-FEED-WATCHDOG #1232); transport `engine`' },
-  { value: 'staging-liveness-watchdog',    tag: 'machine', why: 'server/scripts/staging-liveness-watchdog.mjs (5-min systemd timer on staging, User=deploy): raises watchdog-<check> and server-disk-utilization-<level>, and resolves its own rows through the CLI `resolve-key` verb when the re-measured condition clears (B-DISK-FILE-TIERING #1233 — before it, a recovered outage left its row open and the next outage was silently deduped); transport `cli`, because it goes through the CLI (Langston, Step 2 r3 B1)' },
+  { value: 'staging-liveness-watchdog',    tag: 'machine', why: 'Out-of-process watchdog. Resolves an exact occurrence through `watchdog-recover` after a durable healthy reading and a successful receipt (#647(i)); transport `cli`.' },
   { value: 'drift-dashboard-moved-day',    tag: 'machine', why: 'server/services/data-archive/moved-day-check.ts (in the app, called by the Drift Dashboard): raises disk-tiering-moved-day:phase15b_dbs_telemetry:<window> when a window covers telemetry days the disk-file job moved to warm storage, and resolves its own row when a later check of that window finds none (B-DISK-FILE-TIERING #1233, pre-audit P6); transport `engine`' },
   { value: 'xstock-bar-repair',            tag: 'machine', why: 'server/services/passive-archive/xstock-bar-availability.ts (the writer-cadence certificate repair): resolves its own xstock-bar-availability-certification-pending rows only when a measured global count of uncertified revisions is 0 (B-XSTOCK-BAR-AVAILABILITY R4)' },
   { value: 'xstock-bar-verdict-runner',    tag: 'machine', why: 'server/scripts/b-xstock-bar-availability-verdict-runner.ts (daily 00:15 UTC, scheduled from the root crontab but run as deploy via su - deploy -c and b-xstock-bar-availability-verdict-run.sh, which refuses root): writes the one-shot xstock-bar-availability-capacity-verdict:<window_start> alert and resolves its own xstock-bar-availability-verdict-runner-failed:<window_start> row once a verdict is written and read back, and the rows of an older window once the governed start moves; transport `timer-script` (B-XSTOCK-BAR-AVAILABILITY R7)' },
@@ -387,70 +384,9 @@ export interface SystemAlert {
   dedupe_key?: string | null;
 }
 
-// ─── File-lock primitives (O_EXCL based, no npm deps) ──────────────────────
-//
-// Note (Langston Step 4 review, R-busy-wait): acquireLock is async — under lock
-// contention it yields the Node event loop via `await new Promise(setTimeout)`
-// instead of busy-waiting synchronously. This matters because the HTTP path
-// (`/api/system-alerts/:id/acknowledge`) calls into this library from an
-// Express handler in the trading-hot Node process; a synchronous busy-wait
-// would stall every other route (TEC, signal pipeline) for up to 5s under
-// contention. All public mutating APIs (addAlert/fireDue/ackAlert/resolveAlert)
-// are therefore async — CLI callers must `await`.
-
-async function acquireLock(): Promise<void> {
-  for (let attempt = 0; attempt < LOCK_RETRY_MAX; attempt++) {
-    try {
-      // O_EXCL + O_CREAT: atomic "create only if doesn't exist". If another
-      // process holds the lock, fails with EEXIST.
-      const fd = fs.openSync(LOCK_FILE, fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_WRONLY, 0o644);
-      fs.writeSync(fd, `${process.pid}\n${new Date().toISOString()}\n`);
-      fs.closeSync(fd);
-      return;
-    } catch (err: any) {
-      if (err.code === 'EEXIST') {
-        // Check if the lock is stale (holder crashed before releasing)
-        try {
-          const stats = fs.statSync(LOCK_FILE);
-          if (Date.now() - stats.mtimeMs > LOCK_STALE_AFTER_MS) {
-            // Stale lock — force-remove and retry. Race window: two acquirers
-            // simultaneously detecting staleness both unlink → second unlink
-            // could remove a fresh lock from the first acquirer. Window is
-            // tens of microseconds against a 30s+ stale lock, so very low
-            // probability. Hardening (PID-based liveness check) tracked as
-            // RUNNING_ISSUES candidate, not blocking B-NEW-40 ship.
-            console.warn(`[system-alerts] stale lock detected (age ${Date.now() - stats.mtimeMs}ms), force-acquiring`);
-            try { fs.unlinkSync(LOCK_FILE); } catch { /* race: another writer cleaned up first */ }
-            continue;
-          }
-        } catch { /* file vanished between EEXIST and statSync — race; retry */ }
-        // Active lock; yield event loop and retry
-        await new Promise<void>((resolve) => setTimeout(resolve, LOCK_RETRY_DELAY_MS));
-        continue;
-      }
-      throw err;
-    }
-  }
-  throw new Error(`[system-alerts] failed to acquire lock after ${LOCK_RETRY_MAX} retries (~${LOCK_RETRY_MAX * LOCK_RETRY_DELAY_MS}ms)`);
-}
-
-function releaseLock(): void {
-  try {
-    fs.unlinkSync(LOCK_FILE);
-  } catch (err: any) {
-    if (err.code !== 'ENOENT') {
-      console.error('[system-alerts] failed to release lock:', err);
-    }
-  }
-}
-
-async function withLock<T>(fn: () => T | Promise<T>): Promise<T> {
-  await acquireLock();
-  try {
-    return await fn();
-  } finally {
-    releaseLock();
-  }
+// Contention yields the event loop, including for the trading process's API.
+function withLock<T>(fn: () => T | Promise<T>): Promise<T> {
+  return withAlertFileLock(ALERTS_FILE, fn);
 }
 
 // ─── Read / parse with skip-on-error resilience ────────────────────────────
@@ -510,9 +446,13 @@ export function getAlertDedupeState(dedupeKey: string): AlertDedupeState {
 /**
  * Atomic whole-file rewrite via tmpfile-rename. Always called inside withLock().
  */
+function serializeAlerts(alerts: SystemAlert[]): string {
+  return alerts.map((a) => JSON.stringify(a)).join('\n') + (alerts.length > 0 ? '\n' : '');
+}
+
 function writeAllAlertsAtomic(alerts: SystemAlert[]): void {
   const tmp = `${ALERTS_FILE}.tmp.${process.pid}.${Date.now()}`;
-  const content = alerts.map((a) => JSON.stringify(a)).join('\n') + (alerts.length > 0 ? '\n' : '');
+  const content = serializeAlerts(alerts);
   fs.writeFileSync(tmp, content, { mode: 0o644 });
   fs.renameSync(tmp, ALERTS_FILE);
 }
@@ -652,6 +592,19 @@ export async function ackAlert(id: string, by: string): Promise<SystemAlert | nu
   return result;
 }
 
+function stampResolution(row: SystemAlert, actor: CanonicalAlertActor, evidence: string, transport: ResolveTransport): SystemAlert {
+  const now = new Date().toISOString();
+  return {
+    ...row,
+    state: 'resolved',
+    resolved_at: now,
+    resolved_by_claimed: actor,
+    resolved_by_transport: transport,
+    resolution_evidence: evidence.trim(),
+    ...(row.acknowledged_at ? {} : { acknowledged_at: now, acknowledged_by: actor }),
+  };
+}
+
 /**
  * Mark an alert as resolved (terminal state — kept for history but won't
  * surface). Use when the underlying condition is fully closed.
@@ -665,6 +618,9 @@ export async function resolveAlert(
   // B-ALERT-ACTOR-ALLOWLIST (#987): identity is gated first, before any file or
   // lock — a repeat resolve (the checker re-resolves by design) is bound too.
   const actor = assertAlertActor(by);
+  if (actor === 'staging-liveness-watchdog') {
+    throw new Error('Watchdog resolution requires the receipt-gated watchdog-recover command');
+  }
   // B-GOV-INTEGRITY-1 (F3b): closure is a RECORD, not a state flag. The hard
   // evidence gate is enforced HERE (not only in the CLI) so EVERY resolve path —
   // CLI, dispatcher, API, governance-checker — is bound by it. A close with no
@@ -686,22 +642,21 @@ export async function resolveAlert(
   let result: SystemAlert | null = null;
   await withLock(() => {
     const all = readAllAlerts();
-    const found = all.find((a) => a.id === id);
-    if (!found) return;
-    const now = new Date().toISOString();
-    found.state = 'resolved';
-    found.resolved_at = now;
-    found.resolved_by_claimed = actor;       // the caller's claim, canonicalised (#987)
-    found.resolved_by_transport = transport; // the code-stamped, verifiable channel
-    found.resolution_evidence = evidence.trim();
-    if (!found.acknowledged_at) {
-      found.acknowledged_at = now;
-      found.acknowledged_by = actor;
-    }
-    result = { ...found };
+    const at = all.findIndex((a) => a.id === id);
+    if (at < 0) return;
+    result = stampResolution(all[at], actor, evidence, transport);
+    all[at] = result;
     writeAllAlertsAtomic(all);
   });
   return result;
+}
+
+export function resolveReceivedWatchdogAlert(key: string, attemptId: string): Promise<SystemAlert | null> {
+  const actor = assertAlertActor('staging-liveness-watchdog');
+  return recoverWatchdogAttempt(ALERTS_FILE, key, attemptId, (row, evidence) => {
+    if (!isValidResolutionEvidence(evidence)) throw new Error('Invalid durable watchdog recovery evidence');
+    return stampResolution(row, actor, evidence, 'cli');
+  });
 }
 
 /**
@@ -941,17 +896,18 @@ export async function resolveAlertsByDedupePrefix(
 }
 
 /**
- * B-VENUE-QUIET-ALERTING (objective 1): merge `patch` into a NON-TERMINAL row's `metadata` under the file lock. Used only
- * for the per-class standing record's membership; the row's title and body are never re-rendered (so #572's body-drift
- * question does not arise). Returns the updated row, or null when the row is missing or resolved.
+ * Merge `patch` into a non-terminal row's metadata under the file lock. Used by
+ * venue-quiet standing membership and watchdog delivery receipts. Returns null
+ * when the row is missing or resolved.
  */
 export async function mergeAlertMetadata(
   id: string,
   patch: Record<string, unknown> | ((current: Record<string, unknown>) => Record<string, unknown>),
+  durable = false,
 ): Promise<SystemAlert | null> {
   ensureFileExists();
   let result: SystemAlert | null = null;
-  await withLock(() => {
+  await withLock(async () => {
     const all = readAllAlerts();
     const found = all.find((a) => a.id === id);
     if (!found || found.state === 'resolved') return;
@@ -961,7 +917,8 @@ export async function mergeAlertMetadata(
     const delta = typeof patch === 'function' ? patch(current) : patch;
     found.metadata = { ...current, ...delta };
     result = { ...found };
-    writeAllAlertsAtomic(all);
+    if (durable) await writeDurably(ALERTS_FILE, serializeAlerts(all));
+    else writeAllAlertsAtomic(all);
   });
   return result;
 }

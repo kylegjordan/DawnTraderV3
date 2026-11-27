@@ -57,6 +57,11 @@ COPY --from=build /app/drizzle.config.ts ./drizzle.config.ts
 # Copy server version file
 COPY --from=build /app/server/version.json ./server/version.json
 
+# The alert lock reaper runs in its own Node process under util-linux flock.
+COPY --from=build /app/server/services/system-alert-file-lock.mjs ./server/services/system-alert-file-lock.mjs
+COPY --from=build /app/server/scripts/reap-system-alert-lock.mjs ./server/scripts/reap-system-alert-lock.mjs
+RUN test -x /usr/bin/flock
+
 # Set environment
 ENV NODE_ENV=production
 ENV PORT=5000

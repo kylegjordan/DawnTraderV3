@@ -3,7 +3,7 @@
  * B-STAGING-LIVENESS-WATCH (#512/#520) — the out-of-process staging watchdog.
  *
  * Runs from a systemd timer (User=deploy, every 5 min), PLAIN NODE by design:
- * zero imports from the app, so it runs even when the app build is broken —
+ * shares only build-independent file primitives; runs even when the app build is broken —
  * the exact #512 scenario it exists to catch.
  *
  * Checks (each with a 2-consecutive-tick debounce, state persisted on disk):
@@ -17,20 +17,11 @@
  *             STARTED and FINISHED since its last scheduled 05:00Z (B-DISK-FILE-TIERING amendment 1, H-2):
  *             it watches the archive crons and nothing watched it.
  *
- * CLEAR EDGE (B-DISK-FILE-TIERING P7, Langston Step 2 C4/B2): when a check passes and the
- * alerts file still holds an unresolved row for its key, the watchdog resolves it through the
- * CLI `resolve-key` verb as actor `staging-liveness-watchdog` (transport `cli`). Before this a
- * recovered outage left its row open, and the store's dedupe then swallowed the NEXT outage
- * while the CLI exited 0. Resolving goes through the CLI only — no direct-write fallback — and
- * a missed clear is retried on the next tick because the FILE, not the latch, gates it.
- *
- * Alert emit: PRIMARY = the app's alerts CLI (validates via addAlert; carries
- * --dedupe-key). FALLBACK = direct schema-valid append to the alerts jsonl —
- * load-bearing exactly when the app/CLI is broken. Both paths use the SAME
- * dedupe_key; the fallback additionally scans the file for a non-resolved row
- * with that key before appending (idempotent against file contents). A CI test
- * asserts the fallback template's shape equals a real addAlert row (drift
- * breaks the BUILD, not the outage report).
+ * An occurrence is stored before either the CLI or the plain-Node fallback
+ * commits its UUID to the shared ledger. A passing check saves a recovery
+ * against the observed occurrence independently of ledger contention. The
+ * CLI may clear its exact row after successful notification or a verified
+ * terminal operator disposition. A qualified relapse keeps its own UUID.
  *
  * Detection-only: this script never restarts anything.
  */
@@ -39,6 +30,10 @@ import { promisify } from 'node:util';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import {
+  commitWatchdogAttempt, enqueueWatchdogAlert, hasWatchdogReceipt,
+  listPendingWatchdogKeys, readWatchdogHead, recordWatchdogRecovery,
+} from '../services/watchdog-alert-store.mjs';
 
 const pExecFile = promisify(execFile);
 
@@ -49,10 +44,9 @@ const ALERTS_FILE = process.env.SYSTEM_ALERTS_FILE || '/var/log/dawntrader/syste
 const STATE_FILE = process.env.WATCHDOG_STATE_FILE || '/home/deploy/.dawntrader-watchdog-state.json';
 const PM2_APP_NAME = process.env.WATCHDOG_PM2_NAME || 'dawntrader';
 const DEBOUNCE_TICKS = 2; // 2 × 5min — matches the pre-audit; safe post-#520 (resume completes in seconds)
-const WATCHDOG_ACTOR = 'staging-liveness-watchdog';
 const RUN_ID = crypto.randomUUID(); // logged at start; a resolve's evidence cites it (a re-derivable token)
 // Server-disk thresholds (B-DISK-FILE-TIERING P7). Environment-overridable ONLY so the arming can be
-// FORCED in a one-off run (Langston C1) — the watchdog has zero app imports, so it cannot read the DB.
+// FORCED in a one-off run (Langston C1) — the watchdog has no database dependency.
 const DISK_PATH = process.env.WATCHDOG_DISK_PATH || '/';
 /** An override that is set must be a real number — a typo throws at load instead of silently comparing
  *  against NaN. The service unit sets no WATCHDOG_* variable, so in practice an override comes from a
@@ -97,14 +91,7 @@ export function diskBand(d, t) {
   };
 }
 
-/** One tick of a check's throw counter, pure: a throw counts up and pages once it reaches the debounce;
- *  a run that did not throw resets it. Clearing the page is gated on the FILE, never on this counter. */
-/** Whether a failing check mints its page, pure: only at or past the debounce, and only when the alerts
- *  file holds no unresolved row for its key. The file is the single authority for "a page is up". */
-export function shouldMint(streak, debounce, rowOpen) {
-  return (streak || 0) >= debounce && !rowOpen;
-}
-
+/** A throw counts toward debounce. A check that ran without throwing resets the counter. */
 export function throwStep(prevCount, threw, debounce) {
   if (!threw) return { count: 0, page: false };
   const count = (prevCount || 0) + 1;
@@ -136,15 +123,14 @@ export function buildFallbackAlert({ title, body, dedupeKey, metadata, severity 
     severity,
     title,
     body,
-    metadata: { source: 'staging-liveness-watchdog', emit_path: 'fallback_direct_append', ...metadata },
+    metadata: { ...metadata, source: 'staging-liveness-watchdog', emit_path: 'fallback_atomic' },
     recurrence_interval_seconds: null,
     dedupe_key: dedupeKey,
   };
 }
 
-/** Non-resolved row with this dedupe_key already in the file? (same semantic addAlert applies) */
-/** Every dedupe key with a non-resolved row, from ONE read of the file (the run reads it once, not per check). */
-export function openDedupeKeys(alertsFilePath) {
+/** Read the open ledger rows so a healthy check can recover a pre-rollout alert. */
+export function openAlertRows(alertsFilePath) {
   // Each alert's LAST line wins (a row may be rewritten); a key is open if ANY of its alerts is unresolved
   // — the same rule addAlert's dedupe applies, so this never reads closed while the store still blocks.
   const latest = new Map();
@@ -154,22 +140,11 @@ export function openDedupeKeys(alertsFilePath) {
       try { const row = JSON.parse(line); if (row.id) latest.set(row.id, row); } catch { /* torn line */ }
     }
   }
-  const open = new Set();
-  for (const row of latest.values()) if (row.dedupe_key && row.state !== 'resolved') open.add(row.dedupe_key);
-  return open;
-}
-
-export function fileHasOpenDedupeKey(alertsFilePath, dedupeKey) {
-  if (!fs.existsSync(alertsFilePath)) return false;
-  const lines = fs.readFileSync(alertsFilePath, 'utf8').split('\n');
-  for (const line of lines) {
-    if (!line.trim()) continue;
-    try {
-      const row = JSON.parse(line);
-      if (row.dedupe_key === dedupeKey && row.state !== 'resolved') return true;
-    } catch { /* tolerate a torn line; the CLI validates real rows */ }
+  const open = new Map();
+  for (const row of latest.values()) {
+    if (row.dedupe_key && row.state !== 'resolved' && !open.has(row.dedupe_key)) open.set(row.dedupe_key, row);
   }
-  return false;
+  return open;
 }
 
 /** The JSON object the CLI printed, after npm's own preamble lines; null if there is none. */
@@ -180,58 +155,65 @@ export function cliJson(stdout) {
   try { return JSON.parse(out.slice(start)); } catch { return null; }
 }
 
-async function emitAlert({ title, body, dedupeKey, metadata, severity = 'critical', category = 'breakage' }) {
-  // PRIMARY: the app's CLI (full validation + the same B-NEW-51 dedup).
-  const sentTriggersAt = new Date().toISOString();
-  try {
-    const { stdout } = await pExecFile('npm', ['run', 'system-alerts', '--', 'add',
-      '--triggers-at', sentTriggersAt,
-      '--category', category, '--severity', severity,
-      '--title', title, '--body', body,
-      '--metadata', JSON.stringify({ source: 'staging-liveness-watchdog', emit_path: 'cli', ...metadata }),
-      '--dedupe-key', dedupeKey,
-    ], { cwd: APP_DIR, timeout: 60_000 });
-    // On a dedupe, addAlert returns the EXISTING row, so its triggers_at is not the one just sent
-    // (system-alerts.ts, the non-terminal dedupe check; Langston Step 2 r4 C4). Say so, never "emitted".
-    const row = cliJson(stdout);
-    if (row && row.dedupe_key === dedupeKey && row.triggers_at !== sentTriggersAt) {
-      log(`CLI deduped (dedupe_key=${dedupeKey}): unresolved row ${row.id} already holds the key — no new alert`);
-      return 'deduped';
-    }
-    log(`alert emitted via CLI (dedupe_key=${dedupeKey}${row ? `, id=${row.id}` : ', CLI output not parsed'})`);
-    return 'cli';
-  } catch (cliErr) {
-    log(`CLI emit failed (${cliErr?.message?.slice(0, 200)}) — using direct-append fallback`);
-  }
-  // FALLBACK: direct append (the app/CLI is broken — the #512 case).
-  if (fileHasOpenDedupeKey(ALERTS_FILE, dedupeKey)) {
-    log(`fallback: non-resolved ${dedupeKey} row already present — not appending`);
-    return 'deduped';
-  }
-  const row = buildFallbackAlert({ title, body, dedupeKey, metadata, severity, category });
-  fs.mkdirSync(path.dirname(ALERTS_FILE), { recursive: true });
-  fs.appendFileSync(ALERTS_FILE, JSON.stringify(row) + '\n');
-  log(`alert appended directly (dedupe_key=${dedupeKey})`);
-  return 'fallback';
+function queueAlert(options) {
+  return enqueueWatchdogAlert(ALERTS_FILE, buildFallbackAlert(options));
 }
 
 function log(msg) {
   console.log(`[WATCHDOG] ${new Date().toISOString()} ${msg}`);
 }
 
-/** Resolve every unresolved row for `dedupeKey` through the CLI (gated by the caller on the file). */
-async function resolveKey(dedupeKey, reading) {
-  try {
-    const { stdout } = await pExecFile('npm', ['run', 'system-alerts', '--', 'resolve-key', dedupeKey,
-      '--by', WATCHDOG_ACTOR,
-      '--evidence', `watchdog run ${RUN_ID}: ${dedupeKey} condition cleared (${reading})`,
-    ], { cwd: APP_DIR, timeout: 60_000 });
-    const out = cliJson(stdout);
-    log(`resolved ${dedupeKey}: ${out ? JSON.stringify(out.resolved) : 'CLI output not parsed'}`);
-    return true;
-  } catch (err) {
-    log(`resolve of ${dedupeKey} FAILED (${err?.message?.slice(0, 200)}) — retried next tick while the row stays open`);
-    return false;
+function recordRecovery(key, reading, oldRow) {
+  return recordWatchdogRecovery(ALERTS_FILE, key, `watchdog run ${RUN_ID}: ${key} condition cleared (${reading})`, oldRow);
+}
+
+async function watchdogCli(command, key, id, timeout) {
+  const { stdout } = await pExecFile('npm', ['run', 'system-alerts', '--', `watchdog-${command}`,
+    '--dedupe-key', key, '--id', id,
+  ], { cwd: APP_DIR, timeout, env: { ...process.env, SYSTEM_ALERTS_FILE: path.resolve(ALERTS_FILE) } });
+  const result = cliJson(stdout);
+  if (!result || !Object.hasOwn(result, 'row') || (result.row && result.row.dedupe_key !== key)) {
+    throw new Error(`Unverified watchdog CLI result for ${key}`);
+  }
+  return result.row;
+}
+
+async function retryPending(preferredKey) {
+  const keys = await listPendingWatchdogKeys(ALERTS_FILE);
+  if (preferredKey && keys.includes(preferredKey)) {
+    keys.splice(keys.indexOf(preferredKey), 1);
+    keys.unshift(preferredKey);
+  }
+  // Allow one slow primary call per run so one hung CLI cannot starve every
+  // key's plain-Node retry. Recoveries use a shorter, independently bounded CLI.
+  let primaryAvailable = true;
+  for (const key of keys) {
+    try {
+      // Closing an old terminal row can make its immediate successor eligible.
+      for (let pass = 0; pass < 2; pass++) {
+        const head = await readWatchdogHead(ALERTS_FILE, key);
+        if (!head) break;
+        const id = head.row.id;
+        let row;
+        if (!head.matchedId && primaryAvailable) {
+          primaryAvailable = false;
+          try {
+            row = await watchdogCli('commit', key, id, 60_000);
+          } catch (error) {
+            log(`CLI commit failed for ${key} attempt ${id}: ${error?.message?.slice(0, 200)}`);
+          }
+        }
+        row ??= await commitWatchdogAttempt(ALERTS_FILE, key, id, 'fallback_atomic');
+        if (row && !head.matchedId) log(`${key} attempt ${id} matched ledger row ${row.id} (${row.metadata?.emit_path ?? 'existing'})`);
+        if (row && row.state !== 'resolved' && head.recovery && hasWatchdogReceipt(row)) {
+          const closed = await watchdogCli('recover', key, id, 8_000);
+          if (closed) log(`${key} attempt ${id} resolved ledger row ${closed.id}`);
+        }
+        if ((await readWatchdogHead(ALERTS_FILE, key))?.row.id === id) break;
+      }
+    } catch (error) {
+      log(`Watchdog attempt for ${key} still pending: ${error?.message?.slice(0, 200)}`);
+    }
   }
 }
 
@@ -388,7 +370,7 @@ async function main() {
   delete state.alerted; // the old in-memory latch: the alerts FILE is the one authority now (Langston part 2 r3)
   state.throws = state.throws || {};
   log(`run ${RUN_ID} started${DISK_FORCED ? ' (FORCED disk thresholds)' : ''}`);
-  const open = openDedupeKeys(ALERTS_FILE); // one read per run; kept current as this run resolves
+  const open = openAlertRows(ALERTS_FILE);
   for (const check of CHECKS) {
     const dedupeKey = check.dedupeKey || `watchdog-${check.key}`;
     let ok;
@@ -402,8 +384,8 @@ async function main() {
       state.throws[check.key] = n;
       log(`${check.key}: CHECK-THREW (${n}/${DEBOUNCE_TICKS}): ${err?.message?.slice(0, 200)}`);
       const errKey = `watchdog-check-error-${check.key}`;
-      if (t.page && !open.has(errKey)) {
-        await emitAlert({
+      if (t.page) {
+        await queueAlert({
           title: `WATCHDOG CHECK BROKEN — the ${check.key} check throws every tick`,
           body: `The staging liveness watchdog's ${check.key} check has thrown ${n} consecutive ticks, so it is NOT watching what it is meant to watch. Last error: ${String(err?.message || err).slice(0, 300)}. Check journalctl -u dawntrader-watchdog.service. Resolves itself when the check runs without throwing.`,
           dedupeKey: errKey,
@@ -413,28 +395,23 @@ async function main() {
       }
       continue;
     }
-    state.throws[check.key] = throwStep(state.throws[check.key], false, DEBOUNCE_TICKS).count;
-    // Gated on the FILE alone, so a failed resolve is retried next tick (Langston part 2 r2 blocker: the
-    // old counter gate zeroed first and never retried).
     const errKey = `watchdog-check-error-${check.key}`;
-    if (open.has(errKey) && await resolveKey(errKey, `${check.key} check ran without throwing`)) open.delete(errKey);
+    await recordRecovery(errKey, `${check.key} check ran without throwing`, open.get(errKey));
+    state.throws[check.key] = throwStep(state.throws[check.key], false, DEBOUNCE_TICKS).count;
     if (ok === null) { log(`${check.key}: skipped (precondition unreachable)`); continue; }
     if (ok) {
       if (state.streaks[check.key] > 0) log(`${check.key}: recovered`);
-      state.streaks[check.key] = 0;
-      // ... and the STORE is cleared too, or the next outage is deduped into this row (P7 clear edge).
       // A level check clears only past its margin (check.clear); between the line and the margin the row
       // stays open, so a re-crossing re-uses it and its time-driven re-surface count keeps climbing.
       const mayClear = check.clear ? check.clear() : true;
-      if (mayClear && open.has(dedupeKey) && await resolveKey(dedupeKey, check.reading ? check.reading() : `${check.key} check passed`)) open.delete(dedupeKey);
+      if (mayClear) await recordRecovery(dedupeKey, check.reading ? check.reading() : `${check.key} check passed`, open.get(dedupeKey));
+      state.streaks[check.key] = 0;
       continue;
     }
     state.streaks[check.key] = (state.streaks[check.key] || 0) + 1;
     log(`${check.key}: FAIL (streak ${state.streaks[check.key]}/${DEBOUNCE_TICKS})`);
-    // Mint gated on the FILE, like the clear: an open row means a page is already up; no open row means
-    // mint — even if a person resolved the row while the condition still holds (Langston part 2 r3).
-    if (shouldMint(state.streaks[check.key], DEBOUNCE_TICKS, open.has(dedupeKey))) {
-      const emitPath = await emitAlert({
+    if (state.streaks[check.key] >= DEBOUNCE_TICKS) {
+      await queueAlert({
         title: check.title,
         body: typeof check.body === 'function' ? check.body() : check.body,
         dedupeKey,
@@ -442,10 +419,10 @@ async function main() {
         ...(check.severity ? { severity: check.severity } : {}),
         ...(check.category ? { category: check.category } : {}),
       });
-      if (emitPath !== 'deduped') open.add(dedupeKey);
     }
   }
   saveState(state);
+  await retryPending();
 }
 
 /**
@@ -456,24 +433,28 @@ async function main() {
  * the alarm (F10: a liveness loop cannot close inside its own failure domain).
  */
 async function selfFail() {
-  await emitAlert({
+  const dedupeKey = 'watchdog-self-fail';
+  await queueAlert({
     title: 'WATCHDOG FAILED — staging liveness watchdog run errored',
     body: 'The staging liveness watchdog service run FAILED (systemd OnFailure hook). While it is down, app/engine outages go undetected on-box. Check `journalctl -u dawntrader-watchdog.service`.',
-    dedupeKey: 'watchdog-self-fail',
+    dedupeKey,
     metadata: { check: 'self' },
   });
+  await retryPending(dedupeKey);
 }
 
 async function heartbeat() {
-  // No dedupe key ON PURPOSE: one fresh info row per week is the liveness proof;
-  // §10.5 sweeps resolve it routinely. A missing week = the watchdog is dead.
-  await emitAlert({
+  // The durable dedupe key is the scheduled heartbeat's UTC date. Sweeps may
+  // resolve the info row without allowing a retry for that date to mint again.
+  const dedupeKey = `watchdog-heartbeat-${new Date().toISOString().slice(0, 10)}`;
+  await queueAlert({
     title: 'Watchdog weekly heartbeat — staging liveness watchdog alive',
     body: 'Routine weekly liveness proof from the staging watchdog (resolve on sight). If a week passes WITHOUT this alert, the watchdog itself is dead — that absence is the alarm.',
-    dedupeKey: `watchdog-heartbeat-${new Date().toISOString().slice(0, 10)}`,
+    dedupeKey,
     metadata: { check: 'heartbeat' },
     severity: 'info',
   });
+  await retryPending(dedupeKey);
 }
 
 // Main guard: importable (CI shape test) AND executable (systemd).
@@ -481,5 +462,6 @@ const isDirectRun = process.argv[1] && import.meta.url === new URL(`file://${pro
 if (isDirectRun) {
   const mode = process.argv[2];
   const run = mode === '--self-fail' ? selfFail : mode === '--heartbeat' ? heartbeat : main;
-  run().catch((err) => { console.error('[WATCHDOG] run failed:', err); process.exitCode = 1; });
+  fs.promises.mkdir(path.dirname(ALERTS_FILE), { recursive: true }).then(run)
+    .catch((err) => { console.error('[WATCHDOG] run failed:', err); process.exitCode = 1; });
 }
