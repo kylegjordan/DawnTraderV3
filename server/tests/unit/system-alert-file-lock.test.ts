@@ -1,9 +1,10 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdtemp, readFile, rm, utimes, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, mkdtemp, readFile, rm, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { build } from 'esbuild';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { withAlertFileLock } from '../../services/system-alert-file-lock.mjs';
 
@@ -33,8 +34,8 @@ afterEach(async () => {
   await rm(scratch, { recursive: true, force: true });
 });
 
-function start(executable: string, args: string[]): ChildProcess {
-  const child = spawn(executable, args, { stdio: ['ignore', 'inherit', 'inherit', 'ipc'] });
+function start(executable: string, args: string[], cwd?: string): ChildProcess {
+  const child = spawn(executable, args, { cwd, stdio: ['ignore', 'inherit', 'inherit', 'ipc'] });
   children.push(child);
   return child;
 }
@@ -98,6 +99,40 @@ describe('system alert file lock', () => {
     expect([['enter a', 'exit a', 'enter b', 'exit b'], ['enter b', 'exit b', 'enter a', 'exit a']]).toContainEqual(order);
     await expect(readFile(lock)).rejects.toHaveProperty('code', 'ENOENT');
   }, 15_000);
+
+  it.skipIf(!linux).each(['esm', 'cjs'] as const)('finds the reaper in the installed %s layout outside the current directory', async format => {
+    const bundle = join(scratch, 'installed', format === 'esm' ? 'dist/index.mjs' : 'dispatcher.cjs');
+    for (const [source, relativePath] of [
+      [fileURLToPath(lockModule), 'server/services/system-alert-file-lock.mjs'],
+      [reaper, 'server/scripts/reap-system-alert-lock.mjs'],
+    ]) {
+      const target = join(scratch, 'installed', relativePath);
+      await mkdir(dirname(target), { recursive: true });
+      await copyFile(source, target);
+    }
+    await build({
+      stdin: {
+        resolveDir: dirname(fileURLToPath(lockModule)),
+        contents: `import { withAlertFileLock } from './system-alert-file-lock.mjs';
+          withAlertFileLock(process.argv[2], () => process.send('acquired')).then(() => process.disconnect());`,
+      },
+      bundle: true, platform: 'node', format, outfile: bundle,
+      // A standalone CJS dispatcher anchors to its own __dirname.
+      logOverride: { 'empty-import-meta': 'silent' },
+    });
+    const holder = await hold();
+    const exit = once(holder, 'exit');
+    holder.kill('SIGKILL');
+    expect(await exit).toEqual([null, 'SIGKILL']);
+    await ageOwner();
+
+    const writer = start(process.execPath, [bundle, ledger], scratch);
+    const messages: string[] = [];
+    writer.on('message', message => messages.push(String(message)));
+    expect(await once(writer, 'exit')).toEqual([0, null]);
+    expect(messages).toEqual(['acquired']);
+    await expect(readFile(lock)).rejects.toHaveProperty('code', 'ENOENT');
+  }, 10_000);
 
   it.skipIf(!linux).each([true, false])('protects a successor only with the final token comparison (check=%s)', async check => {
     const holder = await hold();
