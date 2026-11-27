@@ -68,6 +68,9 @@ function getETParts(now: Date): { weekday: string; hour: number; minute: number 
   return { weekday, hour, minute };
 }
 
+let weekendCloseMinute: number | undefined;
+let weekendClosed = false;
+
 /**
  * Returns true iff `now` falls within the unified xStock weekend close window
  * (Friday 20:00 ET → Sunday 20:00 ET).
@@ -77,11 +80,13 @@ function getETParts(now: Date): { weekday: string; hour: number; minute: number 
  * be live and only sleeps across the weekend close.
  */
 export function isInXstockWeekendClose(now: Date): boolean {
+  // The current rule only changes at whole hours. Reuse the exact result within the same UTC minute.
+  const minute = Math.floor(now.getTime() / 60_000);
+  if (minute === weekendCloseMinute) return weekendClosed;
   const { weekday, hour } = getETParts(now);
-  if (weekday === 'Fri' && hour >= 20) return true;
-  if (weekday === 'Sat') return true;
-  if (weekday === 'Sun' && hour < 20) return true;
-  return false;
+  weekendClosed = (weekday === 'Fri' && hour >= 20) || weekday === 'Sat' || (weekday === 'Sun' && hour < 20);
+  weekendCloseMinute = minute;
+  return weekendClosed;
 }
 
 /**

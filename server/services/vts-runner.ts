@@ -109,7 +109,7 @@ import { ensureSigmaFresh } from '../asset_classes/xstock_spot/sigma-rate-cache.
 import { markDecided, onCrossing, onMemberReason, shouldCheckMemberReason, ensureVtsRailIndex, runVtsRailSweep, onUnpricedClose, onShadowUnpriced, productionVtsRailDeps, recordVtsRefusal, recordVtsIncidentRecovery, type VtsRailDeps } from './vts-rail-reporting.js';
 import { EXPECTED_OLD } from '../core/trading/vts-rail.js';
 import { EQUITY_TICKER_MAX_TRANSPORT_GAP_MS, getEquityTickerFeedEvidence, getEquityTickerSourceIdentity } from './passive-archive/equity-spot-archiver.js';
-import { vtsEquityIncidentCohort, VtsFeedIncidentWindows, VTS_FEED_INCIDENT_SAMPLE_MS, type VtsFeedIncidentEvidence } from './vts-feed-incident-windows.js';
+import { VtsIncidentTradeMap, VtsFeedIncidentWindows, VTS_FEED_INCIDENT_SAMPLE_MS, type VtsFeedIncidentEvidence } from './vts-feed-incident-windows.js';
 import { vtsIncidentRecoveryWindows } from './vts-feed-incident-recovery.js';
 import { isInXstockWeekendClose, isXstockVenueTransitionPause, isXstockRailPagingTime } from '../asset_classes/xstock_spot/market-hours.js';
 
@@ -231,6 +231,7 @@ const _vtsEntryFillLooked = new Set<string>();
 // means the sides are older than 90 s (a `vtsSimulation` pass overrun), and 10 min means about six consecutive passes
 // delivered nothing usable — or the symbol never received real sides (a bid equal to the ask refuses as a synthetic book).
 const VTS_NO_TRIGGER_ALERT_AFTER_MS = 10 * 60_000;
+const VTS_CRYPTO_EXIT_CEILINGS = `exit ceilings (${VTS_EXIT_TOUCH_MAX_AGE_MS} ms, ${VTS_EXIT_TOUCH_MAX_SPREAD_FRACTION * 100}% spread)`;
 // ⛔ r3 (Langston Step-4 r2 BLOCKER-1): ONE streak over EVERY no-decision reason — `no_transactable_side` AND
 // `no_usable_mark` (the evaluator's could-not-look arms). The harm is identical for both (no HWM, no latch, no rung, then a
 // timeout at the mark), and clearing on the other reason let a feed that flaps between them reset the clock forever.
@@ -927,23 +928,17 @@ interface OpenVirtualTrade {
   regimeConfidenceModulated?: number;
 }
 
-const openVirtualTrades: Map<string, OpenVirtualTrade> = new Map();
+const openVirtualTrades = new VtsIncidentTradeMap<OpenVirtualTrade>();
 const feedIncidentWindows = new VtsFeedIncidentWindows();
 
 function currentVtsFeedIncidentCohort(atMs: number) {
-  const monitored = new Set<string>();
-  for (const trade of openVirtualTrades.values()) {
-    if (trade.assetClass === 'xstock_spot' && trade.state !== 'pending' && trade.state !== 'weekend_suspended') {
-      monitored.add(trade.symbol);
-    }
-  }
-  return vtsEquityIncidentCohort(monitored, isInXstockWeekendClose(new Date(atMs)));
+  return openVirtualTrades.incidentCohort(atMs);
 }
 
 function sampleVtsFeedIncidentWindows(): void {
   const atMs = Date.now();
   const cohort = currentVtsFeedIncidentCohort(atMs);
-  const feed = getEquityTickerFeedEvidence(cohort.symbols);
+  const feed = getEquityTickerFeedEvidence();
   const nowMs = performance.now();
   feedIncidentWindows.sample(cohort, feed, nowMs);
   for (const proof of vtsIncidentRecoveryWindows.sample(feed, nowMs, EQUITY_TICKER_MAX_TRANSPORT_GAP_MS)) {
@@ -1258,11 +1253,10 @@ export async function registerOpenShadowTrade(
  * next rehydrate at server restart.
  *
  * The Map's value type is structurally compatible with the helpers' loose
- * `{ assetClass; state? }` shape; the cast is internal-module-safe because
- * `OpenVirtualTrade.assetClass` and `.state` carry the expected types.
+ * `{ assetClass; state? }` shape and refresh the incident cohort after mirroring a transition.
  */
-export function getOpenVirtualTradesMap(): Map<string, { assetClass: AssetClass; state?: import('./vts-trade-persistence.js').VtsOpenTradeState }> {
-  return openVirtualTrades as unknown as Map<string, { assetClass: AssetClass; state?: import('./vts-trade-persistence.js').VtsOpenTradeState }>;
+export function getOpenVirtualTradesMap(): import('./vts-trade-persistence.js').VtsOpenTradeStateMap {
+  return openVirtualTrades;
 }
 
 // B79.0g — rehydrate the in-memory Map from vts_open_trades at server boot.
@@ -1303,6 +1297,7 @@ export async function rehydrateOpenVtsTrades(): Promise<void> {
       // Bootstrap path — first deploy of B79.0g, table empty but Map has entries.
       const seeded = await bootstrapOpenTradesFromMemory(
         Array.from(openVirtualTrades.values()) as any,
+        () => openVirtualTrades.refreshIncidentCohort(),
       );
       console.log(`[B79.0g][REHYDRATE] table empty + Map non-empty → bootstrapped ${seeded ?? 0}`);
     } else {
@@ -3913,7 +3908,7 @@ async function resolveOpenVirtualTrades(): Promise<{
       });
       if (_pOutcome !== 'rest') _vtsEntryFillLooked.delete(tradeId);
       if (_pOutcome === 'fill') {
-        trade.state = 'open';
+        openVirtualTrades.setTradeState(tradeId, 'open');
         const { markPendingMakerFilled } = await import('./vts-trade-persistence.js');
         await markPendingMakerFilled(tradeId);
         console.log(`[P19-B7.2c][VTS][MAKER_FILLED] ${trade.symbol}: ask ${_pFillPrice} (mark ${currentPrice}) traded through limit ${_pLimit} — pending→open at ${makerFillPrice(_pLimit)} + maker fee`);
@@ -4173,50 +4168,19 @@ async function resolveOpenVirtualTrades(): Promise<{
         if (incidentLook) {
           try {
             const cohort = currentVtsFeedIncidentCohort(_ntNow);
-            if (cohort) feedIncident = feedIncidentWindows.evidenceAtCrossing(
-              trade.symbol, cohort, getEquityTickerFeedEvidence(cohort.symbols), cutMs);
+            feedIncident = feedIncidentWindows.evidenceAtCrossing(trade.symbol, cohort, getEquityTickerFeedEvidence(), cutMs);
           } catch (error) {
             console.error('[VTS_RAIL][CROSSING_EVIDENCE_FAILED]', error);
           }
         }
-        recordVtsRefusal({
-          kind: 'crossing', tradeId, streakId: streak.streakId, pageSinceMs: streak.pageSinceMs,
-          observedAtMs: _ntNow, reason: streak.lastReason,
-          feedCoverage: feedIncident && {
-            key: feedIncident.key, generation: feedIncident.generation,
-            startMs: feedIncident.startMs, endMs: feedIncident.endMs, cutMs,
-            subscribed: feedIncident.subscribed, qualified: feedIncident.qualified.length,
-          },
+        // Queue the cut and its warning together without waiting for the database-backed sweep.
+        void onCrossing({
+          tradeId, symbol: trade.symbol, assetClass: trade.assetClass, lastReason: _nt.lastReason, pageSinceMs: streak.pageSinceMs,
+          streakId: streak.streakId, feedIncident, firstRefusalAtMs: _nt.sinceMs,
+          cryptoCeilings: trade.assetClass === 'crypto_spot' ? VTS_CRYPTO_EXIT_CEILINGS : undefined,
+        }, _ntNow, undefined, cutMs).catch((err) => {
+          console.error(`[VTS_RAIL][CROSSING_WRITE_FAILED] trade=${tradeId}:`, err);
         });
-        try {
-          // Row 2 increment (4a) P2/P3: an expected wide/quiet xStock book joins ONE standing record; everything else pages
-          // on its own key as before (`vts-rail-reporting.ts`; the rules are pure in `core/trading/vts-rail.ts`).
-          const _rd = await vtsRailDeps();
-          if (!_rd) throw new Error('rail deps unavailable');
-          void onCrossing({
-            tradeId, symbol: trade.symbol, assetClass: trade.assetClass, lastReason: _nt.lastReason, pageSinceMs: _nt.pageSinceMs ?? _ntNow,
-            streakId: streak.streakId,
-            feedIncident,
-            title: `VTS exit decisions unavailable — ${_ntMins} min with no decision for ${trade.symbol}`,
-            body: `VTS has made NO exit decision for ${_ntMins} minutes of paging time (${_ntTotalMins} minutes in all) on open `
-              + `virtual trade ${tradeId} in ${trade.symbol} (most recent reason: ${_nt.lastReason}). \`no_transactable_side\` means a mark exists but no usable BID within the VTS `
-              + (trade.assetClass === 'xstock_spot'
-                ? `xStock exit ceilings (paper's risk-derived age ceiling for the symbol, and the \`vts_xstock_touch\` spread ceiling; `
-                  + `this rail pages in the US regular session only); \`no_usable_mark\` means `
-                : `exit ceilings (${VTS_EXIT_TOUCH_MAX_AGE_MS} ms, ${VTS_EXIT_TOUCH_MAX_SPREAD_FRACTION * 100}% spread); \`no_usable_mark\` means `)
-              + `no live price at all. While this lasts the trade's stop and target are NOT evaluated, `
-              + `its high-water mark and latches do not advance, and if it reaches the max-hold valve it closes with NO recorded `
-              + `price (\`time_stop_unpriced\`) — kept out of every outcome, but its stop or target may have been missed. The reason `
-              + `in brackets is the selector's own refusal: a ceiling (\`too_old\`, \`too_wide\`, a stale age) can be tuned; a `
-              + `\`crossed_book\` or a one-sided book cannot be fixed by any ceiling. Read the symbol's cached sides first (a bid `
-              + `equal to the ask means the cache never received real sides) before touching either ceiling. `
-              + `This row CLEARS ITSELF when the trade decides or closes (row 2 increment (4a)); if you resolve it by hand, never ACK it — an ack silences the dedupe key permanently.`,
-          }, _ntNow, _rd).catch((err) => {
-            console.error(`[VTS_RAIL][CROSSING_WRITE_FAILED] trade=${tradeId}:`, err);
-          });
-        } catch (alertErr) {
-          console.error(`[8a-P3][VTS_NO_TRIGGER_ESCALATION] addAlert failed for ${trade.symbol}:`, alertErr);
-        }
       }
     } catch (tecExitErr) {
       console.error(

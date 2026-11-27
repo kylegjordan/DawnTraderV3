@@ -40,6 +40,10 @@ import { db } from '../db.js';
 import { sql } from 'drizzle-orm';
 import { asValidAssetClass, safeResolveAssetClass, type AssetClass } from '../../shared/asset-classes.js';
 
+export interface VtsOpenTradeStateMap extends ReadonlyMap<string, { assetClass: AssetClass; state?: VtsOpenTradeState }> {
+  refreshIncidentCohort?(): void;
+}
+
 /**
  * reorg-B4 (2026-06-25) — the CANONICAL shadow-exclusion predicate for every
  * NON-shadow-path read of the shared `vts_open_trades` table. reorg-B4 persists
@@ -233,7 +237,7 @@ export async function markOpenTradeClosed(tradeId: string): Promise<void> {
  * Returns the number of DB rows updated.
  */
 export async function markAllXstockWeekendSuspended(
-  inMemoryMap: Map<string, { assetClass: AssetClass; state?: VtsOpenTradeState }>,
+  inMemoryMap: VtsOpenTradeStateMap,
 ): Promise<{ updated: number }> {
   const r = await db.execute<{ count: string }>(sql`
     WITH u AS (
@@ -257,6 +261,7 @@ export async function markAllXstockWeekendSuspended(
       inMemoryMirrored++;
     }
   }
+  if (inMemoryMirrored) inMemoryMap.refreshIncidentCohort?.();
 
   console.log(
     `[B-NEW-36][SUSPEND_XSTOCK] db_rows=${updated} memory_mirrored=${inMemoryMirrored}`,
@@ -276,7 +281,7 @@ export async function markAllXstockWeekendSuspended(
  * Returns the number of DB rows updated.
  */
 export async function unmarkAllXstockWeekendSuspended(
-  inMemoryMap: Map<string, { assetClass: AssetClass; state?: VtsOpenTradeState }>,
+  inMemoryMap: VtsOpenTradeStateMap,
 ): Promise<{ updated: number }> {
   const r = await db.execute<{ count: string }>(sql`
     WITH u AS (
@@ -299,6 +304,7 @@ export async function unmarkAllXstockWeekendSuspended(
       inMemoryMirrored++;
     }
   }
+  if (inMemoryMirrored) inMemoryMap.refreshIncidentCohort?.();
 
   console.log(
     `[B-NEW-36][RESTORE_XSTOCK] db_rows=${updated} memory_mirrored=${inMemoryMirrored}`,
@@ -395,6 +401,7 @@ export async function rehydrateOpenTrades(): Promise<OpenVirtualTradeRecord[]> {
  */
 export async function bootstrapOpenTradesFromMemory(
   inMemoryTrades: Iterable<OpenVirtualTradeRecord>,
+  onClassChange?: () => void,
 ): Promise<number | null> {
   // B79.0g-tx: bootstrap is gated on the OPEN-only count. Closed soft-
   // deleted history rows do not block the re-resolve bootstrap path —
@@ -426,11 +433,11 @@ export async function bootstrapOpenTradesFromMemory(
     try {
       await insertOpenTrade(corrected);
       bootstrapped++;
-      // F3 fix: also update the in-memory record so cache + DB agree post-
-      // bootstrap. The OpenVirtualTrade Map is keyed by id; mutating the
-      // record's assetClass field is safe because all readers consume the
-      // current value (no caching of the field elsewhere).
-      (trade as any).assetClass = reResolved;
+      // F3: the in-memory record and incident cohort follow the committed asset class.
+      if (trade.assetClass !== reResolved) {
+        trade.assetClass = reResolved;
+        onClassChange?.();
+      }
     } catch (err) {
       console.error(
         `[B79.0g][BOOTSTRAP] insert failed for trade=${trade.id} symbol=${trade.symbol}:`,

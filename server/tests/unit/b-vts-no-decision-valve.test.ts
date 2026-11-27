@@ -31,6 +31,7 @@ import {
 import {
   closeVtsTradeUnpriced, computeShadowOutcomeMath, getOpenVirtualTradesMap, getVtsRecentCloseAt,
 } from '../../services/vts-runner.js';
+import { ownWarning } from '../../services/vts-live-warning.js';
 
 const VTS = readFileSync(join(process.cwd(), 'server/services/vts-runner.ts'), 'utf-8').replace(/\r\n/g, '\n');
 const body = (fn: string): string => {
@@ -206,7 +207,14 @@ describe('P8 — the refusal alert names the selector\'s own reason', () => {
     expect(VTS).toMatch(/_vtsExitRefusal = _et\.selection\.ok \? \(_vtsExitBid === null \? 'no_bid_side' : null\) : _et\.selection\.tickerRefusal;/);
     expect(VTS).toMatch(/_vtsExitRefusal = _xsExit\.bid === null \? _xsExit\.reason : null;/);
     expect(VTS).toMatch(/`no_transactable_side \(\$\{_vtsExitRefusal\}\)`/);
-    expect(VTS).not.toMatch(/books a timeout at the `\s*\+ `mark/);
-    expect(VTS).toMatch(/crossed_book/);
+    const firstRefusalAtMs = Date.parse('2026-11-27T15:00:00Z');
+    const warning = ownWarning({
+      tradeId: 'crossed-trade', symbol: 'AZN/USD', assetClass: 'xstock_spot',
+      lastReason: 'no_transactable_side (crossed_book)', firstRefusalAtMs, pageSinceMs: firstRefusalAtMs,
+    }, firstRefusalAtMs + 600_000);
+    expect(warning.body).toContain('most recent reason: no_transactable_side (crossed_book)');
+    expect(warning.body).toContain('closes with NO recorded price');
+    expect(warning.body).toContain('`crossed_book` or a one-sided book cannot be fixed by any ceiling');
+    expect(warning.body).not.toMatch(/books a timeout at the mark/);
   });
 });
