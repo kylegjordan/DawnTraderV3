@@ -266,3 +266,30 @@ At both reads, refresh the exact standing row and member UUIDs, additions/rejoin
 **Next standing-row intake.** Add informational row `d8ff15cc-82b7-4087-a5ef-597482ca1ee0` alongside `d18717d5-0e46-42f6-aec0-d5293c2e8734` for both Nov 28 **02:00 and 05:50 UTC** paper preflights. Check each exact row and its own members at those reads. The OBJ-5 readiness return is **07:00 UTC** or after both protected legs have a disposition, whichever is later.
 
 `REVIEWER: claim-only · which exact served carriers prove complete pre-reconnect and close ownership? · HIT: global subscribed names are available, but full pending/request and owner state is not exposed, and the close keep line proves owner only at the close branch; source and two live read-only controls re-derived · re-derived y`
+
+#### Nov 27 22:39 UTC due-queue intake
+
+The merged staging ledger showed all ten rows active and unacknowledged at the 22:41 UTC read. All ten were promoted at `22:28:05.496Z`. The earlier standing rows above cleared automatically at `21:45:17.981Z` and `22:15:42.905Z`, respectively. The separate PCG book-validation warning cleared at `21:22:03.784Z`.
+
+| Paper position | Exact row UUID | Exact position UUID | Nov 27 mint UTC | Forty-tick reason mix |
+|---|---|---|---|---|
+| TJX/USD | `063c2840-e7d3-4b43-bd2f-b9e5d4cc7c60` | `620cd7cc-203a-4ea6-b206-278e6bc5bdbf` | `22:15:50.038` | Info, 39 unvalidated book + 1 book-state yield |
+| XLE/USD | `0c1057d5-2436-49f4-b8f3-37f1c23ed06d` | `f3bb5fae-db6a-44fd-81e3-6bef9b8dd1f4` | `22:19:49.711` | 40 stale mark |
+| ACN/USD | `eeab49af-6778-448d-8e1e-94a7ebdbbaca` | `d5183e91-6541-48f9-abeb-7db870fb0ca5` | `22:20:16.752` | 27 stale mark + 13 book-state yield |
+| XBI/USD | `c43681ef-1cdb-448d-9803-0abaf701ad33` | `6e2982b0-9c33-454e-a7e1-1167c29b18f6` | `22:20:54.368` | 37 stale mark + 3 book-state yield |
+| WDC/USD | `ac0e0682-5c58-4483-b039-7d1a6f02795f` | `13260ed2-7e9d-4eb1-9f8d-f9734c297842` | `22:20:55.732` | 37 stale mark + 3 book-state yield |
+| HPQ/USD | `071b96a4-f557-459d-9a69-6733b0451c6f` | `63e1da6b-b56b-4407-8dfe-db93ae405dad` | `22:20:58.935` | 40 stale mark |
+| PCG/USD | `b384b7c6-0f17-4eb6-87a4-32d027179264` | `6ec5d5d2-e159-4f61-be0e-e30fa2410a01` | `22:20:59.062` | 40 stale mark |
+| TGT/USD | `1137e04b-b9d2-45c5-8a46-5139f1a5c67c` | `1e97abe5-f5e1-408f-87b1-010a18fd33c2` | `22:21:15.428` | 37 stale mark + 3 book-state yield |
+| NVO/USD | `a09e8ae2-b1bb-4c2f-868a-ab68d96d52ec` | `f0ed25da-6ea2-4d4f-806e-f4a25356f6c9` | `22:21:19.851` | 40 stale mark |
+| NKE/USD | `b3d94e00-13fb-4ec1-b262-e68d820ce64b` | `2f674348-58a1-424b-90d2-a580548233fa` | `22:21:20.017` | 40 stale mark |
+
+On serving Phase A `5ecd7ee24fb7a741e8e015e0e6a262a464e7d016`, restart 716, PID 235604, `out.log` shows the TJX standing join and paper sweeps. The join was `not_quiet`, `T=469`, `book_state` only. TJX stayed held in the `22:41:57Z` sweep with `thin`, `T=0`. The last TJX exit frame was `22:12:42Z`. In `error.log`, each of the nine stale-mark warnings has a matching `PRICE_SKIP_ESCALATION` line, `thin`, `T=0`, and a mark 289–360 seconds old against its 230- or 300-second ceiling. Exact serving `server/services/venue-quiet-alerting.ts` classifies `thin` as a page-worthy state during the generic after-hours session. The TJX book-state row joined the separate standing path.
+
+At `22:15:31Z` the Kraken equities adapter reported 1,393 genuine ticker updates across 469 symbols in the preceding minute. All 26 one-minute samples from `22:16:31Z` through `22:41:31Z` had zero genuine updates. Watchdog reconnects at `22:27:58Z` and `22:40:58Z` each returned 469 snapshots and zero genuine updates at the next sample. Heartbeats continued and the same app logs contained 18,526 crypto VVV/USD ticks over `[22:11,22:42)Z`. The two app streams contained zero exact-position TEC exit frames at or after the mint or join second for these ten positions through `22:42Z`. Positive controls were 2,132 earlier TEC frames across nine of the same positions in the bounded read, plus the earlier 36 exact-position frames for ACN recorded above. No row supplied affirmative closure or writer-clear evidence at intake.
+
+**Disposition.** The nine warnings describe one loss of fresh underlying xStock marks after the Thanksgiving Friday shortened sessions. Nasdaq and the named NYSE late sessions closed at `22:00Z`; the last observed adapter data was around `22:15:19Z`. This supports a holiday-boundary explanation, with the exact Kraken equities feed cutoff and per-symbol eligibility still unverified. A distinct outage during eligible quote hours remains open until checked against genuine updates. The current generic Friday fence begins at `01:00Z`, and already queued `B-XSTOCK-HOLIDAY-CALENDAR` (`#392`, KD-122) owns the exchange and feed eligibility gap. [Nasdaq holiday notice](https://www.nasdaqtrader.com/TraderNews.aspx?id=ETA2026-69), [NYSE holiday hours](https://www.nyse.com/trade/hours-calendars), [Kraken xStock market hours](https://support.kraken.com/articles/market-hours-explained).
+
+At the Nov 28 **02:00Z** and **05:50Z** paper reads, recheck the above exact rows, live paper exposure, TEC evaluation or closure and automatic resolution. If the underlying venue is closed, carry unresolved recovery to the first proven eligible genuine-frame window. Treat a continuing stall during verified quote eligibility as a separate incident. The OBJ-5 readiness return stays **07:00Z or after both protected legs have a disposition, whichever is later**.
+
+`REVIEWER: claim-only · which evidence separates the TJX book-state hold, nine freshness warnings and genuine recovery? · HIT: exact UUIDs, nine emitted thin branches and two snapshot-only reconnects, with same-position frames and the live producer baseline as controls · re-derived y`
