@@ -39,6 +39,14 @@
  *     call sites but no longer consulted internally.
  */
 
+const easternTimeFormatter = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'America/New_York',
+  weekday: 'short',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+});
+
 /**
  * B79.0L: extract ET weekday + 24h-hour from a UTC `now` via
  * `Intl.DateTimeFormat`. DST-aware (handles EST ↔ EDT automatically).
@@ -49,14 +57,7 @@
  *   - minute: 0-59
  */
 function getETParts(now: Date): { weekday: string; hour: number; minute: number } {
-  const fmt = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/New_York',
-    weekday: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  });
-  const parts = fmt.formatToParts(now);
+  const parts = easternTimeFormatter.formatToParts(now);
   const weekday = parts.find((p) => p.type === 'weekday')?.value ?? '';
   const hourStr = parts.find((p) => p.type === 'hour')?.value ?? '0';
   const minuteStr = parts.find((p) => p.type === 'minute')?.value ?? '0';
