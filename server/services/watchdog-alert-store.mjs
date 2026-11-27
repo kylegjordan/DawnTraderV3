@@ -25,8 +25,8 @@ async function readOptional(path) {
   }
 }
 
-async function syncPath(path) {
-  const file = await open(path, 'r');
+async function syncPath(path, flags) {
+  const file = await open(path, flags);
   try {
     await file.sync();
   } finally {
@@ -35,7 +35,7 @@ async function syncPath(path) {
 }
 
 async function syncDirectory(path) {
-  if (process.platform === 'linux') await syncPath(dirname(path));
+  if (process.platform === 'linux') await syncPath(dirname(path), 'r');
 }
 
 export async function writeDurably(path, bytes) {
@@ -62,6 +62,7 @@ export async function writeDurably(path, bytes) {
 function decodeState(bytes, path, ledger) {
   const state = JSON.parse(bytes.toString('utf8'));
   if (state?.version !== 1 || typeof state.key !== 'string' || path !== statePath(ledger, state.key) ||
+      (state.lastRecovery != null && typeof state.lastRecovery !== 'string') ||
       typeof state.infoClosed !== 'boolean' || !Array.isArray(state.queue) ||
       state.queue.some((entry) => !entry?.row || !UUID.test(entry.row.id) || entry.row.dedupe_key !== state.key ||
         (entry.matchedId !== null && !UUID.test(entry.matchedId)) ||
@@ -102,6 +103,10 @@ export async function readWatchdogHead(ledger, key) {
   return (await readState(ledger, key)).queue[0] ?? null;
 }
 
+export async function readWatchdogLastRecovery(ledger, key) {
+  return (await readState(ledger, key)).lastRecovery ?? null;
+}
+
 export async function enqueueWatchdogAlert(ledger, row) {
   const key = row.dedupe_key;
   return withAlertFileLock(statePath(ledger, key), async () => {
@@ -127,6 +132,9 @@ export async function recordWatchdogRecovery(ledger, key, evidence, existingRow)
       // rollout. Pin the observed row, including if it is resolved meanwhile.
       state.queue.push({ row: existingRow, recovery: evidence, matchedId: existingRow.id });
     }
+    // Keep this marker after delivery retires the entry. A restarted check
+    // can have an older failure streak even when the queue is already empty.
+    state.lastRecovery = evidence;
     await writeState(ledger, state);
   });
 }
@@ -172,7 +180,7 @@ async function writeLedgerRow(ledger, raw, row, previous) {
 }
 
 async function flushLedger(ledger) {
-  await syncPath(ledger);
+  await syncPath(ledger, 'r+');
   await syncDirectory(ledger);
 }
 
