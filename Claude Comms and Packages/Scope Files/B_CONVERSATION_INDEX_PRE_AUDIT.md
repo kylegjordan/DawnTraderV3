@@ -1,6 +1,6 @@
 # B-CONVERSATION-INDEX — PRE-IMPLEMENTATION AUDIT AND IMPLEMENTATION PLAN
 
-**Status:** Step 2 opening checkpoint, 2026-11-27. Owner INFRA Codex. Approved scope `4631ed0fb9a56c48bf9aae9dabeca8cd6b73e504`; code and governance read at shared `7cc114ea11b9e854898809232b136932f0502ea4`. The implementation plan follows the source audit and remains open.
+**Status:** Step 2 checkpoint, 2026-11-27. Owner INFRA Codex. Approved scope `4631ed0fb9a56c48bf9aae9dabeca8cd6b73e504`; code and governance read at shared `7cc114ea11b9e854898809232b136932f0502ea4`. The Claude archive opening check is in A2 and the Codex access check is in A3. The implementation plan follows the source audit and remains open.
 
 ## Previously stated vs now
 
@@ -28,9 +28,31 @@ Reviewer histories require Kyle’s separate permission. Command Center, private
 
 `REVIEWER: claim-only · Which versioned objects distinguish archive success, a search hit and backup restore? · The nightly alert leg can change the task outcome independently, a search hit may use an older archive, and the historical restore test sampled a separate snapshot · re-derived y (nightly return branch, pinned synthetic search, Step 8 §§1–2 and 6).`
 
+## A3. Codex access path by role
+
+The first check matched all five distinct DawnTrader role and project rows in `AGENTS.md` §1 against the actors, eligible chats and permitted purpose in KD-66 and KD-67. KD-88 places these five histories in this batch. The approved Step 1 scope requires confirmation of the access path for each source. It grades the raw backup, searchable copy and matching restore separately.
+
+| Role | DawnTrader project and actor | Existing route verified from DawnTrader records | History capture and restore route |
+| --- | --- | --- | --- |
+| OLD Codex | `DawnTraderV3-old`, `codex-a` | PM Codex may inspect the existing OLD chat for coordination under KD-66. That decision records a successful OLD coordination round trip. | Unverified. Need the approved source selector and allowed history range for OLD. |
+| NEW Codex | `DawnTraderV3-new`, `codex-b` | PM Codex may inspect the existing NEW chat for coordination under KD-66. | Unverified. Need the approved source selector and allowed history range for NEW. |
+| ANALYST Codex | `DawnTraderV3-analyst`, `codex-c` | PM Codex may inspect the existing ANALYST chat for coordination under KD-66. | Unverified. Need the approved source selector and allowed history range for ANALYST. |
+| INFRA Codex | `DawnTraderV3-infra`, `codex-infra` | PM Codex may inspect the existing INFRA chat for coordination under KD-66. INFRA is working in its matching DawnTrader project on this audit. | Unverified. Need the approved source selector and allowed history range for INFRA, including which earlier conversations belong to the role. |
+| PM Codex | `DawnTraderV3-pm`, `codex-pm` | The Nov 23 S7 handover §PM records a PM Codex session and points to its handover. KD-67 binds the heartbeat to PM’s existing chat and gives it the four building chats as targets. | Unverified. Need the approved source selector and allowed history range for PM. |
+
+- **Positive controls and limits.** KD-66 records PM’s permitted coordination lane and its OLD round trip. The Transcript Archive completion report §4 and Step 8 evidence §6 separately record an archive and bounded restore for Claude. `dt_archive.py:58–59` maps the five project names to Claude source folders under the `.claude/projects` input root selected by `dt_archive_run.py:233`. The identical project names do not make Codex conversations inputs to that archive. Issue #1238 and `B_PM_CLAUDE_PRE_AUDIT.md` A7 record the historical Codex backup gap. `comms-infra/codex-discord-outbox.py:49–59` fixes outbound Discord attribution from its project folder, so a PM outbox receipt would establish what was sent to Discord. `scripts/codex-export/MANIFEST.txt` is an allowlist for an export of tracked repository material for the advisor.
+- **Desktop surface checked at the tool contract.** The available exact-chat reader accepts a known chat ID and exposes paged turns and items. Its tool contract describes recent status and summaries, with returned items and output subject to limits. The history-listing surface selects a source and host, with no DawnTrader-project filter in its arguments. These are interface observations. No chat listing, source content or account export was opened for A3.
+- **Evidence required before a Codex source read for indexing.** Document the permitted actor and existing access surface, the DawnTrader-only selector with the origin evidence for each matched chat, and the permitted history range for each of the five roles. Record the raw, searchable and restore destinations and their access rules. A match must lead to a source identity and passage reference. Ambiguous or excluded matches stay outside the intake. Before relying on a candidate reader for raw backup, verify its completeness and a matching restore against a representative record through the approved access path. A missing path remains an explicit gap in the five-role result.
+
+`REVIEWER: claim-only · Which tracked evidence distinguishes an approved Codex history path from a project or coordination association? · Shared project names resolve to a Claude input root, KD-66 grants current-turn coordination to PM for four building chats, and the PM heartbeat binding identifies its operating chat · re-derived y (all five AGENTS rows, KD-66/67/88, archive alias map and default root, #1238 and approved scope).`
+
 ## Implementation plan — opening actions only
 
-1. **From A1:** Record the approved inventory route, storage boundary, identity, cutoff and allowed evidence per source before choosing a capture mechanism. Reconcile all five Codex roles individually and preserve the after-live remainder of #1238.
+1. **From A1 and A3:** Record the approved inventory route, storage boundary, identity, cutoff and allowed evidence per source before choosing a capture mechanism. Use the five Codex role rows to verify the permitted selector, history range and destination before reading source contents. Keep the unresolved rows visible and preserve the after-live remainder of #1238.
 2. **From A2:** Keep capture receipts, search coverage and backup/restore tests separate. Start the search evaluation from the proven fixture boundaries and register the actual known-miss cases and acceptance criteria before selecting ranking or optional vectors. Register both switch directions, nightly coverage and freshness timing before scheduling verification.
 
 The full producer/reader census, audit-aid blind spots, source-specific verification windows, known-miss suite and reviewed implementation plan remain Step 2 work. The proposed verification is for crew tooling and currently carries no staging observation window. This checkpoint authorizes no installation.
+
+## AUDIT AIDS RUN
+
+N/A - no code touched in this checkpoint. Record component-specific aid runs once the implementation plan identifies code to change.
