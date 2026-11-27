@@ -1,6 +1,6 @@
 # B-TOKEN-WATCH-BIRTH-CAP — PROGRESS REPORT
 
-## OPEN — OBJ-2/OBJ-8 passed independent adjudication; OBJ-5's registered follow-up window runs to 2026-11-27 00:00Z, then its decision closes the remaining objective
+## OPEN — OBJ-2/OBJ-8 passed independent adjudication; OBJ-5 cycle-end measurement meets its criterion and awaits disposition
 
 > Batch `B-TOKEN-WATCH-BIRTH-CAP` · issue `#1247` · owner Infra Claude · Kyle decision KD-90 · plan row `SPRINT_TO_LIVE_PLAN.md` 5a · change-class `non_architecture` (scope header).
 > Window shape: a **set period** — 7 complete capped days for OBJ-2; OBJ-5's window is registered in §5 (AMENDMENT 18 rider 3): from the rider's commit to 2026-11-27 00:00Z.
@@ -42,7 +42,7 @@ The batch built a controller, `token-watch/birthcap.py` (units `token-watch-birt
 | OBJ-2 | scheduled by time; births per hour of day within the pre-registered band | **MET — independently adjudicated** | Coltrane reconstructed hourly ON intervals directly from the immutable 11-17 → 11-23 snapshot: 24/24 hours PASS; largest absolute difference 1.224429 pp at hour 06 against the 1.5 pp band (02:16:25Z ruling; §4 and change list §9f) |
 | OBJ-3 | the credit cap is a backstop | **MET live** | 11-16 truncated at the first enabled tick (12,095 recorded ≥ allowance 10,493.7) |
 | OBJ-4 | every switch state checked, both directions | **MET in tests; arm (i) live** | suite 142 passed, every mutant killed (change list §9e). The read-back (arm i) runs on every switch: all six 11-20 switches `ok:true` with the echo matching. Arms (ii)-(iv) and the window alarms have **never fired live**, so their silence is not evidence they work |
-| OBJ-5 | everything already tracked keeps being tracked | **OPEN — criterion registered (rider 3)** | §5; window to 11-27 00:00Z |
+| OBJ-5 | everything already tracked keeps being tracked | **Measured criterion met — disposition open** | §5; 142,625 existing-token obligations observed, zero budget-shed or abandoned |
 | OBJ-6 | pre-registration amendment before the first capped birth | **MET** | `9fc98626e` (before the 10:37:20Z switch-on), rider `06df4bee5`, rider 2 |
 | OBJ-7 | Kyle's purpose in `B_TOKEN_WATCH_SCOPE.md` §1 | **MET** | `b86ea91fd` |
 | OBJ-8 | exact switch timestamps persisted; the log reproduces each day's on-time fraction | **MET — independently adjudicated** | 75-row prefix: 38 ON / 37 OFF successful, alternating, non-overlapping and echo-consistent; 72 in-window transitions; 72/72 one-row omission mutants failed validation. Seven daily fractions reproduced in §4/change list §9f |
@@ -72,13 +72,20 @@ My first proposal (observed ÷ due against the 8 runs of 11-15 16:59Z → 11-16 
 - **Window:** forward-only from the commit that landed rider 3, to 2026-11-27 00:00Z.
 - **Counted from observation rows, never from the journal's `shed` total**, which also counts the liquidity leg's always-on shed (13,664 of them in the first 18 h after the install, against 0 checkpoint sheds).
 
-**Langston's two burdens, both met in rider 3:** (a) the observation files are never pruned and reach back to 08-31; a real `follow_up` shed row from the defect window is quoted as the positive control. (b) catch-up reads the oldest buckets first and drops nothing. ⚠️ The `abandoned` leg has no positive control in the record (no `error` or `abandoned` row has ever been written), so its zero rests on the write path.
+**Langston's two burdens, both met in rider 3:** (a) the observation files are never pruned and reach back to 08-31; a real `follow_up` shed row from the defect window is quoted as the positive control. The retry-to-abandoned test exercises the abandoned branch, and live observations prove the shared writer is in service. (b) catch-up reads the oldest buckets first and drops nothing.
 
 **Pre-registration-era, scoring nothing:** the full 18 h after the install is published in rider 3 (every journal key, and the row-level partition: 0 checkpoint sheds, 0 abandoned). The 8 baseline runs stay as context only.
 
+### Cycle-end read — 2026-11-27 UTC
+
+- **Rider 3 result.** The scored interval is `[2026-11-20T20:51:42Z, 2026-11-27T00:00:00Z)`, starting at the committer time of `35180bae871a58052527ac8386a72b037202ce3e`. Select each (mint, checkpoint-age) pair's latest row in the window, from its `observed_at`, and split by the 11-16 10:37:20Z creation cutoff. The **142,625 existing-token obligations** and **284,786 later-token obligations** were observed. Both populations have zero budget sheds, zero vendor rate-limit sheds, zero abandoned and zero latest pending-error rows. The raw census is 427,530 observed rows, 15 error rows subsequently superseded by an in-window row for the same pair, 119 duplicate (mint, age, observed_at) rows, and 131,012 observed rows whose liquidity leg was shed. No obligation had unknown cohort membership. Eleven daily files from 11-16 to 11-26 parsed successfully. A real budget-shed positive control was found in the pre-install data, totaling 457,783 such rows in the scanned files. The abandoned leg's control is the existing retry-to-abandoned test and the live writer's observed rows, with no live abandonment observed.
+- **Boundary reconciliation.** Observation rows use sweep start time, and the system journal totals use sweep finish time. In the pre-registration interval, final row totals **71,967 observed and 17,635 liquidity sheds** minus the sweep stamped **11-20 20:44:59.881827Z** (**9,766 observed, 3,971 liquidity sheds**, finished 22:37:09Z) equal the 18 pre-registration journal results **62,201 and 13,664**. The original interim count of 62,427 and 13,667 had included 226 and 3 rows of that still-running sweep. For the scored interval, completed-journal totals **426,644 and 132,265**, minus the same opening-boundary sweep and plus the closing-boundary sweep stamped **11-26 22:43:53Z** (10,652 and 2,718, finished **11-27 00:30:01Z**), exactly equal **427,530 and 131,012** in the raw observations. The scored totals thus include the last in-window sweep without mixing journal timestamps into the scoring rule.
+- **Catch-up and cycle roll.** The completed results in the scored interval recorded zero `buckets_skipped_too_old`; the closing sweep also recorded zero and read two buckets. The cursor was at the 11-26 22Z bucket at the first post-cutoff reading, two hour buckets behind the 00Z clock. The natural 00:00:20Z Birth Cap run replanned for **11-27 00:00Z to 12-27 00:00Z** with **1,000,000** remaining cycle credits at the plan read. The previously adjudicated OBJ-2/OBJ-8 snapshot manifest still hashes to `4ee27c10124a2cb8b95d382c55c74b5c6aad89a8a98684d1fce008de913a9ba9`. All eight bound files match the manifest (47,106,018 B, 71,715 rows).
+- **Disposition pending.** The numerical OBJ-5 criterion is met. The read is ready for the separate reviewer and owner disposition. The observation entry, progress report, preserved snapshot and existing staging protection remain in force until that gate.
+
 ## 6. What is unproven
 
-- **OBJ-5** — the read (§5, rider 3), over the window to 11-27 00:00Z. The `abandoned` leg's zero has no positive control in the record.
+- **OBJ-5** — §5 records the cycle-end measurement and its controls. The separate reviewer and owner disposition is outstanding.
 - **The window alarms in live use.** No `divergent`, `frozen`, `backwards`, `reset` or cumulative page has fired live. The first `reset` chance is the 11-27 cycle boundary.
 - **The `adopt` path** — not taken live (§2).
 - **Hour 15Z on 11-20:** 7 vendor events with 0 births just after the 14:58:20Z OFF, probably late-counted deliveries from the closing window. **NOT RE-READ.**
