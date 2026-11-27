@@ -1,6 +1,6 @@
 # B-SPREAD-BLOWN-RELEASE-MOVEMENT — #1199 offline comparison
 
-Owner CC-C. Step 3 checkpoint P1. Coltrane approved the Step 2 plan at `2a07df59dd5efeda8ada4c5f50f667a5916ff324` on 2026-11-27 at 04:27:00 UTC. The approved comparison changes no trading behavior or settings.
+Owner CC-C. Step 3 checkpoints P1 and P2 quote recovery. Coltrane approved the Step 2 plan at `2a07df59dd5efeda8ada4c5f50f667a5916ff324` on 2026-11-27 at 04:27:00 UTC.
 
 ## P1 — Existing historical evidence
 
@@ -49,4 +49,17 @@ GROUP BY s.id, s.symbol, s.closed_at, s.metadata, p.position_id, p.position_coun
 ORDER BY s.closed_at, s.id;
 ```
 
-**Next:** prove the paired fixture behavior under Step 3 P2 and record the limits of the evidence under P3. A fixture isolates the decision sequence. The historical recommendation still requires the approved matched benefit and recovery cases. The #1191 joint recovery read and #1073/#961 staging gates keep their recorded precedence.
+## P2 — Paired quote recovery fixtures
+
+`server/tests/unit/b-xstock-bid-trigger-reland-inc2-chain.test.ts` adds nine paired tests through the real exit loop, guard, comparator, selector and hard-stop evaluator. Each arm starts a new engine fixture, warms a fresh comparator on the same tape and runs the identical ordered recovery quotes. A cap-reaching hold must record the position's wide yield and the comparator's actual deletion before starting the paired recovery. The candidate withholds evaluation at the fixture boundary. The close stub captures decision requests. The tape supplies synthetic receipt provenance and 1,500 ms between evaluations. These cases verify decision behavior under controlled inputs. They provide no observed historical fills.
+
+| Tape after the hold | Existing rule | Movement candidate |
+|---|---|---|
+| Fresh `A → B → A` after clear | Requests a stop on evaluation 3 | Counts 0, 1, 2 through seeding and validation, then requests the same stop on evaluation 3. |
+| Fresh `A → B → B`, frozen, ask-only, snapshot, replay and repeat-evaluation cases | Requests a stop on evaluation 3 in each of the six tapes | Holds on evaluation 3 in all six. The ask-only tape counts two pair changes without any bid movement. The snapshot, replay and repeat evaluation add no movement credit. These arms end without a decision at the end of the tape. |
+| Fresh `A → B → wide → A → B → A` after clear | Requests a stop on evaluation 4 | Resets movement on the wide evaluation and requests the stop on evaluation 6, 3,000 ms later at the same tested bid relative to the original stop. |
+| One wide evaluation with a surviving validated comparator, then `A` | Requests a stop on evaluation 1 | Requests the identical stop on evaluation 1 with zero movement. This protects the short-hold path used as the GIS control. |
+
+Local verification passed **67/67** across the chain, increment A and reseed suites. Three temporary fixture mutations caused the specific assertions to fail: counting only after validation, allowing ask-only movement, and retaining movement across a wide interruption. The checked tests use the restored specification.
+
+The fixtures show that a movement requirement changes the timing of some sell decisions. The 81 screened historical closes still supply zero fully matched benefit cases and zero fully matched recovery cases in the checked sources. The grading rule therefore retains the existing release behavior. Further P2 work remains at the independently advanced trailing-state, missing-history and remaining non-target controls specified in the approved plan. Return the combined P2/P3 record for review at the Step 4 boundary. The #1191 joint recovery read and #1073/#961 staging gates keep their recorded precedence.

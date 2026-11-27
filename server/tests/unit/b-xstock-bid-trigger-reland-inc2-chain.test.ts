@@ -127,7 +127,7 @@ import { VenueQuietState } from '../../services/venue-quiet-alerting.js';
 import { priceCache } from '../../services/price-cache';
 import { livePricingAdapter } from '../../services/live-pricing-adapter';
 import { restRateLimiter } from '../../services/market-data/rest-rate-limiter.js';
-import { _resetBookStateComparatorsForTest, _peekRetainedRingForTest, readBookStateComparator } from '../../asset_classes/xstock_spot/book-state-tracker.js';
+import { assessBookStateNow, _resetBookStateComparatorsForTest, _peekRetainedRingForTest, readBookStateComparator } from '../../asset_classes/xstock_spot/book-state-tracker.js';
 
 const SYMBOL = 'MDB/USD';
 const STOP = 385;
@@ -408,6 +408,128 @@ afterEach(() => {
   h.getActiveOpenPositions.mockReset();
   h.updateActiveOpenPosition.mockClear();
   _resetBookStateComparatorsForTest();
+});
+
+type RecoveryQuote = { frame: Frame; source?: 'snapshot' | 'replay' | 'repeat_evaluation' };
+
+// #1199 P2: both arms drive the actual guard, selector and hard-stop evaluator.
+// The proposed movement rule exists only at this fixture's evaluator boundary.
+// The close stub observes requests. There is no fill simulation in this fixture.
+async function replayRecovery(quotes: RecoveryQuote[], requireMovement: boolean, hold: 'clear' | 'short') {
+  _resetBookStateComparatorsForTest();
+  vi.setSystemTime(new Date('2026-10-14T15:00:00Z'));
+  const eng = makeEngine();
+  eng._lastReserveTripwireAt = Date.now();
+  await warm(eng);
+  if (hold === 'clear') {
+    await blowoutToYield(eng);
+  } else {
+    const skipped = await tick(eng, BLOWN);
+    expect(skipped.bookEvents).toEqual([expect.objectContaining({ kind: 'skip', reasons: ['spread_blown'] })]);
+    expect(readBookStateComparator(SYMBOL)?.validated).toBe(true);
+  }
+
+  const evaluate = eng.checkExitConditions.bind(eng);
+  let reached = false;
+  let allowDecision = false;
+  eng.checkExitConditions = (...args: unknown[]) => {
+    reached = true;
+    return allowDecision ? evaluate(...args) : null;
+  };
+  let previous: Frame | undefined;
+  let moves = 0;
+  let bidMoved = false;
+  let askMoved = false;
+  const steps = [];
+  for (const [index, { frame, source }] of quotes.entries()) {
+    vi.setSystemTime(Date.now() + 1_500);
+    h.frame = frame;
+    const assessment = assessBookStateNow(SYMBOL);
+    const eligible = assessment.ok && frame.bid > 0 && frame.ask >= frame.bid
+      && (assessment.result.state === 'two_sided' || assessment.result.reasons.includes('no_comparator'));
+    if (!eligible) {
+      previous = undefined;
+      moves = 0;
+      bidMoved = false;
+      askMoved = false;
+    } else if (source === undefined) {
+      if (previous) {
+        const bidChanged = frame.bid !== previous.bid;
+        const askChanged = frame.ask !== previous.ask;
+        if (bidChanged || askChanged) moves++;
+        bidMoved ||= bidChanged;
+        askMoved ||= askChanged;
+      }
+      previous = frame;
+    }
+    allowDecision = !requireMovement || hold === 'short' || (moves >= 2 && bidMoved && askMoved);
+    reached = false;
+    const result = await tick(eng, frame);
+    expect(result.errors).toEqual([]);
+    expect(result.closes.length).toBeLessThanOrEqual(1);
+    const close = result.closes[0];
+    steps.push({
+      evaluation: index + 1,
+      moves,
+      reached,
+      admitted: reached && allowDecision,
+      bidToStop: frame.bid - STOP,
+      closeReason: close ? (close[2] as { type: string }).type : null,
+    });
+    if (close) break;
+  }
+  return steps;
+}
+
+describe('#1199 P2 — paired post-hold decisions with the real guard', () => {
+  const a = { bid: 384.1, ask: 384.9, last: 384.5 };
+  const b = { bid: 384.2, ask: 385.0, last: 384.5 };
+  const updates = (...frames: Frame[]): RecoveryQuote[] => frames.map(frame => ({ frame }));
+
+  it('counts A–B–A through seed and validation, admitting both arms on evaluation 3', async () => {
+    const tape = updates(a, b, a);
+    const baseline = await replayRecovery(tape, false, 'clear');
+    const candidate = await replayRecovery(tape, true, 'clear');
+    expect(candidate).toEqual(baseline);
+    expect(candidate.map(step => step.moves)).toEqual([0, 1, 2]);
+    expect(candidate.map(step => step.reached)).toEqual([false, false, true]);
+    expect(candidate[2]).toMatchObject({ admitted: true, closeReason: 'stop_hit' });
+  });
+
+  it.each([
+    { name: 'A–B–B', tape: updates(a, b, b), moves: [0, 1, 1] },
+    { name: 'frozen quotes', tape: updates(a, a, a), moves: [0, 0, 0] },
+    { name: 'ask-only movement', tape: updates(a, { ...a, ask: 384.95 }, { ...a, ask: 385.0 }), moves: [0, 1, 2] },
+    { name: 'snapshot', tape: [...updates(a, b), { frame: a, source: 'snapshot' }], moves: [0, 1, 1] },
+    { name: 'replayed quote', tape: [...updates(a, b), { frame: a, source: 'replay' }], moves: [0, 1, 1] },
+    { name: 'repeat evaluation', tape: [...updates(a, b), { frame: b, source: 'repeat_evaluation' }], moves: [0, 1, 1] },
+  ] satisfies { name: string; tape: RecoveryQuote[]; moves: number[] }[])('holds the candidate on $name even though the baseline requests a stop on evaluation 3', async ({ tape, moves }) => {
+    const baseline = await replayRecovery(tape, false, 'clear');
+    const candidate = await replayRecovery(tape, true, 'clear');
+    expect(baseline[2]).toMatchObject({ evaluation: 3, reached: true, admitted: true, closeReason: 'stop_hit' });
+    expect(candidate.map(step => step.moves)).toEqual(moves);
+    expect(candidate.map(step => step.reached)).toEqual([false, false, true]);
+    expect(candidate[2]).toMatchObject({ admitted: false, closeReason: null });
+  });
+
+  it('drops movement credit at a new wide quote and admits the later second move on that evaluation', async () => {
+    const tape = updates(a, b, BLOWN, a, b, a);
+    const baseline = await replayRecovery(tape, false, 'clear');
+    const candidate = await replayRecovery(tape, true, 'clear');
+    expect(baseline.at(-1)).toMatchObject({ evaluation: 4, admitted: true, closeReason: 'stop_hit' });
+    expect(candidate.map(step => step.moves)).toEqual([0, 1, 0, 0, 1, 2]);
+    expect(candidate.at(-1)).toMatchObject({ evaluation: 6, admitted: true, closeReason: 'stop_hit' });
+    expect(candidate.at(-1)?.bidToStop).toBe(baseline.at(-1)?.bidToStop);
+  });
+
+  it('admits the first recovered quote after a short hold with the existing validated comparator', async () => {
+    const tape = updates(a);
+    const baseline = await replayRecovery(tape, false, 'short');
+    const candidate = await replayRecovery(tape, true, 'short');
+    expect(candidate).toEqual(baseline);
+    expect(candidate).toHaveLength(1);
+    expect(candidate[0]).toMatchObject({ evaluation: 1, moves: 0, admitted: true, closeReason: 'stop_hit' });
+  });
 });
 
 describe('3n.q7 inc-2 OBJ-3 — the chain, driven through the real exit loop', () => {
