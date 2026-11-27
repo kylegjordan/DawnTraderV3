@@ -1,6 +1,6 @@
 # B-ALERT-ORPHAN-ROWS — Completion report
 
-**Step 11 submitted for Coltrane confirmation.** CC-B row 3c, #1255 R-1, KD-116 and KD-126. **Historical C-2 is closed unproven under Kyle’s exception.** The original 02:31:33 UTC generated row statements are unavailable. The contemporaneous comparison result was reported as 12/12, and the committed rollback file, aggregate output, and independent database and System Alerts evidence are retained. CC-B owns the wider `#1267` user-link census in `PRE_LIVE_SPRINT.md`, **Legacy and dead-code cleanup**, before #1264. Its review must count orphans by table and trace writers before deciding where enforcement fits. The current cleanup’s governance alert remains open until normal sign-off.
+**Closed 2026-11-27.** Coltrane confirmed Step 11 at 04:44:13 UTC on exact ref `11bca11f9f9e04b5a6bd0b3681fd9c34e0926cce`. CC-B row 3c, #1255 R-1, KD-116 and KD-126. **Historical C-2 is closed unproven under Kyle’s exception.** The original 02:31:33 UTC generated row statements are unavailable. The contemporaneous comparison result was reported as 12/12, and the committed rollback file, aggregate output, and independent database and System Alerts evidence are retained. CC-B owns the wider `#1267` user-link census in `PRE_LIVE_SPRINT.md`, **Legacy and dead-code cleanup**, before #1264. Its review must count orphans by table and trace writers before deciding where enforcement fits. This close record supplies the evidence for resolving governance alert `11ccdc63-d895-4292-83f9-96fba872e816`.
 
 ## Registered readback and decision
 
@@ -30,7 +30,7 @@ The two rendered linked alerts establish that System Alerts remained populated f
 
 ## Governance files and Tier Ledger
 
-Step 10 ledger from the change list at `e0a18855f`, with the completion-report row updated for this submission.
+Step 10 ledger from the change list at `e0a18855f`, updated for Step 11 closure.
 
 | Tier | Document | Verdict | Record |
 |---|---|---|---|
@@ -41,7 +41,7 @@ Step 10 ledger from the change list at `e0a18855f`, with the completion-report r
 | T1 | Shared MEMORY.md and MEMORY_CC_B.md | ✅ | Record the retained rollback, evidence exception and return to final sign-off. |
 | T1 | SCOPE | ✅ | The reviewed Step 1 scope is tracked. |
 | T1 | PRE_AUDIT | ✅ | The reviewed Step 2 audit and plan is tracked. |
-| T1 | COMPLETION_REPORT | ✅ Filed | This document. Coltrane’s Step 11 confirmation is pending. |
+| T1 | COMPLETION_REPORT | ✅ Confirmed | Coltrane’s exact Step 11 confirmation is recorded above. |
 | T1 | Observation column | N/A | The scope uses immediate post-migration readback and carries no elapsed observation. |
 | T1 | CC_A, CC_B, CC_C and CC_INFRA SESSION_TASK_LISTs | ✅ CC-B / N/A ×3 | CC-B records the sign-off path and the other lists belong to their owners. |
 | T1 | Coltrane memory store | ✅ | Record the KD-126 evidence boundary and rollback for future review. |
