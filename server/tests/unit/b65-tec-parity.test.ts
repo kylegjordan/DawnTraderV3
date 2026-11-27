@@ -82,11 +82,13 @@ import {
   clearTrailingState,
   getConcurrentMoonbagCount,
   getResolvedTECConfig,
+  getTrailingState,
   primeTECConfig,
   isMoonbagQualifier,
   _testClearEngineConfigCache,
 } from '../../services/trailing-exit-controller.js';
 import { clearModuleConstantsCache } from '../../services/module-constants-service.js';
+import { clearSymbolState } from '../../services/price-discontinuity-detector.js';
 
 // --- Helper: seed the module_constants rowset with all B65.1 + B65.2 defaults
 // PLUS the B79.TEC per-class break_even_enabled rows. Per B79.TEC scope §1 #5,
@@ -94,7 +96,7 @@ import { clearModuleConstantsCache } from '../../services/module-constants-servi
 // for every ACTIVE class — without one, hasExplicitAssetClassRow returns false
 // and the bootstrap aborts. The test seeds rows for crypto_spot AND crypto_perp
 // AND xstock_spot AND xstock_perp so primeTECConfig() succeeds for all four.
-function seedAllConstants() {
+function seedAllConstants(xstockBreakEvenEnabled = false) {
   const wildcard = {
     moduleName: 'trailing_exit',
     exchange: '*',
@@ -108,7 +110,7 @@ function seedAllConstants() {
     ...wildcard,
     assetClass: cls,
     constantName: 'break_even_enabled',
-    value: false,
+    value: cls === 'xstock_spot' && xstockBreakEvenEnabled,
   });
   mockRows.current = [
     // B79.TEC per-class break_even_enabled rows (required by hasExplicitAssetClassRow)
@@ -151,6 +153,62 @@ const context = {
   strategy: 'strong_bull_trend',
   regime: 'TREND_FRIENDLY_STABLE',
 };
+
+it('#1199 keeps trailing state independent when movement withholds a no-close evaluation', async () => {
+  // Exercise the real state machine with offline break-even enabled.
+  clearModuleConstantsCache();
+  seedAllConstants(true);
+  _testClearEngineConfigCache();
+  await primeTECConfig();
+  const symbol = 'MDB/USD';
+  const initialStop = 95;
+  const start = Date.parse('2026-10-14T15:00:00Z');
+
+  async function replay(tradeId: string, admitFirstRecovery: boolean) {
+    clearSymbolState(symbol);
+    let stopPrice = initialStop;
+    async function evaluate(bid: number, elapsedMs: number) {
+      const decision = await evaluateTECExit({
+        tradeId, symbol, entryPrice: 100, stopPrice, targetPrice: 110,
+        currentPrice: bid + 0.05, triggerPrice: bid, atr: 1,
+        holdDurationMs: 60_000 + elapsedMs, maxHoldMs: Infinity,
+        context: { ...context, assetClass: 'xstock_spot' }, useTrailing: true,
+        callerMode: 'paper', sentinelLane: 'paper', currentTs: start + elapsedMs,
+      });
+      stopPrice = decision.newStopPrice ?? stopPrice;
+      return decision;
+    }
+    try {
+      expect(await evaluate(100, 0)).toMatchObject({ shouldExit: false, newStopPrice: initialStop });
+      // A → B → B admits baseline only. The next genuine two-sided move admits both.
+      const firstRecovery = admitFirstRecovery ? await evaluate(101.2, 6_000) : null;
+      const afterRecovery = getTrailingState(tradeId)!;
+      const recoveryState = {
+        stop: afterRecovery.currentStopPrice,
+        highWater: afterRecovery.highWaterMark,
+        locked: afterRecovery.breakEvenLatched,
+      };
+      const reversalBid = 99.9;
+      const bidToStop = reversalBid - stopPrice;
+      const reversal = await evaluate(reversalBid, 7_500);
+      return { firstRecovery, recoveryState, bidToStop, reversal };
+    } finally {
+      clearTrailingState(tradeId);
+      clearSymbolState(symbol);
+    }
+  }
+
+  const baseline = await replay('recovery-existing', true);
+  const candidate = await replay('recovery-movement', false);
+  expect(baseline.firstRecovery).toMatchObject({ shouldExit: false, exitReason: null, newStopPrice: 100 });
+  expect(baseline.recoveryState).toEqual({ stop: 100, highWater: 101.2, locked: true });
+  expect(candidate.firstRecovery).toBeNull();
+  expect(candidate.recoveryState).toEqual({ stop: initialStop, highWater: 100, locked: false });
+  expect(baseline.bidToStop).toBeCloseTo(-0.1);
+  expect(candidate.bidToStop).toBeCloseTo(4.9);
+  expect(baseline.reversal).toMatchObject({ shouldExit: true, exitReason: 'break_even_stop' });
+  expect(candidate.reversal).toMatchObject({ shouldExit: false, exitReason: null });
+});
 
 describe('B65.2 — evaluateTECExit end-to-end', () => {
   beforeEach(async () => {
