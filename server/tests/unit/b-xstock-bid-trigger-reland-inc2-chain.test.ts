@@ -411,11 +411,12 @@ afterEach(() => {
 });
 
 type RecoveryQuote = { frame: Frame; source?: 'snapshot' | 'replay' | 'repeat_evaluation' };
+type RecoveryEvent = RecoveryQuote | { history: 'unverified' | 'verified_idle'; elapsedMs: number };
 
 // #1199 P2: both arms drive the actual guard, selector and hard-stop evaluator.
 // The proposed movement rule exists only at this fixture's evaluator boundary.
 // The close stub observes requests. There is no fill simulation in this fixture.
-async function replayRecovery(quotes: RecoveryQuote[], requireMovement: boolean, hold: 'clear' | 'short') {
+async function replayRecovery(tape: RecoveryEvent[], requireMovement: boolean, hold: 'clear' | 'short') {
   _resetBookStateComparatorsForTest();
   vi.setSystemTime(new Date('2026-10-14T15:00:00Z'));
   const eng = makeEngine();
@@ -441,7 +442,14 @@ async function replayRecovery(quotes: RecoveryQuote[], requireMovement: boolean,
   let bidMoved = false;
   let askMoved = false;
   const steps = [];
-  for (const [index, { frame, source }] of quotes.entries()) {
+  const recoveryStart = Date.now();
+  for (const event of tape) {
+    if ('history' in event) {
+      if (event.history === 'unverified') return { coverage: 'partial' as const, steps };
+      vi.setSystemTime(Date.now() + event.elapsedMs);
+      continue;
+    }
+    const { frame, source } = event;
     vi.setSystemTime(Date.now() + 1_500);
     h.frame = frame;
     const assessment = assessBookStateNow(SYMBOL);
@@ -469,7 +477,8 @@ async function replayRecovery(quotes: RecoveryQuote[], requireMovement: boolean,
     expect(result.closes.length).toBeLessThanOrEqual(1);
     const close = result.closes[0];
     steps.push({
-      evaluation: index + 1,
+      evaluation: steps.length + 1,
+      elapsedMs: Date.now() - recoveryStart,
       moves,
       reached,
       admitted: reached && allowDecision,
@@ -478,7 +487,7 @@ async function replayRecovery(quotes: RecoveryQuote[], requireMovement: boolean,
     });
     if (close) break;
   }
-  return steps;
+  return { coverage: 'replayed' as const, steps };
 }
 
 describe('#1199 P2 — paired post-hold decisions with the real guard', () => {
@@ -488,8 +497,8 @@ describe('#1199 P2 — paired post-hold decisions with the real guard', () => {
 
   it('counts A–B–A through seed and validation, admitting both arms on evaluation 3', async () => {
     const tape = updates(a, b, a);
-    const baseline = await replayRecovery(tape, false, 'clear');
-    const candidate = await replayRecovery(tape, true, 'clear');
+    const { steps: baseline } = await replayRecovery(tape, false, 'clear');
+    const { steps: candidate } = await replayRecovery(tape, true, 'clear');
     expect(candidate).toEqual(baseline);
     expect(candidate.map(step => step.moves)).toEqual([0, 1, 2]);
     expect(candidate.map(step => step.reached)).toEqual([false, false, true]);
@@ -504,8 +513,8 @@ describe('#1199 P2 — paired post-hold decisions with the real guard', () => {
     { name: 'replayed quote', tape: [...updates(a, b), { frame: a, source: 'replay' }], moves: [0, 1, 1] },
     { name: 'repeat evaluation', tape: [...updates(a, b), { frame: b, source: 'repeat_evaluation' }], moves: [0, 1, 1] },
   ] satisfies { name: string; tape: RecoveryQuote[]; moves: number[] }[])('holds the candidate on $name even though the baseline requests a stop on evaluation 3', async ({ tape, moves }) => {
-    const baseline = await replayRecovery(tape, false, 'clear');
-    const candidate = await replayRecovery(tape, true, 'clear');
+    const { steps: baseline } = await replayRecovery(tape, false, 'clear');
+    const { steps: candidate } = await replayRecovery(tape, true, 'clear');
     expect(baseline[2]).toMatchObject({ evaluation: 3, reached: true, admitted: true, closeReason: 'stop_hit' });
     expect(candidate.map(step => step.moves)).toEqual(moves);
     expect(candidate.map(step => step.reached)).toEqual([false, false, true]);
@@ -514,21 +523,42 @@ describe('#1199 P2 — paired post-hold decisions with the real guard', () => {
 
   it('drops movement credit at a new wide quote and admits the later second move on that evaluation', async () => {
     const tape = updates(a, b, BLOWN, a, b, a);
-    const baseline = await replayRecovery(tape, false, 'clear');
-    const candidate = await replayRecovery(tape, true, 'clear');
+    const { steps: baseline } = await replayRecovery(tape, false, 'clear');
+    const { steps: candidate } = await replayRecovery(tape, true, 'clear');
     expect(baseline.at(-1)).toMatchObject({ evaluation: 4, admitted: true, closeReason: 'stop_hit' });
     expect(candidate.map(step => step.moves)).toEqual([0, 1, 0, 0, 1, 2]);
     expect(candidate.at(-1)).toMatchObject({ evaluation: 6, admitted: true, closeReason: 'stop_hit' });
     expect(candidate.at(-1)?.bidToStop).toBe(baseline.at(-1)?.bidToStop);
+    expect(candidate.at(-1)!.elapsedMs - baseline.at(-1)!.elapsedMs).toBe(3_000);
   });
 
   it('admits the first recovered quote after a short hold with the existing validated comparator', async () => {
     const tape = updates(a);
-    const baseline = await replayRecovery(tape, false, 'short');
-    const candidate = await replayRecovery(tape, true, 'short');
+    const { steps: baseline } = await replayRecovery(tape, false, 'short');
+    const { steps: candidate } = await replayRecovery(tape, true, 'short');
     expect(candidate).toEqual(baseline);
     expect(candidate).toHaveLength(1);
     expect(candidate[0]).toMatchObject({ evaluation: 1, moves: 0, admitted: true, closeReason: 'stop_hit' });
+  });
+
+  it('leaves both arms partial when a missing interval could contain evaluations or quote changes', async () => {
+    const tape: RecoveryEvent[] = [...updates(a, b), { history: 'unverified', elapsedMs: 4_000 }, { frame: a }];
+    const baseline = await replayRecovery(tape, false, 'clear');
+    const candidate = await replayRecovery(tape, true, 'clear');
+    expect(candidate).toEqual(baseline);
+    expect(candidate.coverage).toBe('partial');
+    expect(candidate.steps.map(step => step.moves)).toEqual([0, 1]);
+    expect(candidate.steps.every(step => !step.admitted && step.closeReason === null)).toBe(true);
+  });
+
+  it('bridges the same duration when the tape proves idle time and unchanged admission state', async () => {
+    const tape: RecoveryEvent[] = [...updates(a, b), { history: 'verified_idle', elapsedMs: 4_000 }, { frame: a }];
+    const baseline = await replayRecovery(tape, false, 'clear');
+    const candidate = await replayRecovery(tape, true, 'clear');
+    expect(candidate).toEqual(baseline);
+    expect(candidate.coverage).toBe('replayed');
+    expect(candidate.steps).toHaveLength(3);
+    expect(candidate.steps[2]).toMatchObject({ evaluation: 3, elapsedMs: 8_500, moves: 2, admitted: true, closeReason: 'stop_hit' });
   });
 });
 

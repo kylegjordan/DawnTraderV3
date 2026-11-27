@@ -1,6 +1,6 @@
 # B-SPREAD-BLOWN-RELEASE-MOVEMENT — #1199 offline comparison
 
-Owner CC-C. Step 3 checkpoints P1 and P2 quote recovery. Coltrane approved the Step 2 plan at `2a07df59dd5efeda8ada4c5f50f667a5916ff324` on 2026-11-27 at 04:27:00 UTC.
+Owner CC-C. Step 3 checkpoints P1 and P2 quote recovery, trailing state and history gaps. Coltrane approved the Step 2 plan at `2a07df59dd5efeda8ada4c5f50f667a5916ff324` on 2026-11-27 at 04:27:00 UTC.
 
 ## P1 — Existing historical evidence
 
@@ -62,4 +62,12 @@ ORDER BY s.closed_at, s.id;
 
 Local verification passed **67/67** across the chain, increment A and reseed suites. Three temporary fixture mutations caused the specific assertions to fail: counting only after validation, allowing ask-only movement, and retaining movement across a wide interruption. The checked tests use the restored specification.
 
-The fixtures show that a movement requirement changes the timing of some sell decisions. The 81 screened historical closes still supply zero fully matched benefit cases and zero fully matched recovery cases in the checked sources. The grading rule therefore retains the existing release behavior. Further P2 work remains at the independently advanced trailing-state, missing-history and remaining non-target controls specified in the approved plan. Return the combined P2/P3 record for review at the Step 4 boundary. The #1191 joint recovery read and #1073/#961 staging gates keep their recorded precedence.
+### Independent trailing state and incomplete history
+
+`server/tests/unit/b65-tec-parity.test.ts` drives the real trailing evaluator with break-even enabled in the fixture and zero costs. Both arms start with entry 100, stop 95, target 110, ATR 1 and high-water 100. The fixture supplies the admission sequence established above. A repeated recovery quote at bid 101.20 reaches the existing evaluator alone. On this no-close evaluation the existing arm raises its stop to 100 and high-water to 101.20. The candidate records no evaluation and keeps stop 95 and high-water 100. At the next admitted bid of 99.90, the existing arm requests a break-even stop because its bid is 0.10 below its own stop. The candidate's bid is 4.90 above its stop and it remains open. Each arm has its own trade key and clears its trailing state after replay. Each starts with a fresh discontinuity detector for the same symbol.
+
+`server/tests/unit/b-xstock-bid-trigger-reland-inc2-chain.test.ts` supplies the same `A → B → A` sequence with a four-second interval before the final A. Where the interval could contain unobserved decisions or quote changes, both arms stop after recording the first two evaluations and mark the comparison partial. Where the tape certifies no evaluations and unchanged admission state, both arms preserve the one earned move, count the arriving second move and request a stop at evaluation 3, 8,500 ms into recovery. This checks application of a known evidence status. The fixture supplies the status directly and makes no claim about the historical archive.
+
+Local verification passed **101/101** across the four named fixture suites. The assertions detected three forced errors: allowing the unverified interval through, discarding the verified idle duration and updating the candidate's trailing state during a withheld evaluation.
+
+The 81 screened historical closes still supply zero fully matched benefit cases and zero fully matched recovery cases in the checked sources. The grading rule retains the existing release behavior. The remaining P2 protection controls and final evidence disposition go to Coltrane together. The #1191 joint recovery read and #1073/#961 staging gates keep their recorded precedence.
