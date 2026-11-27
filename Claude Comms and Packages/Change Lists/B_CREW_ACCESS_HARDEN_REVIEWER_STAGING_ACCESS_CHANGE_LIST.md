@@ -288,3 +288,53 @@ The `coltrane-size-watch` difference named above (installed `ac244b69…` vs the
 **Residual, stated.** The fence is lexical, not a sandbox. It cannot see a call built at run time (`__import__`, `importlib`, `getattr` on a string, `eval`). The docstring says so. It holds this file to a shape a reviewer can read; it does not prove that no unbounded process can start.
 
 **Not proven yet: the install.** Script only, since the unit is unchanged. Read the blob from Helsinki's mirror at the approved sha, compare its sha256 with the laptop's, and keep a rollback copy. Then run the self-test from `/usr/local/sbin`, which should report 37 checks and name the unit path. Then do a live `systemctl start reviewer-staging-access.service` and check `dt-sql --status` afterwards.
+
+#### F-2 Step 4 C-7 send-back correction (INFRA Codex, 2026-11-27)
+
+Coltrane **SEND BACK** at `1900eb284ad4ef6de46aeb7e48a84afbfa643fcf` (06:18:33Z).
+The verifier read only the leading digits of the direct alert call's timeout. The Python integer
+`1_000` therefore looked like one second and passed the pre-database bound. C-8 through C-12
+remain as reviewed, including the historical C-10 withdrawal.
+
+**Correction:** parse the source without executing it. Require one direct `subprocess.run` in
+`alert()` and one explicit integer timeout. Refuse unsupported call forms, expanded keywords,
+computed values and floats. Compare the entire integer to the existing bound before the first
+database call. This is a check of the supported source shape, with no attempt to model Python
+runtime control flow. The TLS diagnostic and `dt_reader` assertion from `f9087a56c` stay in
+the candidate. The service unit and staging database tool are unchanged.
+
+**Checks:** the verifier self-test passes 38 checks. Its remote-entry regression reaches both
+stubbed database calls at 300 + 150 seconds and reaches zero for `1000`, `1_000` or `1e3`
+as the alert timeout. Running that regression with the prior parser makes it fail at `1_000`
+with two calls. The checked-in database tool still reports 300 + 150 seconds.
+
+REVIEWER: claim-only · which objects show whether the corrected timeout stops the remote entry
+point before any database call? · HIT: use the actual checked-in database tool and distinguish
+the static call check from runtime control flow; historical line numbers had drifted ·
+re-derived y (real source parse, stubbed entry point, prior-parser comparison, stable citations).
+
+**Install held.** Await exact Step 4 ruling and CI. A later script-only install must use the
+combined reviewed blob and confirm the 38-check self-test before the live verification.
+
+**Connection inventory:** CI at `44c8ad430` detected five additional `dt-sql` text markers.
+They are two net additions in parser diagnostics, two refusal expectations in the remote test,
+and one local test fixture filename.
+The two existing remote database calls and their wrapper are unchanged. Update only this
+file's `dt_sql` count in `scripts/db-helper-retire/surface-baseline.json` from 51 to 56.
+
+#### F-2 Step 4 C-7 follow-up (INFRA Codex, 2026-11-27)
+
+Coltrane accepted the alert timeout correction and **SENT BACK** the remaining call timeout
+at `44c8ad430f5d8927ce6cfeafba0035f7e50a5774` (06:28:02Z). The old line-prefix scan
+overlooked a second annotated assignment to `CALL_TIMEOUT_S`. R3 uses the same parsed module
+for both bounds. The call timeout must have one syntactic binding, a plain top-level assignment
+to an integer literal. Duplicate, annotated, augmented and other unsupported definitions
+refuse before either database call. The ordinary static source shape is the supported contract.
+
+The exact checked-in tool yields 300 + 150 seconds. The normal remote entry point with
+stubbed I/O reaches both calls for that configuration and zero for each of five refused cases,
+including a duplicate plain and a duplicate annotated definition. Substituting the r2 parser
+fails the annotated-definition case with two calls. The verifier still passes 38 self-checks.
+
+REVIEWER: claim-only · what source shapes distinguish the corrected duplicate-binding refusal
+from the approved configuration? · CLEAN · re-derived n.
