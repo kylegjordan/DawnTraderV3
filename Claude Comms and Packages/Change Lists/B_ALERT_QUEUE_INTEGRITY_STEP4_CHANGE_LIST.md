@@ -110,3 +110,19 @@ Coltrane reviewed `6eb3ac599f1d4c8c204930c60925bfa9fd4909e5` at 05:24:51 UTC on 
 `REVIEWER: claim-only · which schedules could still close a successor, lose an eligible warning or leave the reaper dependent on the caller location? · HIT: capture both disk IDs before the cached sample, prevent the slow tick overwriting a newer failure streak, and distinguish the proposed isolated CJS layout from installed containment · re-derived y`
 
 The corrected focused Windows run passed 31 of 31 runnable cases across the three suites, including all three tests using the pinned private #1191 manifest. Six Linux-only cases require the exact candidate job. The approved Scope and Pre-Audit are unchanged, and the code review does not clear P5 or #994.
+
+## Step 6 preparation — offline #1191 manifest replay, Nov 27
+
+Coltrane's 06:04:32 UTC Step 4 approval at `70290ae750a15d3f20db79a18d85833b035e9d07` left the three private-input cases open for independent reproduction. The earlier reviewer run exercised a synthetic manifest. The approved topic and integrated candidate `cdf3356af276cc339f7553fba7ca2951e220ed88` match on the 16 reviewed blobs. All four shared jobs passed on run `45958596744`; those jobs cannot establish the private-input result.
+
+NEW reran the three cases from a clean checkout of `cdf3356af276cc339f7553fba7ca2951e220ed88` on Windows with Node 22.18.0, Vitest 3.2.4 and esbuild 0.25.9. The existing private manifest measured 16,650 bytes and 450 distinct lines, SHA-256 `37dc0d1d99c37a49a614f24a136434a04ad5263be80fe19e20ee0906e24f9816`. This matches the original containment scope and the test's digest assertion. The dispatcher is built by applying the candidate's alert-writer and receipt changes to the pinned `423616c38605afa70e282572a432cd32dcabf290` source against base `feddf5c73`. The cases use a temporary ledger, a loopback webhook and the frozen Nov 27 06:00 UTC clock, inside the hold period.
+
+| Selected fixture | NEW result at the integrated candidate |
+|---|---|
+| Canonical writer reaches its replacement boundary first | Passed. Both writers preserved their records. The original watchdog UUID obtained one receipt and resolved. A new failure produced a distinct scheduled UUID. The preexisting control and one held manifest row remained identical. |
+| Watchdog writer reaches its replacement boundary first | Passed. The reverse contention order preserved the same receipt, resolution, re-arm and held-row outcomes. |
+| Pinned warning held while watchdog gets its first receipt | Passed. The loopback delivered HTTP outcomes `204, 503, 503, 204` in order. Failed deliveries did not advance the successor's resurface marker. The successful retry advanced it once and allowed resolution. The held VTS row remained identical through the final check. |
+
+Command, with `DT_WATCHDOG_1191_PROOF_MANIFEST` pointing to the existing restricted input: `node node_modules/vitest/vitest.mjs run server/tests/unit/watchdog-alert-queue.test.ts --testNamePattern '[(]#1191[)]|keeps the pinned #1191 warning held'`. Three selected passed; the other 15 cases in this file were outside the filter. Each fixture exercises one held member from the exact 450-ID manifest. The full manifest is pinned as input. The result grades the isolated scenarios at the test clock, not the installed dispatcher or current hold state.
+
+**Independent check requested.** INFRA coordination receipt `1575960348878573641` supplies the exact code and manifest digest. Independent reproduction must name the same candidate, digest, case results and environment, or identify the access gap. Keep manifest contents and row IDs out of Git, public CI and chat. The exact staging target, preservation or governed restoration of the separate dispatcher, full writer census and drain for cutover and rollback, and an eligible window remain Step 6 prerequisites. #994 Step 3 follows verified #647(i).
