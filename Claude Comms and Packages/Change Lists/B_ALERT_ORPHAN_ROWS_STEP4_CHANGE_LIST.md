@@ -121,3 +121,39 @@ The command validated the C-2 CSV header and one field per row, normalized CRLF 
 Kyle accepted the historical pre-deploy ordered rollback comparison as **reported, independently unproved**, because the originally returned statements are unavailable. Authority: `1-system-manual/pm/DECISIONS.md` at `06f1e278c6529d457317acb394083ccb26d14be3`, KD-126. This dispositions the single leg returned by Coltrane; the retained original stdout at `75790fcea` and the verified database and UI legs remain as recorded above. The rollback file `drizzle/migrations/2026-11-22-b-alert-orphan-rows-rollback.sql` stays tracked at Phase A with blob `eca6c17dec44a63df2687a57872971e9ef0dc5b3`.
 
 Coltrane closed Step 8 at 03:30:17 UTC on `dbf3f76e91cb41ebf668659cbe31f692e1f5ad35` (dispatch `1575714980739678270`). He verified the three retained lines, literal Phase A rollback blob, and independent database and UI legs. C-2 remains reported 12/12 and independently unproved. Step 9 carries that exception without a staging rerun or reconstruction. The governance alert `11ccdc63-d895-4292-83f9-96fba872e816` remains a sign-off wait through normal closeout.
+
+### Step 10 governance ledger
+
+| Tier | Document | Verdict | Record |
+|---|---|---|---|
+| T1 | BATCH_CATALOG.md | ✅ | Record the Phase A cleanup, retained rollback and KD-126 evidence limit. |
+| T1 | PHASE_HISTORY.md | ✅ | Record the Nov 26 Phase A deletion and verified readback. |
+| T1 | SPRINT_TO_LIVE_PLAN.md | ✅ | Reconcile CC-B row 3c with KD-126 and the #1267 follow-up. |
+| T1 | PHASE_19_PLAN.md | N/A | No batch row is in flight in Phase 19. |
+| T1 | Shared MEMORY.md and MEMORY_CC_B.md | ✅ | Record the retained rollback, evidence exception and return to final sign-off. |
+| T1 | SCOPE | ✅ | The reviewed Step 1 scope is tracked. |
+| T1 | PRE_AUDIT | ✅ | The reviewed Step 2 audit and plan is tracked. |
+| T1 | COMPLETION_REPORT | BLOCKED — Step 11 | The final report follows the governance update. |
+| T1 | Observation column | N/A | The scope uses immediate post-migration readback and carries no elapsed observation. |
+| T1 | CC_A, CC_B, CC_C and CC_INFRA SESSION_TASK_LISTs | ✅ CC-B / N/A ×3 | CC-B records the sign-off path and the other lists belong to their owners. |
+| T1 | Coltrane memory store | ✅ | Record the KD-126 evidence boundary and rollback for future review. |
+| T2 | SYSTEM_MANUAL.md | ✅ | Record the data-only cleanup and the unchanged user-link design. |
+| T2 | SYSTEM_IMPACT_MAP.md | ✅ | Record the historical cleanup and rollback in the operator alert store. |
+| T2 | RUNNING_ISSUES.md | ✅ | Annotate #1255 R-1 and retain #1267 as the separate user-link census. |
+| T2 | CHANGES_AND_FIXES.md | ✅ | Record the removal and the historical verification exception. |
+| T2 | POST_AUDIT_ROADMAP.md | N/A | The 12-row cleanup adds no roadmap phase. |
+| T2 | ADJUSTMENT_FRAMEWORK.md | N/A | The migration changes operator alert rows only. |
+| T2 | AUTHORITY_BASELINE.md | N/A | The batch uses the existing decision and review authority. |
+| T2 | STORAGE_POLICY.md | N/A | The one-time deletion changes no retention policy. |
+| T2 | MULTI_ASSET_VTS_EXPANSION_PLAN.md | N/A | Working list reviewed and the operator-alert migration touches none of its calibration inputs. |
+| T2 | ASSET_CLASS_ONBOARDING_WORKFLOW.md | N/A | The batch introduces no asset class or onboarding step. |
+| T2 | BUILD_METHOD_PLAYBOOK.md | N/A | The batch follows the existing workflow. |
+| T2 | LANGSTON_ARCHITECTURE.md | N/A | The batch changes no reviewer runtime or access. |
+| T2 | CLAUDE.md / CONDUCT.md | N/A | The implementation changes no project rule. |
+| T2 | CLAUDE_MD_RULE_HISTORY.md | N/A | The batch contains no CLAUDE.md rule revision. |
+| T2 | DELETED_COMPONENTS_LOG.md | N/A | The migration removes rows and preserves the alert service and schema. |
+| T2 | MISTAKE_PATTERNS.md | N/A | The batch adds no mistake trailer or weekly pass. |
+| T2 | GOVERNANCE_EXCEPTIONS.md | N/A | KD-126 is an evidence exception in DECISIONS.md and the change list, with no governance-timing waiver. |
+| T2 | ALERT_HANDLING_PROTOCOL.md | N/A | Acknowledgement and resolution rules still apply as written. |
+| T2 | DELIVERY_BOARD_PROTOCOL.md | N/A | The existing board status and fields support the closeout. |
+| T2 | CLAUDE_CODE_FEATURE_WATCH.md | N/A | The batch includes no daily feature or model review. |

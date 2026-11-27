@@ -1,5 +1,13 @@
 # DawnTrader: Changes, Fixes & Improvements Registry
 
+## FIX-2026-11-27-A — B-AI-BRIEF-OFF (#1264, KD-111/KD-127)
+
+The retired Daily AI Brief no longer runs or produces its daily task errors after deployment `e3a96a812`. The 25-hour Step 7 observation and Coltrane's independent verification are recorded in B_AI_BRIEF_OFF_STEP4_CHANGE_LIST.md. KD-127 accepts the measured historical badge effect, with legacy code removal still scheduled after live.
+
+## FIX-2026-11-27-B — B-ALERT-ORPHAN-ROWS (#1255 R-1, KD-116/KD-126)
+
+Phase A `5ecd7ee24` removed the 12 old operator alerts linked to deleted users. The independently verified database and UI readback and retained rollback are recorded in B_ALERT_ORPHAN_ROWS_STEP4_CHANGE_LIST.md. KD-126 accepts the historical ordered rollback comparison as reported and independently unproved. The wider user-link census remains #1267 after live.
+
 ## FIX-2026-11-26-A — B-PRICE-SIDE-BY-JOB row 8a (#1250, ANALYST Codex) — midnight VTS report could silently lose its final rollup
 
 The report now requires the opening archive or a genuine straddling source through the final eligible flush and refuses unreadable selected archives. It keeps the stamp cut as a comparison. The Nov 25 22:00Z to Nov 26 00:00Z control matched all four after-hours lane/hour cells on the hour cut. Coltrane reproduced both cuts and approved Step 8 at 14:37:31Z on shared 59bfa6d49cbc83ed2b9988311d200ae04ae8ebcf. This report-only amendment keeps the architecture parent open. See B_PRICE_SIDE_BY_JOB_8A_P3_PROGRESS_REPORT.md, #1250 controlled midnight END read.
