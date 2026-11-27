@@ -1,12 +1,12 @@
 /**
  * B-STAGING-LIVENESS-WATCH — the fallback template CANNOT drift from addAlert.
  *
- * The watchdog's direct-append fallback (staging-liveness-watchdog.mjs) writes
+ * The watchdog's plain-Node fallback (staging-liveness-watchdog.mjs) writes
  * alert rows when the app/CLI is broken — the exact moment validation can't run.
  * This test pins the fallback template's SHAPE against a REAL addAlert row:
  * a schema change that forgets the fallback breaks the BUILD, not the outage
- * report (Langston Step-2 item 3a). Also pins the fallback's dedupe scan
- * semantics (item 3b: CLI + fallback converge on ONE alert per outage).
+ * report (Langston Step-2 item 3a). Also pins the existing-row read used
+ * to recover watchdog alerts already open before rollout.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import fs from 'node:fs';
@@ -20,11 +20,11 @@ process.env.SYSTEM_ALERTS_FILE = tmpAlerts; // must be set BEFORE system-alerts 
 // Dynamic imports so the env override above governs ALERTS_FILE.
 let addAlert: any;
 let buildFallbackAlert: any;
-let fileHasOpenDedupeKey: any;
+let openAlertRows: any;
 
 beforeAll(async () => {
   ({ addAlert } = await import('../../services/system-alerts.js'));
-  ({ buildFallbackAlert, fileHasOpenDedupeKey } = await import('../../scripts/staging-liveness-watchdog.mjs'));
+  ({ buildFallbackAlert, openAlertRows } = await import('../../scripts/staging-liveness-watchdog.mjs'));
 });
 
 afterAll(() => {
@@ -64,25 +64,25 @@ describe('fallback template shape-equality vs addAlert (drift breaks the build)'
   });
 });
 
-describe('fallback dedupe: idempotent against file contents, converges with the CLI path', () => {
+describe('existing watchdog rows available for recovery', () => {
   it('detects a non-resolved row with the same dedupe_key (CLI-written OR fallback-written)', async () => {
     await addAlert({
       triggers_at: new Date(), category: 'breakage', severity: 'critical',
       title: 'outage', body: 'outage', dedupe_key: 'watchdog-http',
     });
-    expect(fileHasOpenDedupeKey(tmpAlerts, 'watchdog-http')).toBe(true);
-    expect(fileHasOpenDedupeKey(tmpAlerts, 'watchdog-never-written')).toBe(false);
+    expect(openAlertRows(tmpAlerts).has('watchdog-http')).toBe(true);
+    expect(openAlertRows(tmpAlerts).has('watchdog-never-written')).toBe(false);
   });
 
   it('a RESOLVED row does not block a fresh alert for a NEW outage (matches addAlert semantics)', () => {
     const resolved = { ...buildFallbackAlert({ title: 'old', body: 'old', dedupeKey: 'watchdog-engine', metadata: {} }), state: 'resolved' };
     fs.appendFileSync(tmpAlerts, JSON.stringify(resolved) + '\n');
-    expect(fileHasOpenDedupeKey(tmpAlerts, 'watchdog-engine')).toBe(false);
+    expect(openAlertRows(tmpAlerts).has('watchdog-engine')).toBe(false);
   });
 
   it('tolerates a torn/corrupt line without failing the scan', () => {
     fs.appendFileSync(tmpAlerts, '{"torn json\n');
-    expect(fileHasOpenDedupeKey(tmpAlerts, 'watchdog-http')).toBe(true);
+    expect(openAlertRows(tmpAlerts).has('watchdog-http')).toBe(true);
   });
 });
 
@@ -120,14 +120,16 @@ describe('B-DISK-FILE-TIERING — category, dedupe discriminator, clear edge, di
     expect(mod.cliJson('npm ERR! nothing here')).toBeNull();
   });
 
-  it('the clear edge: resolving by key under the watchdog actor stamps cli, and the NEXT outage mints a new row (B1, B2)', async () => {
+  it('the ordinary CLI preserves actor provenance and allows a fresh row after manual closure', async () => {
     const open = await alerts.addAlert({ triggers_at: new Date(), category: 'breakage', severity: 'critical', title: 'outage 1', body: 'o', dedupe_key: 'watchdog-pm2' });
-    expect(mod.fileHasOpenDedupeKey(tmpAlerts, 'watchdog-pm2')).toBe(true);
-    const ids = await alerts.resolveAlertsByDedupeKey('watchdog-pm2', 'staging-liveness-watchdog', `watchdog run ${crypto.randomUUID()}: cleared`, 'cli');
+    expect(openAlertRows(tmpAlerts).has('watchdog-pm2')).toBe(true);
+    const evidence = `watchdog run ${crypto.randomUUID()}: cleared`;
+    await expect(alerts.resolveAlertsByDedupeKey('watchdog-pm2', 'staging-liveness-watchdog', evidence, 'cli')).rejects.toThrow('receipt-gated');
+    const ids = await alerts.resolveAlertsByDedupeKey('watchdog-pm2', 'kyle', evidence, 'cli');
     expect(ids).toEqual([open.id]);
     const row = alerts.readAllAlerts().find((r: any) => r.id === open.id);
-    expect([row.state, row.resolved_by_claimed, row.resolved_by_transport]).toEqual(['resolved', 'staging-liveness-watchdog', 'cli']);
-    expect(mod.fileHasOpenDedupeKey(tmpAlerts, 'watchdog-pm2')).toBe(false);
+    expect([row.state, row.resolved_by_claimed, row.resolved_by_transport]).toEqual(['resolved', 'kyle', 'cli']);
+    expect(openAlertRows(tmpAlerts).has('watchdog-pm2')).toBe(false);
     const next = await alerts.addAlert({ triggers_at: new Date(), category: 'breakage', severity: 'critical', title: 'outage 2', body: 'o', dedupe_key: 'watchdog-pm2' });
     expect(next.id).not.toBe(open.id);
   });
@@ -145,7 +147,7 @@ describe('B-DISK-FILE-TIERING — category, dedupe discriminator, clear edge, di
     expect(at(88.0, 20)).toMatchObject({ critOk: true, critClear: false });
   });
 
-  it('throwStep: two consecutive throws page, a clean run resets; openDedupeKeys reads each alert\'s LAST line', () => {
+  it('throwStep debounces throws and openAlertRows reads each alert\'s last line', () => {
     let s = mod.throwStep(0, true, 2); expect(s).toEqual({ count: 1, page: false });
     s = mod.throwStep(s.count, true, 2); expect(s).toEqual({ count: 2, page: true });
     expect(mod.throwStep(s.count, false, 2)).toEqual({ count: 0, page: false });
@@ -156,14 +158,7 @@ describe('B-DISK-FILE-TIERING — category, dedupe discriminator, clear edge, di
       JSON.stringify({ id: 'b', dedupe_key: 'k2', state: 'active' }),
       JSON.stringify({ id: 'c', dedupe_key: 'k2', state: 'resolved' }), // another id for k2, resolved: k2 still open
     ].join('\n') + '\n');
-    expect([...mod.openDedupeKeys(f)].sort()).toEqual(['k2']);
-  });
-
-  it('shouldMint: the alerts file decides — an open row never re-mints; no open row mints at the debounce, even right after a person resolved it', () => {
-    expect(mod.shouldMint(1, 2, false)).toBe(false); // under the debounce
-    expect(mod.shouldMint(2, 2, true)).toBe(false);  // a page is already up
-    expect(mod.shouldMint(2, 2, false)).toBe(true);  // no open row: mint
-    expect(mod.shouldMint(9, 2, false)).toBe(true);  // still failing after a hand resolve: mint again
+    expect([...openAlertRows(f).keys()].sort()).toEqual(['k2']);
   });
 
   it('envNumber: an unset override falls back, a numeric one is used, a typo THROWS rather than comparing against NaN', () => {
