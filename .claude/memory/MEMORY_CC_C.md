@@ -62,7 +62,7 @@
 ▶ **S7 alert outcomes:** evidence a638c6baf cleared a9351617, 9429aa7e, a641d0cc, 322a736b and a446f715. Active/unacked 9798d24f is ANALYST’s objective-12 shadow-close running count; fix and close only under B-SHADOW-HOLD-CLOCK row 4c / #1144. e67b2638 clears when pricing resumes.
 ▶ **8c week Step 8 closed Nov 23:** c15fb88d resolved at 34fec1121. Official NO-RESULT / no stop / hold discharged.
 ▶ **#1073 B-VTS-REST-DEADLINE · STEP: 5 of 11 DONE · NEXT STEP: 6 of 11 compatible slot.** ee5d5a46c CI 45877237324 4/4. #961 staging holds. **KD-73 Step 2 P2:** shared feddf5c73, exact CI 45936823722 4/4, shared run 45938647690. PM, NEW and INFRA notified. Cohort verdict gated.
-▶ **#1199 · STEP: 9 of 11 DONE · NEXT STEP: 10 of 11 shared docs.** Coltrane PROCEED 07:16:23Z at 6a7e04b8d; retain P3, no deploy. Closeout review and actual-parent CI follow NEW #647(i) placement.
+▶ **#1199 · STEP: 9 of 11 DONE · NEXT STEP: 10 of 11 shared docs.** Coltrane PROCEED 07:16:23Z at 6a7e04b8d; retain P3, no deploy. Closeout corrected per 07:23:50Z. Shared docs/CI after NEW #647(i), then Step 11.
 ▶ **#961 B-XSTOCK-BID-TRIGGER-RELAND · STEP: 5 of 11 DONE · NEXT STEP: 6 of 11 after staging gates.** Exact shared 2d8635ed6 CI 45842708142 4/4; 33 review paths unchanged. Price enforcement offline. INFRA Phase 3C landed f9c9cf18e. C14/legacy clear -> #1174.
 ▶ **#1250 midnight END · STEP: 11 of 11 confirmed at fc0aaa3e2.** 8A_P3 Progress. Parent remains Verify. #677 due Dec 16.
 ▶ **#441 B-XSTOCK-SESSION-FRESHNESS · OLD STEP: 2 of 11 APPROVED.** Coltrane 14:25:06Z on ecc395cbe5. Agreed +6h read and +49h/+54h register dates from first fully covered occurrence (Discord 1575523361344200837). Actual authorized activation and both dates owed before shared; no slot booked.

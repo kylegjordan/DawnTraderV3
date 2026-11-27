@@ -2,13 +2,13 @@
 
 Owner CC-C (ANALYST Codex). Change class `non_architecture`. Placement is pre-sprint stage 2, item 3, after Bid Trigger Reland objective 6. Step 11 confirmation pending.
 
-**Disposition.** Keep the current exit release in paper mode. The study compared the existing fresh seed after a wide-spread hold with a requirement for at least two real quote-pair changes and movement on both sides. The shared change contains three Markdown files and three unit suites. Steps 6 and 7 are offline because this batch has no deployable change or affected UI. The decision applies to #1199 only. The #1191 feed incident and the #1073/#961 staging work remain under their own gates.
+**Disposition.** Keep the current exit release in paper mode. The study compared the existing fresh seed after a wide-spread hold with a requirement for at least two real quote-pair changes and movement on both sides. The shared change contains three Markdown files and three unit suites. Step 6 is N/A. Step 7 passed offline verification. This batch has no deployable change or affected UI. The decision applies to #1199 only. The #1191 feed incident and the #1073/#961 staging work remain under their own gates.
 
 ## Objectives
 
 | Scope objective | Verdict | Evidence |
 |---|---|---|
-| 1. Reproduce the current sequence with coverage recorded | YES | Change List P1 reproduced the fixed screen of 81 wide-hold closes out of 297 paper xStock closes between 2026-10-16 15:10:55 UTC inclusive and 2026-11-04 13:52:36 UTC exclusive. All 81 were partial. Each had one position and one archived close, while the actual comparator deletion, successor seed, validation and continuous decision tape could not be matched. The separate read of 17 still-open positions was right-censored and excluded. |
+| 1. Reproduce the current sequence with coverage recorded | YES | The owner's fixed screen (Change List P1) found a recorded stop-side `spread_blown` marker in 81 of 297 paper xStock closes between 2026-10-16 15:10:55 UTC inclusive and 2026-11-04 13:52:36 UTC exclusive. All 81 histories were partial and zero episodes were fully matched. The controlled replay (P2) reproduced both release paths. A short hold that kept a validated comparator admitted the first recovered evaluation, and after an actual clear the first qualifying evaluation seeded, the second validated, and the third first requested an exit. The 17 still-open positions were right-censored and excluded from the screen. |
 | 2. Compare the same admissible recovery inputs | YES for the planned offline comparison | Change List P2 replayed both arms through the real TEC and guard with controlled inputs, independent trailing state and fill requests captured by stubs. The candidate held six recovery tapes that the existing rule admitted by the third evaluation and delayed the interrupted tape by 3 seconds at the same tested bid. A short hold and each same-symbol sibling control kept their applicable exit decision. A withheld evaluation also changed later trailing state. The historical portion was unable to score executable opportunities, as permitted by the evidence rule. |
 | 3. Return a reviewed policy disposition | YES | Step 4 approved retention under P3 at exact `fa834a1a6c9649511d40bf760f71c716a4c63ecb` on 2026-11-27 06:02:24 UTC. The registered minimum was at least one fully matched episode showing a prevented unusable sale and one fully matched recovery opportunity, plus the preservation controls. The screen yielded zero eligible episodes of either kind. |
 
@@ -18,7 +18,7 @@ Owner CC-C (ANALYST Codex). Change class `non_architecture`. Placement is pre-sp
 - The focused command in the Change List passed 182/182 tests across nine suites at the shared ref. The no-deploy check compared the shared diff to a runtime positive control (#961, `2d8635ed6`) and a migration positive control (#1263, `329cd825b`).
 - REVIEWER: claim-only · did this batch add anything that needs a deployment or a UI check · observed CI build stamps a new SHA on rebuild and Docker takes the files into its build context; exact shared delta has no serving-code, settings or migration change · re-derived y, exact diff and controls.
 - Coltrane PROCEED at 2026-11-27 07:16:23 UTC on the exact shared study. He compared all six blobs and file modes, reran 182/182, reproduced the sibling-control failure after removing its position guard, and got the pass back on restoration. His independent tally replay reproduced the opposite-direction summary collision. He verified the coverage limitation offline and treated the historical counts as owner-reported.
-- No staging action or observation was required for this study.
+- Step 6 N/A, Step 7 verified offline, Step 8 independently cleared. This study created no observation window.
 
 ## Known limits
 
