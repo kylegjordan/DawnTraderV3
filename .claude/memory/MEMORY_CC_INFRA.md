@@ -28,7 +28,7 @@
 - **`B-AGENT-INVOKE-FAILURE-NOTICE` — STEP: 7 of 11 · NEXT STEP: 8 of 11.** Step 6 DONE 11-13 13:19Z (bridges at `5215c529d` = this batch + GB-8 pin, 17/17). Step 7 = Langston B-amended (msg `1570794392229253182`): Coltrane arm PASS (11-11 natural timeouts handled, control discriminates). Langston arm: first natural failures, window to alert `e7ac23d6` 11-27 13:20Z; empty = NOT-RUN → option A for him only, test-only entry point. Next bridge touch: `:473` comment 64→68.
 - **`B-DISK-HEADROOM` (row 6) — STEP: 9 of 11 · NEXT: 10.** Stages A/B, P7, P8 PASS (progress report). Waits on P11 alert `f8188c60` 12-01 02:05Z. Step 10 owes b70 crontab comment + SysManual bar rows. Close order: flip GOVERNANCE_EXCEPTIONS row to open-retired, push, THEN resolve 21cacc38/b178ed3d.
 - 🔁 **Older owned items (crew-switch resume 2026-10-16):**
-  0. **B-CREW-ACCESS-HARDEN (`#1092`, `#924`) — F-2 STEP: 4 of 11 · NEXT STEP: 5 of 11.** Coltrane PROCEED `ff92bb046` 11-27 06:39:26Z; exact CI `45952945038`, then shared placement in crew order. Install held; live verifier `eca5607f7`. Drift #1004; P3a and disposable keys held.
+  0. **B-CREW-ACCESS-HARDEN (`#1092`, `#924`) — F-2 STEP: 5 of 11 · NEXT STEP: 6 of 11, HELD.** Coltrane-confirmed `40d4aa78` shared 11-27; exact CI `45960017207` 4/4. ANALYST notified for #1199. Live verifier `eca5607f7`. Drift #1004; P3a and disposable keys held.
   1. **B-CREDENTIALS-PRIVATE-REPO (#1023):** OBJ-1 CLOSED (`680e87b8d`); parent open for OBJ-2, OBJ-3, OBJ-4 readers and OBJ-6 flip.
      - **Deployer pin — STEP: 9 of 11 · NEXT STEP: 10 of 11 with parent.** Coltrane PROCEED `f50fbd358`. Alert `7953f97f` resolved. Phase A 716.
      - GB-8 Step 10 done; Step 11 with parent. Coltrane PROCEED `910e3a5b`; `#463` closed.
