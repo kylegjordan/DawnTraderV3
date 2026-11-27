@@ -1562,7 +1562,7 @@ Sessions now have tools that answer "where is this used, how does the running ap
 
 Completion report: `Claude Comms and Packages/Batch Completion/B_DB_READONLY_ROLE_COMPLETION_REPORT.md`. The database map and helper retirement remain placed next as sprint orders 5a2 and 5a3.
 
-### 2026-11-16 — B-TOKEN-WATCH-BIRTH-CAP (Infra Claude, Kyle KD-90; `#1247`) — 🟨 IN OBSERVATION (Langston Step 8 PROCEED 2026-11-20; record `Batch Completion/B_TOKEN_WATCH_BIRTH_CAP_PROGRESS_REPORT.md`)
+### 2026-11-16 — B-TOKEN-WATCH-BIRTH-CAP (Infra Claude, Kyle KD-90; `#1247`) — 🟨 IN OBSERVATION (Langston Step 8 PROCEED 2026-11-20; record `Batch Completion/B_TOKEN_WATCH_BIRTH_CAP_COMPLETION_REPORT.md`)
 
 **token-watch now switches its new-coin feed on and off on a published timetable, so it stays inside the free Helius allowance instead of running dry mid-cycle.** Each hour of the day is sampled in a known proportion, so the study can still compare hours honestly; a credit backstop stops a day early if the allowance is reached; and every switch is checked against the vendor's own meter, failing to the feed ON if anything is wrong. Live since 2026-11-16 (reviewed version installed 2026-11-20); the first compared window matched the vendor within 1 %. Closes on the 7-day hour-band read (after 2026-11-24) and the follow-up read to the cycle end (11-27).
 
