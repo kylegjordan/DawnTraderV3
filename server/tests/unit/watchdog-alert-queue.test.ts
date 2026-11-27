@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { access, mkdtemp, readFile, readdir, rm, utimes, writeFile } from 'node:fs/promises';
+import { access, copyFile, mkdir, mkdtemp, readFile, readdir, rm, utimes, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -11,7 +11,7 @@ import { build } from 'esbuild';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { SystemAlert } from '../../services/system-alerts.js';
 import { withAlertFileLock } from '../../services/system-alert-file-lock.mjs';
-import { commitWatchdogAttempt, enqueueWatchdogAlert, readWatchdogHead, recordWatchdogRecovery } from '../../services/watchdog-alert-store.mjs';
+import { commitWatchdogAttempt, enqueueWatchdogAlert, observeWatchdogOccurrence, readWatchdogHead, recordWatchdogRecovery } from '../../services/watchdog-alert-store.mjs';
 
 const run = promisify(execFile);
 const watchdog = 'server/scripts/staging-liveness-watchdog.mjs';
@@ -33,8 +33,8 @@ beforeEach(async () => {
 
 afterEach(async () => { await rm(scratch, { recursive: true, force: true }); });
 
-function node(args: string[], extraEnv: NodeJS.ProcessEnv = {}) {
-  return run(process.execPath, args, { env: { ...env, ...extraEnv }, timeout: 15_000 });
+function node(args: string[], extraEnv: NodeJS.ProcessEnv = {}, cwd?: string) {
+  return run(process.execPath, args, { cwd, env: { ...env, ...extraEnv }, timeout: 15_000 });
 }
 
 function runCli(...args: string[]) {
@@ -130,9 +130,15 @@ async function buildHoldDispatcher() {
   expect(contents.includes("&& alert.state === 'active' && alert.category === 'breakage' && alert.severity === 'warning'")).toBe(true);
   expect(service.includes('if (defer?.(fresh))')).toBe(true);
   const outfile = join(scratch, 'pinned-hold-candidate.cjs');
+  for (const helper of ['server/scripts/reap-system-alert-lock.mjs', 'server/services/system-alert-file-lock.mjs']) {
+    const target = join(scratch, helper);
+    await mkdir(dirname(target), { recursive: true });
+    await copyFile(helper, target);
+  }
   await build({
     stdin: { contents, sourcefile: entry, resolveDir: dirname(entry), loader: 'ts' },
     platform: 'node', bundle: true, format: 'cjs', outfile,
+    logOverride: { 'empty-import-meta': 'silent' },
     plugins: [{
       name: 'pinned-hold-alert-service',
       setup(plugin) {
@@ -150,6 +156,7 @@ async function startWatchdogFixture(pinnedTime?: number) {
   const archive = join(scratch, 'archive.log');
   const received: string[] = [];
   let healthy = false;
+  let pauseHttp: (() => Promise<void>) | undefined;
   const pm2 = JSON.stringify([{ name: 'dawntrader', pm2_env: { status: 'online' } }]);
   await writeFile(join(scratch, 'pm2'), `#!/bin/sh\nprintf '%s\\n' '${pm2}'\n`, { mode: 0o755 });
   await writeFile(state, JSON.stringify({ streaks: { http: 1 } }));
@@ -198,7 +205,11 @@ async function startWatchdogFixture(pinnedTime?: number) {
     } else if (req.url === '/liveness') {
       res.writeHead(200).end('{"engineExpected":false}');
     } else {
-      res.writeHead(healthy ? 200 : 503).end();
+      const status = healthy ? 200 : 503;
+      const pause = pauseHttp;
+      pauseHttp = undefined;
+      await pause?.();
+      res.writeHead(status).end();
     }
   });
   await new Promise<void>((accept, reject) => sink.once('error', reject).listen(0, '127.0.0.1', accept));
@@ -211,7 +222,19 @@ async function startWatchdogFixture(pinnedTime?: number) {
     ALERTS_DISCORD_WEBHOOK_URL: `${url}/receipt`, WATCHDOG_DISK_WARN_PCT: '101',
     WATCHDOG_DISK_CRIT_PCT: '101', WATCHDOG_DISK_CRIT_FREE_BYTES: '0',
   });
-  return { state, received, setHealthy(value: boolean) { healthy = value; }, close() { sink.close(); } };
+  return {
+    state, received,
+    setHealthy(value: boolean) { healthy = value; },
+    pauseNextHttp() {
+      let release!: () => void;
+      const released = new Promise<void>(accept => { release = accept; });
+      const waiting = new Promise<void>(accept => {
+        pauseHttp = () => { accept(); return released; };
+      });
+      return { waiting, release };
+    },
+    close() { sink.close(); },
+  };
 }
 
 async function pendingEntries(dedupeKey: string): Promise<Array<{ row: SystemAlert; recovery: string | null; matchedId: string | null }>> {
@@ -482,10 +505,120 @@ describe('durable watchdog alert queue', () => {
     const locks = (await readdir(scratch)).filter(name => name.endsWith('.lock'));
     expect(locks).toHaveLength(2);
     await Promise.all(locks.map(name => utimes(join(scratch, name), aged, aged)));
-    await node([watchdog, '--heartbeat']);
+    await node([resolve(watchdog), '--heartbeat'], {}, scratch);
     const recovered = (await rows()).filter(row => row.dedupe_key === key);
     expect(recovered.map(row => [row.id, row.metadata.emit_path])).toEqual([[first.id, 'cli']]);
     expect((await readWatchdogHead(ledger, key))?.matchedId).toBe(first.id);
+  }, 20_000);
+
+  it('keeps a later outage active when an earlier healthy reading completes after re-arm', async () => {
+    await writeFile(ledger, '');
+    const fixture = await startWatchdogFixture();
+    const tick = () => node([watchdog], { WATCHDOG_APP_DIR: process.cwd() });
+    try {
+      await tick();
+      const first = (await readWatchdogHead(ledger, key))!.row.id;
+      fixture.setHealthy(true);
+      const pause = fixture.pauseNextHttp();
+      const stale = tick();
+      void stale.catch(() => {});
+      let later: string;
+      try {
+        await Promise.race([pause.waiting, stale.then(() => { throw new Error('Delayed tick did not sample HTTP'); })]);
+        await tick();
+        fixture.setHealthy(false);
+        await tick();
+        await tick();
+        const entries = await pendingEntries(key);
+        expect(entries).toMatchObject([{ row: { id: first }, recovery: expect.stringContaining('http check passed') }, { recovery: null }]);
+        later = entries[1].row.id;
+        expect(later).not.toBe(first);
+      } finally {
+        pause.release();
+        await stale;
+      }
+      expect(await pendingEntries(key)).toMatchObject([{ row: { id: first } }, { row: { id: later }, recovery: null }]);
+      expect(JSON.parse(await readFile(fixture.state, 'utf8')).streaks.http).toBe(2);
+      for (const id of [first, later]) {
+        expect((await runCli('fire-due')).stdout).toContain(`Discord alert posted for ${id}`);
+        await tick();
+      }
+      expect(fixture.received).toHaveLength(2);
+      expect((await rows()).map(row => [row.id, row.state])).toEqual([[first, 'resolved'], [later, 'active']]);
+    } finally {
+      fixture.close();
+    }
+  }, 20_000);
+
+  it('does not close a critical disk alert raised after the shared disk sample', async () => {
+    await writeFile(ledger, '');
+    const fixture = await startWatchdogFixture();
+    fixture.setHealthy(true);
+    await writeFile(fixture.state, JSON.stringify({ streaks: { 'disk-critical': 1 } }));
+    const marker = join(scratch, 'at-statfs');
+    const release = join(scratch, 'release-statfs');
+    const preload = `
+      import fs from 'node:fs';
+      fs.statfsSync = () => {
+        const sample = { blocks: 1_000_000, bfree: 800_000, bavail: 800_000, bsize: 4096 };
+        fs.writeFileSync(${JSON.stringify(marker)}, 'sample taken');
+        const end = performance.now() + 5000;
+        const timer = new Int32Array(new SharedArrayBuffer(4));
+        while (!fs.existsSync(${JSON.stringify(release)})) {
+          if (performance.now() >= end) throw new Error('disk sample was not released');
+          Atomics.wait(timer, 0, 0, 20);
+        }
+        return sample;
+      };
+    `;
+    const diskKey = 'server-disk-utilization-critical';
+    const stale = node(['--import', `data:text/javascript,${encodeURIComponent(preload)}`, watchdog]);
+    void stale.catch(() => {});
+    try {
+      let id: string;
+      try {
+        await waitFor(() => access(marker).then(() => true, () => false));
+        await node([watchdog], { WATCHDOG_DISK_CRIT_PCT: '0' });
+        id = (await readWatchdogHead(ledger, diskKey))!.row.id;
+      } finally {
+        await writeFile(release, 'continue');
+        await stale;
+      }
+      expect(await readWatchdogHead(ledger, diskKey)).toMatchObject({ row: { id }, recovery: null });
+      expect((await runCli('fire-due')).stdout).toContain(`Discord alert posted for ${id}`);
+      await node([watchdog], { WATCHDOG_DISK_CRIT_PCT: '0', WATCHDOG_APP_DIR: process.cwd() });
+      expect((await rows()).map(row => [row.id, row.state])).toEqual([[id, 'active']]);
+    } finally {
+      fixture.close();
+    }
+  }, 15_000);
+
+  it('delivers and rearms past a silent same-key info row from the ordinary CLI', async () => {
+    const fixture = await startWatchdogFixture();
+    try {
+      const { stdout } = await runCli('add', '--triggers-at', new Date().toISOString(), '--category', 'health_check',
+        '--severity', 'info', '--title', 'Independent health check', '--body', 'Routine info carrier', '--dedupe-key', key);
+      const info = JSON.parse(stdout).id;
+      const tick = () => node([watchdog], { WATCHDOG_APP_DIR: process.cwd() });
+      await tick();
+      const first = (await readWatchdogHead(ledger, key))!.row.id;
+      expect(first).not.toBe(info);
+      expect(await readWatchdogHead(ledger, key)).toMatchObject({ row: { id: first }, matchedId: first });
+      fixture.setHealthy(true);
+      await tick();
+      fixture.setHealthy(false);
+      await tick();
+      await tick();
+      const successor = (await pendingEntries(key))[1].row.id;
+      expect((await runCli('fire-due')).stdout).toContain(`Discord alert posted for ${first}`);
+      await tick();
+      expect((await runCli('fire-due')).stdout).toContain(`Discord alert posted for ${successor}`);
+      expect(fixture.received).toHaveLength(2);
+      expect(fixture.received.every(content => !content.includes(info))).toBe(true);
+      expect((await rows()).map(row => [row.id, row.state])).toEqual([[info, 'active'], [first, 'resolved'], [successor, 'active']]);
+    } finally {
+      fixture.close();
+    }
   }, 20_000);
 
   it('retains one healthy reading across a killed tick and still requires two failures to re-arm', async () => {
@@ -494,16 +627,19 @@ describe('durable watchdog alert queue', () => {
     const atSave = join(scratch, 'at-streak-save');
     const preload = `
       import fs from 'node:fs';
-      const write = fs.writeFileSync;
-      fs.writeFileSync = (path, ...args) => {
-        if (path === ${JSON.stringify(fixture.state)}) {
-          write(${JSON.stringify(atSave)}, 'about to save new streak');
+      import fsp from 'node:fs/promises';
+      import { syncBuiltinESMExports } from 'node:module';
+      const open = fsp.open;
+      fsp.open = (path, ...args) => {
+        if (String(path).startsWith(${JSON.stringify(`${fixture.state}.lock.`)})) {
+          fs.writeFileSync(${JSON.stringify(atSave)}, 'about to acquire the streak state lock');
           const timer = new Int32Array(new SharedArrayBuffer(4));
           Atomics.wait(timer, 0, 0, 8000);
           throw new Error('watchdog fixture was not killed before saving the streak');
         }
-        return write(path, ...args);
+        return open(path, ...args);
       };
+      syncBuiltinESMExports();
     `;
     try {
       let first: string | undefined;
@@ -566,7 +702,8 @@ describe('durable watchdog alert queue', () => {
     await writeFile(ledger, `${JSON.stringify(held)}\n`);
     await enqueueWatchdogAlert(ledger, watchdogRow);
     await commitWatchdogAttempt(ledger, key, watchdogRow.id, 'fallback_atomic');
-    await recordWatchdogRecovery(ledger, key, `watchdog run ${randomUUID()}: fixture recovered before dispatch`);
+    await recordWatchdogRecovery(ledger, key, `watchdog run ${randomUUID()}: fixture recovered before dispatch`,
+      await observeWatchdogOccurrence(ledger, key));
     await enqueueWatchdogAlert(ledger, laterRow);
     const received: Array<{ status: number; content: string }> = [];
     const statuses = [204, 503, 503, 204];
@@ -598,7 +735,8 @@ describe('durable watchdog alert queue', () => {
       });
       await runHold(now, 'watchdog-recover', ...args(watchdogRow.id));
       await runHold(now, 'watchdog-commit', ...args(laterRow.id));
-      await recordWatchdogRecovery(ledger, key, `watchdog run ${randomUUID()}: later outage cleared`);
+      await recordWatchdogRecovery(ledger, key, `watchdog run ${randomUUID()}: later outage cleared`,
+        await observeWatchdogOccurrence(ledger, key));
       await runHold(now, 'fire-due');
       await runHold(now + 60_000, 'fire-due');
       expect(received.map(({ status }) => status)).toEqual([204, 503]);
@@ -624,7 +762,7 @@ describe('durable watchdog alert queue', () => {
     const recovery = `watchdog run ${randomUUID()}: fixture check passed`;
     await withAlertFileLock(ledger, async () => {
       await enqueueWatchdogAlert(ledger, first);
-      await recordWatchdogRecovery(ledger, key, recovery);
+      await recordWatchdogRecovery(ledger, key, recovery, await observeWatchdogOccurrence(ledger, key));
       await enqueueWatchdogAlert(ledger, relapse);
       expect(await readWatchdogHead(ledger, key)).toMatchObject({ row: { id: first.id }, recovery, matchedId: null });
     });
