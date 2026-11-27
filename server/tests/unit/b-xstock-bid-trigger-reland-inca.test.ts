@@ -295,6 +295,25 @@ describe('P5 — the refusal-duration tally', () => {
 // bid is AT OR BELOW the stop (the first tick the stop would have fired absent the guard), never the first WIDE tick, and
 // times the held stop from there to the release / the close.
 describe('row 2 objective 6 S6 — the spread-blown stop-hold tripwire', () => {
+  it('can save the same latest release summary for opposite wide-hold release directions', () => {
+    const stop = 100;
+    const histories = [
+      { wideReleaseBid: 99, laterReleaseBid: null },
+      { wideReleaseBid: 101, laterReleaseBid: 99 },
+    ];
+    const snapshots = histories.map(({ wideReleaseBid, laterReleaseBid }) => {
+      const tally = newExitRefusalTally(false);
+      noteRefusal(tally, 'yield_refused', 1_000, true, 98, stop);
+      expect(noteRelease(tally, wideReleaseBid, stop, 2_000)).toBe(true);
+      expect(tally.lastReleaseBidToStopPct).toBe(wideReleaseBid - stop);
+      noteRefusal(tally, 'unvalidated', 3_000);
+      expect(noteRelease(tally, laterReleaseBid, stop, 4_000)).toBe(true);
+      return snapshotExitRefusal(tally);
+    });
+    expect(snapshots[0]).toEqual(snapshots[1]);
+    expect(snapshots[0]).toMatchObject({ releases: 2, spreadBlownTicks: 1, lastReleaseBidToStopPct: -1 });
+  });
+
   it('a wide book that starts ABOVE the stop, later crosses below it, then closes below: the cost is the first BELOW-stop bid', async () => {
     const { newExitRefusalTally, noteRefusal, noteRelease, snapshotExitRefusal } = await import('../../services/exit-refusal-tally.js');
     const STOP = 100;

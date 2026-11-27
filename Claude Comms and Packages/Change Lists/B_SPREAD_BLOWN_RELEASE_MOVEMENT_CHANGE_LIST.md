@@ -1,6 +1,25 @@
 # B-SPREAD-BLOWN-RELEASE-MOVEMENT — #1199 offline comparison
 
-Owner CC-C. Step 3 checkpoints P1 and P2 quote recovery, trailing state and history gaps. Coltrane approved the Step 2 plan at `2a07df59dd5efeda8ada4c5f50f667a5916ff324` on 2026-11-27 at 04:27:00 UTC.
+Owner CC-C. Step 4 review of the Step 3 P1–P3 evidence and policy disposition. Coltrane approved the Step 2 plan at `2a07df59dd5efeda8ada4c5f50f667a5916ff324` on 2026-11-27 at 04:27:00 UTC.
+
+**Declared change-class** `architecture`, as declared for the possible policy change in the scope. **Step 2 reference** `Claude Comms and Packages/Scope Files/B_SPREAD_BLOWN_RELEASE_MOVEMENT_PRE_AUDIT.md` at the approval ref above.
+
+| Architecture doc set | Status at Step 4 |
+|---|---|
+| Scope | Present at `Claude Comms and Packages/Scope Files/B_SPREAD_BLOWN_RELEASE_MOVEMENT_SCOPE.md`. |
+| Pre-audit | Present at the Step 2 path above. |
+| Change list | Present here, with the offline diff and the decision for review. |
+| Completion report | Absent at Step 4. Due at closeout after the disposition is reviewed. |
+| Batch Catalog | Absent for this batch. Due at closeout. |
+| Phase History | Absent for this batch. Due at closeout. |
+| System Manual | No batch entry. Request judged N/A because the selected disposition makes no trading-architecture change. |
+| System Impact Map | No batch entry. Request judged N/A because the selected disposition changes no runtime component, dependency or state. |
+| Changes and Fixes | Conditional, judged N/A for evidence and test fixtures only. |
+| Running Issues | Present as the open #1199 entry in `1-system-manual/RUNNING_ISSUES.md`. Closure awaits the reviewed disposition. |
+| Post-Audit Roadmap | Conditional, judged N/A for this evidence-only comparison. Placement already exists in `1-system-manual/SPRINT_TO_LIVE_PLAN.md`, Wave 2 row 3. |
+| Deleted Components Log | Conditional, judged N/A. There are no deletions of components. |
+| Phase 19 Plan | Conditional, judged N/A. #1199 is outside the Phase 19 batch namespace. |
+| Adjustment Framework | Conditional, judged N/A. No setting or calibration changes. |
 
 ## P1 — Existing historical evidence
 
@@ -14,6 +33,12 @@ The fixed screen comprises 81 of 297 paper xStock closes in the half-open interv
 | Operational logs and sampled quotes | Earliest retained error rotation was November 7, whose daily file starts November 6 under Storage Policy §5.5. November 16 GIS remains a direct positive control for the same log family. | The saved samples can witness quotes. A four-second target sampling cadence leaves intervening exit evaluations unknown. The October 19 retained warm manifest identifies an available partition; it cannot supply missing engine history. |
 
 **Current coverage of the screened closes:** 81 partial, zero fully matched in the checked sources, zero missing all close evidence. Each close has its position and archived exit. For each, the missing grade is a same-process link from its wide hold to the actual comparator deletion, successor seed, validation and exit opportunity on an unbroken evaluation tape. The 53 first-night release log events and the later GIS control stay outside the 81-close screen. CRM remains a recorded ask-only sequence control. GIS remains a short hold with a surviving comparator and a witnessed bid, with no direct linkage from the archive snapshot to the booked fill.
+
+A second read checked the retained C-P5 harvest. Across the compressed daily files named October 20 through November 16, it returned 9,513,729 admitted `XS_FRAME` lines and 1,443 `VENUE_PAUSE` family lines. The 9,515,172 lines exhaust the read. The producer deliberately retains only those line families, so it gives no clear, yield, seed or validation trace. The frame format also lacks bid size and a venue receipt identity. `scripts/analysis/xs_frame_extract.sh` describes a separate evaluator-frame harvest and deployment/restart manifest with the same frame limitations. Reading its default directory failed because the path did not exist on staging. No coverage is claimed from that path.
+
+An independent open-position sample at 2026-11-27 05:44:04 UTC found 17 staging paper xStock positions currently open. All 17 opened after the fixed historical cohort cut. Sixteen of those 17 carried both a saved last book-state skip and a saved wide-only yield. These records are right-censored context. The data lacks a decision/close endpoint or the stable evaluator tape needed to grade these holds, and they stay outside the 81-close denominator.
+
+REVIEWER: claim-only · which retained sources can settle exact historical matching and what other histories are possible · identified the C-P5 harvest and the separate frame-extractor path · re-derived y, read harvest and attempted default-path read.
 
 The structured read can reproduce the per-close coverage beginning with this projection. Run through `dt-sql --csv`:
 
@@ -70,4 +95,63 @@ Local verification passed **67/67** across the chain, increment A and reseed sui
 
 Local verification passed **101/101** across the four named fixture suites. The assertions detected three forced errors: allowing the unverified interval through, discarding the verified idle duration and updating the candidate's trailing state during a withheld evaluation.
 
-The 81 screened historical closes still supply zero fully matched benefit cases and zero fully matched recovery cases in the checked sources. The grading rule retains the existing release behavior. The remaining P2 protection controls and final evidence disposition go to Coltrane together. The #1191 joint recovery read and #1073/#961 staging gates keep their recorded precedence.
+### Scope and rejected inputs
+
+The final paired fixtures exercise the real position streak, book guard and comparator. An empty comparator still yields after three wide evaluations, but records no deletion. A new engine given only the retained spread ring after a restart cannot inherit a movement gate from the previous engine. Both arms request the same stop on evaluation 3 with one quote move in each case. The retained-implausible test records `YIELD_KEEPS_IMPLAUSIBLE_CHAIN` and verifies the chain is present after the yield. The existing escape suite exercises how an implausible seed can recover.
+
+With two positions holding the same symbol, the third wide evaluation records the first position's yield and one shared comparator deletion, alongside the other position's first skip. Only the yielding position qualifies for the proposed gate. If the evidence has two possible yielding owners, the fixture cannot attribute the deletion. A synthetic yield with both `spread_blown` and another reason is outside scope. The real absolute guard returns `spread_blown` alone before it reaches the comparator-relative branches.
+
+Missing, crossed, nonpositive and stale quotes each block the existing evaluator on the ineligible evaluation and erase the candidate's one earned move. After that interruption, the existing arm first requests the stop at evaluation 4. The candidate restarts from zero and requests it at evaluation 6. In these four synthetic tapes the tested decision is at the same bid and 3,000 ms later. There is no fill simulation or historical opportunity credited in any fixture.
+
+The new tally control uses the real refusal-tally writer. Two wide-hold releases occur on opposite sides of the same 100 stop, at 99 and 101. Each history then has a generic refusal and release. One later release carries no bid, while the other carries 99. The full serialized summaries are equal and both show a latest distance of −1%. That stored summary cannot establish the direction of the wide-hold release.
+
+The verified change set has two test file changes and this evidence file after the earlier trailing checkpoint. The upstream and downstream controls exercised paper entry depth, VTS booked closes and selector callers, crypto's stale/fresh exit boundary, and independent trailing states on the same symbol. The runtime files, entry paths, VTS and crypto code have no changes in the batch diff.
+
+### Load-bearing fixture diff
+
+**MODIFIED** `server/tests/unit/b-xstock-bid-trigger-reland-inc2-chain.test.ts`. Before the scope controls, the fixture's selected hold shape itself identified the candidate target.
+
+```diff
+- await warm(eng);
+- if (hold === 'clear') {
+-   await blowoutToYield(eng);
+- } else {
+-   const skipped = await tick(eng, BLOWN);
+-   expect(readBookStateComparator(SYMBOL)?.validated).toBe(true);
+- }
+- allowDecision = !requireMovement || hold === 'short' || (moves >= 2 && bidMoved && askMoved);
+```
+
+```ts
+function movementGateOwner(events: BookEvent[], cleared: boolean): string | undefined {
+  const yields = events.filter(event => event.kind === 'yield');
+  if (!cleared || yields.length !== 1) return;
+  const [yieldEvent] = yields;
+  if (yieldEvent.reasons.length === 1 && yieldEvent.reasons[0] === 'spread_blown') return yieldEvent.positionId;
+}
+
+eng.checkExitConditions = (position: { id: string }, ...args: unknown[]) => {
+  reached = true;
+  admitted = !requireMovement || position.id !== owner || movementReady;
+  return admitted ? evaluate(position, ...args) : null;
+};
+```
+
+**NEW** `server/tests/unit/b-xstock-bid-trigger-reland-inca.test.ts`, tally control shown with the state-changing calls.
+
+```ts
+noteRefusal(tally, 'yield_refused', 1_000, true, 98, stop);
+expect(noteRelease(tally, wideReleaseBid, stop, 2_000)).toBe(true);
+expect(tally.lastReleaseBidToStopPct).toBe(wideReleaseBid - stop);
+noteRefusal(tally, 'unvalidated', 3_000);
+expect(noteRelease(tally, laterReleaseBid, stop, 4_000)).toBe(true);
+return snapshotExitRefusal(tally);
+```
+
+**Verification** 182/182 tests across nine suites. Reproducible via `npm exec --offline -- vitest run --silent=true` with `b-xstock-bid-trigger-reland-inc2-chain`, `b-xstock-bid-trigger-reland-inca`, `b65-tec-parity`, `b-price-side-8a-p4a-reseed-escape`, `b-book-state-restart-durable`, `b80-tec-per-trade-keying`, `p19-b4b1-depth-gate`, `kd19-vts-exit-walk` and `b-xstock-bid-trigger-reland-inc4b` under `server/tests/unit/`. Four temporary fixture mutations failed their intended assertions: ignoring actual deletion, accepting a mixed reason, assigning an ambiguous clear and carrying ownership through restart. The fixture was restored for the passing run.
+
+## P3 — Disposition proposed for review
+
+**Retain the current release rule.** The registered minimum is at least one fully matched eligible benefit and one fully matched eligible recovery case, with all scope controls passing. The fixed screen supplies zero of each across the 81 screened closes under the exact matching rule. The synthetic comparisons show how the candidate could withhold a valid decision or alter later trailing state, with no adjudicated historical benefit or cost. No policy release, setting change, deployment or new observation is requested. The #1191 joint recovery read and #1073/#961 staging gates retain their precedence.
+
+**Review question** Is the test-only diff and evidence sufficient to close #1199 at retained behavior under the approved minimum, with the architecture documentation judgments above, or is there a specific unresolved coverage or grading defect?
