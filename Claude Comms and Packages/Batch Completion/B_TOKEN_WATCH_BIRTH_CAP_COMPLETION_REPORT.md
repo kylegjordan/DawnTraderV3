@@ -1,10 +1,10 @@
 # B-TOKEN-WATCH-BIRTH-CAP — COMPLETION REPORT
 
-## STEP 11 OPEN — OBJ-2, OBJ-5 and OBJ-8 passed independent adjudication
+## STEP 11 COMPLETE — OBJ-2, OBJ-5 and OBJ-8 passed independent adjudication
 
 > Batch `B-TOKEN-WATCH-BIRTH-CAP` · issue `#1247` · owner Infra Claude · Kyle decision KD-90 · plan row `SPRINT_TO_LIVE_PLAN.md` 5a · change-class `non_architecture` (scope header).
 > Window shape: a **set period** — 7 complete capped days for OBJ-2; OBJ-5's window is registered in §5 (AMENDMENT 18 rider 3): from the rider's commit to 2026-11-27 00:00Z.
-> Both scheduled reads are complete and the owner has accepted the results within their registered criteria. Coltrane confirmed the corrected Step 11 report at `c003882447166db8f1cd496c5cfb468ea82af385` on 2026-11-27T03:57:57Z. Report CI `45936472313` passed Build, TypeScript Check, Test Suite and Docker Build. Formal closeout follows shared placement.
+> Both scheduled reads are complete and the owner has accepted the results within their registered criteria. Coltrane confirmed the corrected Step 11 report at `c003882447166db8f1cd496c5cfb468ea82af385` on 2026-11-27T03:57:57Z. Report CI `45936472313` passed Build, TypeScript Check, Test Suite and Docker Build. Coltrane approved placement continuity at 2026-11-27T04:49:45Z for `a1fcd6a3a1ab41a1dea31d4dd4c660d07ee98eb8`. That exact ref passed Build, TypeScript Check, Test Suite and Docker Build (CI `45941919558`) and was verified on shared.
 > Step-by-step evidence: `Claude Comms and Packages/Change Lists/B_TOKEN_WATCH_BIRTH_CAP_CHANGE_LIST.md` §9-§9e. This report points at it rather than copying it.
 
 **Open evidence and custody.** INFRA retains the C-2 snapshot and the separately restricted KD-124 extract pending their own authorized disposition. This report supplies no disposal authority. The OBJ-5 coverage limit and the behaviors that lack a live example are listed in §6.
@@ -100,9 +100,11 @@ REVIEWER: claim-only · What can still be true when the reported OBJ-5 zeros hol
 - **C-2 deletion only.** Coltrane rejected both live-store ACL forms and approved the separate snapshot. Exact-ref implementation review, 4/4 CI, the collision redispatch, combined install, one snapshot and OBJ-2/OBJ-8 adjudication are complete. The fixed object remains unchanged; deletion is not authorized until a later explicit ruling.
 - **Follow-up Memory alert work** is tracked separately in `Change Lists/B_TOKEN_WATCH_FOLLOWUP_MEMORY_P10_07EBA4B2_CHANGE_LIST.md`. Its Step 9 lock return remains independent of this report.
 
-## 7. Governance files changed (this Step 10)
+## 7. Governance files changed at Step 10
 
 CHANGE-CLASS: non_architecture
+
+This is the historical Step 10 ledger. Section 8 records the later formal closeout.
 
 | document | class | verdict | line |
 |---|---|---|---|
@@ -126,3 +128,13 @@ CHANGE-CLASS: non_architecture
 | own session task list | REQUIRED | ✅ updated | row 24 |
 | `CONDUCT.md` / `CLAUDE.md` | judged | N/A | no rule changed |
 | `B_TOKEN_WATCH_SCOPE.md` §5.1 | judged | N/A | the parent scope's residuals are unchanged by this batch |
+
+## 8. Formal closeout
+
+The owner accepted the completed Birth Cap observation against the registered criteria and closes its deploy window as completed in `DEPLOY_WINDOWS.jsonl`. The close retires the temporary declaration in `GOVERNANCE_EXCEPTIONS.md` and records completion in the catalog, phase history, running issues, sprint plan, Infra task list and Infra position. The two evidence holds in §§4–6 continue, with custody staying separate from the observation window. The Follow-up Memory window and its Step 9 lock return, the #1191 repeat checks and expiry/rollback check, and KD-81 retain their existing conditions. The original #1247 investigation remains in B-TOKEN-WATCH-BIRTH-GAP after live (KD-52).
+
+| Tier | Document | Verdict | Evidence |
+|---|---|---|---|
+| T1 | The four session task lists | ✅ mine / N/A — not mine ×3 | `CC_INFRA_SESSION_TASK_LIST.md` records Birth Cap closed, matching sprint row 5a. |
+
+REVIEWER: claim-only · Which outstanding records could this closeout suppress? · #1247 still carries the KD-52 historical root-cause investigation; preserve the open issue and record the Birth Cap mitigation as complete · re-derived y from KD-52 and PRE_LIVE_SPRINT.md.
