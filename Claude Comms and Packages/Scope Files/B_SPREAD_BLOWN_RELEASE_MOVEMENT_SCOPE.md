@@ -1,8 +1,10 @@
 # B-SPREAD-BLOWN-RELEASE-MOVEMENT — scope
 
-change-class: architecture
+change-class: non_architecture
 
 Owner: CC-C · RUNNING_ISSUES #1199 · pre-sprint stage 2, item 3
+
+Coltrane's Step 4 ruling on 2026-11-27 at 05:51:26 UTC (`3374dee596681fe9daa0bb884e006d6472762edb`) confirmed retention under P3 and directed this re-declaration. The approved Step 2 plan at `2a07df59dd5efeda8ada4c5f50f667a5916ff324` considered a possible runtime policy change. The resulting branch carries evidence and offline tests, with the existing release rule retained.
 
 ## Directive and boundary
 

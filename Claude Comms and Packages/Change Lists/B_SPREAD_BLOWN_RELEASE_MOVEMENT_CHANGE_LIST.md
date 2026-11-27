@@ -2,9 +2,9 @@
 
 Owner CC-C. Step 4 review of the Step 3 P1–P3 evidence and policy disposition. Coltrane approved the Step 2 plan at `2a07df59dd5efeda8ada4c5f50f667a5916ff324` on 2026-11-27 at 04:27:00 UTC.
 
-**Declared change-class** `architecture`, as declared for the possible policy change in the scope. **Step 2 reference** `Claude Comms and Packages/Scope Files/B_SPREAD_BLOWN_RELEASE_MOVEMENT_PRE_AUDIT.md` at the approval ref above.
+**Declared change-class** `non_architecture`, re-declared in the scope on Coltrane's Step 4 ruling at `3374dee596681fe9daa0bb884e006d6472762edb` on 2026-11-27 at 05:51:26 UTC. The original class allowed for a possible trading change. The disposition now keeps the rule and carries only evidence and tests. **Step 2 reference** `Claude Comms and Packages/Scope Files/B_SPREAD_BLOWN_RELEASE_MOVEMENT_PRE_AUDIT.md` at the approval ref above.
 
-| Architecture doc set | Status at Step 4 |
+| Non-architecture doc set and closeout ledger | Status at Step 4 r2 |
 |---|---|
 | Scope | Present at `Claude Comms and Packages/Scope Files/B_SPREAD_BLOWN_RELEASE_MOVEMENT_SCOPE.md`. |
 | Pre-audit | Present at the Step 2 path above. |
@@ -12,14 +12,17 @@ Owner CC-C. Step 4 review of the Step 3 P1–P3 evidence and policy disposition.
 | Completion report | Absent at Step 4. Due at closeout after the disposition is reviewed. |
 | Batch Catalog | Absent for this batch. Due at closeout. |
 | Phase History | Absent for this batch. Due at closeout. |
-| System Manual | No batch entry. Request judged N/A because the selected disposition makes no trading-architecture change. |
-| System Impact Map | No batch entry. Request judged N/A because the selected disposition changes no runtime component, dependency or state. |
+| System Manual | Conditional, judged N/A because the retained rule changes no trading architecture. |
+| System Impact Map | Conditional, judged N/A because the retained rule changes no runtime component, dependency or state. |
 | Changes and Fixes | Conditional, judged N/A for evidence and test fixtures only. |
 | Running Issues | Present as the open #1199 entry in `1-system-manual/RUNNING_ISSUES.md`. Closure awaits the reviewed disposition. |
 | Post-Audit Roadmap | Conditional, judged N/A for this evidence-only comparison. Placement already exists in `1-system-manual/SPRINT_TO_LIVE_PLAN.md`, Wave 2 row 3. |
 | Deleted Components Log | Conditional, judged N/A. There are no deletions of components. |
 | Phase 19 Plan | Conditional, judged N/A. #1199 is outside the Phase 19 batch namespace. |
 | Adjustment Framework | Conditional, judged N/A. No setting or calibration changes. |
+| Sprint to Live Plan | Present as Wave 2 row 3. Update the row and link the report at closeout. |
+| Session task list | `1-system-manual/CC_C_SESSION_TASK_LIST.md` references #1199 under row 2. Record the resulting disposition and report link at closeout. |
+| Memory | `.claude/memory/MEMORY_CC_C.md` and its matching outside copy track the exact review boundary. Record the reviewed disposition at closeout. |
 
 ## P1 — Existing historical evidence
 
@@ -99,13 +102,15 @@ Local verification passed **101/101** across the four named fixture suites. The 
 
 The final paired fixtures exercise the real position streak, book guard and comparator. An empty comparator still yields after three wide evaluations, but records no deletion. A new engine given only the retained spread ring after a restart cannot inherit a movement gate from the previous engine. Both arms request the same stop on evaluation 3 with one quote move in each case. The retained-implausible test records `YIELD_KEEPS_IMPLAUSIBLE_CHAIN` and verifies the chain is present after the yield. The existing escape suite exercises how an implausible seed can recover.
 
-With two positions holding the same symbol, the third wide evaluation records the first position's yield and one shared comparator deletion, alongside the other position's first skip. Only the yielding position qualifies for the proposed gate. If the evidence has two possible yielding owners, the fixture cannot attribute the deletion. A synthetic yield with both `spread_blown` and another reason is outside scope. The real absolute guard returns `spread_blown` alone before it reaches the comparator-relative branches.
+With two positions holding the same symbol, the third wide evaluation records the first position's yield and one shared comparator deletion, alongside the other position's first skip. The paired runs then replay fresh `A → B → B`. The existing arm requests a stop for both position IDs at evaluation 2. The movement candidate requests the sibling's same stop at evaluation 2 at the same requested price, 384.60. The yielding position has just one move and requests no stop before the tape ends. Each requested close removes its position from the fixture before the next evaluation. This is a test of stop requests with stubbed fills. Removing the position-ID restriction suppresses the sibling's stop and fails the paired assertion.
+
+If the evidence has two possible yielding owners, the fixture cannot attribute the deletion. A synthetic yield with both `spread_blown` and another reason is outside scope. The real absolute guard returns `spread_blown` alone before it reaches the comparator-relative branches.
 
 Missing, crossed, nonpositive and stale quotes each block the existing evaluator on the ineligible evaluation and erase the candidate's one earned move. After that interruption, the existing arm first requests the stop at evaluation 4. The candidate restarts from zero and requests it at evaluation 6. In these four synthetic tapes the tested decision is at the same bid and 3,000 ms later. There is no fill simulation or historical opportunity credited in any fixture.
 
 The new tally control uses the real refusal-tally writer. Two wide-hold releases occur on opposite sides of the same 100 stop, at 99 and 101. Each history then has a generic refusal and release. One later release carries no bid, while the other carries 99. The full serialized summaries are equal and both show a latest distance of −1%. That stored summary cannot establish the direction of the wide-hold release.
 
-The verified change set has two test file changes and this evidence file after the earlier trailing checkpoint. The upstream and downstream controls exercised paper entry depth, VTS booked closes and selector callers, crypto's stale/fresh exit boundary, and independent trailing states on the same symbol. The runtime files, entry paths, VTS and crypto code have no changes in the batch diff.
+The final Step 4 diff from approved Step 2 contains three test files, this evidence file, and the class amendment to the scope. The upstream and downstream controls exercised paper entry depth, VTS booked closes and selector callers, crypto's stale/fresh exit boundary, and independent trailing states on the same symbol. The runtime files, entry paths, VTS and crypto code have no changes in the batch diff.
 
 ### Load-bearing fixture diff
 
@@ -137,6 +142,18 @@ eng.checkExitConditions = (position: { id: string }, ...args: unknown[]) => {
 };
 ```
 
+**MODIFIED in r2**, actual stop requests checked by position and evaluation.
+
+```ts
+const { steps: baseline } = await replayRecovery(tape, false, 'siblings');
+const { steps: candidate } = await replayRecovery(tape, true, 'siblings');
+const siblingStop = { positionId: 'pos-MDB-sibling', requestedPrice: mid(b), reason: 'stop_hit' };
+const ownerStop = { positionId: makePosition().id, requestedPrice: mid(b), reason: 'stop_hit' };
+expect(baseline.map(step => step.requests)).toEqual([[], [ownerStop, siblingStop]]);
+expect(candidate.map(step => step.requests)).toEqual([[], [siblingStop], []]);
+expect(candidate[2].moves).toBe(1);
+```
+
 **NEW** `server/tests/unit/b-xstock-bid-trigger-reland-inca.test.ts`, tally control shown with the state-changing calls.
 
 ```ts
@@ -148,10 +165,10 @@ expect(noteRelease(tally, laterReleaseBid, stop, 4_000)).toBe(true);
 return snapshotExitRefusal(tally);
 ```
 
-**Verification** 182/182 tests across nine suites. Reproducible via `npm exec --offline -- vitest run --silent=true` with `b-xstock-bid-trigger-reland-inc2-chain`, `b-xstock-bid-trigger-reland-inca`, `b65-tec-parity`, `b-price-side-8a-p4a-reseed-escape`, `b-book-state-restart-durable`, `b80-tec-per-trade-keying`, `p19-b4b1-depth-gate`, `kd19-vts-exit-walk` and `b-xstock-bid-trigger-reland-inc4b` under `server/tests/unit/`. Four temporary fixture mutations failed their intended assertions: ignoring actual deletion, accepting a mixed reason, assigning an ambiguous clear and carrying ownership through restart. The fixture was restored for the passing run.
+**Verification** 182/182 tests across nine suites. Reproducible via `npm exec --offline -- vitest run --silent=true` with `b-xstock-bid-trigger-reland-inc2-chain`, `b-xstock-bid-trigger-reland-inca`, `b65-tec-parity`, `b-price-side-8a-p4a-reseed-escape`, `b-book-state-restart-durable`, `b80-tec-per-trade-keying`, `p19-b4b1-depth-gate`, `kd19-vts-exit-walk` and `b-xstock-bid-trigger-reland-inc4b` under `server/tests/unit/`. The Step 3 fixture mutations each failed their intended assertion: ignoring actual deletion, accepting a mixed reason, assigning an ambiguous clear and carrying ownership through restart. The r2 paired assertion specifically fails after removal of the position-ID restriction. The fixture was restored for the passing run.
 
 ## P3 — Disposition proposed for review
 
 **Retain the current release rule.** The registered minimum is at least one fully matched eligible benefit and one fully matched eligible recovery case, with all scope controls passing. The fixed screen supplies zero of each across the 81 screened closes under the exact matching rule. The synthetic comparisons show how the candidate could withhold a valid decision or alter later trailing state, with no adjudicated historical benefit or cost. No policy release, setting change, deployment or new observation is requested. The #1191 joint recovery read and #1073/#961 staging gates retain their precedence.
 
-**Review question** Is the test-only diff and evidence sufficient to close #1199 at retained behavior under the approved minimum, with the architecture documentation judgments above, or is there a specific unresolved coverage or grading defect?
+**Review question** Does the revised paired sibling control and `non_architecture` inventory discharge the two Step 4 corrections at this ref? Coltrane's first ruling already accepted the historical retention result.

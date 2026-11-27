@@ -436,16 +436,38 @@ const WIDE_CLEAR = /COMPARATOR_CLEARED reason=yield_after_3_hollow/;
 // #1199 P2: both arms drive the actual guard, selector and hard-stop evaluator.
 // The proposed movement rule exists only at this fixture's evaluator boundary.
 // The close stub observes requests. There is no fill simulation in this fixture.
-async function replayRecovery(tape: RecoveryEvent[], requireMovement: boolean, hold: 'clear' | 'short' | 'empty' | 'restart') {
+async function replayRecovery(tape: RecoveryEvent[], requireMovement: boolean, hold: 'clear' | 'short' | 'empty' | 'restart' | 'siblings') {
   _resetBookStateComparatorsForTest();
   vi.setSystemTime(new Date('2026-10-14T15:00:00Z'));
   let eng = makeEngine();
   eng._lastReserveTripwireAt = Date.now();
+  const position = makePosition();
+  let positions = [position];
+  h.getActiveOpenPositions.mockImplementation(async () => positions);
   let owner: string | undefined;
   if (hold !== 'empty') await warm(eng);
   if (hold === 'clear') {
     const yielded = await blowoutToYield(eng);
     owner = movementGateOwner(yielded.bookEvents, has(yielded.warns, WIDE_CLEAR));
+  } else if (hold === 'siblings') {
+    const sibling = { ...position, id: 'pos-MDB-sibling' };
+    await tick(eng, BLOWN);
+    await tick(eng, BLOWN);
+    expect(readBookStateComparator(SYMBOL)?.validated).toBe(true);
+    positions = [position, sibling];
+    const yielded = await tick(eng, BLOWN);
+    expect(yielded.bookEvents).toEqual([
+      expect.objectContaining({ positionId: position.id, kind: 'yield', streak: 3, reasons: ['spread_blown'] }),
+      expect.objectContaining({ positionId: sibling.id, kind: 'skip', streak: 1, reasons: ['spread_blown'] }),
+    ]);
+    expect(count(yielded.warns, WIDE_CLEAR)).toBe(1);
+    expect(readBookStateComparator(SYMBOL)).toBeNull();
+    owner = movementGateOwner(yielded.bookEvents, has(yielded.warns, WIDE_CLEAR));
+    expect(owner).toBe(position.id);
+    const [wideYield, siblingSkip] = yielded.bookEvents;
+    // Evidence controls: a competing yield makes attribution ambiguous, and extra causes fall outside the rule.
+    expect(movementGateOwner([wideYield, { ...siblingSkip, kind: 'yield' }], true)).toBeUndefined();
+    expect(movementGateOwner([{ ...wideYield, reasons: ['spread_blown', 'mark_deviation'] }], true)).toBeUndefined();
   } else if (hold === 'short') {
     const skipped = await tick(eng, BLOWN);
     expect(skipped.bookEvents).toEqual([expect.objectContaining({ kind: 'skip', reasons: ['spread_blown'] })]);
@@ -519,8 +541,14 @@ async function replayRecovery(tape: RecoveryEvent[], requireMovement: boolean, h
     admitted = false;
     const result = await tick(eng, frame);
     expect(result.errors).toEqual([]);
-    expect(result.closes.length).toBeLessThanOrEqual(1);
-    const close = result.closes[0];
+    const requests = result.closes.map(([positionId, price, exit]) => ({
+      positionId: positionId as string,
+      requestedPrice: price as number,
+      reason: (exit as { type: string }).type,
+    }));
+    const closingIds = new Set(requests.map(request => request.positionId));
+    expect(closingIds.size).toBe(requests.length);
+    expect([...closingIds].every(id => positions.some(open => open.id === id))).toBe(true);
     steps.push({
       evaluation: steps.length + 1,
       elapsedMs: Date.now() - recoveryStart,
@@ -528,9 +556,11 @@ async function replayRecovery(tape: RecoveryEvent[], requireMovement: boolean, h
       reached,
       admitted,
       bidToStop: frame === null ? null : frame.bid - STOP,
-      closeReason: close ? (close[2] as { type: string }).type : null,
+      closeReason: requests[0]?.reason ?? null,
+      requests,
     });
-    if (close) break;
+    positions = positions.filter(open => !closingIds.has(open.id));
+    if (positions.length === 0) break;
   }
   return { coverage: 'replayed' as const, steps };
 }
@@ -625,27 +655,15 @@ describe('#1199 P2 — paired post-hold decisions with the real guard', () => {
     expect(movementGateOwner(yielded.bookEvents, false)).toBeUndefined();
   });
 
-  it('attributes the yield and deletion to the position at the cap, even with a second position on that symbol', async () => {
-    const eng = makeEngine();
-    const position = makePosition();
-    const sibling = { ...position, id: 'pos-MDB-sibling' };
-    await warm(eng);
-    await tick(eng, BLOWN);
-    await tick(eng, BLOWN);
-    expect(readBookStateComparator(SYMBOL)?.validated).toBe(true);
-    h.getActiveOpenPositions.mockImplementation(async () => [position, sibling]);
-    const yielded = await tick(eng, BLOWN);
-    expect(yielded.bookEvents).toEqual([
-      expect.objectContaining({ positionId: position.id, kind: 'yield', streak: 3, reasons: ['spread_blown'] }),
-      expect.objectContaining({ positionId: sibling.id, kind: 'skip', streak: 1, reasons: ['spread_blown'] }),
-    ]);
-    expect(count(yielded.warns, WIDE_CLEAR)).toBe(1);
-    expect(readBookStateComparator(SYMBOL)).toBeNull();
-    expect(movementGateOwner(yielded.bookEvents, true)).toBe(position.id);
-    const [wideYield, siblingSkip] = yielded.bookEvents;
-    // Evidence controls: a competing yield makes attribution ambiguous, and extra causes fall outside the rule.
-    expect(movementGateOwner([wideYield, { ...siblingSkip, kind: 'yield' }], true)).toBeUndefined();
-    expect(movementGateOwner([{ ...wideYield, reasons: ['spread_blown', 'mark_deviation'] }], true)).toBeUndefined();
+  it('preserves the sibling stop request at the same evaluation on a shared symbol', async () => {
+    const tape = updates(a, b, b);
+    const { steps: baseline } = await replayRecovery(tape, false, 'siblings');
+    const { steps: candidate } = await replayRecovery(tape, true, 'siblings');
+    const siblingStop = { positionId: 'pos-MDB-sibling', requestedPrice: mid(b), reason: 'stop_hit' };
+    const ownerStop = { positionId: makePosition().id, requestedPrice: mid(b), reason: 'stop_hit' };
+    expect(baseline.map(step => step.requests)).toEqual([[], [ownerStop, siblingStop]]);
+    expect(candidate.map(step => step.requests)).toEqual([[], [siblingStop], []]);
+    expect(candidate[2].moves).toBe(1);
   });
 
   it('leaves both arms partial when a missing interval could contain evaluations or quote changes', async () => {
