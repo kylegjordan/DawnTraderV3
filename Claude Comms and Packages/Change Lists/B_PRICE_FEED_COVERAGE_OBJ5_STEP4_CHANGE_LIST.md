@@ -263,4 +263,6 @@ At both reads, refresh the exact standing row and member UUIDs, additions/rejoin
 
 `REVIEWER: claim-only · which objects distinguish the standing intake from a separate failure? · HIT: check the latest join per position; the same PCG UUID can have a resolved book-validation warning and later quiet-market membership · re-derived y in the merged ledger and bounded join log`
 
+**Next standing-row intake.** Add informational row `d8ff15cc-82b7-4087-a5ef-597482ca1ee0` alongside `d18717d5-0e46-42f6-aec0-d5293c2e8734` for both Nov 28 **02:00 and 05:50 UTC** paper preflights. Check each exact row and its own members at those reads. The OBJ-5 readiness return is **07:00 UTC** or after both protected legs have a disposition, whichever is later.
+
 `REVIEWER: claim-only · which exact served carriers prove complete pre-reconnect and close ownership? · HIT: global subscribed names are available, but full pending/request and owner state is not exposed, and the close keep line proves owner only at the close branch; source and two live read-only controls re-derived · re-derived y`
