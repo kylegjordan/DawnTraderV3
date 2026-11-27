@@ -1,6 +1,6 @@
 # B-CONVERSATION-INDEX — PRE-IMPLEMENTATION AUDIT AND IMPLEMENTATION PLAN
 
-**Status:** Step 2 checkpoint, 2026-11-27. Owner INFRA Codex. Approved scope `4631ed0fb9a56c48bf9aae9dabeca8cd6b73e504`. A1–A4 retain the opening checks and benchmark pin at `7cc114ea11b9e854898809232b136932f0502ea4`. A5–A11 use shared `dda235747c4d18ca2f3854b4251d351687b6281a` for the repository census, verification windows, access routes, Crew Switch verification plan and bounded document disposition. A12 reconciles that evidence with all five approved objectives and records what is still required for review. The older ChatGPT route, all five Codex full-history routes and complete corpus disposition remain open.
+**Status:** Step 2 checkpoint, 2026-11-27. Owner INFRA Codex. Approved scope `4631ed0fb9a56c48bf9aae9dabeca8cd6b73e504`. A1–A4 retain the opening checks and benchmark pin at `7cc114ea11b9e854898809232b136932f0502ea4`. A5–A11 use shared `dda235747c4d18ca2f3854b4251d351687b6281a` for the repository census, verification windows, access routes, Crew Switch verification plan and bounded document disposition. A12 reconciles that evidence with all five approved objectives. A13 adds the immediate System Manual and PM candidate dispositions and pins the next batch-document population. The older ChatGPT route, all five Codex full-history routes and complete corpus disposition remain open.
 
 ## Previously stated vs now
 
@@ -9,6 +9,8 @@
 **Previously stated:** A9 assigned a proposed source use to 21 of the 1,822 immediate Markdown candidates enumerated in A7. **Now:** A10 adds 19, bringing the total to 40 of 1,822. **Reason:** A10 verifies and classifies the top-level pre-Phase 12 reports. The count measures document review and leaves passage screening open.
 
 **Previously stated:** A10 listed 17 deeper Markdown paths by metadata. **Now:** A11 assigns a proposed historical use to all 17. The A7 immediate-entry count remains 40 of 1,822 reviewed. **Reason:** The newly reviewed paths are descendants of the archive directories and sit outside A7’s immediate-entry population.
+
+**Previously stated:** A12 recorded a proposed use for 40 of the 1,822 immediate Markdown candidates. **Now:** A13 adds 62, bringing the total to 102 of 1,822. **Reason:** The additional review assigns an initial source use to the remaining immediate System Manual and PM documents at the same pin. The denominator and passage-screening requirement are unchanged.
 
 ## A1. Source access and evidence map
 
@@ -220,7 +222,7 @@ Require a separate refresh receipt tied to that exact switch key, or to the sche
 
 ## A12. Evidence and review criteria by approved objective
 
-Read against scope `4631ed0fb9a56c48bf9aae9dabeca8cd6b73e504` and checkpoint `cee000a164fda19a285d5d24597bc93dc8efda62`. The checkpoint covers all 36 reports in the pinned pre-Phase 12 archive (19 immediate and 17 nested). The A7 immediate-entry review covers 40 of 1,822 candidates, including the 19 immediate archive reports. The other 1,782 immediate candidates and eligible roots outside that frame still need disposition.
+Read against scope `4631ed0fb9a56c48bf9aae9dabeca8cd6b73e504` and checkpoint `cee000a164fda19a285d5d24597bc93dc8efda62`. That checkpoint covers all 36 reports in the pinned pre-Phase 12 archive (19 immediate and 17 nested) and assigns a proposed use to 40 of 1,822 immediate candidates, including the 19 immediate archive reports. A13 advances the immediate-entry disposition.
 
 | Objective | Step 2 evidence and remaining work | Acceptance after implementation |
 | --- | --- | --- |
@@ -236,15 +238,46 @@ Read against scope `4631ed0fb9a56c48bf9aae9dabeca8cd6b73e504` and checkpoint `ce
 
 `REVIEWER: claim-only · What does the published archive checkpoint establish for each approved objective? · The document sample and historical verification controls support plan drafting, with corpus reconciliation, six history routes and later acceptance still open · re-derived y (approved scope, 19 immediate and 17 nested Git paths, distinct A4 and A7 commit populations, A11 engine-start qualification, A6 and A8 receipt coverage).`
 
+## A13. Immediate System Manual and PM document inventory
+
+**Population and method.** At the A7 pin, enumerated the two immediate Git trees using A7’s regular Markdown predicate. The full population is 64 paths in `1-system-manual/` and seven in `1-system-manual/pm/`. A9 already names eight and one respectively. Reopened the remaining 56 and six tracked blobs for a structural scan of titles, headings and status markers, then reopened the specific passages below as controls. The 62 sorted full path-and-blob rows produce SHA-256 `f597e432a3dbe241c48434ba895e9ccf70e35c0ca3fd0dc61f76c7c73d0d0467` with A7 serialization. The table assigns one proposed use per candidate. Full passage screening and final admission are open.
+
+| Proposed use | Paths relative to `1-system-manual/` | Result and source rule |
+| --- | --- | --- |
+| Governed reference or process (10) | `ADJUSTMENT_FRAMEWORK.md`, `ALERT_HANDLING_PROTOCOL.md`, `ASSET_CLASS_ONBOARDING_WORKFLOW.md`, `DELIVERY_BOARD_PROTOCOL.md`, `GOVERNANCE_EXCEPTIONS.md`, `LEGACY_DEPRECATION_PLAN.md`, `MISTAKE_PATTERNS.md`, `STORAGE_POLICY.md`, `WORKFLOW_SHARED_CONTRACT.md`, `pm/DECISION_PROTOCOL.md` | Cite the operative passage and its scope. Check exceptions, dates and explicitly referenced authorities before presenting instructions as current. |
+| Date-bound evidence or snapshot (13) | `ACTIVE_TRADING_PIPELINE_AUDIT_AS_OF_2026-06-18.md`, `AMR_INPUT_CHARACTERIZATION_2026-07-28.md`, `AUTHORITY_BASELINE.md`, `CRYPTO_NET_EV_INVESTIGATION_2026-08-07.md`, `CURRENT_SETTINGS_REGISTRY.md`, `EXIT_PATH_MACHINERY_AUDIT_2026-08-30.md`, `LEARNING_AND_STORAGE_AUDIT_2026-08-07.md`, `LEVER_INVENTORY.md`, `PAPER_SOAK_ANALYSIS_2026-07-20.md`, `PHASE_25_5_PARTIAL_DECISIONS_2026-08.md`, `PRICE_FEED_MAP.md`, `PRICING_DATA_ARCHITECTURE.md`, `RTB_REFRESH_AUDIT_2026-07-18.md` | Carry the source date, observed population and evidence type into the result. A historical measurement or settings dump needs fresh authority for a current-state answer. |
+| Concept, plan or historical intent (15) | `ACTIVE_PATH_FLOW.md`, `ADAPTIVE_MARKET_RESPONSE_CONCEPT.md`, `AUDIT_PLAN.md`, `CREW_COORDINATION_AND_COMMS_PROPOSAL_2026-07-20.md`, `MECHANISM_INTEGRATION_PLAN.md`, `MULTI_ASSET_VTS_EXPANSION_PLAN.md`, `PHASE_19_PLAN.md`, `PHASE_24_TO_19_READINESS_CHECKLIST.md`, `POST_AUDIT_ROADMAP.md`, `REPLIT_ONBOARDING_PROMPT.md`, `STRATEGIC_DIRECTIONS_AND_AI_EDGE.md`, `XSTOCK_CALIBRATION_PLAN.md`, `XSTOCK_PRICING_DECISION_PATH.md`, `XSTOCK_PRICING_PLAN.md`, `XSTOCK_PRICING_PLAN_DRAFT.md` | Preserve draft, approval and placement state at the cited revision. A plan or design premise establishes intent. Implementation and current behavior need their own evidence. |
+| Coordination or change record (12) | `CC_A_SESSION_TASK_LIST.md`, `CC_B_SESSION_TASK_LIST.md`, `CC_C_SESSION_TASK_LIST.md`, `CC_INFRA_SESSION_TASK_LIST.md`, `CHANGES_AND_FIXES.md`, `CLAUDE_CODE_FEATURE_WATCH.md`, `CODEX_FINDINGS_REGISTER.md`, `DISCORD_FINDINGS_RUNNING_LIST_2026-07-20.md`, `pm/INTENT_REGISTER.md`, `pm/OPEN_BATCH_REGISTER.md`, `pm/SESSION_LOG.md`, `pm/STALL_AND_DRIFT_LOG.md` | Use the documented event, change or decision lead with its date and primary citation. Screen embedded source content before admitting passages. Resolve current ownership or placement against the governing record. |
+| Operational procedure requiring targeted screening (9) | `BUILD_METHOD_PLAYBOOK.md`, `CLAUDE_CODE_PERMISSION_PROMPT_RUNBOOK.md`, `CLAUDE_CODE_SESSION_TRANSCRIPT_TRIM_RUNBOOK.md`, `CLAUDE_CODE_WAKE_WATCHER_RUNBOOK.md`, `COMMS_BRIDGE_RUNBOOK.md`, `DT_SQL_RUNBOOK.md`, `LANGSTON_ARCHITECTURE.md`, `PM_CLAUDE_RULES.md`, `REPO_TOPOLOGY_AND_SYNC_RUNBOOK.md` | Consider approved DawnTrader passages after source and audience screening. Treat paths to restricted material and sensitive operational detail under their original access limits. |
+| Directory or forwarding source (3) | `PUSH_TO_LIVE_PLAN.md`, `SYSTEM_MANUAL_OVERVIEW.md`, `pm/INDEX.md` | Use permitted pointers to navigate to the original record. Preserve a rename for provenance where shown. Apply scope and passage checks at the target independently. |
+
+**Reopen controls.** These extend A9’s source-use checks and leave A4’s frozen benchmark intact.
+
+- **Historical authority.** `AUDIT_PLAN.md:3–18` records a February 2026 approval and decisions. `SYSTEM_MANUAL_OVERVIEW.md:86–88` identifies the plan as an archive reference. A historical query can cite the approval. A current workflow query must use its operative source. `CURRENT_SETTINGS_REGISTRY.md:1–5` calls itself live in its title and gives its actual snapshot date in the body.
+- **Passage scope and exceptions.** `ALERT_HANDLING_PROTOCOL.md:37–42` combines a general acknowledgement example, an actor list explicitly marked as dated and an event-wait exception. A result for an event-wait alert must carry the exception. A query for current actors needs the live authority named by the protocol. The general acknowledgement and the dated list serve as controls for wrong-passage and stale-authority results.
+- **Original record and directory.** `pm/INDEX.md:5,17` points to the named record. `pm/DECISIONS.md:83` holds the actual KD-60 warning decision. The index points to subtrees as well as files. A directory entry proves only a route to consider. `PUSH_TO_LIVE_PLAN.md:1–3` establishes the old name and forwarding path. `SPRINT_TO_LIVE_PLAN.md:1–3` confirms the rename and the active plan.
+
+**Remaining repository coverage.** A9, A10 and A13 now cover 102 of 1,822 A7 immediate rows. The remaining 1,720 are in the following three Git roots. The recursive metadata census separately found three nested Markdown candidates in the same roots. The table uses A7 serialization over all regular Markdown paths in each root. Other eligible subtrees still need enumeration. The A11 nested archive review remains separate.
+
+| Root under `Claude Comms and Packages/` | Immediate | Nested | SHA-256 of sorted path-and-blob rows |
+| --- | ---: | ---: | --- |
+| Scope Files | 994 | 0 | `3225f2b9e51c4b81551dfa70ed7b273c4d8d1fa7fe38b1df53dbc111d8909d7b` |
+| Change Lists | 329 | 2 | `d9ef1c3cfba23cce08c86328e62f9d65f7e352436cde4d26237d60b0a66c55e7` |
+| Batch Completion | 397 | 1 | `ef678a92b1fc9d29caf515b5c219ce83629c47bd2dc6cc3c093efa76d18bab79` |
+
+The Scope Files paths `STRATEGY_FAMILY_FILTER_AUDIT_PLAN.md` and `STRATEGY_FAMILY_FILTER_AUDIT_PLAN_2026-03-23.md` refer to the same blob at this cut. Preserve both paths in the inventory. Establish their provenance and applicable access before collapsing their passages in results. Next, reconcile the batch-document roots by artifact type and authority where their tracked records support it. Exact identity and a filename alone do not establish a batch ruling or permission to admit content.
+
+`REVIEWER: claim-only · What different claims can the same readable source support? · A dated approval records intent, an operative protocol can contain dated examples, and a directory needs the named original · re-derived y (A7 Git trees, Audit Plan and Overview, Alert Handling Protocol exception and both PM pointer and KD-60 source).`
+
 ## Implementation plan — Step 2 draft
 
 1. **From A1, A3, A5 and A7:** Freeze source-specific authority, selector, cutoff, allowed destination and one disposition per inventory item. Use the narrow approved redacted Claude copy and a consistently committed view. Prove five Codex routes and the surviving legacy route before using their contents. The source-access gaps stay open until the evidence resolves them. Preserve the after-live remainder of #1238.
 2. **From A2, A3 and A5:** Keep capture, readable archive, provenance search and restore independently verifiable. Record stable source and passage IDs, a source/cutoff manifest and raw-backup versus searchable-copy receipts. Prove a matching restore per Codex role and a source reopen per approved class, with separate denominators for inventory and samples. Keep permissions on both result metadata and content.
-3. **From A4, A5, A7, A9, A10 and A11:** Use the bounded source-use dispositions and exact-passage reopen controls when screening the governance inventory. Exercise dated authority, proved rename aliases and verification scope as source controls. Build the keyword-and-passage baseline against the separate frozen document and commit-message benchmark and score it before deciding on local vectors. Preserve the query, ranking, latency, cost and denial controls. Use exact-revision links for documents and full commit identities for messages.
+3. **From A4, A5, A7, A9–A11 and A13:** Use the bounded source-use dispositions and exact-passage reopen controls when screening the governance inventory. Exercise dated authority, pointers, operative exceptions, proved rename aliases and verification scope as source controls. Build the keyword-and-passage baseline against the separate frozen document and commit-message benchmark and score it before deciding on local vectors. Preserve the query, ranking, latency, cost and denial controls. Use exact-revision links for documents and full commit identities for messages.
 4. **From A5, A6, A8 and A12:** Validate the governed completion read and continuity controls before committing to the integration. Use distinct trigger identities with the same refresh and publish rules. Bind the A6 windows to actual UTC boundaries once authority, installation and baselines are established. Reconcile expected orders, matching refresh receipts, interrupted runs and exceptions while preserving existing Claude archive behavior.
 5. **From A4 and A5:** After verification, have a crew member use the documented search to reopen an earlier decision. Record PM’s separate re-check on #1262 and update the Step 2 search guidance with the verified command and coverage. Add the delivered architecture and operating limits to governance during its normal step.
 
-**Plain-language summary.** The plan now ties each of the five approved goals to its evidence and its remaining checks. The archive review is complete, the search benchmark is fixed, and the plan defines when new material must arrive. Before asking Coltrane to clear the whole plan, finish the source inventory and establish approved access to the surviving older ChatGPT conversations and the full histories of the five Codex roles.
+**Plain-language summary.** The plan ties each of the five approved goals to its evidence and its remaining checks. The pre-Phase 12 archive review is complete, and each immediate System Manual and PM document at the pinned revision now has a proposed use. Before asking Coltrane to clear the whole plan, finish the source inventory and establish approved access to the surviving older ChatGPT conversations and the full histories of the five Codex roles.
 
 ## AUDIT AIDS RUN
 
