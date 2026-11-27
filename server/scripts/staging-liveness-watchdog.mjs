@@ -30,9 +30,11 @@ import { promisify } from 'node:util';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { withAlertFileLock } from '../services/system-alert-file-lock.mjs';
 import {
-  commitWatchdogAttempt, enqueueWatchdogAlert, hasWatchdogReceipt,
-  listPendingWatchdogKeys, readWatchdogHead, readWatchdogLastRecovery, recordWatchdogRecovery,
+  commitWatchdogAttempt, enqueueWatchdogAlert, hasWatchdogReceipt, isWatchdogReceiptAlert,
+  listPendingWatchdogKeys, observeWatchdogOccurrence, readWatchdogHead, readWatchdogLastRecovery,
+  recordWatchdogRecovery, writeDurably,
 } from '../services/watchdog-alert-store.mjs';
 
 const pExecFile = promisify(execFile);
@@ -130,7 +132,7 @@ export function buildFallbackAlert({ title, body, dedupeKey, metadata, severity 
 }
 
 /** Read the open ledger rows so a healthy check can recover a pre-rollout alert. */
-export function openAlertRows(alertsFilePath) {
+export function openAlertRows(alertsFilePath, eligible = () => true) {
   // Each alert's LAST line wins (a row may be rewritten); a key is open if ANY of its alerts is unresolved
   // — the same rule addAlert's dedupe applies, so this never reads closed while the store still blocks.
   const latest = new Map();
@@ -142,7 +144,7 @@ export function openAlertRows(alertsFilePath) {
   }
   const open = new Map();
   for (const row of latest.values()) {
-    if (row.dedupe_key && row.state !== 'resolved' && !open.has(row.dedupe_key)) open.set(row.dedupe_key, row);
+    if (row.dedupe_key && row.state !== 'resolved' && eligible(row) && !open.has(row.dedupe_key)) open.set(row.dedupe_key, row);
   }
   return open;
 }
@@ -163,8 +165,8 @@ function log(msg) {
   console.log(`[WATCHDOG] ${new Date().toISOString()} ${msg}`);
 }
 
-function recordRecovery(key, reading, oldRow) {
-  return recordWatchdogRecovery(ALERTS_FILE, key, `watchdog run ${RUN_ID}: ${key} condition cleared (${reading})`, oldRow);
+function recordRecovery(key, reading, observed) {
+  return recordWatchdogRecovery(ALERTS_FILE, key, `watchdog run ${RUN_ID}: ${key} condition cleared (${reading})`, observed);
 }
 
 async function previousFailureCount(state, counters, check, dedupeKey) {
@@ -243,11 +245,22 @@ function diskText() {
   return `${DISK_PATH} ${d.usedPct.toFixed(1)}% used, ${(d.freeBytes / 1024 ** 3).toFixed(2)} GiB free`;
 }
 
-function loadState() {
-  try { return JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')); } catch { return { streaks: {} }; }
+function readStateBytes() {
+  try { return fs.readFileSync(STATE_FILE, 'utf8'); } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+    return null;
+  }
 }
-function saveState(state) {
-  fs.writeFileSync(STATE_FILE, JSON.stringify(state));
+
+function loadState(bytes) {
+  try { return JSON.parse(bytes) ?? { streaks: {} }; } catch { return { streaks: {} }; }
+}
+
+function saveState(state, before) {
+  return withAlertFileLock(STATE_FILE, async () => {
+    // A slower tick must not replace streaks a newer overlapping tick saved.
+    if (readStateBytes() === before) await writeDurably(STATE_FILE, JSON.stringify({ ...state, savedRun: RUN_ID }));
+  });
 }
 
 async function checkHttp() {
@@ -373,17 +386,33 @@ const CHECKS = [
   },
 ];
 
+async function observeCheck(check, open) {
+  const dedupeKey = check.dedupeKey || `watchdog-${check.key}`;
+  const errKey = `watchdog-check-error-${check.key}`;
+  const [observed, observedError] = await Promise.all([
+    observeWatchdogOccurrence(ALERTS_FILE, dedupeKey, open.get(dedupeKey)),
+    observeWatchdogOccurrence(ALERTS_FILE, errKey, open.get(errKey)),
+  ]);
+  return { dedupeKey, errKey, observed, observedError };
+}
+
 async function main() {
-  const state = loadState();
+  const before = readStateBytes();
+  const state = loadState(before);
   state.streaks = state.streaks || {};
   delete state.alerted; // the old in-memory latch: the alerts FILE is the one authority now (Langston part 2 r3)
   state.throws = state.throws || {};
   state.recoverySeen = state.recoverySeen || {};
   log(`run ${RUN_ID} started${DISK_FORCED ? ' (FORCED disk thresholds)' : ''}`);
-  const open = openAlertRows(ALERTS_FILE);
+  const open = openAlertRows(ALERTS_FILE, isWatchdogReceiptAlert);
+  let criticalObservation;
   for (const check of CHECKS) {
-    const dedupeKey = check.dedupeKey || `watchdog-${check.key}`;
-    const errKey = `watchdog-check-error-${check.key}`;
+    const { dedupeKey, errKey, observed, observedError } = check.key === 'disk-critical'
+      ? criticalObservation : await observeCheck(check, open);
+    if (check.key === 'disk-warning') {
+      // Both disk checks use the same statfs sample. Snapshot both UUIDs before reading it.
+      criticalObservation = await observeCheck(CHECKS.find(candidate => candidate.key === 'disk-critical'), open);
+    }
     let ok;
     try {
       ok = await check.run();
@@ -406,7 +435,7 @@ async function main() {
       }
       continue;
     }
-    await recordRecovery(errKey, `${check.key} check ran without throwing`, open.get(errKey));
+    await recordRecovery(errKey, `${check.key} check ran without throwing`, observedError);
     state.throws[check.key] = throwStep(state.throws[check.key], false, DEBOUNCE_TICKS).count;
     if (ok === null) { log(`${check.key}: skipped (precondition unreachable)`); continue; }
     if (ok) {
@@ -414,7 +443,7 @@ async function main() {
       // A level check clears only past its margin (check.clear); between the line and the margin the row
       // stays open, so a re-crossing re-uses it and its time-driven re-surface count keeps climbing.
       const mayClear = check.clear ? check.clear() : true;
-      if (mayClear) await recordRecovery(dedupeKey, check.reading ? check.reading() : `${check.key} check passed`, open.get(dedupeKey));
+      if (mayClear) await recordRecovery(dedupeKey, check.reading ? check.reading() : `${check.key} check passed`, observed);
       state.streaks[check.key] = 0;
       continue;
     }
@@ -432,8 +461,11 @@ async function main() {
       });
     }
   }
-  saveState(state);
-  await retryPending();
+  try {
+    await saveState(state, before);
+  } finally {
+    await retryPending();
+  }
 }
 
 /**

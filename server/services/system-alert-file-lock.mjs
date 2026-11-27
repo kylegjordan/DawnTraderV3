@@ -4,6 +4,7 @@ import { constants } from 'node:fs';
 import { link, open, readFile, readlink, unlink } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
+import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
 const run = promisify(execFile);
@@ -117,12 +118,18 @@ export async function reapDeadAlertFileLockUnderGuard(lockPath) {
 }
 
 async function tryReap(lockPath, remainingMs) {
+  // Source, the flattened ESM app build, and the standalone CJS dispatcher
+  // each carry the helper beside their own installation, independent of cwd.
+  const reaper = typeof __dirname === 'string'
+    ? resolve(__dirname, 'server/scripts/reap-system-alert-lock.mjs')
+    : fileURLToPath(new URL(import.meta.url.endsWith('/services/system-alert-file-lock.mjs')
+      ? '../scripts/reap-system-alert-lock.mjs' : '../server/scripts/reap-system-alert-lock.mjs', import.meta.url));
   try {
     // --no-fork gives the guard to the Node reaper itself. A timeout kills
     // that process and releases the guard, including during contention.
     await run('/usr/bin/flock', [
       '--nonblock', '--no-fork', '--conflict-exit-code=75', `${lockPath}.reap`,
-      process.execPath, resolve('server/scripts/reap-system-alert-lock.mjs'), lockPath,
+      process.execPath, reaper, lockPath,
     ], { timeout: Math.max(1, remainingMs) });
   } catch (error) {
     if (error.code !== 75 && !error.killed) throw error;
