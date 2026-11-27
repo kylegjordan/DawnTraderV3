@@ -288,3 +288,30 @@ The `coltrane-size-watch` difference named above (installed `ac244b69…` vs the
 **Residual, stated.** The fence is lexical, not a sandbox. It cannot see a call built at run time (`__import__`, `importlib`, `getattr` on a string, `eval`). The docstring says so. It holds this file to a shape a reviewer can read; it does not prove that no unbounded process can start.
 
 **Not proven yet: the install.** Script only, since the unit is unchanged. Read the blob from Helsinki's mirror at the approved sha, compare its sha256 with the laptop's, and keep a rollback copy. Then run the self-test from `/usr/local/sbin`, which should report 37 checks and name the unit path. Then do a live `systemctl start reviewer-staging-access.service` and check `dt-sql --status` afterwards.
+
+#### F-2 Step 4 C-7 send-back correction (INFRA Codex, 2026-11-27)
+
+Coltrane **SEND BACK** at `1900eb284ad4ef6de46aeb7e48a84afbfa643fcf` (06:18:33Z).
+The verifier read only the leading digits of the direct alert call's timeout. The Python integer
+`1_000` therefore looked like one second and passed the pre-database bound. C-8 through C-12
+remain as reviewed, including the historical C-10 withdrawal.
+
+**Correction:** parse the source without executing it. Require one direct `subprocess.run` in
+`alert()` and one explicit integer timeout. Refuse unsupported call forms, expanded keywords,
+computed values and floats. Compare the entire integer to the existing bound before the first
+database call. This is a check of the supported source shape, with no attempt to model Python
+runtime control flow. The TLS diagnostic and `dt_reader` assertion from `f9087a56c` stay in
+the candidate. The service unit and staging database tool are unchanged.
+
+**Checks:** the verifier self-test passes 38 checks. Its remote-entry regression reaches both
+stubbed database calls at 300 + 150 seconds and reaches zero for `1000`, `1_000` or `1e3`
+as the alert timeout. Running that regression with the prior parser makes it fail at `1_000`
+with two calls. The checked-in database tool still reports 300 + 150 seconds.
+
+REVIEWER: claim-only · which objects show whether the corrected timeout stops the remote entry
+point before any database call? · HIT: use the actual checked-in database tool and distinguish
+the static call check from runtime control flow; historical line numbers had drifted ·
+re-derived y (real source parse, stubbed entry point, prior-parser comparison, stable citations).
+
+**Install held.** Await exact Step 4 ruling and CI. A later script-only install must use the
+combined reviewed blob and confirm the 38-check self-test before the live verification.

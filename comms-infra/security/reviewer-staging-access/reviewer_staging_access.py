@@ -33,8 +33,8 @@ STAGING_DT_SQL = "/usr/local/bin/dt-sql"   # the B-DB-READ-TOOL one-attempt read
 DT_SQL_BUSY_TRIES = 3
 DT_SQL_BUSY_WAIT_S = 5   # a dt-sql call measured 0.30 s (B-DB-READ-TOOL log); 5 s spans many calls, and BUSY is rare
 # The remote verifier makes DT_SQL_CALLS dt-sql calls. One call that ATTEMPTS a login is bounded by dt-sql's own
-# psql timeout (CALL_TIMEOUT_S = 300, comms-infra/staging/dt-sql:69) plus, if that attempt locks it, the alert it raises
-# (subprocess timeout 150, dt-sql:171). The client ssh timeout must exceed that whole remote worst case: killing dt-sql
+# psql timeout (CALL_TIMEOUT_S = 300 in comms-infra/staging/dt-sql) plus, if that attempt locks it, the alert it raises
+# (subprocess timeout 150 in dt-sql's alert()). The client ssh timeout must exceed that whole remote worst case: killing dt-sql
 # mid-attempt leaves its INTENT behind and LOCKS it `ambiguous` for every caller (dt-sql:34), which is far worse than
 # this check failing.
 DT_SQL_CALLS = 2                 # the read, then the read-only write probe (verify_remote)
@@ -352,6 +352,8 @@ def parse_dt_sql_bounds(text: str) -> dict[str, int]:
     """dt-sql's own two time bounds, read from its source WITHOUT running it: CALL_TIMEOUT_S (the psql call) and the
     alert subprocess timeout inside alert(). DT_SQL_CALL_BOUND_S is their sum copied by hand; staging reports these so
     the client refuses the day dt-sql's bounds rise past the copy (Langston F-2 round 3 C-2). Exactly one of each, or REFUSED."""
+    import ast
+
     lines = text.split(NL)
     call = [line for line in lines if line.startswith("CALL_TIMEOUT_S = ")]
     if len(call) != 1:
@@ -359,30 +361,28 @@ def parse_dt_sql_bounds(text: str) -> dict[str, int]:
     value = call[0][len("CALL_TIMEOUT_S = "):].strip()
     if not (value.isascii() and value.isdigit()):
         raise VerificationError("dt-sql source: CALL_TIMEOUT_S is not an integer literal: %r" % value)
-    start = [i for i, line in enumerate(lines) if line.startswith("def alert(")]
-    if len(start) != 1:
-        raise VerificationError("dt-sql source: expected exactly one alert() function, found %d" % len(start))
-    body = []
-    for line in lines[start[0] + 1:]:
-        if line and not line[0].isspace():
-            break
-        body.append(line)
-    found = []
-    for line in body:
-        rest = line
-        while "timeout=" in rest:
-            rest = rest.split("timeout=", 1)[1]
-            digits = ""
-            for ch in rest:
-                if not ch.isdigit():
-                    break
-                digits += ch
-            if not digits:
-                raise VerificationError("dt-sql source: alert() has a timeout= that is not an integer literal")
-            found.append(int(digits))
-    if len(found) != 1:
-        raise VerificationError("dt-sql source: expected exactly one timeout= in alert(), found %d" % len(found))
-    return {"call_timeout_s": int(value), "alert_timeout_s": found[0]}
+    try:
+        module = ast.parse(text)
+    except SyntaxError as error:
+        raise VerificationError("dt-sql source cannot be parsed: %s" % error.msg) from error
+    alerts = [node for node in module.body if isinstance(node, ast.FunctionDef) and node.name == "alert"]
+    if len(alerts) != 1:
+        raise VerificationError("dt-sql source: expected exactly one alert() function, found %d" % len(alerts))
+    runs = [
+        node for node in ast.walk(alerts[0])
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+        and isinstance(node.func.value, ast.Name) and node.func.value.id == "subprocess" and node.func.attr == "run"
+    ]
+    if len(runs) != 1:
+        raise VerificationError("dt-sql source: expected exactly one subprocess.run in alert(), found %d" % len(runs))
+    keywords = runs[0].keywords
+    timeouts = [keyword.value for keyword in keywords if keyword.arg == "timeout"]
+    if len(timeouts) != 1 or any(keyword.arg is None for keyword in keywords):
+        raise VerificationError("dt-sql source: alert() must have exactly one timeout keyword and no keyword expansion")
+    timeout = timeouts[0]
+    if not isinstance(timeout, ast.Constant) or type(timeout.value) is not int:
+        raise VerificationError("dt-sql source: alert() timeout is not an integer literal")
+    return {"call_timeout_s": int(value), "alert_timeout_s": timeout.value}
 
 
 def require_dt_sql_bounds_fit(who: str, bounds: object) -> None:
@@ -699,6 +699,54 @@ def subprocess_fence(source: str) -> None:
                                     % (name, node.lineno, ", ".join(TIMEOUT_NAMES)))
 
 
+def self_test_remote_bounds(source: str) -> None:
+    """Drive the normal remote entry point without reading real logs or contacting staging."""
+    from contextlib import redirect_stdout
+    from io import StringIO
+    from unittest.mock import Mock, mock_open, patch
+
+    with tempfile.TemporaryDirectory() as directory:
+        dt_sql = Path(directory) / "dt-sql"
+        database = Mock()
+        remote_stubs = {
+            "STAGING_DT_SQL": str(dt_sql),
+            "pwd": Mock(getpwnam=Mock(return_value=Mock(pw_uid=101))),
+            "os": Mock(geteuid=Mock(return_value=101), access=Mock(return_value=True),
+                       stat=Mock(return_value=Mock(st_size=1)), R_OK=os.R_OK),
+            "require_path": Mock(),
+            "bounded_run": Mock(return_value=subprocess.CompletedProcess([], 0, "", "")),
+            "parse_effective_authorization_sources": Mock(),
+            "resolve_authorized_key_paths": Mock(return_value=["/home/deploy/.ssh/authorized_keys"]),
+            "read_root_text_if_exists": Mock(return_value="fixture"),
+            "validate_authorization_population": Mock(return_value={}),
+            "open": mock_open(read_data=b"x"),
+            "shutil": Mock(which=Mock(return_value=STAGING_PSQL)),
+            "run_dt_sql": database,
+        }
+        with patch.dict(globals(), remote_stubs), redirect_stdout(StringIO()):
+            for literal, refusal in (
+                ("150", None),
+                ("1000", "dt-sql NOT started"),
+                ("1_000", "dt-sql NOT started"),
+                ("1e3", "not an integer literal"),
+            ):
+                dt_sql.write_text(source.replace("timeout=150", "timeout=" + literal), encoding="utf-8")
+                database.reset_mock()
+                database.side_effect = [
+                    subprocess.CompletedProcess([], 0, "dt_reader|postgres|t", ""),
+                    subprocess.CompletedProcess([], 1, "", READ_ONLY_REFUSAL),
+                ]
+                try:
+                    result = verify_remote("coltrane")
+                except VerificationError as error:
+                    if refusal is None or refusal not in str(error) or database.called:
+                        raise VerificationError("remote timeout control %s failed: %s" % (literal, error)) from error
+                else:
+                    if refusal is not None or result != 0 or database.call_count != DT_SQL_CALLS:
+                        raise VerificationError("remote timeout control %s reached %d database calls"
+                                                % (literal, database.call_count))
+
+
 def self_test() -> int:
     fingerprints = {
         "LANGSTON": ACTORS["langston"]["fingerprint"],
@@ -939,8 +987,10 @@ def self_test() -> int:
         (good.replace("CALL_TIMEOUT_S = 300", "CALL_TIMEOUT_S = 3OO"), "a non-integer call timeout", "integer literal"),
         (good.replace("CALL_TIMEOUT_S = 300", "# none"), "a missing call timeout", "found 0"),
         (good + NL + "CALL_TIMEOUT_S = 900", "a second call timeout", "found 2"),
-        (good.replace("timeout=150)", "timeout=150, x=timeout=9)"), "two alert timeouts", "alert"),
+        (good.replace("timeout=150)", "timeout=150, timeout=9)"), "two alert timeouts", "alert"),
         (good.replace("timeout=150", "timeout=ALERT_S"), "a named alert timeout", "alert"),
+        (good.replace("timeout=150", "timeout=150 + 850"), "a computed alert timeout", "alert"),
+        (good.replace("timeout=150", "timeout=150, **options"), "expanded alert arguments", "alert"),
         (good.replace("def alert(", "def alarm("), "a missing alert()", "alert"),
     ):
         try:
@@ -968,6 +1018,8 @@ def self_test() -> int:
             raise VerificationError("the remote bounds refusal does not say dt-sql was not started: %s" % error)
     else:
         raise VerificationError("the remote bounds refusal accepted a sum above the bound")
+    checks += 1
+    self_test_remote_bounds(good)
     checks += 1
     # C-2, client half: refused unless the reported sum fits DT_SQL_CALL_BOUND_S
     if "check_dt_sql_bounds(actor, payload)" not in actor_body:
