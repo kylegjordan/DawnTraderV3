@@ -20,6 +20,7 @@ const key = 'watchdog-http';
 const holdManifest = process.env.DT_WATCHDOG_1191_PROOF_MANIFEST;
 const holdRef = '423616c386';
 const holdBase = 'feddf5c73';
+const holdTime = Date.parse('2026-11-27T06:00:00Z');
 let scratch: string;
 let ledger: string;
 let env: NodeJS.ProcessEnv;
@@ -144,14 +145,50 @@ async function buildHoldDispatcher() {
   return outfile;
 }
 
-async function startWatchdogFixture() {
+async function startWatchdogFixture(pinnedTime?: number) {
   const state = join(scratch, 'watchdog-state.json');
   const archive = join(scratch, 'archive.log');
   const received: string[] = [];
   let healthy = false;
-  await writeFile(join(scratch, 'pm2'), "#!/bin/sh\nprintf '%s\\n' '[{\"name\":\"dawntrader\",\"pm2_env\":{\"status\":\"online\"}}]'\n", { mode: 0o755 });
+  const pm2 = JSON.stringify([{ name: 'dawntrader', pm2_env: { status: 'online' } }]);
+  await writeFile(join(scratch, 'pm2'), `#!/bin/sh\nprintf '%s\\n' '${pm2}'\n`, { mode: 0o755 });
   await writeFile(state, JSON.stringify({ streaks: { http: 1 } }));
-  await writeFile(archive, `[archival-health] started at ${new Date().toISOString()}\n[archival-health] DONE — all_ok=true\n`);
+  await writeFile(archive, `[archival-health] started at ${new Date(pinnedTime ?? Date.now()).toISOString()}\n[archival-health] DONE — all_ok=true\n`);
+  if (process.platform === 'win32' || pinnedTime !== undefined) {
+    const preload = join(scratch, 'watchdog-fixture-preload.mjs');
+    await writeFile(preload, `
+      import childProcess from 'node:child_process';
+      import { syncBuiltinESMExports } from 'node:module';
+      if (process.platform === 'win32') {
+        const execFile = childProcess.execFile;
+        const custom = Symbol.for('nodejs.util.promisify.custom');
+        // Windows requires an executable instead of the POSIX pm2 shim or
+        // npm.cmd. Preserve the actual alert CLI and the requested cwd.
+        function executable(file, args, options) {
+          if (file === 'pm2') return [process.execPath, ['-e', ${JSON.stringify(`console.log(${JSON.stringify(pm2)})`)}], options];
+          if (file === 'npm' && args[1] === 'system-alerts') {
+            return [process.execPath, [...${JSON.stringify(cli.map(path => resolve(path)))}, ...args.slice(3)], options];
+          }
+          return [file, args, options];
+        }
+        function compatible(file, args, options, callback) {
+          return execFile(...executable(file, args, options), callback);
+        }
+        compatible[custom] = (...args) => execFile[custom](...executable(...args));
+        childProcess.execFile = compatible;
+        syncBuiltinESMExports();
+      }
+      const pinnedTime = ${pinnedTime ?? 'undefined'};
+      if (pinnedTime !== undefined) {
+        const NativeDate = Date;
+        globalThis.Date = class extends NativeDate {
+          constructor(...args) { super(...(args.length > 0 ? args : [pinnedTime])); }
+          static now() { return pinnedTime; }
+        };
+      }
+    `);
+    env.NODE_OPTIONS = `${env.NODE_OPTIONS ?? ''} --import=${pathToFileURL(preload).href}`.trim();
+  }
   const sink = createServer(async (req, res) => {
     if (req.url === '/receipt') {
       const chunks: Buffer[] = [];
@@ -180,6 +217,18 @@ async function startWatchdogFixture() {
 async function pendingEntries(dedupeKey: string): Promise<Array<{ row: SystemAlert; recovery: string | null; matchedId: string | null }>> {
   const hash = createHash('sha256').update(dedupeKey).digest('hex');
   return JSON.parse(await readFile(`${ledger}.watchdog-${hash}.json`, 'utf8')).queue;
+}
+
+async function pinnedHoldRow() {
+  const manifest = await readFile(holdManifest!);
+  expect(createHash('sha256').update(manifest).digest('hex')).toBe('37dc0d1d99c37a49a614f24a136434a04ad5263be80fe19e20ee0906e24f9816');
+  const { RAIL_KEY_PREFIX } = await import('../../core/trading/vts-rail.js');
+  return {
+    ...scheduled(`${RAIL_KEY_PREFIX}fixture`), id: manifest.toString('utf8').split('\n')[0],
+    state: 'active' as const, severity: 'warning' as const,
+    created_at: new Date(holdTime - 48 * 3600_000).toISOString(),
+    fired_at: new Date(holdTime - 47 * 3600_000).toISOString(),
+  };
 }
 
 describe('durable watchdog alert queue', () => {
@@ -212,12 +261,19 @@ describe('durable watchdog alert queue', () => {
     expect(stored.filter(row => row.dedupe_key === 'watchdog-self-fail').map(row => row.id)).toEqual([id]);
   }, 20_000);
 
-  it.skipIf(process.platform !== 'linux').each(['canonical', 'watchdog'])(
-    'delivers and re-arms after the healthy tick when %s reached the write boundary first', async firstWriter => {
-      const fixture = await startWatchdogFixture();
+  for (const [firstWriter, dispatcher] of [
+    ['canonical', 'ordinary'], ['watchdog', 'ordinary'],
+    ['canonical', '#1191'], ['watchdog', '#1191'],
+  ] as const) {
+    const pinned = dispatcher === '#1191';
+    it.skipIf(pinned && !holdManifest)(`delivers and re-arms after ${firstWriter} reaches the write boundary first (${dispatcher})`, async () => {
+      const fixture = await startWatchdogFixture(pinned ? holdTime : undefined);
       const control = { ...scheduled('preexisting-control'), severity: 'info', triggers_at: '2099-01-01T00:00:00.000Z' };
-      await writeFile(ledger, `${JSON.stringify(control)}\n`);
       try {
+        const held = pinned ? await pinnedHoldRow() : null;
+        const binary = pinned ? await buildHoldDispatcher() : null;
+        const initial = held ? [control, held] : [control];
+        await writeFile(ledger, initial.map(row => `${JSON.stringify(row)}\n`).join(''));
         const pause = await pauseLedgerReplacement();
         const canonical = controlWrite();
         const ordinaryTick = [watchdog];
@@ -231,7 +287,7 @@ describe('durable watchdog alert queue', () => {
           contender = node(order[1]);
           void contender.catch(() => {});
           await waitFor(async () => (await readdir(scratch)).some(name => name.startsWith('alerts.jsonl.lock.')));
-          expect(await rows()).toEqual([control]);
+          expect(await rows()).toEqual(initial);
           id = (await readWatchdogHead(ledger, key))?.row.id;
           expect(id).toBeTruthy();
         } finally {
@@ -244,8 +300,9 @@ describe('durable watchdog alert queue', () => {
         expect((await rows()).find(row => row.id === id)?.state).toBe('scheduled');
         expect(await readWatchdogHead(ledger, key)).toMatchObject({ row: { id }, recovery: expect.stringContaining('http check passed') });
 
-        const delivered = await runCli('fire-due');
+        const delivered = binary ? await node([binary, 'fire-due'], { DT_VTS_NOV26_REPEAT_HOLD_FILE: holdManifest }) : await runCli('fire-due');
         expect(delivered.stdout).toContain(`Discord alert posted for ${id}`);
+        if (held) expect(delivered.stdout).toContain('repeat hold deferred 1');
         expect(fixture.received).toHaveLength(1);
         expect(fixture.received[0]).toContain(id!);
         const onLedger = () => rows().then(items => items.find(row => row.id === id));
@@ -258,6 +315,7 @@ describe('durable watchdog alert queue', () => {
         await node([watchdog]);
         const stored = await rows();
         expect(stored.find(row => row.id === control.id)).toEqual(control);
+        if (held) expect(stored.find(row => row.id === held.id)).toEqual(held);
         expect(stored.filter(row => row.dedupe_key === 'independent-writer')).toHaveLength(1);
         expect(stored.filter(row => row.dedupe_key === key)).toMatchObject([{ id, state: 'resolved' }, { state: 'scheduled' }]);
         expect(stored.filter(row => row.dedupe_key === key)[1].id).not.toBe(id);
@@ -265,6 +323,7 @@ describe('durable watchdog alert queue', () => {
         fixture.close();
       }
     }, 30_000);
+  }
 
   it('reproduces the lost UUID with the pinned old unlocked watchdog', async () => {
     const legacy = join(scratch, 'legacy-watchdog.mjs');
@@ -315,7 +374,7 @@ describe('durable watchdog alert queue', () => {
     expect(stored.filter(row => row.dedupe_key === `watchdog-heartbeat-${new Date().toISOString().slice(0, 10)}`)).toHaveLength(1);
   }, 20_000);
 
-  it.skipIf(process.platform !== 'linux')('keeps the watchdog UUID when killed at the primary CLI boundary', async () => {
+  it('keeps the watchdog UUID when killed at the primary CLI boundary', async () => {
     const marker = join(scratch, 'before-npm');
     const preload = `
       import childProcess from 'node:child_process';
@@ -351,6 +410,35 @@ describe('durable watchdog alert queue', () => {
     }
     await node([watchdog, '--self-fail']);
     expect((await rows()).filter(row => row.dedupe_key === selfKey).map(row => row.id)).toEqual([firstId]);
+  }, 20_000);
+
+  it('reconciles the same UUID when the real primary CLI commits and its caller sees an error', async () => {
+    const cliOptions = join(scratch, 'cli-ran.json');
+    const preload = `
+      import childProcess from 'node:child_process';
+      import { writeFileSync } from 'node:fs';
+      import { syncBuiltinESMExports } from 'node:module';
+      const execFile = childProcess.execFile;
+      const custom = Symbol.for('nodejs.util.promisify.custom');
+      function wrapped(...args) { return execFile(...args); }
+      wrapped[custom] = async (file, args, options) => {
+        if (file !== 'npm' || !args.includes('watchdog-commit')) return execFile[custom](file, args, options);
+        const result = await execFile[custom](process.execPath, [...${JSON.stringify(cli)}, ...args.slice(3)], options);
+        writeFileSync(${JSON.stringify(cliOptions)}, result.stdout);
+        throw new Error('fixture primary CLI error after commit');
+      };
+      childProcess.execFile = wrapped;
+      syncBuiltinESMExports();
+    `;
+    const selfKey = 'watchdog-self-fail';
+    const result = await node(['--import', `data:text/javascript,${encodeURIComponent(preload)}`, watchdog, '--self-fail'],
+      { WATCHDOG_APP_DIR: process.cwd() });
+    const { row } = JSON.parse(await readFile(cliOptions, 'utf8'));
+    expect(result.stdout).toContain('fixture primary CLI error after commit');
+    expect(row.id).toBeTruthy();
+    expect((await rows()).filter(item => item.dedupe_key === selfKey)).toEqual([row]);
+    expect(row.metadata.emit_path).toBe('cli');
+    expect(await readWatchdogHead(ledger, selfKey)).toMatchObject({ row: { id: row.id }, matchedId: row.id });
   }, 20_000);
 
   it('dedupes to a distinct unresolved UUID and ignores the same row once terminal', async () => {
@@ -400,7 +488,7 @@ describe('durable watchdog alert queue', () => {
     expect((await readWatchdogHead(ledger, key))?.matchedId).toBe(first.id);
   }, 20_000);
 
-  it.skipIf(process.platform !== 'linux')('retains one healthy reading across a killed tick and still requires two failures to re-arm', async () => {
+  it('retains one healthy reading across a killed tick and still requires two failures to re-arm', async () => {
     await writeFile(ledger, '');
     const fixture = await startWatchdogFixture();
     const atSave = join(scratch, 'at-streak-save');
@@ -469,16 +557,10 @@ describe('durable watchdog alert queue', () => {
   }, 45_000);
 
   it.skipIf(!holdManifest)('keeps the pinned #1191 warning held while the watchdog gets its first receipt', async () => {
-    const manifest = await readFile(holdManifest!);
-    expect(createHash('sha256').update(manifest).digest('hex')).toBe('37dc0d1d99c37a49a614f24a136434a04ad5263be80fe19e20ee0906e24f9816');
-    const pinnedId = manifest.toString('utf8').split('\n')[0];
+    const held = await pinnedHoldRow();
+    const pinnedId = held.id;
     const binary = await buildHoldDispatcher();
-    const now = Date.parse('2026-11-27T06:00:00Z');
-    const { RAIL_KEY_PREFIX } = await import('../../core/trading/vts-rail.js');
-    const held = {
-      ...scheduled(`${RAIL_KEY_PREFIX}fixture`), id: pinnedId, state: 'active', severity: 'warning',
-      created_at: new Date(now - 48 * 3600_000).toISOString(), fired_at: new Date(now - 47 * 3600_000).toISOString(),
-    };
+    const now = holdTime;
     const watchdogRow = { ...scheduled(key), triggers_at: new Date(now - 60_000).toISOString() };
     const laterRow = { ...scheduled(key), triggers_at: watchdogRow.triggers_at };
     await writeFile(ledger, `${JSON.stringify(held)}\n`);

@@ -1,9 +1,9 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdtemp, readFile, rm, utimes } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { withAlertFileLock } from '../../services/system-alert-file-lock.mjs';
 
@@ -99,7 +99,7 @@ describe('system alert file lock', () => {
     await expect(readFile(lock)).rejects.toHaveProperty('code', 'ENOENT');
   }, 15_000);
 
-  it.skipIf(!linux)('retains a successor published while a guarded reaper proves the older owner dead', async () => {
+  it.skipIf(!linux).each([true, false])('protects a successor only with the final token comparison (check=%s)', async check => {
     const holder = await hold();
     const pidStatPath = `/proc/${holder.pid}/stat`;
     await ageOwner();
@@ -117,9 +117,19 @@ describe('system alert file lock', () => {
       };
       syncBuiltinESMExports();
     `;
+    let command = [reaper, lock];
+    if (!check) {
+      const source = await readFile(new URL(lockModule), 'utf8');
+      const comparison = "if (await readFile(lockPath, 'utf8') === deadToken) await unlink(lockPath);";
+      expect(source.split(comparison)).toHaveLength(2);
+      const mutant = join(scratch, 'reaper-without-final-check.mjs');
+      await writeFile(mutant, source.replace(comparison, 'await unlink(lockPath);'));
+      command = ['--input-type=module', '-e',
+        `import { reapDeadAlertFileLockUnderGuard } from ${JSON.stringify(pathToFileURL(mutant).href)}; await reapDeadAlertFileLockUnderGuard(process.argv[1]);`, lock];
+    }
     const reclaimer = start('/usr/bin/flock', [
       '--nonblock', '--no-fork', `${lock}.reap`, process.execPath,
-      '--import', `data:text/javascript,${encodeURIComponent(preload)}`, reaper, lock,
+      '--import', `data:text/javascript,${encodeURIComponent(preload)}`, ...command,
     ]);
     expect((await once(reclaimer, 'message'))[0]).toBe('checking old owner');
     const holderExit = once(holder, 'exit');
@@ -132,7 +142,8 @@ describe('system alert file lock', () => {
     const reclaimerExit = once(reclaimer, 'exit');
     reclaimer.send('continue');
     expect(await reclaimerExit).toEqual([0, null]);
-    expect(await readFile(lock, 'utf8')).toBe(token);
+    if (check) expect(await readFile(lock, 'utf8')).toBe(token);
+    else await expect(readFile(lock)).rejects.toHaveProperty('code', 'ENOENT');
 
     const successorExit = once(successor, 'exit');
     successor.send('release');
