@@ -1,12 +1,14 @@
 # B-CONVERSATION-INDEX — PRE-IMPLEMENTATION AUDIT AND IMPLEMENTATION PLAN
 
-**Status:** Step 2 checkpoint, 2026-11-27. Owner INFRA Codex. Approved scope `4631ed0fb9a56c48bf9aae9dabeca8cd6b73e504`. A1–A4 retain the opening checks and benchmark pin at `7cc114ea11b9e854898809232b136932f0502ea4`. A5–A10 use shared `dda235747c4d18ca2f3854b4251d351687b6281a` for the repository census, verification windows, access-route checks, Crew Switch verification plan and bounded document disposition. The older ChatGPT route, all five Codex full-history routes, complete corpus disposition and implementation review remain open.
+**Status:** Step 2 checkpoint, 2026-11-27. Owner INFRA Codex. Approved scope `4631ed0fb9a56c48bf9aae9dabeca8cd6b73e504`. A1–A4 retain the opening checks and benchmark pin at `7cc114ea11b9e854898809232b136932f0502ea4`. A5–A11 use shared `dda235747c4d18ca2f3854b4251d351687b6281a` for the repository census, verification windows, access-route checks, Crew Switch verification plan and bounded document disposition. The older ChatGPT route, all five Codex full-history routes, complete corpus disposition and implementation review remain open.
 
 ## Previously stated vs now
 
 **Previously stated:** Step 1 approved five source classes and one backup, searchable copy and matching restore for each of the five Codex roles. **Now:** Those populations and pass criteria are unchanged. A6 proposes windows and deadlines for OBJ-4. A7 checks access routes and pins a bounded repository population independently of the A4 benchmark. **Reason:** The cadence needs grading rules and each source needs its own coverage proof. The intake dates and counts remain historical.
 
 **Previously stated:** A9 assigned a proposed source use to 21 of the 1,822 immediate Markdown candidates enumerated in A7. **Now:** A10 adds 19, bringing the total to 40 of 1,822. **Reason:** A10 verifies and classifies the top-level pre-Phase 12 reports. The count measures document review and leaves passage screening open.
+
+**Previously stated:** A10 listed 17 deeper Markdown paths by metadata. **Now:** A11 assigns a proposed historical use to all 17. The A7 immediate-entry count remains 40 of 1,822 reviewed. **Reason:** The newly reviewed paths are descendants of the archive directories and sit outside A7’s immediate-entry population.
 
 ## A1. Source access and evidence map
 
@@ -190,15 +192,37 @@ Require a separate refresh receipt tied to that exact switch key, or to the sche
 
 **Rename and reopen control.** The 19 original paths under `reports/` at `a254601d444f6c6b658fc42edaaad63f41001cc9` became the 19 archive paths in `81e4b8094859f54de1899cb293bcf63ab3f8b0e8`. Verified 19 exact Git rename records and matching blob IDs at the move and the A7 pin. Reopen the readiness checklist at the original path and the archive path, at line 195 in each. The unchanged passage should produce one result when both aliases enter a declared corpus. Retain its exact permitted source citation and the evidenced rename for provenance. Establish lineage before collapsing aliases and apply access checks to each displayed citation.
 
-**Remaining coverage.** A9 and A10 cover 40 of the 1,822 immediate candidates. The other 1,782 and eligible documents beyond the sampled immediate-entry sets await disposition. This checkpoint leaves admission, retrieval performance and restore evidence open. Legacy ChatGPT and all five Codex full-history routes remain open under the same source limits.
+**Remaining coverage at the A10 checkpoint.** A9 and A10 cover 40 of the 1,822 immediate candidates. The other 1,782 and eligible documents beyond the sampled immediate-entry sets awaited disposition. A11 follows the 17 nested archive reports. Passage admission, retrieval performance and restore evidence remain open. Legacy ChatGPT and all five Codex full-history routes remain open under the same source limits.
 
 `REVIEWER: claim-only · What can the archive establish about historical intent and current authority? · The dated checklist can look like approval, and an unchanged archive rename can make one passage look like two sources · re-derived y (decision criteria and blank sign-off, dated Phase 8.3 approval, current plan and exact rename/blob controls).`
+
+## A11. Verify the Phase 8.7 and 8.8 archive reports
+
+**Population.** Reopened the one Phase 8.7 and 16 Phase 8.8 regular Markdown blobs identified in A10 at the A7 pin. The 17 full paths and blobs produce SHA-256 `8b7768d56df838537ffda8746dbfc64a8f063caa32af07d2e31bb5e9ac870b0f` with the A7 serialization. All 17 also have an unchanged `reports/` alias verified in the A10 archival move. Reopening either alias requires the exact revision and permitted citation. A10 and A11 now cover all 36 Markdown reports in the pinned pre-Phase 12 archive.
+
+| Proposed historical use | Reports relative to the archive |
+| --- | --- |
+| Historical Git restore assessment · 1 | `phase-8.7/8.7-restore-check-report.md` |
+| Source, behavior or regression audit · 7 | `phase-8.8/8.8.1-scanner-audit.md`, `phase-8.8/8.8.1A-stage3-locations.md`, `phase-8.8/8.8.1A-truth-constraint.md`, `phase-8.8/8.8.1A-ws-events.md`, `phase-8.8/8.8.2-UI-rollback-analysis.md`, `phase-8.8/8.8.2C-signal-engine-audit.md`, `phase-8.8/8.8.2D-singleton-scan.md` |
+| Implementation or corrective change · 5 | `phase-8.8/8.8.2-FINAL-IMPLEMENTATION-REPORT.md`, `phase-8.8/8.8.2-STANDALONE-HELPERS-FINAL.md`, `phase-8.8/8.8.2-fix-scanner-disconnect.md`, `phase-8.8/8.8.2A-stage3-implementation-notes.md`, `phase-8.8/8.8.2B-breakdown-truth-constraint-report.md` |
+| Work-in-progress checkpoint · 1 | `phase-8.8/8.8.2-UI-rollback-progress.md` |
+| Verification report with explicit test boundary · 3 | `phase-8.8/8.8.2-FINAL-VERIFICATION-REPORT.md`, `phase-8.8/8.8.2-UI-rollback-COMPLETE.md`, `phase-8.8/8.8.2D-runtime-verification.md` |
+
+**Controls for reopening historical evidence.** Use these alongside A9’s passage and access checks. They are source controls outside the frozen A4 retrieval benchmark.
+
+- **A completion heading can overstate verification.** `8.8.2-FINAL-VERIFICATION-REPORT.md:5,11,375–390` records a wiring check and a blocked engine start, with runtime evidence still due for that configuration. `8.8.2D-runtime-verification.md:25–32,338–358` reports later FX5 runtime checks with the engines stopped, including two sampled scans and four sessions for the counter check. The five log paths at lines 398–405 are a separate listed population. A historical result must preserve each test’s configuration, outcome and sample. The later report leaves the original engine-start retest unverified.
+- **Keep the original observation and the follow-up sample.** `8.8.1A-truth-constraint.md:13–28` records the evaluated, eligible and breakdown reconciliation rule and an observed violation. `8.8.2-FINAL-IMPLEMENTATION-REPORT.md:243–254` reports a calculation change and a sample with 1,382 evaluated, 662 eligible and 720 failures. A result describing the fix must distinguish the reported behavior before and after the change and retain the measured sample. The Git check establishes the report text and its provenance. Underlying runtime logs were outside this review.
+- **A historical restore assessment has its own object and outcome.** `phase-8.7/8.7-restore-check-report.md:8–12,150–169,324–329` records an unsuitable candidate commit for the dedicated Filter Insights page and explicitly leaves historical rendering and runtime unverified. A restore query should reopen that assessment with its limit. Scope OBJ-2 still needs a content-and-identity restore from an approved conversation backup for each Codex role.
+
+**Remaining coverage.** The 1,782 immediate-entry records remaining in A7, other eligible repository populations and passage screening remain open. A11 used the 17 tracked Markdown reports in the approved repository source class and their Git metadata. The older ChatGPT and all five Codex full-history access and restore gaps remain open under the existing source limits.
+
+`REVIEWER: claim-only · Which archived records distinguish a change, a runtime check and a restore assessment? · The completed wiring report retains its runtime blocker, the later tests use a bounded stand-alone configuration, and the restore report establishes limits of a historical candidate · re-derived y (pinned status, next steps, runtime test conditions and denominators, and restore assessment passages).`
 
 ## Implementation plan — Step 2 draft
 
 1. **From A1, A3, A5 and A7:** Freeze source-specific authority, selector, cutoff, allowed destination and one disposition per inventory item. Use the narrow approved redacted Claude copy and a consistently committed view. Prove five Codex routes and the surviving legacy route before using their contents. The source-access gaps stay open until the evidence resolves them. Preserve the after-live remainder of #1238.
 2. **From A2, A3 and A5:** Keep capture, readable archive, provenance search and restore independently verifiable. Record stable source and passage IDs, a source/cutoff manifest and raw-backup versus searchable-copy receipts. Prove a matching restore per Codex role and a source reopen per approved class, with separate denominators for inventory and samples. Keep permissions on both result metadata and content.
-3. **From A4, A5, A7, A9 and A10:** Use the bounded source-use dispositions and exact-passage reopen controls when screening the governance inventory. Exercise dated authority and proved rename aliases as source controls. Build the keyword-and-passage baseline against the separate frozen document and commit-message benchmark and score it before deciding on local vectors. Preserve the query, ranking, latency, cost and denial controls. Use exact-revision links for documents and full commit identities for messages.
+3. **From A4, A5, A7, A9, A10 and A11:** Use the bounded source-use dispositions and exact-passage reopen controls when screening the governance inventory. Exercise dated authority, proved rename aliases and verification scope as source controls. Build the keyword-and-passage baseline against the separate frozen document and commit-message benchmark and score it before deciding on local vectors. Preserve the query, ranking, latency, cost and denial controls. Use exact-revision links for documents and full commit identities for messages.
 4. **From A5, A6 and A8:** Validate the governed completion read and continuity controls before committing to the integration. Use distinct trigger identities with the same refresh and publish rules. Freeze the measured windows after authority and baselines are established. Reconcile expected orders, matching refresh receipts, interrupted runs and exceptions without changing existing Claude archive behavior.
 5. **From A4 and A5:** After verification, have a crew member use the documented search to reopen an earlier decision. Record PM’s separate re-check on #1262 and update the Step 2 search guidance with the verified command and coverage. Add the delivered architecture and operating limits to governance during its normal step.
 
