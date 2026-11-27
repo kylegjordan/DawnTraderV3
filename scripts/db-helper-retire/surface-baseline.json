@@ -45,7 +45,7 @@
       "markers": {
         "database_url": 2,
         "direct_psql": 8,
-        "dt_sql": 51,
+        "dt_sql": 56,
         "installed_psql_path": 3
       }
     },
