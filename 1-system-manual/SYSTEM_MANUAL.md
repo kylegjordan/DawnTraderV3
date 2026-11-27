@@ -7757,12 +7757,12 @@ interface ScheduledTask {
 }
 ```
 
-### Registered Tasks (12 total, registered in index.ts — System Health Check deleted 2026-10-02, `#1147`)
+### Registered Tasks (direct registrations from `index.ts`)
 | # | Task | Module |
 |---|------|--------|
 | 1 | Screener Recalibration | screener-recalibration-task |
 | 2 | Market Scan | market-scan-task |
-| 3 | AI Summary | ai-summary-task |
+| 3 | ~~AI Summary~~ — legacy Daily AI Brief scheduling switched off 2026-11-24 (`B-AI-BRIEF-OFF`, `#1264`, KD-111); code removal after live | `ai-summary-task` retained, not registered |
 | 4 | ~~System Health Check~~ — **DELETED 2026-10-02** (B-HEALTH-CHECK-REMOVAL, `#1147`: Replit-era, measured nothing) | ~~system-health-check-task~~ |
 | 5 | CLE (Continuous Learning Engine) | cle-task |
 | 6 | CWA (Cognitive Weight Adjustment) | cwa-task |
@@ -7773,6 +7773,8 @@ interface ScheduledTask {
 | 11 | Weekly Expert Insights | weekly-expert-insights-task |
 | 12 | Trading Signals Cleanup | trading-signals-cleanup |
 | 13 | Audit Anomaly Detection | audit-anomaly-task |
+
+AI Transparency's Autonomy Confidence badge uses the latest transparency-task outcomes. Historical AI Summary rows can affect that display (KD-127 accepts the bounded historical replay effect). The CLE trading input comes from error logs. Daily Brief history and the manual generation path are separate from the retired schedule.
 
 **Additionally, 3 jobs registered via their own functions (not through the registry interface):**
 - `registerLearningFeedbackJob()`

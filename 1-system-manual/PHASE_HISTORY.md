@@ -1585,6 +1585,14 @@ Completion report: `Claude Comms and Packages/Batch Completion/B_DB_READONLY_ROL
 
 **A repeat alert now refreshes the stored one instead of crashing the save, and the feed-health check finishes every cycle.** Before this, saving an alert whose message already existed — or saving it once per admin — broke a duplicate rule in the alert table, and the feed-health check stopped mid-cycle 42 times in 14 days. Now a repeat updates the existing alert, one alert is written per mode, and an alert the operator acknowledged comes back only after a healthy cycle has closed the episode. Over the seven-day window every alerting cycle completed and every later deploy carried the fix.
 
+### 2026-11-24 — B-AI-BRIEF-OFF (CC-B, KD-111, KD-127, #1264)
+
+The legacy Daily AI Brief schedule was removed in `e3a96a812`. The full first 25-hour observation verified the schedule and task errors were gone. Coltrane confirmed verification and then cleared Step 9 after Kyle accepted its measured historical Autonomy Confidence badge effect. Legacy code removal stays in the after-live cleanup. Final batch sign-off follows the governance update.
+
+### 2026-11-26 — B-ALERT-ORPHAN-ROWS (CC-B, KD-116 and KD-126, #1255 R-1)
+
+Phase A `5ecd7ee24` removed 12 old operator alerts linked to deleted users. Coltrane verified the post-deploy database and UI. The original ordered rollback comparison remains reported and independently unproved under Kyle's narrow exception. The rollback file stays tracked, and the class-wide user-link census remains #1267 after live. Final batch sign-off follows the governance update.
+
 ### 2026-11-11 — B-PRICE-FEED-COVERAGE increment 0 (CC-B, Kyle pre-sprint item 3; `#1222`) — 🟦 STEP 10 2026-11-22; the parent batch stays open (live 2026-11-11 at `72e7f35f6`, instrument `e7ef8413e`; Langston Step 8 PROCEED Discord `1574021946004475926`; change list `Change Lists/B_PRICE_FEED_COVERAGE_INC0_STEP4_CHANGE_LIST.md`)
 
 **An xStock paper trade is no longer filled on a price older than the live one.** Before this, the step that sends an xStock fill and the open gate both looked at a saved snapshot of the order book, while exits and resting orders watched the live price — so a fill could be booked at a price that had already gone stale. Now both look at the live price too: no live price, one the feed has not confirmed, or one that is too old means the fill is refused, and the open gate judges the older of the two. In the evidence window it turned away at least 59 entries on old or empty books. Not yet seen live: a refusal because the live price was missing outright. The rest of the batch — one measured freshness standard for every symbol, and the feed-reconnect fix — is still in planning.
