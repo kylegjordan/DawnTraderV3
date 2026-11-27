@@ -31,6 +31,8 @@
 
 ## SHARED CONSENSUS TRUTHS (all three sessions; per-session working-state lives in MEMORY_CC_A/B/C.md, auto-loaded via the hook)
 
+**NOV 2026 alert and AI closeout:** Operator-alert orphans were removed in Phase A; the rollback is retained under KD-126 and #1267 stays after live. Daily AI Brief scheduling is off under KD-111/KD-127. The historical display effect is accepted; code removal is still #1264 after live.
+
 **Trading posture:** paper-mode **ACTIVE TRADING is ON** through the full pipeline; VTS/passive is a separate system. **Live mode remains Phase 21.** Run order: Phase 19 → 25 calibration → 16+20 cleanup/hardening → 21 live (`POST_AUDIT_ROADMAP` §2; verify state in code).
 
 **★ ACTIVE-TRADING REORG LOCKED:** work covers both classes; validate one at a time. Both must be paper-active by Phase 19, calibrated in Phase 25, and ready for Phase 21 live (`P19_REORG_BOTH_CLASSES_PLAN_2026-06-19.md`; issues #328-#331).

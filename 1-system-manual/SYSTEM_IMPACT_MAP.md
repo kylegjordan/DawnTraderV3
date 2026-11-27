@@ -344,6 +344,7 @@ Kill-switch is **DB-backed per-mode**: `isKillSwitchTripped(mode)` (`guardrail-p
 
 ### 2.1.1.a The operator alert store — `system_alerts` / `AlertsService` (B-ALERT-INSERT-CONTRACT, `#1255`, live 2026-11-14)
 - **Files**: `server/services/alerts-service.ts` (the only writer) · `shared/schema.ts` (the two unique rules, `:1561`).
+- **Alert Orphan Rows, 2026-11-26:** Phase A `5ecd7ee24` applied `2026-11-22-b-alert-orphan-rows.sql` to remove existing rows whose users were missing. Post-deploy database and UI checks passed. The tracked rollback remains available. KD-126 accepts only the independently unproved historical ordered rollback comparison. The writer, unique keys and lack of an enforced user foreign key retain the existing contract. The user-link census is #1267 after live.
 - **What**: the operator alert table shown in the app (not the staging alert queue of `CLAUDE.md` §10.5). **ONE insert path: `AlertsService.createAlert` (`:58`), an upsert on `unique_global_alert (mode, alert_type, message)`.** A repeat refreshes timestamp, severity, category and metadata and keeps the id; it re-opens an acknowledged row only when the stored metadata carries `episodeClosedAt` (`EPISODE_CLOSED_KEY`, `:15`), which a healthy feed cycle stamps through `acknowledgeFeedHealthAlerts` (`:311`).
 - **Owner per mode**: `getAlertOwner()` (`:292`, oldest admin) — one write per mode, replacing the per-admin loop that collided with itself.
 - **Writers (callers of `createAlert`, tests excluded)**: `unknown-strategy-counter.ts`, `feed-integrity-auto-check.ts` (2), `formula-auto-audit.ts`, `daily-loss-budget.ts`, `expert-insights-alerts.ts` (9), `openai-rate-limiter.ts`.
@@ -984,6 +985,7 @@ Kill-switch is **DB-backed per-mode**: `isKillSwitchTripped(mode)` (`guardrail-p
 - **Blast Radius**: **LOW** — administrative tracking
 - ⚠️ **Known defect, `#1039` (`B-SCHEDULER-FIRST-TICK`, row 73, Infra Claude):** `startTask` (:26-52) arms a first-run `setTimeout` and a `setInterval` at the same delay, so every task without `getInitialDelay` runs twice on its first cycle after each restart — **35 of the 38 registered after `B-HEALTH-CHECK-REMOVAL`** (36 of 39 when measured at `e9c243986`, before the System Health Check was deleted); `executeTask` has no overlap guard. Measured harm per task is recorded on `#1039` (2026-10-02).
 - **2026-10-02:** the `System Health Check` task was DELETED (`#1147`, `DELETED_COMPONENTS_LOG.md`); `server/index.ts` now registers 12 tasks, `autonomy-scheduler.ts` 25, `learning-feedback.ts` 1.
+- **2026-11-24, `B-AI-BRIEF-OFF`:** the legacy `AI Summary` registration left `server/index.ts`. The task module stays until after-live cleanup (#1264). Existing transparency history remains an Autonomy Confidence badge input, with its bounded historical effect accepted under KD-127. The CLE trading input reads error logs. The older registry counts above describe their stated date.
 
 ### 9.9 Stage-3 Emitter
 - **File**: `server/services/stage3-emitter.ts` (~100+ lines)
