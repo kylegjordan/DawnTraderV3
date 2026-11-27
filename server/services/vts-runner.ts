@@ -106,7 +106,7 @@ import { readXstockSigmaCacheConfig } from '../asset_classes/xstock_spot/mark-st
 import { selectExitTrigger, exitTriggerClass, type ExitTriggerRefusal } from '../core/trading/exit-trigger.js';
 import { selectVtsXstockExitBid, selectVtsXstockEntryAsk, vtsXstockSideSize } from '../asset_classes/xstock_spot/vts-xs-select.js';
 import { ensureSigmaFresh } from '../asset_classes/xstock_spot/sigma-rate-cache.js';
-import { markDecided, onCrossing, onMemberReason, shouldCheckMemberReason, ensureVtsRailIndex, runVtsRailSweep, onUnpricedClose, onShadowUnpriced, productionVtsRailDeps, recordVtsRefusal, recordVtsIncidentRecovery, type VtsRailDeps } from './vts-rail-reporting.js';
+import { markDecided, queueVtsCrossing, onMemberReason, shouldCheckMemberReason, ensureVtsRailIndex, runVtsRailSweep, onUnpricedClose, onShadowUnpriced, productionVtsRailDeps, recordVtsRefusal, recordVtsIncidentRecovery, type VtsRailDeps } from './vts-rail-reporting.js';
 import { EXPECTED_OLD } from '../core/trading/vts-rail.js';
 import { EQUITY_TICKER_MAX_TRANSPORT_GAP_MS, getEquityTickerFeedEvidence, getEquityTickerSourceIdentity } from './passive-archive/equity-spot-archiver.js';
 import { VtsIncidentTradeMap, VtsFeedIncidentWindows, VTS_FEED_INCIDENT_SAMPLE_MS, type VtsFeedIncidentEvidence } from './vts-feed-incident-windows.js';
@@ -4174,13 +4174,11 @@ async function resolveOpenVirtualTrades(): Promise<{
           }
         }
         // Queue the cut and its warning together without waiting for the database-backed sweep.
-        void onCrossing({
+        queueVtsCrossing({
           tradeId, symbol: trade.symbol, assetClass: trade.assetClass, lastReason: _nt.lastReason, pageSinceMs: streak.pageSinceMs,
           streakId: streak.streakId, feedIncident, firstRefusalAtMs: _nt.sinceMs,
           cryptoCeilings: trade.assetClass === 'crypto_spot' ? VTS_CRYPTO_EXIT_CEILINGS : undefined,
-        }, _ntNow, undefined, cutMs).catch((err) => {
-          console.error(`[VTS_RAIL][CROSSING_WRITE_FAILED] trade=${tradeId}:`, err);
-        });
+        }, _ntNow, cutMs);
       }
     } catch (tecExitErr) {
       console.error(

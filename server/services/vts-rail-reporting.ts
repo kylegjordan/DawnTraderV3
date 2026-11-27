@@ -1,7 +1,7 @@
 /**
  * `B-XSTOCK-BID-TRIGGER-RELAND` increment (4a) (row 2, `#1191`) — THE VTS NO-DECISION RAIL'S REPORTING, the IO half.
  * The rules are pure in `server/core/trading/vts-rail.ts`; this file owns the state and the alert-file / DB calls, and the
- * runner calls it at five hooks: a streak crossing (`onCrossing`), an exit decision (`markDecided`), the once-a-minute sweep
+ * runner calls it at five hooks: a streak crossing (`queueVtsCrossing`), an exit decision (`markDecided`), the once-a-minute sweep
  * (`runVtsRailSweep`), and the two unpriced-close sites (`onUnpricedClose`, `onShadowUnpriced`).
  * Plan: `Scope Files/B_XSTOCK_BID_TRIGGER_RELAND_INC4A_PRE_AUDIT.md` r3, P1-P5 (Coltrane APPROVED 2026-10-16).
  *
@@ -207,39 +207,79 @@ const workerCrossingDeps: WorkerCrossingDeps = {
   writeLiveWarning: warning => alertWrites.writeLiveWarning(warning),
 };
 
-/** A streak crossed the page threshold. An expected wide/quiet xStock book joins the standing record; all else pages. */
-export async function onCrossing(
-  c: Crossing, nowMs: number, deps: VtsRailDeps | WorkerCrossingDeps = workerCrossingDeps, refusalCutMs?: number,
-): Promise<'joined' | 'paged'> {
+function crossingJoins(c: Crossing, nowMs: number, deps: Pick<VtsRailDeps, 'xstockVerdict'>): boolean {
   railCounts.crossings++;
   let verdict: ClassVerdict | null = null;
   if (c.assetClass === 'xstock_spot' && c.lastReason.startsWith('no_transactable_side (too_old')) {
     try { verdict = deps.xstockVerdict(nowMs); } catch { verdict = null; } // unreadable ⇒ page
   }
-  const joins = c.assetClass === 'xstock_spot' && vtsXstockJoinsStandingRecord(c.lastReason, verdict);
+  return c.assetClass === 'xstock_spot' && vtsXstockJoinsStandingRecord(c.lastReason, verdict);
+}
+
+function trackCrossing(tradeId: string): void {
+  state.pendingCrossings.set(tradeId, (state.pendingCrossings.get(tradeId) ?? 0) + 1);
+}
+
+function finishCrossing(c: Crossing, result: LiveWarningResult | null): 'joined' | 'paged' {
+  try {
+    if (result?.route === 'joined') {
+      state.memberRecord.set(c.tradeId, result.alertId);
+      countJoin(c.lastReason);
+      return 'joined';
+    }
+    if (result?.route === 'incident') {
+      state.memberRecord.delete(c.tradeId);
+      state.incidentTrades.add(c.tradeId);
+    } else if (result) countLivePage(c.tradeId, result);
+    return 'paged';
+  } finally {
+    untrackCrossing(c.tradeId);
+  }
+}
+
+function untrackCrossing(tradeId: string): void {
+  const count = state.pendingCrossings.get(tradeId) ?? 0;
+  if (count <= 1) state.pendingCrossings.delete(tradeId);
+  else state.pendingCrossings.set(tradeId, count - 1);
+}
+
+function completeCrossing({ crossing }: LiveWarning, result: LiveWarningResult | null): void {
+  try {
+    finishCrossing(crossing, result);
+  } catch (error) {
+    console.error(`[VTS_RAIL][CROSSING_WRITE_FAILED] trade=${crossing.tradeId}:`, error);
+  }
+}
+
+/** Admit the cut and warning together. All crossings share a completion handler. */
+export function queueVtsCrossing(crossing: Crossing, nowMs: number, refusalCutMs: number): void {
+  try {
+    const action = crossingJoins(crossing, nowMs, workerCrossingDeps) ? 'join' : 'page';
+    if (alertWrites.queueLiveWarning({ kind: 'live-warning', crossing, nowMs, action, refusalCutMs }, completeCrossing)) {
+      trackCrossing(crossing.tradeId);
+    }
+  } catch (error) {
+    console.error(`[VTS_RAIL][CROSSING_WRITE_FAILED] trade=${crossing.tradeId}:`, error);
+  }
+}
+
+/** A streak crossed the page threshold. An expected wide/quiet xStock book joins the standing record; all else pages. */
+export async function onCrossing(
+  c: Crossing, nowMs: number, deps: VtsRailDeps | WorkerCrossingDeps = workerCrossingDeps, refusalCutMs?: number,
+): Promise<'joined' | 'paged'> {
+  const joins = crossingJoins(c, nowMs, deps);
   if (deps.writeLiveWarning) {
     const pending = deps.writeLiveWarning({ crossing: c, nowMs, action: joins ? 'join' : 'page', refusalCutMs });
     if (!pending) return joins ? 'joined' : 'paged'; // An identical observation already owns the publication.
-    state.pendingCrossings.set(c.tradeId, (state.pendingCrossings.get(c.tradeId) ?? 0) + 1);
+    trackCrossing(c.tradeId);
+    let result: LiveWarningResult | null;
     try {
-      const result = await pending;
-      if (result?.route === 'joined') {
-        state.memberRecord.set(c.tradeId, result.alertId);
-        countJoin(c.lastReason);
-        return 'joined';
-      }
-      if (result?.route === 'incident') {
-        state.memberRecord.delete(c.tradeId);
-        state.incidentTrades.add(c.tradeId);
-        return 'paged';
-      }
-      if (result) countLivePage(c.tradeId, result);
-      return 'paged';
-    } finally {
-      const count = state.pendingCrossings.get(c.tradeId) ?? 0;
-      if (count <= 1) state.pendingCrossings.delete(c.tradeId);
-      else state.pendingCrossings.set(c.tradeId, count - 1);
+      result = await pending;
+    } catch (error) {
+      untrackCrossing(c.tradeId);
+      throw error;
     }
+    return finishCrossing(c, result);
   }
   if (!('addAlert' in deps)) throw new Error('VTS crossing has no writer');
   const refusal = refusalAtCrossing(c, nowMs, refusalCutMs);

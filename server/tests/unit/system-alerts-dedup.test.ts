@@ -239,19 +239,20 @@ describe('#1191 alert store edits', () => {
 
   it('queues a crossing through the production writer independently of sweep setup', async () => {
     const { readAllAlerts, readVtsRefusalEvidence } = await load();
-    const { onCrossing, recordVtsRefusal } = await import('../../services/vts-rail-reporting.js');
+    const { _vtsRailIndex, queueVtsCrossing, recordVtsRefusal } = await import('../../services/vts-rail-reporting.js');
     const nowMs = Date.parse('2026-11-27T15:00:00Z');
     const pageSinceMs = nowMs - 600_000;
     const id = { tradeId: 'cold-writer-trade', streakId: 'cold-writer-streak' };
     const coverage = { symbol: 'AZN/USD', assetClass: 'xstock_spot' };
     recordVtsRefusal({ ...id, ...coverage, kind: 'first', firstAtMs: pageSinceMs, firstReason: 'no_usable_mark', thresholdMs: 600_000 });
     recordVtsRefusal({ ...id, kind: 'paging', pageSinceMs });
-    expect(await onCrossing({ ...id, ...coverage, firstRefusalAtMs: pageSinceMs,
-      pageSinceMs, lastReason: 'no_usable_mark' }, nowMs, undefined, 120_004)).toBe('paged');
+    queueVtsCrossing({ ...id, ...coverage, firstRefusalAtMs: pageSinceMs,
+      pageSinceMs, lastReason: 'no_usable_mark' }, nowMs, 120_004);
+    await vi.waitFor(() => expect(_vtsRailIndex().rowByTrade.get(id.tradeId)?.size).toBe(1), { timeout: 5_000 });
     const [row] = readAllAlerts();
     expect(readVtsRefusalEvidence()[0]?.crossings[0]).toMatchObject({ observedAtMs: nowMs, disposition: { route: 'individual', alertId: row.id } });
     expect(row.metadata[vtsRefusalReceiptField(id.streakId, pageSinceMs)]).toBe(id.tradeId);
-  });
+  }, 10_000);
 
   it('issues a new individual warning when a worker backlog contains an earlier decision and a new crossing', async () => {
     const { VtsAlertWriteQueue } = await import('../../services/vts-alert-write-queue.js');

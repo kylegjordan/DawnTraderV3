@@ -19,10 +19,28 @@ function startWorker(): Worker {
   return new Worker(new URL(`data:text/javascript,${encodeURIComponent(source)}`), { execArgv: [] });
 }
 
-interface PendingWrite {
+type QueuedWarning = Extract<VtsAlertWrite, { kind: 'live-warning' }>;
+
+interface PendingPromiseWrite {
   key: string;
   write: VtsAlertWrite;
   finish: (written: VtsAlertWriteResult) => void;
+}
+
+interface PendingWarningWrite {
+  key: string;
+  write: QueuedWarning;
+  complete: (warning: LiveWarning, result: LiveWarningResult | null) => void;
+}
+
+type PendingWrite = PendingPromiseWrite | PendingWarningWrite;
+
+function warningKey({ crossing, action, nowMs }: LiveWarning): string {
+  return JSON.stringify(['live-warning', action, crossing.tradeId, crossing.streakId, crossing.pageSinceMs, nowMs]);
+}
+
+function warningResult(result: VtsAlertWriteResult): LiveWarningResult | null {
+  return typeof result === 'object' ? result : null;
 }
 
 interface PendingReconciliation {
@@ -51,9 +69,15 @@ export class VtsAlertWriteQueue {
   }
 
   writeLiveWarning(warning: LiveWarning): Promise<LiveWarningResult | null> | undefined {
-    const { crossing, action, nowMs } = warning;
-    const key = JSON.stringify(['live-warning', action, crossing.tradeId, crossing.streakId, crossing.pageSinceMs, nowMs]);
-    return this.enqueue(key, { ...warning, kind: 'live-warning' })?.then(result => typeof result === 'object' ? result : null);
+    return this.enqueue(warningKey(warning), { ...warning, kind: 'live-warning' })?.then(warningResult);
+  }
+
+  queueLiveWarning(write: QueuedWarning, complete: PendingWarningWrite['complete']): boolean {
+    const key = warningKey(write);
+    if (this.pending.has(key)) return false;
+    this.pending.set(key, { key, write, complete });
+    this.schedule(COALESCE_MS);
+    return true;
   }
 
   recordRefusal(event: VtsRefusalEvent): Promise<boolean> | undefined {
@@ -159,10 +183,7 @@ export class VtsAlertWriteQueue {
         return;
       }
       this.inFlight = undefined;
-      for (const [index, entry] of batch.writes.entries()) {
-        this.pending.delete(entry.key);
-        entry.finish(result.written[index]);
-      }
+      this.completeWrites(batch.writes, result.written);
       if (batch.reconciliation) {
         this.reconciliation = undefined;
         batch.reconciliation.finish(result.reconciled === true, result.rail);
@@ -181,6 +202,30 @@ export class VtsAlertWriteQueue {
     });
     worker.unref();
     return worker;
+  }
+
+  private completeWrites(writes: PendingWrite[], written: VtsAlertWriteResult[]): void {
+    let warningStart = 0;
+    for (const [index, entry] of writes.entries()) {
+      this.pending.delete(entry.key);
+      if ('finish' in entry) {
+        if (warningStart < index) this.completeWarnings(writes, written, warningStart, index);
+        entry.finish(written[index]);
+        warningStart = index + 1;
+      }
+    }
+    if (warningStart < writes.length) this.completeWarnings(writes, written, warningStart, writes.length);
+  }
+
+  private completeWarnings(writes: PendingWrite[], written: VtsAlertWriteResult[], start: number, end: number): void {
+    // Match the two Promise continuations used by writeLiveWarning and its consumer. The sweep installs its index
+    // before these updates. Runs split at Promise-backed writes to preserve order with interleaved reason exits.
+    queueMicrotask(() => queueMicrotask(() => {
+      for (let index = start; index < end; index++) {
+        const entry = writes[index];
+        if ('complete' in entry) entry.complete(entry.write, warningResult(written[index]));
+      }
+    }));
   }
 
   private retry(error: unknown): void {
