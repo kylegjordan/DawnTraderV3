@@ -163,3 +163,39 @@ The deployed reader orders by `executed_at` only. The full replay breaks equal t
 Kyle accepted the measured effect in the historical replay, up to 0.8 displayed Autonomy Confidence points with the other badge inputs held fixed. Authority: `1-system-manual/pm/DECISIONS.md` at `06f1e278c6529d457317acb394083ccb26d14be3`, KD-127. The badge and the trading input still have the distinct sources documented above. The legacy Daily AI Brief schedule stays off. Runtime code removal stays in the existing after-live slot under KD-111.
 
 Coltrane ruled Step 9 PROCEED at 03:30:42 UTC on `dbf3f76e91cb41ebf668659cbe31f692e1f5ad35` (dispatch `1575714987320676455`). He confirmed the tie-free replay from 46/50 to 44/50 outcomes, the 20% weighting, and the separate CLE input. Step 8 and the completed timed-alert dispositions stand. Step 10 reconciles the CC-B list and sprint row 3b; the stale-open exception remains active through actual close. Step 11 remains due.
+
+### Step 10 governance ledger
+
+| Tier | Document | Verdict | Record |
+|---|---|---|---|
+| T1 | BATCH_CATALOG.md | ✅ | Record the removed schedule and accepted historical badge effect. |
+| T1 | PHASE_HISTORY.md | ✅ | Record the Nov 24 removal and completed observation. |
+| T1 | SPRINT_TO_LIVE_PLAN.md | ✅ | Reconcile CC-B row 3b with KD-127 and the after-live removal. |
+| T1 | PHASE_19_PLAN.md | N/A | No batch row is in flight in Phase 19. |
+| T1 | Shared MEMORY.md and MEMORY_CC_B.md | ✅ | Record the accepted badge effect and return to final sign-off. |
+| T1 | SCOPE | ✅ | The reviewed Step 1 scope is tracked. |
+| T1 | PRE_AUDIT | ✅ | The reviewed Step 2 audit and plan is tracked. |
+| T1 | COMPLETION_REPORT | BLOCKED — Step 11 | The final report follows the governance update. |
+| T1 | Observation column | ✅ | The first 25 hours have been read and the timed alerts are resolved. |
+| T1 | CC_A, CC_B, CC_C and CC_INFRA SESSION_TASK_LISTs | ✅ CC-B / N/A ×3 | CC-B records the sign-off path and the other lists belong to their owners. |
+| T1 | Coltrane memory store | ✅ | Record the KD-127 display boundary and after-live follow-up for future review. |
+| T2 | SYSTEM_MANUAL.md | ✅ | Record the disabled scheduler entry and the distinct confidence readers. |
+| T2 | SYSTEM_IMPACT_MAP.md | ✅ | Record the Daily AI Brief scheduling and badge-reader effect. |
+| T2 | RUNNING_ISSUES.md | ✅ | Annotate #1264 and preserve its after-live cleanup home. |
+| T2 | CHANGES_AND_FIXES.md | ✅ | Record the scheduler and recurring task error fix. |
+| T2 | POST_AUDIT_ROADMAP.md | N/A | The schedule change follows the existing pre-live decision and after-live cleanup. |
+| T2 | ADJUSTMENT_FRAMEWORK.md | N/A | The scheduler diff changes no trading setting. |
+| T2 | AUTHORITY_BASELINE.md | N/A | The batch uses the existing decision and review authority. |
+| T2 | STORAGE_POLICY.md | N/A | The scheduler change does not alter task history retention. |
+| T2 | MULTI_ASSET_VTS_EXPANSION_PLAN.md | N/A | Working list reviewed and the scheduler change touches none of its calibration inputs. |
+| T2 | ASSET_CLASS_ONBOARDING_WORKFLOW.md | N/A | The batch introduces no asset class or onboarding step. |
+| T2 | BUILD_METHOD_PLAYBOOK.md | N/A | The batch follows the existing workflow. |
+| T2 | LANGSTON_ARCHITECTURE.md | N/A | The batch changes no reviewer runtime or access. |
+| T2 | CLAUDE.md / CONDUCT.md | N/A | The implementation changes no project rule. |
+| T2 | CLAUDE_MD_RULE_HISTORY.md | N/A | The batch contains no CLAUDE.md rule revision. |
+| T2 | DELETED_COMPONENTS_LOG.md | N/A | The scheduler registration is disabled and the task module is retained for after-live removal. |
+| T2 | MISTAKE_PATTERNS.md | N/A | The batch adds no mistake trailer or weekly pass. |
+| T2 | GOVERNANCE_EXCEPTIONS.md | ✅ | Record KD-127 and keep the open row through Step 11 sign-off. |
+| T2 | ALERT_HANDLING_PROTOCOL.md | N/A | Acknowledgement and resolution rules still apply as written. |
+| T2 | DELIVERY_BOARD_PROTOCOL.md | N/A | The existing board status and fields support the closeout. |
+| T2 | CLAUDE_CODE_FEATURE_WATCH.md | N/A | The batch includes no daily feature or model review. |
