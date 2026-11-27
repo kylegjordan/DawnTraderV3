@@ -4,7 +4,9 @@ export function writeDurably(path: string, bytes: string | Buffer): Promise<void
 export function isWatchdogReceiptAlert(row: Pick<SystemAlert, 'severity' | 'metadata' | 'dedupe_key'>): boolean;
 export function hasWatchdogReceipt(row: SystemAlert): boolean;
 export function enqueueWatchdogAlert(ledger: string, row: SystemAlert): Promise<void>;
-export function recordWatchdogRecovery(ledger: string, key: string, evidence: string, existingRow?: SystemAlert): Promise<void>;
+type WatchdogObservation = { id: string; legacy?: { row: SystemAlert; previousId: string | null } };
+export function observeWatchdogOccurrence(ledger: string, key: string, existingRow?: SystemAlert): Promise<WatchdogObservation | null>;
+export function recordWatchdogRecovery(ledger: string, key: string, evidence: string, observed: WatchdogObservation | null): Promise<void>;
 export function readWatchdogLastRecovery(ledger: string, key: string): Promise<string | null>;
 export function readWatchdogHead(ledger: string, key: string): Promise<{
   row: SystemAlert;

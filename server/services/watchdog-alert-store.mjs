@@ -63,6 +63,7 @@ function decodeState(bytes, path, ledger) {
   const state = JSON.parse(bytes.toString('utf8'));
   if (state?.version !== 1 || typeof state.key !== 'string' || path !== statePath(ledger, state.key) ||
       (state.lastRecovery != null && typeof state.lastRecovery !== 'string') ||
+      (state.lastOccurrenceId != null && !UUID.test(state.lastOccurrenceId)) ||
       typeof state.infoClosed !== 'boolean' || !Array.isArray(state.queue) ||
       state.queue.some((entry) => !entry?.row || !UUID.test(entry.row.id) || entry.row.dedupe_key !== state.key ||
         (entry.matchedId !== null && !UUID.test(entry.matchedId)) ||
@@ -107,6 +108,19 @@ export async function readWatchdogLastRecovery(ledger, key) {
   return (await readState(ledger, key)).lastRecovery ?? null;
 }
 
+export async function observeWatchdogOccurrence(ledger, key, existingRow) {
+  const state = await readState(ledger, key);
+  const latest = state.queue.at(-1);
+  if (latest) return { id: latest.row.id };
+  // A ledger-only observation must not outlive a tracked occurrence that
+  // entered and left the queue during the probe.
+  if (existingRow?.dedupe_key === key && existingRow.id !== state.lastOccurrenceId &&
+      UUID.test(existingRow.id) && isWatchdogReceiptAlert(existingRow)) {
+    return { id: existingRow.id, legacy: { row: existingRow, previousId: state.lastOccurrenceId ?? null } };
+  }
+  return null;
+}
+
 export async function enqueueWatchdogAlert(ledger, row) {
   const key = row.dedupe_key;
   return withAlertFileLock(statePath(ledger, key), async () => {
@@ -115,22 +129,26 @@ export async function enqueueWatchdogAlert(ledger, row) {
     const latest = state.queue.at(-1);
     if (latest && latest.recovery === null) return;
     state.queue.push({ row, recovery: null, matchedId: null });
+    state.lastOccurrenceId = row.id;
     await writeState(ledger, state);
   });
 }
 
-export async function recordWatchdogRecovery(ledger, key, evidence, existingRow) {
+export async function recordWatchdogRecovery(ledger, key, evidence, observed) {
+  if (!observed) return;
   return withAlertFileLock(statePath(ledger, key), async () => {
     const state = await readState(ledger, key);
     const latest = state.queue.at(-1);
     if (latest) {
-      if (latest.recovery !== null) return;
+      if (observed.id !== latest.row.id || latest.recovery !== null) return;
       latest.recovery = evidence;
     } else {
-      if (!existingRow || !UUID.test(existingRow.id) || existingRow.dedupe_key !== key) return;
+      if (!observed.legacy || observed.legacy.previousId !== (state.lastOccurrenceId ?? null)) return;
       // An open alert from before rollout can have its first recovery after
       // rollout. Pin the observed row, including if it is resolved meanwhile.
-      state.queue.push({ row: existingRow, recovery: evidence, matchedId: existingRow.id });
+      const { row } = observed.legacy;
+      state.queue.push({ row, recovery: evidence, matchedId: row.id });
+      state.lastOccurrenceId = row.id;
     }
     // Keep this marker after delivery retires the entry. A restarted check
     // can have an older failure streak even when the queue is already empty.
@@ -196,16 +214,20 @@ export function commitWatchdogAttempt(ledger, key, id, emitPath, validateCategor
     const head = state.queue[0];
     if (head?.row.id !== id) return exact?.dedupe_key === key ? exact : null;
 
+    const info = head.row.severity === 'info';
     let row = head.matchedId ? byId.get(head.matchedId)?.row : exact;
     if (head.matchedId && (!row || row.dedupe_key !== key)) {
       throw new Error(`Durable watchdog match is absent from the ledger: ${head.matchedId}`);
     }
     if (!row) {
-      const info = head.row.severity === 'info';
-      row = [...byId.values()].find(({ row }) => row.dedupe_key === key && (info || row.state !== 'resolved'))?.row;
+      row = [...byId.values()].find(({ row }) => row.dedupe_key === key &&
+        (info || (row.state !== 'resolved' && isWatchdogReceiptAlert(row))))?.row;
     }
     if (row) {
       if (row.dedupe_key !== key) throw new Error(`Watchdog attempt ID belongs to another key: ${id}`);
+      if (!info && row.state !== 'resolved' && !isWatchdogReceiptAlert(row)) {
+        throw new Error(`Watchdog attempt matched an ineligible receipt row: ${row.id}`);
+      }
       if (head.matchedId !== row.id || row.state === 'resolved') await flushLedger(ledger);
     } else {
       validateCategory?.(head.row.category);
@@ -213,9 +235,9 @@ export function commitWatchdogAttempt(ledger, key, id, emitPath, validateCategor
       await writeLedgerRow(ledger, raw, row);
     }
 
-    if (row.state === 'resolved' || head.row.severity === 'info') {
+    if (row.state === 'resolved' || info) {
       state.queue.shift();
-      state.infoClosed = head.row.severity === 'info';
+      state.infoClosed = info;
       await writeState(ledger, state);
     } else if (head.matchedId !== row.id) {
       head.matchedId = row.id;
@@ -237,7 +259,7 @@ export function recoverWatchdogAttempt(ledger, key, id, makeResolved) {
     if (row.state === 'resolved') {
       await flushLedger(ledger);
     } else {
-      if (!hasWatchdogReceipt(row)) return null;
+      if (!isWatchdogReceiptAlert(row) || !hasWatchdogReceipt(row)) return null;
       row = makeResolved(row, head.recovery);
       await writeLedgerRow(ledger, raw, row, matched);
     }
