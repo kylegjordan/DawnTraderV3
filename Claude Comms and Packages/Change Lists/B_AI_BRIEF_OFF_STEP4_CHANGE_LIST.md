@@ -157,3 +157,9 @@ Coltrane confirmed exact review ref `239bf1ad353bff94204f058987cc2ddbf61bde7e` a
 The deployed reader orders by `executed_at` only. The full replay breaks equal times by `id` (four event bounds had a shared timestamp). The maximum also reproduces with unique timestamps in both 50-row samples at `2026-11-17T06:13:22.362395Z`: 46 successes including two AI rows versus 44 successes after omission and refill. The badge difference holds its other inputs fixed. The Delivery Board read-back is `Verification`, `Blocked on = Kyle`.
 
 `REVIEWER: claim-only · current confidence reader and historical replay · HIT: timestamp tie handling in the deployed reader, and historical dependency does not establish a live delta; independently reproduced first tie-free positive and re-derived tie-free maximum · re-derived y`
+
+### KD-127 — display effect accepted, 2026-11-27
+
+Kyle accepted the measured effect in the historical replay, up to 0.8 displayed Autonomy Confidence points with the other badge inputs held fixed. Authority: `1-system-manual/pm/DECISIONS.md` at `06f1e278c6529d457317acb394083ccb26d14be3`, KD-127. The badge and the trading input still have the distinct sources documented above. The legacy Daily AI Brief schedule stays off. Runtime code removal stays in the existing after-live slot under KD-111.
+
+Next: return the exact Step 9 record and Kyle's disposition to Coltrane to release the closeout hold. Preserve Step 8's verification and the completed timed-alert dispositions. Governance and final confirmation follow their normal steps.
