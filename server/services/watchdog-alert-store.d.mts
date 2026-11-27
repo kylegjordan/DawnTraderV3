@@ -5,6 +5,7 @@ export function isWatchdogReceiptAlert(row: Pick<SystemAlert, 'severity' | 'meta
 export function hasWatchdogReceipt(row: SystemAlert): boolean;
 export function enqueueWatchdogAlert(ledger: string, row: SystemAlert): Promise<void>;
 export function recordWatchdogRecovery(ledger: string, key: string, evidence: string, existingRow?: SystemAlert): Promise<void>;
+export function readWatchdogLastRecovery(ledger: string, key: string): Promise<string | null>;
 export function readWatchdogHead(ledger: string, key: string): Promise<{
   row: SystemAlert;
   recovery: string | null;

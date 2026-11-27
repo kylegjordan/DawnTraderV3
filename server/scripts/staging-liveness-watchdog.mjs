@@ -32,7 +32,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import {
   commitWatchdogAttempt, enqueueWatchdogAlert, hasWatchdogReceipt,
-  listPendingWatchdogKeys, readWatchdogHead, recordWatchdogRecovery,
+  listPendingWatchdogKeys, readWatchdogHead, readWatchdogLastRecovery, recordWatchdogRecovery,
 } from '../services/watchdog-alert-store.mjs';
 
 const pExecFile = promisify(execFile);
@@ -165,6 +165,15 @@ function log(msg) {
 
 function recordRecovery(key, reading, oldRow) {
   return recordWatchdogRecovery(ALERTS_FILE, key, `watchdog run ${RUN_ID}: ${key} condition cleared (${reading})`, oldRow);
+}
+
+async function previousFailureCount(state, counters, check, dedupeKey) {
+  const recovery = await readWatchdogLastRecovery(ALERTS_FILE, dedupeKey);
+  if (recovery && state.recoverySeen[dedupeKey] !== recovery) {
+    state.recoverySeen[dedupeKey] = recovery;
+    return 0;
+  }
+  return counters[check] || 0;
 }
 
 async function watchdogCli(command, key, id, timeout) {
@@ -369,21 +378,23 @@ async function main() {
   state.streaks = state.streaks || {};
   delete state.alerted; // the old in-memory latch: the alerts FILE is the one authority now (Langston part 2 r3)
   state.throws = state.throws || {};
+  state.recoverySeen = state.recoverySeen || {};
   log(`run ${RUN_ID} started${DISK_FORCED ? ' (FORCED disk thresholds)' : ''}`);
   const open = openAlertRows(ALERTS_FILE);
   for (const check of CHECKS) {
     const dedupeKey = check.dedupeKey || `watchdog-${check.key}`;
+    const errKey = `watchdog-check-error-${check.key}`;
     let ok;
     try {
       ok = await check.run();
     } catch (err) {
       // A THROW is not a skip (Langston part 2, C2): one throw must not end the run for the other checks,
       // but a check that throws every tick must page, not log to journald forever.
-      const t = throwStep(state.throws[check.key], true, DEBOUNCE_TICKS);
+      const prior = await previousFailureCount(state, state.throws, check.key, errKey);
+      const t = throwStep(prior, true, DEBOUNCE_TICKS);
       const n = t.count;
       state.throws[check.key] = n;
       log(`${check.key}: CHECK-THREW (${n}/${DEBOUNCE_TICKS}): ${err?.message?.slice(0, 200)}`);
-      const errKey = `watchdog-check-error-${check.key}`;
       if (t.page) {
         await queueAlert({
           title: `WATCHDOG CHECK BROKEN — the ${check.key} check throws every tick`,
@@ -395,7 +406,6 @@ async function main() {
       }
       continue;
     }
-    const errKey = `watchdog-check-error-${check.key}`;
     await recordRecovery(errKey, `${check.key} check ran without throwing`, open.get(errKey));
     state.throws[check.key] = throwStep(state.throws[check.key], false, DEBOUNCE_TICKS).count;
     if (ok === null) { log(`${check.key}: skipped (precondition unreachable)`); continue; }
@@ -408,7 +418,8 @@ async function main() {
       state.streaks[check.key] = 0;
       continue;
     }
-    state.streaks[check.key] = (state.streaks[check.key] || 0) + 1;
+    const prior = await previousFailureCount(state, state.streaks, check.key, dedupeKey);
+    state.streaks[check.key] = prior + 1;
     log(`${check.key}: FAIL (streak ${state.streaks[check.key]}/${DEBOUNCE_TICKS})`);
     if (state.streaks[check.key] >= DEBOUNCE_TICKS) {
       await queueAlert({
