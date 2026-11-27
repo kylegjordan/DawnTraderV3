@@ -1,6 +1,6 @@
 # B-CONVERSATION-INDEX — PRE-IMPLEMENTATION AUDIT AND IMPLEMENTATION PLAN
 
-**Status:** Step 2 checkpoint, 2026-11-27. Owner INFRA Codex. Approved scope `4631ed0fb9a56c48bf9aae9dabeca8cd6b73e504`. A1–A4 retain the opening checks and benchmark pin at `7cc114ea11b9e854898809232b136932f0502ea4`. A5–A11 use shared `dda235747c4d18ca2f3854b4251d351687b6281a` for the repository census, verification windows, access routes, Crew Switch verification plan and bounded document disposition. A12 reconciles the evidence with the five approved objectives. A13–A16 cover the immediate System Manual and PM documents, Batch Completion, Change Lists and Scope Files. The seven immediate A7 roots have an initial document-level screening. Other eligible repository populations, passage admission, the older ChatGPT route and all five Codex full-history routes remain open.
+**Status:** Step 2 checkpoint, 2026-11-27. Owner INFRA Codex. Approved scope `4631ed0fb9a56c48bf9aae9dabeca8cd6b73e504`. A1–A4 retain the opening checks and benchmark pin at `7cc114ea11b9e854898809232b136932f0502ea4`. A5–A11 use shared `dda235747c4d18ca2f3854b4251d351687b6281a` for the repository census, verification windows, access routes, Crew Switch verification plan and bounded document disposition. A12 reconciles the evidence with the five approved objectives. A13–A17 cover the immediate System Manual and PM documents, Batch Completion, Change Lists, Scope Files and the 11 standalone System Manual sections. The seven immediate A7 roots have an initial document-level screening. Other eligible repository populations, passage admission, the older ChatGPT route and all five Codex full-history routes remain open.
 
 ## Previously stated vs now
 
@@ -17,6 +17,8 @@
 **Previously stated:** A14 recorded a proposed use for 499 of the 1,822 immediate Markdown candidates. **Now:** A15 adds 329, bringing that count to 828, and screens two nested Change Lists paths separately. **Reason:** The Change Lists pass reconciles each path to a readable Git blob and assigns a proposed use. Final passage admission is still open.
 
 **Previously stated:** A15 recorded a proposed use for 828 of the 1,822 immediate Markdown candidates. **Now:** A16 adds all 994 immediate Scope Files, bringing the initial coverage to 1,822 of 1,822 paths in the original seven roots. **Reason:** The Scope Files pass assigns a proposed use to each pinned path. The 20 previously reviewed nested paths and the unreviewed eligible subtrees sit outside that denominator.
+
+**Previously stated:** A16 inventoried the metadata for 11 System Manual section paths. **Now:** A17 screens their content and brings the separately reviewed nested path count from 20 to 31. **Reason:** The standalone phase documents sit below an A7 root. The immediate population stays at 1,822, and the two passage controls in A17 guide later screening.
 
 ## A1. Source access and evidence map
 
@@ -350,11 +352,39 @@ The Scope Files paths `STRATEGY_FAMILY_FILTER_AUDIT_PLAN.md` and `STRATEGY_FAMIL
 
 `REVIEWER: claim-only · What material states can a readable scope or identical plan blob represent? · An approved scope can gain an objective at a later gate, and the same draft bytes can sit at two paths with different citation roles · re-derived y (exact #987 scope and approval refs and catalog, same-blob aliases and addition, dated catalog pointer and Batch 20 outcome, Cost Math supersession).`
 
+## A17. Standalone System Manual sections and their unified counterparts
+
+**Population.** Reopened all 11 regular Markdown blobs under `1-system-manual/sections/` at the A7 pin. The sorted full paths and blob IDs reproduce SHA-256 `e45d9a6ffc9a7a2384d1b5c542a4117f3bbc1a3f62ce5d36d1668aae9c3d1329` with A7 serialization. Compared each section's heading and date with the corresponding chapter of the unified System Manual and checked the path's most recent commit at that pin. The chapter line below is an exact-revision navigation point. A path's last change dates the Git revision, while a passage's authority depends on its text and applicable decisions.
+
+| Phase file in `1-system-manual/sections/` | Unified chapter starts at line | Latest path commit at the A7 pin |
+| --- | ---: | --- |
+| `PHASE1_CORE_MATH_AND_SCORING.md` | 199 | `505fc8bc0`, Feb 19 |
+| `PHASE2_STRATEGY_DEEP_DIVES.md` | 1720 | `505fc8bc0`, Feb 19 |
+| `PHASE3_MARKET_SCANNING_AND_PAIR_MANAGEMENT.md` | 2591 | `156470b94`, Jul 28 |
+| `PHASE4_RISK_MANAGEMENT_GUARDRAILS_PORTFOLIO.md` | 3540 | `505fc8bc0`, Feb 19 |
+| `PHASE5_TRADE_EXECUTION_AND_LIFECYCLE.md` | 4589 | `154f576d5`, Aug 29 |
+| `PHASE6_ML_PIPELINE_LEARNING_AND_CALIBRATION.md` | 6253 | `505fc8bc0`, Feb 19 |
+| `PHASE7_SYSTEM_LIFECYCLE_AND_INFRASTRUCTURE.md` | 7373 | `9d5760ed2`, Oct 17 |
+| `PHASE8_API_AND_COMMUNICATION_LAYER.md` | 8481 | `505fc8bc0`, Feb 19 |
+| `PHASE9_FRONTEND_AND_UI_LAYER.md` | 9412 | `7e689e1f3`, Sep 30 |
+| `PHASE10_TESTING_AND_QUALITY_ASSURANCE.md` | 10351 | `505fc8bc0`, Feb 19 |
+| `PHASE11_DATABASE_SCHEMA_AND_MIGRATIONS.md` | 11090 | `f67301c2a`, Oct 11 |
+
+**Supersession control.** Phase 2 at line 14 describes the DSS as broken and still importing the legacy strategy map. The unified manual at line 1724 records its deletion. The identical canonical-map heading (Phase 2 line 121, unified manual line 1877) leads to a 17-strategy heading in the original audit (line 138) and a 19-strategy heading in the unified manual (line 1896). The unified correction at line 1898 dates the older tables even within that chapter. A current DSS or strategy-count query must reopen the governing passage with its qualifications. An original-audit query must still be able to reopen the standalone passage.
+
+**Parallel-copy control.** The unified manual at line 8160 and Phase 7 at line 696 contain the same October 17 route correction, applied to both paths by `9d5760ed27e2d130e2fd6ab48fdd9081857d0b5b`. The equality claim covers those two exact lines. Reopen both locations and give the unified manual priority for a current System Manual lookup. An equivalent passage can appear once in results with alternative source locations retained. The same heading on its own establishes neither textual equivalence nor shared authority.
+
+**Proposed use.** `SYSTEM_MANUAL_OVERVIEW.md` lines 90–104 retain the original phase reports for reference, and line 125 identifies the unified manual as the living document. Use the 11 standalone phase files as candidate sources for original intent or passage-level corroboration. The matched chapter in the unified manual is the starting point for current System Manual guidance. Its own lines 34–42 distinguish current architecture and intended design. An individual claim still needs its applicable decision, amendment, or code and runtime evidence when its wording asserts present behavior. Preserve the exact revision, path, heading and source status for each admitted passage. The historical-control and parallel-copy cases extend A9's governance checks without changing the frozen A4 known-miss suite.
+
+`REVIEWER: claim-only · What evidence distinguishes the standalone phase reports from the living System Manual? · Overview assigns the source roles, and the same Phase 2 heading leads to different counts and a dated-table caveat · re-derived y (pinned overview and both Phase 2 passages, plus the independently checked parallel Phase 7 correction).`
+
+**Next bounded population.** The pinned `1-system-manual/audits/` tree contains one Markdown report under `b-new-42/` and four sibling CSV/JSON evidence objects. The next document check is the Markdown report and its relationship to the governing batch record. Raw CSV/JSON remains outside this document screening.
+
 ## Implementation plan — Step 2 draft
 
 1. **From A1, A3, A5 and A7:** Freeze source-specific authority, selector, cutoff, allowed destination and one disposition per inventory item. Use the narrow approved redacted Claude copy and a consistently committed view. Prove five Codex routes and the surviving legacy route before using their contents. The source-access gaps stay open until the evidence resolves them. Preserve the after-live remainder of #1238.
 2. **From A2, A3 and A5:** Keep capture, readable archive, provenance search and restore independently verifiable. Record stable source and passage IDs, a source/cutoff manifest and raw-backup versus searchable-copy receipts. Prove a matching restore per Codex role and a source reopen per approved class, with separate denominators for inventory and samples. Keep permissions on both result metadata and content.
-3. **From A4, A5, A7, A9–A11 and A13–A16:** Use the bounded source-use dispositions and exact-passage reopen controls when screening the governance inventory. Exercise dated authority, operative exceptions, governing pointers, aliases and verification scope. Verify status from exact artifacts and applicable governance records. Preserve applicable amendments and distinguish which revision was proposed, approved, placed or verified in service. Build the keyword-and-passage baseline against the separate frozen document and commit-message benchmark and score it before deciding on local vectors. Preserve the query, ranking, latency, cost and denial controls. Use exact-revision links for documents and full commit identities for messages.
+3. **From A4, A5, A7, A9–A11 and A13–A17:** Use the bounded source-use dispositions and exact-passage reopen controls when screening the governance inventory. Exercise dated authority, operative exceptions, governing pointers, aliases and verification scope. Run the A17 supersession and parallel-copy controls to verify that result priority and grouping follow the exact passage. Verify status from exact artifacts and applicable governance records. Preserve applicable amendments and distinguish which revision was proposed, approved, placed or verified in service. Build the keyword-and-passage baseline against the separate frozen document and commit-message benchmark and score it before deciding on local vectors. Preserve the query, ranking, latency, cost and denial controls. Use exact-revision links for documents and full commit identities for messages.
 4. **From A5, A6, A8 and A12:** Validate the governed completion read and continuity controls before committing to the integration. Use distinct trigger identities with the same refresh and publish rules. Bind the A6 windows to actual UTC boundaries once authority, installation and baselines are established. Reconcile expected orders, matching refresh receipts, interrupted runs and exceptions while preserving existing Claude archive behavior.
 5. **From A4 and A5:** After verification, have a crew member use the documented search to reopen an earlier decision. Record PM’s separate re-check on #1262 and update the Step 2 search guidance with the verified command and coverage. Add the delivered architecture and operating limits to governance during its normal step.
 
