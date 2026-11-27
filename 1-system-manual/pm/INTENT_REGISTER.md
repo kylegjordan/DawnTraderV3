@@ -47,3 +47,10 @@
 - **Scope** — [Sprint to Live Plan, Wave B2](../SPRINT_TO_LIVE_PLAN.md), row 166b1, and [Running Issues](../RUNNING_ISSUES.md), #392. The owner writes the scope at Step 1 when the sprint reaches the slot.
 - **Completion report** — Due at the batch’s close, after the applicable three-mode verification.
 - **Supersedes** — The September 3 parking of #392.
+
+## #647(i) — watchdog alert write safeguard, KD-123
+
+- **Owner** — NEW Codex / CC-B. Approved November 27, 2026 in the PM Codex chat.
+- **Kyle's words** — *"Decision #1 - your recommendation is approved."* This answers the status report recommendation to advance only the watchdog safeguard, in gaps, ahead of #994 Step 3.
+- **PM explanation** — A critical watchdog alert must survive a concurrent alert-history rewrite. Verifying this safeguard first lets NEW implement the paper Discord grouping without exposing those warnings to loss.
+- **Done** — NEW and Coltrane verify that the watchdog obligation survives both forced write orderings and delivers once. The remaining 2.4b items keep their after-live place. See Sprint to Live §0a rows 3c1 and 3c2 and the Step 2 review at `167e37cef`.
