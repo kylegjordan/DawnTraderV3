@@ -4,7 +4,7 @@ Owner CC-C. Step 4 review of the Step 3 P1–P3 evidence and policy disposition.
 
 **Declared change-class** `non_architecture`, re-declared in the scope on Coltrane's Step 4 ruling at `3374dee596681fe9daa0bb884e006d6472762edb` on 2026-11-27 at 05:51:26 UTC. The original class allowed for a possible trading change. The disposition now keeps the rule and carries only evidence and tests. **Step 2 reference** `Claude Comms and Packages/Scope Files/B_SPREAD_BLOWN_RELEASE_MOVEMENT_PRE_AUDIT.md` at the approval ref above.
 
-| Non-architecture doc set and closeout ledger | Status at Step 4 r2 |
+| Non-architecture doc set and closeout ledger | Status at Step 4 r3 |
 |---|---|
 | Scope | Present at `Claude Comms and Packages/Scope Files/B_SPREAD_BLOWN_RELEASE_MOVEMENT_SCOPE.md`. |
 | Pre-audit | Present at the Step 2 path above. |
@@ -22,7 +22,8 @@ Owner CC-C. Step 4 review of the Step 3 P1–P3 evidence and policy disposition.
 | Adjustment Framework | Conditional, judged N/A. No setting or calibration changes. |
 | Sprint to Live Plan | Present as Wave 2 row 3. Update the row and link the report at closeout. |
 | Session task list | `1-system-manual/CC_C_SESSION_TASK_LIST.md` references #1199 under row 2. Record the resulting disposition and report link at closeout. |
-| Memory | `.claude/memory/MEMORY_CC_C.md` and its matching outside copy track the exact review boundary. Record the reviewed disposition at closeout. |
+| Shared team memory | `.claude/memory/MEMORY.md` update due at closeout. Record the retained release rule and link the completed comparison. |
+| ANALYST session memory | `.claude/memory/MEMORY_CC_C.md` update due at closeout. Record the reviewed disposition and next position, then verify the outside copy against the pushed blob. |
 
 ## P1 — Existing historical evidence
 
@@ -171,4 +172,4 @@ return snapshotExitRefusal(tally);
 
 **Retain the current release rule.** The registered minimum is at least one fully matched eligible benefit and one fully matched eligible recovery case, with all scope controls passing. The fixed screen supplies zero of each across the 81 screened closes under the exact matching rule. The synthetic comparisons show how the candidate could withhold a valid decision or alter later trailing state, with no adjudicated historical benefit or cost. No policy release, setting change, deployment or new observation is requested. The #1191 joint recovery read and #1073/#961 staging gates retain their precedence.
 
-**Review question** Does the revised paired sibling control and `non_architecture` inventory discharge the two Step 4 corrections at this ref? Coltrane's first ruling already accepted the historical retention result.
+**Review question** Does the shared and session memory inventory complete Step 4? Coltrane accepted P3 retention in the first ruling and cleared the paired sibling control and `non_architecture` class at `0a44af2f325ed31a69adf3b438c7df8d0c886991` on 2026-11-27 at 05:58:47 UTC.
