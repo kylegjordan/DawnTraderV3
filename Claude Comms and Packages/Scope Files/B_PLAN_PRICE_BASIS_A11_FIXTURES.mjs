@@ -57,23 +57,32 @@ function gradeBars(row, read) {
       commit.availableAt <= read.at && commit.sequence <= read.readSequence);
 }
 
-function gradeFreshness(row, read) {
+function matchesFrameReceipt(receipt, expected, read) {
+  return receipt && expected &&
+    typeof expected.id === 'string' && expected.id.length > 0 && receipt.id === expected.id &&
+    typeof expected.socket === 'string' && expected.socket.length > 0 && receipt.socket === expected.socket &&
+    receipt.type === expected.type && receipt.boot === expected.boot && receipt.boot === read.boot &&
+    receipt.clock === expected.clock && receipt.clock === read.clock &&
+    Number.isSafeInteger(receipt.observedAt) && receipt.observedAt === expected.observedAt &&
+    Number.isSafeInteger(receipt.availableAt) && receipt.availableAt === expected.availableAt &&
+    receipt.observedAt <= receipt.availableAt && receipt.availableAt <= read.at;
+}
+
+function gradeFreshness(row, read, opportunityBoot) {
+  if (read.boot !== opportunityBoot) return unassessable('dispatch boot differs from the opportunity');
   const { frame, genuine } = row;
-  if (!frame || frame.id !== read.frame || frame.socket !== read.socket || frame.boot !== read.boot ||
-      frame.clock !== read.clock ||
-      !['update', 'replay'].includes(frame.type) ||
-      !Number.isSafeInteger(frame.availableAt) || frame.availableAt > read.at ||
+  if (!matchesFrameReceipt(frame, read.frame, read) || !['update', 'replay'].includes(frame.type) ||
       frame.availableAt !== row.availableAt) {
     return unassessable('raw frame identity or availability');
   }
   if (genuine === null && frame.type === 'replay' && read.genuine === null) {
-    return row.outcome === 'cold' ? proved('cold') : unassessable('reported freshness outcome');
+    return row.observedAt === frame.observedAt && row.outcome === 'cold'
+      ? proved('cold') : unassessable('reported freshness outcome');
   }
-  if (!genuine || genuine.id !== read.genuine || genuine.type !== 'update' ||
-      genuine.socket !== read.socket || genuine.boot !== read.boot ||
-      genuine.clock !== read.clock || !Number.isSafeInteger(genuine.observedAt) ||
-      !Number.isSafeInteger(genuine.availableAt) || genuine.observedAt > genuine.availableAt ||
-      genuine.availableAt > frame.availableAt || (frame.type === 'update' && frame.id !== genuine.id) ||
+  // A replay can carry a genuine update from an earlier socket on the same boot.
+  if (!matchesFrameReceipt(genuine, read.genuine, read) || genuine.type !== 'update' ||
+      genuine.observedAt > frame.observedAt || genuine.availableAt > frame.availableAt ||
+      (frame.type === 'update' && !matchesFrameReceipt(frame, read.genuine, read)) ||
       row.observedAt !== genuine.observedAt ||
       !Number.isSafeInteger(row.ceiling) || row.ceiling < 0 || row.ceiling !== read.ceiling) {
     return unassessable('genuine update or age ceiling');
@@ -124,7 +133,7 @@ function gradeDedupe(row, read) {
   return row.outcome === outcome ? proved(outcome) : unassessable('reported setup comparison');
 }
 
-function gradeReceipt(kind, row, read) {
+function gradeReceipt(kind, row, read, opportunityBoot) {
   if (row.id !== read.id || row.source !== read.source || !visibleAt(row, read)) {
     return unassessable('receipt identity, reader or clock');
   }
@@ -162,7 +171,7 @@ function gradeReceipt(kind, row, read) {
       return typeof row.trade === 'string' && row.trade.length > 0
         ? proved('registered') : unassessable('registration outcome');
     case 'freshness':
-      return gradeFreshness(row, read);
+      return gradeFreshness(row, read, opportunityBoot);
     case 'handoff':
       return row.outcome === 'forwarded' ? proved('forwarded') : unassessable('handoff outcome');
     case 'entryGate':
@@ -231,7 +240,7 @@ function reconcile({ roster, registrations, reads, receipts }) {
           continue;
         }
         stages[kind] = sameList(matches[0].scope, scope)
-          ? gradeReceipt(kind, matches[0], read)
+          ? gradeReceipt(kind, matches[0], read, offered.boot)
           : unassessable('receipt belongs to another scope');
       }
       const stoppedAtOrb = stages.orbClock?.grade === 'proved' && stages.orbClock.outcome !== 'range present';
@@ -256,7 +265,7 @@ function reconcile({ roster, registrations, reads, receipts }) {
           const matches = receiptsByKind.get(receiptKey({ ...identity, kind })) ?? [];
           const read = orderedReads.get(kind);
           const conflicts = matches.filter(row => read && sameList(row.scope, scope) &&
-            gradeReceipt(kind, row, read).grade === 'proved');
+            gradeReceipt(kind, row, read, offered.boot).grade === 'proved');
           const contradiction = `receipt contradicts ${reason}`;
           stages[kind] = conflicts.length > 0 && !stoppedAtOrb ? unassessable(contradiction) : unreached(reason);
           if (conflicts.length > 0) {
@@ -342,10 +351,7 @@ const checkpoints = {
     reader: 'active-dispatch',
     at: time + 40,
     source: 'fixture-active-cache',
-    frame: 'update-1',
-    genuine: 'update-1',
     boot: 'boot-1',
-    socket: 'socket-1',
     ceiling: 100,
   },
   handoff: { reader: 'signal-orchestrator', at: time + 50, source: 'fixture-handoff' },
@@ -408,6 +414,10 @@ function makeFixture() {
       const sharedCheckpoints = { bars: barRead, dedupe: opportunity.dedupeRead };
       const checkpoint = sharedCheckpoints[kind] ??
         { ...checkpoints[kind], id: `${arm}-${kind}`, clock: barRead.clock };
+      if (kind === 'freshness') {
+        checkpoint.frame = { ...observation };
+        checkpoint.genuine = { ...observation };
+      }
       if (!Object.hasOwn(sharedCheckpoints, kind)) read[kind] = checkpoint;
       receipts.push({
         ...identity,
@@ -699,44 +709,89 @@ check('explicit pending Entry Gate, absent fill', fixture => {
   removeCandidate(fixture, 'fill');
 }, (_result, candidate) => assert.equal(candidate.entryGate.outcome, 'pending'));
 
-check('replay with earlier genuine update on same socket', fixture => {
+function addReplay(fixture, socket) {
   const row = candidateReceipt(fixture, 'freshness');
-  row.frame = { ...row.frame, id: 'replay-1', type: 'replay', availableAt: time + 38 };
+  row.frame = { ...row.frame, id: 'replay-1', type: 'replay', socket, observedAt: time + 37, availableAt: time + 38 };
   row.availableAt = row.frame.availableAt;
-  candidateRead(fixture, 'freshness').frame = 'replay-1';
+  candidateRead(fixture, 'freshness').frame = { ...row.frame };
+  return row;
+}
+
+check('replay with earlier genuine update on same socket', fixture => {
+  addReplay(fixture, 'socket-1');
 }, (_result, candidate) => assert.equal(candidate.freshness.outcome, 'pass'));
 
-check('replay without a genuine update remains cold', fixture => {
-  const row = candidateReceipt(fixture, 'freshness');
-  row.frame = { ...row.frame, id: 'replay-1', type: 'replay', availableAt: time + 38 };
+check('replacement socket replay carries the earlier genuine update age', fixture => {
+  addReplay(fixture, 'socket-2');
+}, (_result, candidate) => assert.deepEqual(candidate.freshness, proved('pass')));
+
+check('replacement socket replay with the wrong raw socket', fixture => {
+  addReplay(fixture, 'socket-2').frame.socket = 'socket-3';
+}, (_result, candidate) => assert.equal(candidate.freshness.reason, 'raw frame identity or availability'));
+
+check('replacement socket replay with the wrong raw frame type', fixture => {
+  addReplay(fixture, 'socket-2').frame.type = 'update';
+}, (_result, candidate) => assert.equal(candidate.freshness.reason, 'raw frame identity or availability'));
+
+check('replacement socket replay with the wrong genuine socket', fixture => {
+  const row = addReplay(fixture, 'socket-2');
+  row.genuine = { ...row.genuine, socket: 'socket-3' };
+}, (_result, candidate) => assert.equal(candidate.freshness.reason, 'genuine update or age ceiling'));
+
+check('replacement socket replay with a changed raw receipt time', fixture => {
+  const row = addReplay(fixture, 'socket-2');
+  row.frame.availableAt += 1;
   row.availableAt = row.frame.availableAt;
+}, (_result, candidate) => assert.equal(candidate.freshness.reason, 'raw frame identity or availability'));
+
+check('replacement socket replay with a changed genuine receipt time', fixture => {
+  const row = addReplay(fixture, 'socket-2');
+  row.genuine = { ...row.genuine, observedAt: time + 34 };
+  row.observedAt = row.genuine.observedAt;
+}, (_result, candidate) => assert.equal(candidate.freshness.reason, 'genuine update or age ceiling'));
+
+check('internally matching replacement socket receipts from another boot', fixture => {
+  const row = addReplay(fixture, 'socket-2');
+  const read = candidateRead(fixture, 'freshness');
+  for (const evidence of [row.frame, row.genuine, read, read.frame, read.genuine]) {
+    evidence.boot = 'boot-2';
+  }
+}, (_result, candidate) => assert.equal(candidate.freshness.reason, 'dispatch boot differs from the opportunity'));
+
+check('replacement socket replay cannot carry a genuine update observed afterward', fixture => {
+  const row = addReplay(fixture, 'socket-2');
+  row.genuine = { ...row.genuine, observedAt: time + 38, availableAt: time + 38 };
+  row.observedAt = row.genuine.observedAt;
+  candidateRead(fixture, 'freshness').genuine = { ...row.genuine };
+}, (_result, candidate) => assert.equal(candidate.freshness.reason, 'genuine update or age ceiling'));
+
+function makeReplayCold(fixture) {
+  const row = addReplay(fixture, 'socket-2');
   row.genuine = null;
+  row.observedAt = row.frame.observedAt;
   row.outcome = 'cold';
-  Object.assign(candidateRead(fixture, 'freshness'), { frame: 'replay-1', genuine: null });
+  candidateRead(fixture, 'freshness').genuine = null;
+}
+
+check('replacement socket replay without a genuine update remains cold', fixture => {
+  makeReplayCold(fixture);
   removeCandidate(fixture, 'handoff', 'entryGate', 'fill');
 }, (_result, candidate) => assert.equal(candidate.freshness.outcome, 'cold'));
 
 check('cold replay with contradictory handoff receipt', fixture => {
-  const row = candidateReceipt(fixture, 'freshness');
-  row.frame = { ...row.frame, id: 'replay-1', type: 'replay', availableAt: time + 38 };
-  row.availableAt = row.frame.availableAt;
-  row.genuine = null;
-  row.outcome = 'cold';
-  Object.assign(candidateRead(fixture, 'freshness'), { frame: 'replay-1', genuine: null });
+  makeReplayCold(fixture);
 }, (result, candidate) => {
   assert.equal(candidate.freshness.outcome, 'cold');
   assert.equal(candidate.handoff.grade, 'unassessable');
   assert.ok(result.issues.some(row => row.kind === 'handoff'));
 });
 
-check('fresh replay receipt with stale original update', fixture => {
-  const row = candidateReceipt(fixture, 'freshness');
-  row.frame = { ...row.frame, id: 'replay-1', type: 'replay', availableAt: time + 38 };
-  row.availableAt = row.frame.availableAt;
+check('fresh replacement socket replay with stale original update', fixture => {
+  const row = addReplay(fixture, 'socket-2');
   row.genuine = { ...row.genuine, observedAt: time - 80, availableAt: time - 79 };
   row.observedAt = row.genuine.observedAt;
   row.outcome = 'stale';
-  candidateRead(fixture, 'freshness').frame = 'replay-1';
+  candidateRead(fixture, 'freshness').genuine = { ...row.genuine };
   removeCandidate(fixture, 'handoff', 'entryGate', 'fill');
 }, (_result, candidate) => {
   assert.equal(candidate.freshness.outcome, 'stale');
@@ -800,6 +855,10 @@ function withOrbClock(fixture, decision, outcome) {
   for (const arm of fixture.reads) {
     for (const kind of receiptKinds) {
       if (arm[kind]) arm[kind].at += shift;
+    }
+    for (const receipt of [arm.freshness.frame, arm.freshness.genuine]) {
+      receipt.observedAt += shift;
+      receipt.availableAt += shift;
     }
   }
   // Booking and all downstream receipts stay on the detector's synthetic decision clock.
