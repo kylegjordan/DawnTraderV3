@@ -943,15 +943,17 @@ OLD Claude's off-schedule cold audit (B-DISK-FILE-TIERING 3d, 12:5xZ) raised `3e
 3. INFRA Codex takes the same sample and posts the same evidence for each five-minute deadline and for the required readback. Both recipients reply visibly by each deadline. PM Codex watches the deadlines independently of INFRA's posts. From **6,442,450,944 bytes** up to the cap, call out WARN and the byte delta from the previous sample. At **8,589,934,592 bytes** and above the threshold result is HOLD. A missing, late, incomplete or failed read, absent or late receipt, unavailable observer or delivery route, timeout or cap breach is HOLD before GO. After GO it requires immediate escalation to OLD for his approved stop or recovery decision. The independent watcher escalates if INFRA cannot report.
 4. End on OLD's verified readback or cancellation of the named slot. If the cutoff arrives without either, escalate to OLD immediately and end the substitute's authority at that cutoff. A later slot needs a fresh ruling and clearances. Preserve the existing observations, automated services and timers, study records and alert ledger. Automated recovery requires real delivery evidence.
 
-**Exact measurement for review:** Run as root with `timeout --kill-after=2s 12s python3 -B -`, passing the following body on stdin. The exact staging host, mount and directory inode were read from the live staging access path at 07:00:37 UTC. The walk checks host, mount, canonical path and root inode, and requires each enumerated directory to be visited with the same device and inode recorded in its parent. An unreadable source, changed identity, unvisited directory or nested different filesystem fails. Any nonzero exit, timeout, incomplete output or missing receipt makes the sample unusable. This is a timed live walk, so concurrent growth can move bytes between reads.
+**Exact measurement for review:** Run as root with `timeout --kill-after=2s 12s python3 -B -`, passing the following body on stdin. The exact staging host, mount and directory inode were read from the live staging access path at 07:00:37 UTC. The walk checks host, mount, canonical path and root inode, and requires each enumerated directory to be visited with the same device and inode recorded in its parent. Before counting, arm read-only Linux filesystem watches on the tier source and destination directories and their parents. Keep those watches open through the entire walk, verify the observed directory identities and reject any queued event, including an overflow. The installed follow-up tail and the standalone tier timer both call `tier.run_locked`; the watched paths cover payload relocation, closed spend journals, due-bucket pruning and removal from cold storage. Count only a sample from the checked installed paths. The walk measures file sizes over a short interval while ordinary append-only input can continue. A failed or incomplete read, timeout, or missing receipt makes the sample unusable.
 
 ```python
+import ctypes
 import json
 import os
 import socket
 import stat
 import subprocess
 import sys
+from contextlib import contextmanager
 from datetime import datetime, timezone
 
 ROOT = "/var/lib/token-watch"
@@ -960,6 +962,12 @@ MOUNT = "/ 8:1 ext4 5e6f1593-c3dd-45e2-bf7a-27b3cd9ef023"
 ROOT_ID = (os.makedev(8, 1), 638747)
 WARN_BYTES = 6_442_450_944
 CAP_BYTES = 8_589_934_592
+# inotify flags from Linux <sys/inotify.h>.
+CONTENT_EVENT = 0x00000002 | 0x00000008  # modify or close-after-write
+TREE_EVENT = 0x00000FC0  # move in/out, create/delete, delete/move watched directory
+ONLY_DIRECTORY = 0x01000000
+TIER_PATHS = ("", "cold", "due", "state", "provenance", "provenance/raw",
+              "provenance/follow-up")
 
 def band(total):
     if total >= CAP_BYTES:
@@ -968,7 +976,41 @@ def band(total):
         return "warn"
     return "ok"
 
-def measure(root, expected_root, expected_id):
+@contextmanager
+def tier_watches(root):
+    libc = ctypes.CDLL("libc.so.6", use_errno=True)
+    watch = libc.inotify_init1(os.O_NONBLOCK | os.O_CLOEXEC)
+    if watch < 0:
+        raise OSError(ctypes.get_errno(), "cannot initialize tier watches")
+    try:
+        watched = {}
+        for relative in TIER_PATHS:
+            path = os.path.join(root, relative) if relative else root
+            if os.path.realpath(path, strict=True) != path:
+                raise ValueError("tier watch path is not canonical")
+            dfd = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            try:
+                current = os.fstat(dfd)
+                events = TREE_EVENT | ONLY_DIRECTORY
+                if relative == "cold":
+                    events |= CONTENT_EVENT
+                pinned = os.fsencode("/proc/self/fd/%d" % dfd)
+                if libc.inotify_add_watch(watch, pinned, events) < 0:
+                    raise OSError(ctypes.get_errno(), "cannot arm tier watch")
+                watched[path] = (current.st_dev, current.st_ino)
+            finally:
+                os.close(dfd)
+        yield watched
+        try:
+            os.read(watch, 4096)
+        except BlockingIOError:
+            pass  # Nonblocking queue empty after the walk.
+        else:
+            raise ValueError("tier path changed during storage measurement")
+    finally:
+        os.close(watch)
+
+def measure(root, expected_root, expected_id, watched):
     started = datetime.now(timezone.utc)
     if root != expected_root or os.path.realpath(root, strict=True) != expected_root:
         raise ValueError("root path is wrong or contains a symlink")
@@ -984,8 +1026,11 @@ def measure(root, expected_root, expected_id):
 
     for directory, dirs, names, dfd in os.fwalk(root, onerror=count_error, follow_symlinks=False):
         visited = os.fstat(dfd)
-        if pending_directories.pop(directory, None) != (visited.st_dev, visited.st_ino):
+        identity = (visited.st_dev, visited.st_ino)
+        if pending_directories.pop(directory, None) != identity:
             raise ValueError("directory identity changed during walk")
+        if directory in watched and watched.pop(directory) != identity:
+            raise ValueError("watched directory identity changed during walk")
         for entries, expect_directory in ((dirs, True), (names, False)):
             for name in entries:
                 try:
@@ -1006,9 +1051,9 @@ def measure(root, expected_root, expected_id):
     after = os.stat(root, follow_symlinks=False)
     if (after.st_dev, after.st_ino) != expected_id:
         raise ValueError("root changed during walk")
-    if files == 0 or errors or unexpected or pending_directories:
-        raise ValueError("empty or incomplete walk: files=%d errors=%d unexpected=%d unvisited=%d" %
-                         (files, errors, unexpected, len(pending_directories)))
+    if files == 0 or errors or unexpected or pending_directories or watched:
+        raise ValueError("empty or incomplete walk: files=%d errors=%d unexpected=%d unvisited=%d unwatched=%d" %
+                         (files, errors, unexpected, len(pending_directories), len(watched)))
     disk = os.statvfs(root)
     return {"started": started.isoformat(timespec="milliseconds"),
             "finished": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
@@ -1025,7 +1070,9 @@ def main():
             check=True, capture_output=True, text=True, timeout=3)
         if " ".join(mount.stdout.split()) != MOUNT:
             raise ValueError("unexpected staging mount")
-        print(json.dumps(measure(ROOT, ROOT, ROOT_ID)))
+        with tier_watches(ROOT) as watched:
+            result = measure(ROOT, ROOT, ROOT_ID, watched)
+        print(json.dumps(result))
     except (OSError, ValueError, subprocess.SubprocessError) as error:
         print(json.dumps({"complete": False, "error_class": type(error).__name__}), file=sys.stderr)
         return 2
@@ -1035,7 +1082,9 @@ if __name__ == "__main__":
     sys.exit(main())
 ```
 
-**Discriminating controls on staging.** Revision 2 accepted a known three-byte scratch file, rejected a symlink root, a wrong root and a wrong filesystem identity, and returned 124 from the timeout wrapper on a stalled scratch command. Coltrane's 07:18:52 UTC revision 2 ruling reproduced a same-filesystem directory replacement after the parent recorded the directory. At 07:21:33 UTC an isolated two-file fixture measured 8,589,934,595 bytes / HOLD before and after the replacement exercise. During the replacement revision 2 returned three bytes / OK, exit 0. The corrected body returned exit 2 with `complete: false` on the same exercise and passed all six threshold edges. Both scratch trees were removed within the same call. At 07:21:33.792–.799 UTC the corrected body returned WARN, exit 0, for 2,171 regular files totaling 6,731,938,153 bytes with 46,932,889,600 bytes free, zero errors and zero unexpected entries. The natural 06:13 feed reading corroborates the size band only.
+**Discriminating controls on staging.** Revision 2 accepted a known three-byte scratch file, rejected a symlink root, a wrong root and a wrong filesystem identity, and returned 124 from the timeout wrapper on a stalled scratch command. Coltrane's 07:18:52 UTC revision 2 ruling reproduced a same-filesystem directory replacement after the parent recorded the directory. At 07:21:33 UTC an isolated two-file fixture measured 8,589,934,595 bytes / HOLD before and after the replacement exercise. During the replacement revision 2 returned three bytes / OK, exit 0. Revision 3 rejected the replacement. Coltrane's 07:34:29 UTC review independently confirmed that result and found a second undercount during a normal tier relocation.
+
+**Tier-relocation control.** At 07:38:17 UTC, each scratch case forced the walk to visit cold before the copy and hot after the unlink. The two cases invoked the installed tier timer entry and the installed follow-up tail's call under the shared lock, respectively. The installed `tier.py` and `follow_up.py` hashes matched the Git source and both systemd entry points at 07:36 UTC. Each case measured 8,589,934,594 bytes / HOLD before the move and 8,589,935,015 bytes / HOLD after it, including the completed-run state record. Revision 3 returned 8,588,886,072 bytes / WARN during both moves. With the watches, both overlapping moves returned exit 2 and `complete: false`. The fixtures used private `/tmp` roots and were removed in the same call. The same exact body passed all six threshold edges and returned WARN at 07:38:17.235–.242 UTC for 2,171 live staging files totaling 6,739,608,920 bytes, with 46,890,627,072 bytes free and no walk errors or unexpected entries. The installed jobs and their timers continued normally. A live packet must bind those entry points and tier paths to the serving version before relying on the check.
 
 **Delivery exercise.** Dry run marker `TW-STORE-R2-0702`, Discord `1576130978282479677`, carries the fresh warning-band sample and a 07:06:35 UTC receipt deadline. PM independently read Discord at 07:06:42 UTC, saw the sample and no visible receipt from either owner by cutoff, and reported HOLD. The sender's 07:06:46 UTC read agreed. PM's 07:06:30 UTC outbox reply reached Discord at 07:11:04.678 UTC, `1576133310885929101`, providing a late-delivery control. OLD deliberately withheld the exercise receipt through cutoff. INFRA posted the parallel simulated after-GO escalation in `1576132273181294683`. OLD replied with a simulated STOP at 07:07:44.641 UTC, `1576132472079392811`, withdrawing the simulated GO and specifying executor stand-down before a staging change. No operation had started. If a live operation has started, report its last confirmed stage and serving identity to OLD for his separate recovery decision. A named live slot still needs both timely receipt witnesses and independent watch coverage.
 
