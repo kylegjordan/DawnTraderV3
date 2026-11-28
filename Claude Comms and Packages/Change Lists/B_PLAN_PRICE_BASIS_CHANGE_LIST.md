@@ -16,3 +16,7 @@
 - [Pre-Implementation Audit and Implementation Plan](../Scope%20Files/B_PLAN_PRICE_BASIS_PRE_AUDIT.md) A5 records the exact joins and limits for the pre-VTS opportunity roster, bar revisions, VTS booking quote, and active price observation. It carries the A6 booking and dispatch controls and separately accounts for a VTS registration failure that still reaches active dispatch.
 - All 21 tests in the three existing provenance, xStock aggregate and xStock cache unit suites passed locally. The controls exercise value equality, changed settled values, certified read ordering and whole-revision replacement. They do not grade an historical population.
 - Formal Step 2 review still requires a replay registration with the roster, exact opportunity-to-revision and price receipts, session boundaries and minimum usable coverage, or a reviewed prospective route. Reviewed Price Feed Coverage bounds are required before grading admission or making a basis choice.
+
+### Registration preparation
+
+- The Pre-Implementation Audit and Implementation Plan now records the eligible source checks, proposal for a prospective two-session feasibility pilot, denominator reconciliation, independent price receipts, and positive and refusal controls. The reviewer question asks for the evidence route and the conditions for admitting sessions. The exact calendar, serving evidence and observation registration remain prerequisites for collection.
