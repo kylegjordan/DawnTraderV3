@@ -167,7 +167,7 @@ const _comparators = new Map<string, BookStateComparator>();
  * ⛔ A RESTORED ring is consumed at the first PLAUSIBLE seed exactly like a clear-written one — it judges one
  * seed and is gone. Persistence does NOT create a standing yardstick (Langston, Step-1 condition 5).
  */
-export interface RetainedRing {
+export type RetainedRing = {
   spreads: number[];
   /** `judged` when the chain that wrote it had its own seed judged against a ring; `vacuous` when it cold-seeded. */
   seedBasis: 'judged' | 'vacuous';
@@ -176,9 +176,10 @@ export interface RetainedRing {
    * is. ⛔ NOT the wall clock: this tracker reads no clock (Kyle 2026-09-03, fenced by `8a-P4a` test 10).
    */
   writtenAtMs: number;
-  /** True only for an entry loaded back from the durable store at boot. A clear never sets it. */
-  restored: boolean;
-}
+} & (
+  | { restored: false }
+  | { restored: true; persistedAtMs: number; persistedSource: RingSnapshotEntry['source'] }
+);
 const _retainedSpreads = new Map<string, RetainedRing>();
 
 /**
@@ -495,7 +496,9 @@ export function advanceBookStateComparator(
       console.warn(
         `[3n.q8][BOOK_STATE] ${key} RESTORED_RING_CONSUMED verdict=${verdict} seedSpread=${spreadNow.toFixed(5)} ` +
         `retainedMedian=${retainedMedian === null ? 'none' : retainedMedian.toFixed(5)} kRel=${kRel ?? 'unreadable'} ` +
-        `ringSeedBasis=${retained.seedBasis} ringAgeMs=${frame.atMs - retained.writtenAtMs} ringDeleted=${!seedImplausible}`,
+        `ringSeedBasis=${retained.seedBasis} ringAgeMs=${frame.atMs - retained.writtenAtMs} ringDeleted=${!seedImplausible} ` +
+        `ringWrittenAtMs=${retained.writtenAtMs} ringPersistedAtMs=${retained.persistedAtMs} ` +
+        `ringPersistedSource=${retained.persistedSource} seedFrameAtMs=${frame.atMs}`,
       );
     }
   }
@@ -682,6 +685,11 @@ export interface RingSnapshotEntry {
   writtenAtMs: number;
 }
 
+/** The validated durable row preserves its own application submission stamp. */
+export interface RestoredRingSnapshotEntry extends RingSnapshotEntry {
+  persistedAtMs: number;
+}
+
 /**
  * ⭐ `3n.q8` P3 — "THE RING A CLEAR WOULD LEAVE BEHIND RIGHT NOW", for every symbol (OBJ-1, Langston Q1: the wider
  * form). A restart is treated as a clear of every chain:
@@ -720,7 +728,7 @@ export function snapshotRetainableRings(): RingSnapshotEntry[] {
  * Validation of each row happens in the store (`book-state-ring-store.ts`) before this is called.
  * Returns the symbols actually loaded, so the caller's counts share one population with `n`.
  */
-export function restoreRetainedRings(entries: ReadonlyArray<{ symbol: string; spreads: number[]; seedBasis: 'judged' | 'vacuous'; writtenAtMs: number }>): string[] {
+export function restoreRetainedRings(entries: readonly RestoredRingSnapshotEntry[]): string[] {
   if (_comparators.size > 0) {
     throw new Error(`restoreRetainedRings is boot-only: ${_comparators.size} live chain(s) already exist`);
   }
@@ -728,7 +736,10 @@ export function restoreRetainedRings(entries: ReadonlyArray<{ symbol: string; sp
   for (const e of entries) {
     const key = e.symbol.toUpperCase();
     if (_retainedSpreads.has(key)) continue;
-    _retainedSpreads.set(key, { spreads: [...e.spreads], seedBasis: e.seedBasis, writtenAtMs: e.writtenAtMs, restored: true });
+    _retainedSpreads.set(key, {
+      spreads: [...e.spreads], seedBasis: e.seedBasis, writtenAtMs: e.writtenAtMs, restored: true,
+      persistedAtMs: e.persistedAtMs, persistedSource: e.source,
+    });
     loaded.push(key);
   }
   return loaded;

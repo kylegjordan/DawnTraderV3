@@ -64,7 +64,7 @@
  */
 import { sql } from 'drizzle-orm';
 import { db } from '../../db.js';
-import { snapshotRetainableRings, restoreRetainedRings, type RingSnapshotEntry } from './book-state-tracker.js';
+import { snapshotRetainableRings, restoreRetainedRings, type RingSnapshotEntry, type RestoredRingSnapshotEntry } from './book-state-tracker.js';
 import { resolveBookStateConfigSync } from './book-state-config.js';
 import { medianOf } from './book-state.js';
 
@@ -187,12 +187,8 @@ export async function flushRingSnapshotOnShutdown(): Promise<void> {
  *  `persisted_at`, every value UNTRUSTED until `validateRingRows` has read it. */
 export type RingStoreRow = Record<string, unknown>;
 
-export interface ValidatedRing {
-  symbol: string; spreads: number[]; seedBasis: 'judged' | 'vacuous'; source: 'live' | 'retained';
-  writtenAtMs: number; persistedAtMs: number;
-}
 export interface ValidatedRings {
-  entries: ValidatedRing[];
+  entries: RestoredRingSnapshotEntry[];
   skippedInvalid: number;
   skipReasons: Record<string, number>;
   /** Over-long rings kept as their last `ringCap` values (not skipped). */

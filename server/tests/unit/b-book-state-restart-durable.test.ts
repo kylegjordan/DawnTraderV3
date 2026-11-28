@@ -223,7 +223,9 @@ describe('4 — restore: per-row validation, partial stores, the boot-only fence
   });
   it('⛔ FINDING-2: restore is BOOT-ONLY — it throws if any live chain exists, and loads nothing', () => {
     movingHealthyChain('LIV/USD');
-    expect(() => restoreRetainedRings([{ symbol: 'OTHER/USD', spreads: [0.9], seedBasis: 'judged', writtenAtMs: 1 }])).toThrow(/boot-only/);
+    expect(() => restoreRetainedRings([{
+      symbol: 'OTHER/USD', spreads: [0.9], seedBasis: 'judged', source: 'retained', writtenAtMs: 1, persistedAtMs: 2,
+    }])).toThrow(/boot-only/);
     expect(_peekRetainedRingForTest('OTHER/USD')).toBeNull();
   });
 });
@@ -231,7 +233,12 @@ describe('4 — restore: per-row validation, partial stores, the boot-only fence
 describe('5 — condition 5: a restored ring judges one seed and is gone', () => {
   it('an IMPLAUSIBLE seed leaves the restored ring in place; the next PLAUSIBLE seed consumes it', () => {
     const sym = 'CON/USD';
-    restoreRetainedRings([{ symbol: sym, spreads: new Array(20).fill(0.004), seedBasis: 'judged', writtenAtMs: 0 }]);
+    applyRestoredRings(validateRingRows([
+      { symbol: sym, spreads: new Array(20).fill(0.004), seed_basis: 'judged', source: 'live',
+        written_at: new Date(0), persisted_at: new Date(50_000) },
+      { symbol: 'UNUSED/USD', spreads: [0.004], seed_basis: 'vacuous', source: 'retained',
+        written_at: new Date(10_000), persisted_at: new Date(55_000) },
+    ], WINDOW), 56_000);
     advanceBookStateComparator(sym, { ...HOLLOW, atMs: 60_000 }, WINDOW, false, K_REL);
     expect(readBookStateComparator(sym)!.seedImplausible).toBe(true);
     expect(_peekRetainedRingForTest(sym)).not.toBeNull();
@@ -240,6 +247,7 @@ describe('5 — condition 5: a restored ring judges one seed and is gone', () =>
     expect(l1[0]).toContain('verdict=implausible');
     expect(l1[0]).toContain('ringDeleted=false');
     expect(l1[0]).toContain('ringAgeMs=60000');
+    expect(l1[0]).toContain('ringWrittenAtMs=0 ringPersistedAtMs=50000 ringPersistedSource=live seedFrameAtMs=60000');
     // the chain ends (a yield), and a healthy book reseeds against the SAME restored ring — and consumes it
     clearBookStateComparator(sym, 'yield');
     advanceBookStateComparator(sym, { bid: 100, ask: 100.4, last: 100.2, atMs: 120_000 }, WINDOW, false, K_REL);
@@ -249,6 +257,8 @@ describe('5 — condition 5: a restored ring judges one seed and is gone', () =>
     expect(l2).toHaveLength(2);
     expect(l2[1]).toContain('verdict=plausible');
     expect(l2[1]).toContain('ringDeleted=true');
+    expect(l2[1]).toContain('ringWrittenAtMs=0 ringPersistedAtMs=50000 ringPersistedSource=live seedFrameAtMs=120000');
+    expect(_peekRetainedRingForTest('UNUSED/USD')).toMatchObject({ restored: true, persistedAtMs: 55_000, persistedSource: 'retained' });
   });
   it('a ring written by a clear is NOT flagged restored and prints no RESTORED_RING_CONSUMED line', () => {
     const sym = 'CLR/USD';
@@ -270,7 +280,10 @@ describe('6 — THE §0 REPLAY: ANET 2026-09-19, the same seed judged vs unjudge
     expect(c.seedRetainedMedian).toBeNull();
   });
   it('WITH the restored ring (median 0.00415, the 00:16:29 clear): the same seed is REFUSED', () => {
-    restoreRetainedRings([{ symbol: 'ANET/USD', spreads: new Array(20).fill(0.00415), seedBasis: 'vacuous', writtenAtMs: 0 }]);
+    restoreRetainedRings([{
+      symbol: 'ANET/USD', spreads: new Array(20).fill(0.00415), seedBasis: 'vacuous', source: 'retained',
+      writtenAtMs: 0, persistedAtMs: 500_000,
+    }]);
     advanceBookStateComparator('ANET/USD', ANET, WINDOW, false, K_REL);
     const c = readBookStateComparator('ANET/USD')!;
     expect(c.seedImplausible).toBe(true);
