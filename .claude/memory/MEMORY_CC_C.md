@@ -56,7 +56,7 @@
 ▶ **WINGS/USD VTS, Nov 28.** Same crypto trade open. Prior cd4c5c43 writer-cleared 04:06:28.997Z. Recurrence 87fd9c1c delivered 04:43:13Z, active and unacknowledged at 05:06:51Z. VTS clears on a decision or close.
 ▶ **Nov 26–27 xStock:** 186e8711/e80d1129 wait. PDD b76962aa, PDD twin 41e29ee5 and GME twin 9ea6dcb2 resolved. #1144 owns 9798d24f. BCC info eeeca00f writer-cleared on escalation; four trade rows then cleared on decisions by 15:25Z.
 ▶ **KD-128 resumed · #1191 STEP: 3 of 11 P4 · NEXT STEP: 3 of 11.** UR-A-1128-0925 unused. Re-slot after INFRA P10/Birth Cap clearance and renewed Coltrane concurrence. Progress Report §3k.6 has fresh checks, OLD GO and readback gates. Replay closed, linked grade inconclusive, both misses and 5%/100 ms gates.
-▶ **Bid Trigger Reland inc (1) · STEP: 2 of 11 · NEXT STEP: 2 of 11.** Coltrane ruling pending on `d0917a8a5`, Discord `1576172351400190023`. Evidence and return in INCA Pre-Audit §D.
+▶ **Bid Trigger Reland inc (1) · STEP: 2 of 11 · NEXT STEP: 2 of 11.** Folded Coltrane 09:50:59Z changes on `d0917a8a5`. Exact CI and re-review return in INCA Pre-Audit §D.
 ▶ **#1154 Step 7 open.** Proof contract approved with riders `443eca9c8`. Capture implementation, staging and Stage 5 reset held.
 ▶ **ACK KD-122, Nov 26.** PM plan e65d5000e places B-XSTOCK-HOLIDAY-CALENDAR (#392) in Wave B2 row 166b1, after Weekend Posture. NEW owns implementation at that slot. ANALYST verifies VTS entries, exits, warning behavior and reopening with NEW, including applicable official closures and venue/symbol exceptions. Future planning only. Current #1191 and all observation dates keep their order.
 ▶ **Nov 26 cron:** 13a2720c resolved as pre-activation. Per-job follow-up unplaced. Cron Missed Catchup Completion Report §10.
