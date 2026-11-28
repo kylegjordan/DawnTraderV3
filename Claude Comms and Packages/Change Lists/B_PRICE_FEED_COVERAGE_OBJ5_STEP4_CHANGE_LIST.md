@@ -331,3 +331,36 @@ At the Nov 28 **02:00Z** and **05:50Z** paper reads, recheck the above exact row
 **Disposition.** The reconnect and paper-close checks remain unexercised. NEW and INFRA must identify an approved read-only capture of actual ownership and generation-specific request, pending and ACK state, then establish separate owner-approved slots. The paper close also needs an actual eligible filled position and current carrier/UI proof at the test. Keep the first genuine eligible xStock frame follow-up for the quiet-market cohort independent. Step 7 remains current and OBJ-4 follows its live evidence.
 
 `REVIEWER: claim-only · can the live served carriers settle both registered cases? · HIT: the known subscription names and ticker receipt are positive controls; owner reasons, generation-specific state and a qualifying close are required separately · re-derived y at exact R3, bracketed read-only observations and the existing overlap control. Capture 16,055 bytes, SHA-256 6b618a54e73f9c63f23ee423727729a141ac738cd33297e313ef2037233b3b19.`
+
+#### Nov 28 09:05 UTC owner preflight for UR-A-1128-0925
+
+**Serving target and fences.** R3 `8f97c294ed705fab920245762183632eec7bad71` matched the clean checkout, build and completed deploy record at `09:05:13.873Z` and `09:05:15.650Z`. Both reads returned online PID `1778615`, restart `717`, boot `02:35:24.315Z` and zero unstable restarts. Literal Phase A `5ecd7ee24fb7a741e8e015e0e6a262a464e7d016` and r4 storage procedure `512cda268bbfe47e9dbb6c7ee9633945582843a7` each passed all four exact CI jobs (`45589022150` and `46122466073`). Shared `a6d32759535fbebd0d13b0ef34f83b10a95a6c74`, deployment-window blob `f78f08ef60b13e9102dab9ac9fe2f47eb68938a6`, keeps the RTB #1136 window open and the KD-87 anchor pending. The slot must name that window.
+
+**Exact paper evidence.** The `09:05:15.020341Z` read returned the same 16 unique xStock paper position IDs, symbols and open states as the `05:50:11.627744Z` read. Four crypto positions controlled class selection. The bounded paper xStock close check since 05:50 found zero closures. The same table returned the known earlier PL/USD close `f95b1342-750d-43da-92a5-8811bbb80faa`. Changing one known position from open to pending made exactly one of the 16 keys fail to match. The preserved JSON capture is 11,361 bytes, SHA-256 `f1b1d53cd0c099de26c50c51af021907132573a3eeb1e9dc0fa4dd2aa7b05d49`.
+
+| xStock paper symbol | Position ID at both reads |
+| --- | --- |
+| ACN/USD | `d5183e91-6541-48f9-abeb-7db870fb0ca5` |
+| BAX/USD | `50b0f8be-c5b0-45c0-acc5-3900367092ee` |
+| CME/USD | `a09e0fc4-66b5-4ab3-abc2-e7c403c7e725` |
+| DUK/USD | `1cbcc5f7-7114-48a9-bf3c-c675221db525` |
+| EWL/USD | `0ffec77f-065d-48ca-8414-03b4e532ed20` |
+| HPQ/USD | `63e1da6b-b56b-4407-8dfe-db93ae405dad` |
+| NKE/USD | `2f674348-58a1-424b-90d2-a580548233fa` |
+| NVO/USD | `f0ed25da-6ea2-4d4f-806e-f4a25356f6c9` |
+| PCG/USD | `6ec5d5d2-e159-4f61-be0e-e30fa2410a01` |
+| PPL/USD | `a22fec59-2d46-4d6d-a890-2b20f2d60eee` |
+| SLB/USD | `8cc6fde7-3040-4c1b-a5c1-6437c22e70a1` |
+| TGT/USD | `1e97abe5-f5e1-408f-87b1-010a18fd33c2` |
+| TJX/USD | `620cd7cc-203a-4ea6-b206-278e6bc5bdbf` |
+| WDC/USD | `13260ed2-7e9d-4eb1-9f8d-f9734c297842` |
+| XBI/USD | `6e2982b0-9c33-454e-a7e1-1167c29b18f6` |
+| XLE/USD | `f3bb5fae-db6a-44fd-81e3-6bef9b8dd1f4` |
+
+**Disposition.** NEW cleared its own protected windows for the exact slot and target in Discord `1576162454579449891`. INFRA's scope HOLD `1576162067306651791` still applied at that read. The direct paper exit and RTB paths match at the two targets. The crypto close witness reads recorder membership and connection state, which can change with a boot even when its code matches. After any authorized return, reconcile the same exact xStock IDs and states on the new process. The PFC controlled crypto reconnect, eligible paper-close check and xStock genuine-frame return retain their separate triggers.
+
+**Slot closed unused at 09:16 UTC.** INFRA's final hold `1576164533381111879` cited the live natural P10 lock with its window still outstanding, and Birth Cap admitting 275 births during the OFF interval, 256 after the first 60 seconds. OLD independently checked the same R3 build, PID and restart at `09:15:53Z` and cancelled the `09:25–09:50Z` slot in `1576164766416773264`. Keep the 09:05 snapshot as preflight evidence. A later Phase A return requires a new reviewed slot and fresh position reconciliation.
+
+`REVIEWER: claim-only · does the tree delta establish execution or live state invariance? · HIT: the unchanged crypto close branch reads recorder membership and health from the changed recorder component · re-derived y at active-execution-engine.ts:4715–4724 and exact R3 recorder diff.`
+
+`REVIEWER: 05:50 and 09:05 saved captures · do the unique IDs, symbols and states match under an open-state mutation? · exact set equality and one-state mismatch control · re-derived y against the raw row objects and the 09:05 process brackets.`
