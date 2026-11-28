@@ -85,7 +85,8 @@ function gradeFreshness(row, read) {
 function gradeOrbClock(row, read) {
   if (!Number.isSafeInteger(row.detectorAt) || row.detectorAt !== read.detectorAt ||
       row.detectorAt !== read.at || row.clock !== 'fixture-epoch-ms' ||
-      !sameList(row.rangeBars, read.rangeBars) || !row.rangeBars.every(Number.isSafeInteger) ||
+      !Array.isArray(read.rangeBars) || !sameList(row.rangeBars, read.rangeBars) ||
+      !row.rangeBars.every(Number.isSafeInteger) ||
       ![read.formationMinutes, read.activeHours].every(value => Number.isFinite(value) && value > 0)) {
     return unassessable('ORB clock or opening-range identity');
   }
@@ -93,6 +94,7 @@ function gradeOrbClock(row, read) {
   const open = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 14, 30);
   const formationEnd = open + read.formationMinutes * 60_000;
   const breakoutEnd = formationEnd + read.activeHours * 3_600_000;
+  if (!Number.isFinite(breakoutEnd)) return unassessable('ORB clock or opening-range identity');
   let outcome = 'range present';
   if (row.detectorAt < formationEnd || row.detectorAt >= breakoutEnd) {
     outcome = 'outside breakout window';
@@ -174,12 +176,20 @@ function gradeReceipt(kind, row, read) {
 
 function reconcile({ roster, registrations, reads, receipts }) {
   const rosterById = groupBy(roster, row => row.opportunity);
-  const rosterByCycle = groupBy(roster, cycleKey);
+  const frozenRoster = [...rosterById.values()].map(([first]) => first);
+  const rosterByCycle = groupBy(frozenRoster, cycleKey);
   const registered = groupBy(registrations, cycleKey);
   const readsByArm = groupBy(reads, armKey);
   const receiptsByKind = groupBy(receipts, receiptKey);
   const issues = [];
-  for (const cycle of new Set([...registered.keys(), ...rosterByCycle.keys()])) {
+  for (const [opportunity, members] of rosterById) {
+    if (members.length < 2) continue;
+    // Keep one denominator entry at its first frozen position and reject ambiguous joins.
+    for (const cycle of new Set(members.map(cycleKey))) {
+      issues.push({ reason: 'duplicate frozen opportunity', cycle, opportunity });
+    }
+  }
+  for (const cycle of new Set([...registered.keys(), ...roster.map(cycleKey)])) {
     const registration = registered.get(cycle) ?? [];
     const offered = rosterByCycle.get(cycle)?.length ?? 0;
     if (registration.length !== 1 || registration[0].offered !== offered) {
@@ -192,7 +202,7 @@ function reconcile({ roster, registrations, reads, receipts }) {
       issues.push({ reason: 'unattached evidence', row });
     }
   }
-  const rows = roster.map(offered => {
+  const rows = frozenRoster.map(offered => {
     const sharedReads = { bars: offered.barsRead, orbClock: offered.orbRead, dedupe: offered.dedupeRead };
     const byArm = Object.fromEntries(arms.map(arm => {
       const identity = { opportunity: offered.opportunity, arm };
@@ -224,26 +234,33 @@ function reconcile({ roster, registrations, reads, receipts }) {
           ? gradeReceipt(kind, matches[0], read)
           : unassessable('receipt belongs to another scope');
       }
+      const stoppedAtOrb = stages.orbClock?.grade === 'proved' && stages.orbClock.outcome !== 'range present';
       const stoppedAtDedupe = stages.dedupe.outcome === 'same setup';
       const stoppedAtBooking = stages.booking.outcome === 'no-ask';
       const stoppedAtDispatch = ['stale', 'cold'].includes(stages.freshness.outcome);
-      if (stoppedAtDedupe || stoppedAtBooking || stoppedAtDispatch) {
-        // A later observation can be independent of a call blocked at booking.
-        const reason = stoppedAtDedupe ? 'proved setup suppression' :
-          stoppedAtBooking ? 'proved early booking refusal' : 'proved dispatch freshness refusal';
-        const downstream = ['handoff', 'entryGate', 'fill'];
-        if (stoppedAtDedupe || stoppedAtBooking) downstream.unshift('registration');
-        if (stoppedAtDedupe) downstream.unshift('booking');
+      if (stoppedAtOrb || stoppedAtDedupe || stoppedAtBooking || stoppedAtDispatch) {
+        let reason;
+        let downstream;
+        if (stoppedAtOrb) {
+          reason = 'proved ORB detector refusal';
+          downstream = receiptKinds.slice(receiptKinds.indexOf('orbClock') + 1).filter(kind => Object.hasOwn(stages, kind));
+        } else {
+          // A later observation can be independent of a call blocked at booking.
+          reason = stoppedAtDedupe ? 'proved setup suppression' :
+            stoppedAtBooking ? 'proved early booking refusal' : 'proved dispatch freshness refusal';
+          downstream = ['handoff', 'entryGate', 'fill'];
+          if (stoppedAtDedupe || stoppedAtBooking) downstream.unshift('registration');
+          if (stoppedAtDedupe) downstream.unshift('booking');
+        }
         for (const kind of downstream) {
           const matches = receiptsByKind.get(receiptKey({ ...identity, kind })) ?? [];
           const read = orderedReads.get(kind);
           const conflicts = matches.filter(row => read && sameList(row.scope, scope) &&
             gradeReceipt(kind, row, read).grade === 'proved');
+          const contradiction = `receipt contradicts ${reason}`;
+          stages[kind] = conflicts.length > 0 && !stoppedAtOrb ? unassessable(contradiction) : unreached(reason);
           if (conflicts.length > 0) {
-            stages[kind] = unassessable(`receipt contradicts ${reason}`);
-            issues.push({ ...identity, kind, reason: `receipt contradicts ${reason}`, count: conflicts.length });
-          } else {
-            stages[kind] = unreached(reason);
+            issues.push({ ...identity, kind, reason: contradiction, count: conflicts.length });
           }
           if (matches.length > conflicts.length) {
             issues.push({ ...identity, kind, reason: 'unlinked or invalid receipt after proved refusal',
@@ -253,7 +270,9 @@ function reconcile({ roster, registrations, reads, receipts }) {
       }
       return [arm, stages];
     }));
-    const pairedInputs = byArm.comparator.bars.grade === 'proved' &&
+    const sharedOrbRange = offered.strategy !== 'orb' || arms.every(arm =>
+      byArm[arm].orbClock.grade === 'proved' && byArm[arm].orbClock.outcome === 'range present');
+    const pairedInputs = sharedOrbRange && byArm.comparator.bars.grade === 'proved' &&
       byArm.candidate.bars.grade === 'proved' && byArm.candidate.planAsk.grade === 'proved';
     return { ...offered, byArm, pairedInputs };
   });
@@ -425,8 +444,9 @@ function check(name, mutate, verify) {
   const fixture = makeFixture();
   mutate(fixture);
   const result = reconcile(fixture);
-  assert.equal(result.rows.length, fixture.roster.length, name);
-  assert.equal(result.counts.reduce((sum, count) => sum + count.offered, 0), fixture.roster.length, name);
+  const offeredIds = new Set(fixture.roster.map(row => row.opportunity));
+  assert.deepEqual(result.rows.map(row => row.opportunity), [...offeredIds], name);
+  assert.equal(result.counts.reduce((sum, count) => sum + count.offered, 0), offeredIds.size, name);
   for (const { offered, arms: stageTotals } of result.counts) {
     for (const stages of Object.values(stageTotals)) {
       for (const grades of Object.values(stages)) {
@@ -543,12 +563,38 @@ check('same trade stages with duplicate bar evidence', fixture => {
   assert.equal(candidate.bars.reason, 'ambiguous evidence');
 });
 
-check('duplicate roster identity remains in denominator', fixture => {
+check('duplicate frozen identity counts once and cannot inflate a registered cycle', fixture => {
   fixture.roster.push(structuredClone(fixture.roster[0]));
   fixture.registrations[0].offered = 2;
 }, result => {
-  assert.equal(result.counts[0].offered, 2);
-  assert.ok(result.rows.every(row => !row.pairedInputs));
+  assert.equal(result.rows.length, 1);
+  assert.equal(result.counts[0].offered, 1);
+  assert.equal(result.counts[0].arms.candidate.bars.unassessable, 1);
+  assert.equal(result.rows[0].pairedInputs, false);
+  assert.deepEqual(result.issues.map(issue => issue.reason), ['duplicate frozen opportunity', 'cycle denominator']);
+  assert.equal(result.issues[0].opportunity, result.rows[0].opportunity);
+  assert.equal(result.issues[0].cycle, cycleKey(result.rows[0]));
+});
+
+check('matching registered count still flags the duplicate frozen identity', fixture => {
+  fixture.roster.push(structuredClone(fixture.roster[0]));
+}, result => {
+  assert.equal(result.counts[0].offered, 1);
+  assert.deepEqual(result.issues.map(issue => issue.reason), ['duplicate frozen opportunity']);
+});
+
+check('one frozen identity shared by two cycles flags both even when their totals match', fixture => {
+  const duplicate = { ...fixture.roster[0], cycle: 'cycle-2', symbol: 'OTHER/USD', lane: 'maker' };
+  fixture.roster.push(duplicate);
+  fixture.registrations.push({ ...fixture.registrations[0], cycle: duplicate.cycle, offered: 0 });
+}, result => {
+  assert.equal(result.rows.length, 1);
+  assert.equal(result.counts[0].offered, 1);
+  assert.equal(result.rows[0].pairedInputs, false);
+  assert.deepEqual(result.issues.map(issue => [issue.reason, issue.cycle]), [
+    ['duplicate frozen opportunity', cycleKey(result.rows[0])],
+    ['duplicate frozen opportunity', cycleKey({ ...result.rows[0], cycle: 'cycle-2' })],
+  ]);
 });
 
 check('registered cycle without offered rows', fixture => {
@@ -799,24 +845,87 @@ check('both ORB arms use the same detector clock and same-day range', fixture =>
 }, (result, candidate, comparator) => {
   assert.equal(candidate.orbClock.outcome, 'range present');
   assert.equal(comparator.orbClock.outcome, 'range present');
+  assert.equal(candidate.booking.outcome, 'passed');
   assert.equal(candidate.freshness.outcome, 'pass');
   assert.equal(result.rows[0].pairedInputs, true);
+  assert.deepEqual(result.issues, []);
 });
 
 check('ORB clock on the following day with previous-day bars', fixture => {
   withOrbClock(fixture, '2026-05-12T15:30Z', 'no opening range for detector date');
-}, (_result, candidate) => assert.equal(candidate.orbClock.outcome, 'no opening range for detector date'));
+  fixture.receipts = fixture.receipts.filter(row => row.kind === 'bars' || row.kind === 'orbClock');
+}, (result, candidate, comparator) => {
+  assert.equal(candidate.orbClock.outcome, 'no opening range for detector date');
+  assert.equal(comparator.orbClock.outcome, 'no opening range for detector date');
+  assert.equal(result.rows[0].pairedInputs, false);
+  for (const stages of [candidate, comparator]) {
+    assert.equal(stages.bars.grade, 'proved');
+    for (const [kind, stage] of Object.entries(stages)) {
+      if (kind !== 'bars' && kind !== 'orbClock') assert.deepEqual(stage, unreached('proved ORB detector refusal'));
+    }
+  }
+  assert.deepEqual(result.issues, []);
+});
 
 check('ORB clock on the exclusive breakout boundary', fixture => {
   withOrbClock(fixture, '2026-05-11T17:00Z', 'outside breakout window');
-}, (_result, candidate) => assert.equal(candidate.orbClock.outcome, 'outside breakout window'));
+  fixture.receipts.push({ ...candidateReceipt(fixture, 'handoff'), id: 'unrelated-handoff' });
+}, (result, candidate, comparator) => {
+  assert.equal(candidate.orbClock.outcome, 'outside breakout window');
+  assert.equal(comparator.orbClock.outcome, 'outside breakout window');
+  assert.equal(result.rows[0].pairedInputs, false);
+  assert.equal(candidate.booking.grade, 'unreached');
+  assert.equal(comparator.booking.grade, 'unreached');
+  const bookingConflicts = result.issues.filter(issue => issue.kind === 'booking');
+  assert.deepEqual(bookingConflicts.map(issue => [issue.arm, issue.reason]), [
+    ['comparator', 'receipt contradicts proved ORB detector refusal'],
+    ['candidate', 'receipt contradicts proved ORB detector refusal'],
+  ]);
+  const handoffIssues = result.issues.filter(issue => issue.kind === 'handoff');
+  assert.deepEqual(handoffIssues.map(issue => [issue.arm, issue.reason, issue.count]), [
+    ['comparator', 'receipt contradicts proved ORB detector refusal', 1],
+    ['candidate', 'receipt contradicts proved ORB detector refusal', 1],
+    ['candidate', 'unlinked or invalid receipt after proved refusal', 1],
+  ]);
+});
 
 check('one ORB arm changes the pinned detector clock', fixture => {
   withOrbClock(fixture, '2026-05-11T15:30Z', 'range present');
   candidateReceipt(fixture, 'orbClock').detectorAt += 1;
-}, (_result, candidate, comparator) => {
+}, (result, candidate, comparator) => {
   assert.equal(candidate.orbClock.grade, 'unassessable');
   assert.equal(comparator.orbClock.outcome, 'range present');
+  assert.equal(candidate.booking.outcome, 'passed');
+  assert.equal(result.rows[0].pairedInputs, false);
+});
+
+check('one ORB arm changes the opening range at the same detector clock', fixture => {
+  withOrbClock(fixture, '2026-05-11T15:30Z', 'range present');
+  candidateReceipt(fixture, 'orbClock').rangeBars[0] += 1;
+}, (result, candidate, comparator) => {
+  assert.equal(candidate.orbClock.reason, 'ORB clock or opening-range identity');
+  assert.equal(comparator.orbClock.outcome, 'range present');
+  assert.equal(result.rows[0].pairedInputs, false);
+});
+
+check('missing shared ORB range is unassessable in both arms', fixture => {
+  withOrbClock(fixture, '2026-05-11T15:30Z', 'range present');
+  delete fixture.roster[0].orbRead.rangeBars;
+}, (result, candidate, comparator) => {
+  assert.equal(candidate.orbClock.reason, 'ORB clock or opening-range identity');
+  assert.equal(comparator.orbClock.reason, 'ORB clock or opening-range identity');
+  assert.equal(result.rows[0].pairedInputs, false);
+});
+
+check('missing ORB clock receipt does not borrow the other arm’s refusal', fixture => {
+  withOrbClock(fixture, '2026-05-11T17:00Z', 'outside breakout window');
+  removeCandidate(fixture, 'orbClock');
+}, (result, candidate, comparator) => {
+  assert.equal(candidate.orbClock.reason, 'missing evidence');
+  assert.equal(candidate.booking.outcome, 'passed');
+  assert.equal(comparator.orbClock.outcome, 'outside breakout window');
+  assert.equal(comparator.booking.grade, 'unreached');
+  assert.equal(result.rows[0].pairedInputs, false);
 });
 
 console.log(`${passed} integrated fixture cases passed`);
