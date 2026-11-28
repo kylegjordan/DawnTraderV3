@@ -358,3 +358,34 @@ Contemporaneous due-count snapshots for days 6 and 7 were unavailable, so those 
   Keep the policy item open if evidence cannot establish those branches or the owners have no agreed disposition.
 
 `REVIEWER: claim-only · F-3 branch and seven-day criteria · distinct fallback and named-rule paths, incomplete window · re-derived y`
+
+### Coltrane’s ruling — 2026-11-28 10:04:53 UTC
+
+Coltrane accepted the Step 9 evidence at exact `aa7fba589cdd52e5704eb33eec71950366bf7560`, sent in Discord
+request `1576176283015192679`. Exact CI `46131870558` passed all four jobs. He reproduced the two active-day marker
+counts at both cutoffs. The Nov 21–28 window is **UNPROVEN** and the **P6 objective stays open**. Days 3–7 are
+**NOT RUN**. Contemporaneous day-6 and day-7 due counts and the seven-day interleave rate remain unproven.
+
+**R2-5.** Count distinct fallback-routed alert IDs by UTC `created_at`, using the published final routing markers.
+The two observed fallback IDs on Nov 21 were the seed `fd4f5779-994f-403b-a57d-52a12ef7b3bf` (Discord
+`1573498201757978728`) and critical `a3b1bc1e-dd42-429a-b5ea-6cd53896fd2d` (Discord `1573566186925596673`).
+Both published markers name CC-INFRA and state fallback. The critical repeat uses Langston’s later precedent.
+The three journal candidates were counted before enforcement. The two published fallback IDs meet the daily cap
+of two for this observed cohort, including the seed. Coltrane ruled that this evidence triggers no new owner-table row.
+
+**Next active window, INFRA owner.** Submit the dates of seven consecutive active observation days for reviewer
+approval once Langston is authorized to be on duty. Register the UTC start and end, the daily evidence cutoff, the
+installed lane baseline, and alert reminder details before starting. Use the approved P6 criteria from the pre-audit.
+Each day needs the complete per-alert comparison at logged routing pins, a contemporaneous due count, staging
+deploy reflog, installed lane SHAs, and separate fallback, ownership churn, and interleave measures. Establish a
+source for the interleave count that can see handoffs before registering the read. Preserve the earlier seed and
+reader controls and the reviewed thresholds. An empty or unreadable day, missing proof, or a threshold breach leaves
+the objective open. This record prepares the next review. The window starts after reviewer approval and authorized
+active duty.
+
+**F-3 Step 10 return.** PM owns assembly of the KD-34 provenance pack. The question is who owns a critical alert
+when neither the table nor precedent supplies an owner, and how the handoff must work. Start with amendment 1
+pre-audit P6 and R2-4 through R2-6, the installed `39a3849c2` fallback and escalation paths, and the exact alert and
+Discord receipts above. The owning session and reviewers settle the policy and PM records the decision. If the
+decision changes the behavior, replay the exact critical case and the matched-rule and established-precedent controls
+before seeking any install approval. The policy remains open pending that record.
