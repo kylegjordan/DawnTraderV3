@@ -924,6 +924,65 @@ OLD Claude's off-schedule cold audit (B-DISK-FILE-TIERING 3d, 12:5xZ) raised `3e
 - **#1257 retry census materially changed.** The registered tool at 00:29:21Z measured **1,339,656 checked mints, 297,132 stranded (22,179.724 per 100,000), 304,213 attempts-map entries, and 1,478 with checks after a final state**. A second read at 00:32:04Z, after the in-flight sweep saved its cursor, measured **1,339,766 checked, 299,204 stranded (22,332.557 per 100,000), 307,112 attempts-map entries, and 1,478 post-final**. The baseline was 630,552 checked, 16 stranded (2.537 per 100,000), and 182 post-final. These are the tool's cumulative checked populations. The stranding criterion requires a birth row wholly behind the saved cursor, an attempts entry and a latest `deferred` check. This reopens the ordering under the pre-switch-on ruling. KD-81 remains the recorded placement pending a new decision.
 - **Reminder `88fc097f-b903-4a3e-9720-7f9c353dadbd` remains open.** The installed `derive_obs_window.py` matches the reviewed file (`a6b7da9743b590ff1881cf7ca4662d8d7151faf814e1c4dc3353ca0f45af9d93`). It requires the shared periodic lock even on its dry path. The sweeps were running back-to-back and `state/obs_window.json` was absent at this read. Keep the follow-up and deploy-window protection active. Resume the existing derive/apply and reminder disposition at a safe lock opportunity, with the #1257 ordering and the summary warning still tracked.
 
+## Step 9 — Nov 28 storage-warning delivery failure and one-window substitute for review
+
+**Status:** Evidence recorded. INFRA's scoped hold stands. The following is a proposal for one future named literal Phase A return slot, subject to Coltrane's ruling and the existing owner clearances. OLD canceled the 06:10–06:35 UTC slot unused in Discord `1576119114940813323`; the readback in `1576119195165397164` kept exact R3 `8f97c294ed705fab920245762183632eec7bad71`, PID 1778615, restart 717.
+
+### Provenance and limits
+
+- At 06:00:03.679 UTC, the scheduled storage watch hit its own 134,217,728-byte `MemoryMax` (kernel record: usage 131,072 KiB, limit 131,072 KiB). The kernel killed Node child 1892961 in the storage unit's cgroup. Its recorded anonymous/file RSS was 89,892/44,032 KiB. An independent 06:00:05 UTC read counted 6,684,330,684 file bytes, above 6 GiB and below 8 GiB. Five preceding daily runs (Nov 23–27) succeeded below the warning line, without exercising warning minting. At 06:00:09.399 UTC the backup failure notifier exited nonzero after the ledger's 50 × 100 ms wait. The 06:01 ledger read had prior storage-warning and summary-failure controls and no new storage warning or failure row. At 06:13:15.266 UTC the natural feed watch completed successfully and recorded 6,694,416,454 bytes, in the warning band.
+- Effective units have no drop-ins and match `372bee3ed` for both unit files and the failure notifier source. Installed store watch/alert helper SHA-256 digests match the repository blobs at `f148e4536`. The notifier and the primary call the same `npm run system-alerts` writer. The installed app checkout, package and both alert sources match R3 byte for byte. The same three writer files are byte-identical at literal Phase A `5ecd7ee24fb7a741e8e015e0e6a262a464e7d016`; the `cdf3356af` ledger change is outside both serving histories. The lock holder at 06:00 is unverified. The dispatcher ran at 05:58:15 UTC and recorded no run during the five-second wait; its logs do not exclude another writer. Avoid hand removal of any ledger lock or attribution to the killed child from timing alone.
+- INFRA sent these boundaries and the proposed substitute to OLD/PM in Discord `1576124849951350885`. P16 in the Follow-up Memory pre-audit already carries the independent backup alert design. Prove the primary at its actual warning entry point under representative host load before declaring recovery. The primary memory budget and the P16 backup path each need their own reviewed change and outcome proof. This record authorizes neither change.
+
+### Proposed manual check for one authorized return window
+
+1. INFRA covers the full named window through the required post-return readback. Before OLD can issue GO, take a fresh sample within five minutes of the decision and post the UTC interval, file count, file bytes, band, walk status and current free space to OLD and PM over the established direct notification route. Verify the receipt and mention the existing failed warning path. The sample uses the same regular-file byte population as the storage warning, with the stricter behavior below. The natural feed journal is corroboration at its own timestamp.
+2. Refresh the same sample at least every five minutes while the window is active, and at the required readback. At 6 GiB or higher, explicitly relay the warning band and the direction from the prior sample. The 8 GiB cap still binds. An absent/incomplete read, missed receipt, unavailable INFRA observer or measurement at or above 8 GiB requires HOLD before GO. If any occurs after GO, immediately invoke OLD's separately approved stop or recovery decision path. A direct delivery failure itself fails clearance. Preserve all existing named observations, app authorization and owner preflights.
+3. End the substitution on OLD's verified return or cancellation of the one named slot. Keep the automated services/timers, study records and alert ledger intact. This is scoped manual coverage for that slot only. A later slot needs a fresh approved disposition, and automated recovery requires real delivery evidence.
+
+**Exact measurement for review:** Run as root with `python3 -B - /var/lib/token-watch`, passing the following body on stdin. It emits aggregate metadata only. Nonzero exit, incomplete output or an unexpected entry type is a failed sample. This is a timed walk of live file metadata, so concurrent growth can move bytes between reads. It creates no filesystem snapshot.
+
+```python
+import json
+import os
+import stat
+import sys
+from datetime import datetime, timezone
+
+root = sys.argv[1]
+files = total = errors = special = 0
+
+def count_error(_):
+    global errors
+    errors += 1
+
+started = datetime.now(timezone.utc)
+for directory, dirs, names in os.walk(root, onerror=count_error, followlinks=False):
+    for entries, expect_directory in ((dirs, True), (names, False)):
+        for name in entries:
+            try:
+                item = os.stat(os.path.join(directory, name), follow_symlinks=False)
+            except OSError as error:
+                count_error(error)
+                continue
+            if expect_directory and stat.S_ISDIR(item.st_mode):
+                continue
+            if not expect_directory and stat.S_ISREG(item.st_mode):
+                files += 1
+                total += item.st_size
+            else:
+                special += 1
+
+complete = files > 0 and errors == 0 and special == 0
+print(json.dumps({"started": started.isoformat(timespec="milliseconds"),
+                  "finished": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
+                  "files": files, "file_bytes": total,
+                  "errors": errors, "special": special, "complete": complete}))
+sys.exit(0 if complete else 2)
+```
+
+**Discriminating controls on staging:** At 06:38:30.643–.653 UTC, the exact walk read 2,170 regular files, 6,712,291,072 bytes, no traversal/stat errors or unexpected entries, exit 0. A deliberately absent path produced one traversal error and exit 2 at 06:38:30.660 UTC. The 06:13 natural reading above is a distinct successful control. Neither control asserts that the alert path delivered. Under this proposal the next fresh warning-band sample must reach both owners before clearance.
+
 ## P10 observation-window follow-through — 2026-11-28 UTC
 
 - **Exact alert `d99daefe-0b4d-45f8-b9cf-4ac4361c78e5`**, owner Infra, reports the registered P10 window stale after November 27 06:00Z. The current event remains incomplete. At 05:38:41Z staging still had follow-up PID 1814437 holding the periodic lock since 03:34:54Z. The lock had a 05:38:00Z heartbeat and the holder was live. The P10 safe-lock read and reminder `88fc097f` stay due.
