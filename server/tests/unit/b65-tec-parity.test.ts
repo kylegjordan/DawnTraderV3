@@ -155,11 +155,6 @@ const context = {
 };
 
 it('#1199 keeps trailing state independent when movement withholds a no-close evaluation', async () => {
-  // Exercise the real state machine with offline break-even enabled.
-  clearModuleConstantsCache();
-  seedAllConstants(true);
-  _testClearEngineConfigCache();
-  await primeTECConfig();
   const symbol = 'MDB/USD';
   const initialStop = 95;
   const start = Date.parse('2026-10-14T15:00:00Z');
@@ -168,12 +163,14 @@ it('#1199 keeps trailing state independent when movement withholds a no-close ev
     clearSymbolState(symbol);
     let stopPrice = initialStop;
     async function evaluate(bid: number, elapsedMs: number) {
+      const currentTs = start + elapsedMs;
+      vi.setSystemTime(currentTs);
       const decision = await evaluateTECExit({
         tradeId, symbol, entryPrice: 100, stopPrice, targetPrice: 110,
         currentPrice: bid + 0.05, triggerPrice: bid, atr: 1,
         holdDurationMs: 60_000 + elapsedMs, maxHoldMs: Infinity,
         context: { ...context, assetClass: 'xstock_spot' }, useTrailing: true,
-        callerMode: 'paper', sentinelLane: 'paper', currentTs: start + elapsedMs,
+        callerMode: 'paper', sentinelLane: 'paper', currentTs,
       });
       stopPrice = decision.newStopPrice ?? stopPrice;
       return decision;
@@ -198,16 +195,28 @@ it('#1199 keeps trailing state independent when movement withholds a no-close ev
     }
   }
 
-  const baseline = await replay('recovery-existing', true);
-  const candidate = await replay('recovery-movement', false);
-  expect(baseline.firstRecovery).toMatchObject({ shouldExit: false, exitReason: null, newStopPrice: 100 });
-  expect(baseline.recoveryState).toEqual({ stop: 100, highWater: 101.2, locked: true });
-  expect(candidate.firstRecovery).toBeNull();
-  expect(candidate.recoveryState).toEqual({ stop: initialStop, highWater: 100, locked: false });
-  expect(baseline.bidToStop).toBeCloseTo(-0.1);
-  expect(candidate.bidToStop).toBeCloseTo(4.9);
-  expect(baseline.reversal).toMatchObject({ shouldExit: true, exitReason: 'break_even_stop' });
-  expect(candidate.reversal).toMatchObject({ shouldExit: false, exitReason: null });
+  // The xStock venue gate reads Date, so give it the same session as the replay.
+  vi.useFakeTimers({ toFake: ['Date'] });
+  try {
+    vi.setSystemTime(start);
+    // Exercise the real state machine with offline break-even enabled.
+    clearModuleConstantsCache();
+    seedAllConstants(true);
+    _testClearEngineConfigCache();
+    await primeTECConfig();
+    const baseline = await replay('recovery-existing', true);
+    const candidate = await replay('recovery-movement', false);
+    expect(baseline.firstRecovery).toMatchObject({ shouldExit: false, exitReason: null, newStopPrice: 100 });
+    expect(baseline.recoveryState).toEqual({ stop: 100, highWater: 101.2, locked: true });
+    expect(candidate.firstRecovery).toBeNull();
+    expect(candidate.recoveryState).toEqual({ stop: initialStop, highWater: 100, locked: false });
+    expect(baseline.bidToStop).toBeCloseTo(-0.1);
+    expect(candidate.bidToStop).toBeCloseTo(4.9);
+    expect(baseline.reversal).toMatchObject({ shouldExit: true, exitReason: 'break_even_stop' });
+    expect(candidate.reversal).toMatchObject({ shouldExit: false, exitReason: null });
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 describe('B65.2 — evaluateTECExit end-to-end', () => {
