@@ -943,7 +943,7 @@ OLD Claude's off-schedule cold audit (B-DISK-FILE-TIERING 3d, 12:5xZ) raised `3e
 3. INFRA Codex takes the same sample and posts the same evidence for each five-minute deadline and for the required readback. Both recipients reply visibly by each deadline. PM Codex watches the deadlines independently of INFRA's posts. From **6,442,450,944 bytes** up to the cap, call out WARN and the byte delta from the previous sample. At **8,589,934,592 bytes** and above the threshold result is HOLD. A missing, late, incomplete or failed read, absent or late receipt, unavailable observer or delivery route, timeout or cap breach is HOLD before GO. After GO it requires immediate escalation to OLD for his approved stop or recovery decision. The independent watcher escalates if INFRA cannot report.
 4. End on OLD's verified readback or cancellation of the named slot. If the cutoff arrives without either, escalate to OLD immediately and end the substitute's authority at that cutoff. A later slot needs a fresh ruling and clearances. Preserve the existing observations, automated services and timers, study records and alert ledger. Automated recovery requires real delivery evidence.
 
-**Exact measurement for review:** Run as root with `timeout --kill-after=2s 12s python3 -B -`, passing the following body on stdin. The exact staging host, mount and directory inode were read from the live staging access path at 07:00:37 UTC. The walk checks host, mount, canonical path and inode before counting file metadata. An unreadable source, changed identity or nested different filesystem fails. Any nonzero exit, timeout, incomplete output or missing receipt makes the sample unusable. This is a timed live walk, so concurrent growth can move bytes between reads.
+**Exact measurement for review:** Run as root with `timeout --kill-after=2s 12s python3 -B -`, passing the following body on stdin. The exact staging host, mount and directory inode were read from the live staging access path at 07:00:37 UTC. The walk checks host, mount, canonical path and root inode, and requires each enumerated directory to be visited with the same device and inode recorded in its parent. An unreadable source, changed identity, unvisited directory or nested different filesystem fails. Any nonzero exit, timeout, incomplete output or missing receipt makes the sample unusable. This is a timed live walk, so concurrent growth can move bytes between reads.
 
 ```python
 import json
@@ -976,14 +976,16 @@ def measure(root, expected_root, expected_id):
     if not stat.S_ISDIR(before.st_mode) or (before.st_dev, before.st_ino) != expected_id:
         raise ValueError("root or filesystem identity changed")
     files = total = errors = unexpected = 0
+    pending_directories = {root: expected_id}
 
     def count_error(_):
         nonlocal errors
         errors += 1
 
     for directory, dirs, names, dfd in os.fwalk(root, onerror=count_error, follow_symlinks=False):
-        if os.fstat(dfd).st_dev != before.st_dev:
-            raise ValueError("walk reached a different filesystem")
+        visited = os.fstat(dfd)
+        if pending_directories.pop(directory, None) != (visited.st_dev, visited.st_ino):
+            raise ValueError("directory identity changed during walk")
         for entries, expect_directory in ((dirs, True), (names, False)):
             for name in entries:
                 try:
@@ -994,6 +996,7 @@ def measure(root, expected_root, expected_id):
                 if item.st_dev != before.st_dev:
                     raise ValueError("walk reached a different filesystem")
                 if expect_directory and stat.S_ISDIR(item.st_mode):
+                    pending_directories[os.path.join(directory, name)] = (item.st_dev, item.st_ino)
                     continue
                 if not expect_directory and stat.S_ISREG(item.st_mode):
                     files += 1
@@ -1003,9 +1006,9 @@ def measure(root, expected_root, expected_id):
     after = os.stat(root, follow_symlinks=False)
     if (after.st_dev, after.st_ino) != expected_id:
         raise ValueError("root changed during walk")
-    if files == 0 or errors or unexpected:
-        raise ValueError("empty or incomplete walk: files=%d errors=%d unexpected=%d" %
-                         (files, errors, unexpected))
+    if files == 0 or errors or unexpected or pending_directories:
+        raise ValueError("empty or incomplete walk: files=%d errors=%d unexpected=%d unvisited=%d" %
+                         (files, errors, unexpected, len(pending_directories)))
     disk = os.statvfs(root)
     return {"started": started.isoformat(timespec="milliseconds"),
             "finished": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
@@ -1032,9 +1035,9 @@ if __name__ == "__main__":
     sys.exit(main())
 ```
 
-**Discriminating controls on staging.** At 07:01:35.434–.444 UTC, the revised walk read 2,171 regular files, 6,723,439,703 bytes, with 46,988,066,816 bytes free on the same filesystem. The return was WARN, zero errors or unexpected entries, exit 0. An isolated scratch directory under `/tmp` accepted its known three-byte control file, rejected a symlink root, a wrong root and a wrong filesystem identity, and passed all six threshold edges. It was removed within the same Python call. A stalled scratch command was killed by the timeout wrapper and returned 124. The earlier natural 06:13 feed reading corroborates the size band only.
+**Discriminating controls on staging.** Revision 2 accepted a known three-byte scratch file, rejected a symlink root, a wrong root and a wrong filesystem identity, and returned 124 from the timeout wrapper on a stalled scratch command. Coltrane's 07:18:52 UTC revision 2 ruling reproduced a same-filesystem directory replacement after the parent recorded the directory. At 07:21:33 UTC an isolated two-file fixture measured 8,589,934,595 bytes / HOLD before and after the replacement exercise. During the replacement revision 2 returned three bytes / OK, exit 0. The corrected body returned exit 2 with `complete: false` on the same exercise and passed all six threshold edges. Both scratch trees were removed within the same call. At 07:21:33.792–.799 UTC the corrected body returned WARN, exit 0, for 2,171 regular files totaling 6,731,938,153 bytes with 46,932,889,600 bytes free, zero errors and zero unexpected entries. The natural 06:13 feed reading corroborates the size band only.
 
-**Delivery exercise.** Dry run marker `TW-STORE-R2-0702`, Discord `1576130978282479677`, carries the fresh warning-band sample and a 07:06:35 UTC receipt deadline. PM independently read Discord at 07:06:42 UTC, saw the sample and no visible receipt from either owner by cutoff, and reported HOLD. PM had written a reply to its outbox at 07:06:30 UTC. That local write did not establish Discord delivery by cutoff. The sender's 07:06:46 UTC read agreed. INFRA posted the parallel simulated after-GO escalation to OLD in `1576132273181294683`. PM confirmed OLD owns that stop or recovery choice. The exercise establishes the response to a missing receipt. A named live slot still needs both timely receipt witnesses and independent watch coverage.
+**Delivery exercise.** Dry run marker `TW-STORE-R2-0702`, Discord `1576130978282479677`, carries the fresh warning-band sample and a 07:06:35 UTC receipt deadline. PM independently read Discord at 07:06:42 UTC, saw the sample and no visible receipt from either owner by cutoff, and reported HOLD. The sender's 07:06:46 UTC read agreed. PM's 07:06:30 UTC outbox reply reached Discord at 07:11:04.678 UTC, `1576133310885929101`, providing a late-delivery control. OLD deliberately withheld the exercise receipt through cutoff. INFRA posted the parallel simulated after-GO escalation in `1576132273181294683`. OLD replied with a simulated STOP at 07:07:44.641 UTC, `1576132472079392811`, withdrawing the simulated GO and specifying executor stand-down before a staging change. No operation had started. If a live operation has started, report its last confirmed stage and serving identity to OLD for his separate recovery decision. A named live slot still needs both timely receipt witnesses and independent watch coverage.
 
 ## P10 observation-window follow-through — 2026-11-28 UTC
 
