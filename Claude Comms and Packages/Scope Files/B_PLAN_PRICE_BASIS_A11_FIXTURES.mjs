@@ -35,6 +35,14 @@ function visibleAt(receipt, read) {
     receipt.observedAt <= receipt.availableAt && receipt.availableAt <= receipt.readAt;
 }
 
+function gradeQuoteAge(receipt, read) {
+  if (receipt.ageBasis !== read.ageBasis || typeof read.ageBasis !== 'string' ||
+      !Number.isSafeInteger(read.maxAgeMs) || read.maxAgeMs < 0 || receipt.maxAgeMs !== read.maxAgeMs) {
+    return unassessable('quote age basis or bound');
+  }
+  return proved(read.at - receipt.observedAt <= read.maxAgeMs ? 'within age bound' : 'too old');
+}
+
 function gradeBars(row, read) {
   return sameList(row.scannerRevisions, read.scannerRevisions) &&
     sameList(row.mceRevisions, read.mceRevisions) &&
@@ -123,9 +131,12 @@ function gradeReceipt(kind, row, read) {
       return gradeBars(row, read) ? proved('exact revisions') : unassessable('bar revision or sequence');
     case 'orbClock':
       return gradeOrbClock(row, read);
-    case 'planAsk':
-      return row.side === 'ask' && Number.isFinite(row.price) && row.price > 0
-        ? proved('usable ask') : unassessable('plan ask');
+    case 'planAsk': {
+      if (row.side !== 'ask' || !Number.isFinite(row.price) || row.price <= 0) return unassessable('plan ask');
+      const age = gradeQuoteAge(row, read);
+      if (age.grade !== 'proved') return age;
+      return age.outcome === 'too old' ? unassessable('plan ask too old') : proved('usable ask');
+    }
     case 'dedupe':
       return gradeDedupe(row, read);
     case 'booking':
@@ -138,8 +149,12 @@ function gradeReceipt(kind, row, read) {
       if (row.mode === 'maker' && row.chosenMode === 'maker' && row.price === null && row.outcome === 'rested') {
         return proved('rested');
       }
-      return Number.isFinite(row.price) && row.price > 0 && row.outcome === 'passed'
-        ? proved('passed') : unassessable('booking outcome');
+      if (Number.isFinite(row.price) && row.price > 0 && row.outcome === 'passed') {
+        const age = gradeQuoteAge(row, read);
+        if (age.grade !== 'proved') return age;
+        return age.outcome === 'too old' ? unassessable('positive booking contradicts quote age') : proved('passed');
+      }
+      return unassessable('booking outcome');
     case 'registration':
       if (row.trade === null) return proved('explicit null');
       return typeof row.trade === 'string' && row.trade.length > 0
@@ -295,8 +310,14 @@ const opportunity = {
   },
 };
 const checkpoints = {
-  planAsk: { reader: 'plan-geometry', at: time + 10, source: 'fixture-plan-quotes' },
-  booking: { reader: 'vts-booking', at: time + 20, source: 'fixture-vts-quotes', mode: 'taker', chosenMode: 'taker' },
+  planAsk: {
+    reader: 'plan-geometry', at: time + 10, source: 'fixture-plan-quotes',
+    ageBasis: 'fixture-observed-ask', maxAgeMs: 10,
+  },
+  booking: {
+    reader: 'vts-booking', at: time + 20, source: 'fixture-vts-quotes', mode: 'taker', chosenMode: 'taker',
+    ageBasis: 'selected-row-captured-at', maxAgeMs: 15,
+  },
   registration: { reader: 'vts-registration', at: time + 30, source: 'fixture-vts-register' },
   freshness: {
     reader: 'active-dispatch',
@@ -337,7 +358,10 @@ function makeFixture() {
           .map((revision, index) => ({ revision, availableAt: time - 4 + index, sequence: 9 + index })),
         close: 100,
       },
-      planAsk: { side: 'ask', price: 100.1 },
+      planAsk: {
+        side: 'ask', price: 100.1,
+        ageBasis: checkpoints.planAsk.ageBasis, maxAgeMs: checkpoints.planAsk.maxAgeMs,
+      },
       dedupe: {
         setupKey: opportunity.dedupeRead.setupKey,
         state: opportunity.dedupeRead.state,
@@ -349,7 +373,10 @@ function makeFixture() {
         plannedTarget: 104,
         outcome: 'different or no prior setup',
       },
-      booking: { side: 'ask', mode: 'taker', chosenMode: 'taker', price: 100.2, outcome: 'passed' },
+      booking: {
+        side: 'ask', mode: 'taker', chosenMode: 'taker', price: 100.2, outcome: 'passed',
+        ageBasis: checkpoints.booking.ageBasis, maxAgeMs: checkpoints.booking.maxAgeMs,
+      },
       registration: { trade: `book-${arm}` },
       freshness: { frame: observation, genuine: observation, ceiling: 100, outcome: 'pass' },
       handoff: { outcome: 'forwarded' },
@@ -447,6 +474,40 @@ check('same quote available after its read', fixture => {
   assert.equal(candidate.planAsk.grade, 'unassessable');
   assert.equal(candidate.booking.grade, 'proved');
 });
+
+check('candidate ask observation exactly at its fixture age bound', fixture => {
+  const row = candidateReceipt(fixture, 'planAsk');
+  row.observedAt = row.readAt - row.maxAgeMs;
+}, (result, candidate) => {
+  assert.equal(result.rows[0].pairedInputs, true);
+  assert.equal(candidate.planAsk.outcome, 'usable ask');
+});
+
+check('candidate ask available on time but too old by one millisecond', fixture => {
+  const row = candidateReceipt(fixture, 'planAsk');
+  row.observedAt = row.readAt - row.maxAgeMs - 1;
+}, (result, candidate) => {
+  assert.equal(result.rows[0].pairedInputs, false);
+  assert.equal(candidate.planAsk.reason, 'plan ask too old');
+  assert.equal(candidate.booking.outcome, 'passed');
+});
+
+check('recorded candidate ask without its reviewed bound fixture', fixture => {
+  delete candidateRead(fixture, 'planAsk').maxAgeMs;
+}, (_result, candidate) => assert.equal(candidate.planAsk.reason, 'quote age basis or bound'));
+
+check('on-time VTS booking receipt conflicts with consumed quote age', fixture => {
+  const row = candidateReceipt(fixture, 'booking');
+  row.observedAt = row.readAt - row.maxAgeMs - 1;
+}, (_result, candidate) => {
+  assert.equal(candidate.booking.reason, 'positive booking contradicts quote age');
+  assert.equal(candidate.freshness.outcome, 'pass');
+  assert.equal(candidate.handoff.outcome, 'forwarded');
+});
+
+check('candidate clock cannot stand in for the selected booking row clock', fixture => {
+  candidateReceipt(fixture, 'booking').ageBasis = 'fixture-observed-ask';
+}, (_result, candidate) => assert.equal(candidate.booking.reason, 'quote age basis or bound'));
 
 check('quote from another opportunity', fixture => {
   candidateReceipt(fixture, 'planAsk').opportunity = 'unoffered';
