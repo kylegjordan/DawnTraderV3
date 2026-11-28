@@ -392,7 +392,10 @@ before seeking any install approval. The policy remains open pending that record
 
 ## Step 10 checkpoint — F-3 policy disposition (KD-129, 2026-11-28 UTC)
 
-PM reported recording KD-129 after the INFRA and Coltrane policy round. The provenance starts with Coltrane’s
+PM recorded KD-129 after the INFRA and Coltrane policy round. Both sources are pinned at
+`0d5b6c0e2a1d647bd3fcdbaa6d42fe643f7dd1ec`: the [KD-129 decision row](https://github.com/kylegjordan/DawnTraderV3/blob/0d5b6c0e2a1d647bd3fcdbaa6d42fe643f7dd1ec/1-system-manual/pm/DECISIONS.md#L149)
+and the [F-3 provenance and controls pack](https://github.com/kylegjordan/DawnTraderV3/blob/0d5b6c0e2a1d647bd3fcdbaa6d42fe643f7dd1ec/1-system-manual/pm/decisions/2026-11-28_p6-critical-alert-fallback.md).
+The provenance starts with Coltrane’s
 10:04:53 UTC Step 9 ruling in response to Discord `1576176283015192679` and his 10:44:33 UTC policy reply to
 PM’s Discord `1576186160244588574`. INFRA concurred in the INFRA Codex chat. This checkpoint records the governed
 policy and the proof required of a proposed change. The fallback path under review is pinned at `39a3849c2`.
@@ -433,5 +436,5 @@ Conversation Index return is Step 2 at `90feb6ef372dd48c67f59482ad4d3ec5db079d9c
 
 **Independent review, 11:49:56 UTC.** Coltrane accepted the policy and controls at exact `98258392a9ffe1eb6434deef8baa5bacde380dee`
 in response to Discord `1576202539769139234`. He returned the documentation checkpoint for the pinned KD-129
-row in `DECISIONS.md` and its cited provenance pack. PM owns that record under the KD-34 decision protocol.
-The next review action is to verify both sources at PM's published ref and add their exact citations.
+row in `DECISIONS.md` and its cited provenance pack. The pinned citations above address that return. Independent
+verification of those two sources remains the open review item.

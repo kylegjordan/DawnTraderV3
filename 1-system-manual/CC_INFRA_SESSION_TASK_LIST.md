@@ -11,7 +11,7 @@
 
 | batch | stalled at | waiting on | note |
 |---|---|---|---|
-| ▶ **`B-TOKEN-ECONOMY` amendment 1 P6** (PM stage 0 row 1) | **Step 10 F-3 checkpoint** | PM's published KD-129 decision row and cited provenance pack, then citation review. The new active seven-day observation needs separate authorization. | `B_TOKEN_ECONOMY_AMD1_P6_STEP7_VERIFY.md`; Coltrane accepted controls at `98258392`, returned citations; original window UNPROVEN, days 3–7 NOT RUN |
+| ▶ **`B-TOKEN-ECONOMY` amendment 1 P6** (PM stage 0 row 1) | **Step 10 F-3 checkpoint** | Coltrane's citation re-review of the KD-129 decision row and provenance pack at `0d5b6c0e2`. The new active seven-day observation needs separate authorization. | `B_TOKEN_ECONOMY_AMD1_P6_STEP7_VERIFY.md`; controls accepted at `98258392`; original window UNPROVEN, days 3–7 NOT RUN |
 | ⏳ **`B-DEPLOY-WINDOW-GUARD`** (`#1249`, plan §0 Infra order 10a, KD-56) | **Step 10 — IN OBSERVATION** (installed 2026-11-13) | the first real in-window deploy; the first stale window; NEW Claude's first register rows | report `Batch Completion/B_DEPLOY_WINDOW_GUARD_PROGRESS_REPORT.md` §3 holds the pre-registered criterion |
 | ✅ ~~`B-DTREVIEW-ABSENCE-PROVENANCE`~~ (`#1181`, plan row 1w1) | **CLOSED 2026-11-14** (Langston CONFIRMED Step 11) | — | record `Change Lists/B_DTREVIEW_ABSENCE_PROVENANCE_CHANGE_LIST.md`; the live by-id fetch is unproven until a real side-branch review lands in the sync gap |
 | ✅ ~~`B-SIZE-WATCH-BREACH-ALARM`~~ (`#1215`, plan §0 Infra order 10, KD-50) | **CLOSED 2026-11-14** (Langston CONFIRMED Step 11) | — | breach/missing/archive/tamper each their own alert; none has fired live yet (fixtures + drill carry them) |
