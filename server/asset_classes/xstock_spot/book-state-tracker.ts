@@ -36,11 +36,14 @@
  * (2) `closePosition` at the fill instant; (3) `closeAllPositions` and the two manual routes, for
  * the label only. All four call `assessBookStateNow(symbol)`; none of them re-implements the read.
  */
+import { randomUUID } from 'node:crypto';
 import { getLatestEquityTick, type EquityTickRaw } from '../../services/passive-archive/equity-spot-archiver.js';
 import { assessBookState, medianOf, type BookStateConfig, type BookStateResult } from './book-state.js';
 import { resolveBookStateConfigSync } from './book-state-config.js';
 
 export interface BookStateComparator {
+  /** Immutable for the life of the chain, including advances that replace the comparator object. */
+  evidence: BookStateChainEvidence;
   priorMid: number;
   priorBid: number;
   priorAsk: number;
@@ -178,9 +181,26 @@ export type RetainedRing = {
   writtenAtMs: number;
 } & (
   | { restored: false }
-  | { restored: true; persistedAtMs: number; persistedSource: RingSnapshotEntry['source'] }
+  | { restored: true; restoreId: string; persistedAtMs: number; persistedSource: RingSnapshotEntry['source'] }
 );
 const _retainedSpreads = new Map<string, RetainedRing>();
+
+export interface RestoredRingSeedEvidence {
+  readonly restoreId: string;
+  readonly writtenAtMs: number;
+  readonly persistedAtMs: number;
+  readonly persistedSource: RingSnapshotEntry['source'];
+  readonly seedBasis: RetainedRing['seedBasis'];
+  readonly verdict: 'not_judged' | 'implausible' | 'plausible';
+  readonly removed: boolean;
+}
+
+export interface BookStateChainEvidence {
+  readonly chainId: string;
+  readonly seedFrameAtMs: number;
+  readonly escapeReason: 'ring_independent_escape' | 'seed_escape_recovered' | null;
+  readonly restoredSeed: RestoredRingSeedEvidence | null;
+}
 
 /**
  * ⛔⛔ `3n.q8` P1 — THE r5 WRITE GATE, NAMED SO THE CLEAR AND THE SNAPSHOT SHARE ONE DEFINITION (Langston's
@@ -459,6 +479,8 @@ export function advanceBookStateComparator(
   const observedMovement = (prev?.observedMovement ?? false) || movedThisFrame;
   let seedImplausible = prev?.seedImplausible ?? false;
   let seedRetainedMedian: number | null = prev ? prev.seedRetainedMedian : null;
+  const chainId = prev?.evidence.chainId ?? randomUUID();
+  let restoredSeed = prev?.evidence.restoredSeed ?? null;
   if (!prev && riEscapedThisFrame) {
     // P1: the release overrides the retained ring for THIS seed (see the release above). Consume the ring, as a plausible
     // seed does, and seed `vacuous` (no judged-against median) — the honest basis for a seed the ring did not judge.
@@ -493,16 +515,25 @@ export function advanceBookStateComparator(
     // says whether that use consumed it (a plausible seed) or left it for the next seed (an implausible one).
     if (retained?.restored) {
       const verdict = !(retainedMedian !== null && retainedMedian > 0) ? 'not_judged' : (seedImplausible ? 'implausible' : 'plausible');
+      restoredSeed = {
+        restoreId: retained.restoreId, writtenAtMs: retained.writtenAtMs, persistedAtMs: retained.persistedAtMs,
+        persistedSource: retained.persistedSource, seedBasis: retained.seedBasis, verdict, removed: !seedImplausible,
+      };
       console.warn(
         `[3n.q8][BOOK_STATE] ${key} RESTORED_RING_CONSUMED verdict=${verdict} seedSpread=${spreadNow.toFixed(5)} ` +
         `retainedMedian=${retainedMedian === null ? 'none' : retainedMedian.toFixed(5)} kRel=${kRel ?? 'unreadable'} ` +
         `ringSeedBasis=${retained.seedBasis} ringAgeMs=${frame.atMs - retained.writtenAtMs} ringDeleted=${!seedImplausible} ` +
         `ringWrittenAtMs=${retained.writtenAtMs} ringPersistedAtMs=${retained.persistedAtMs} ` +
-        `ringPersistedSource=${retained.persistedSource} seedFrameAtMs=${frame.atMs}`,
+        `ringPersistedSource=${retained.persistedSource} seedFrameAtMs=${frame.atMs} ` +
+        `restoreId=${retained.restoreId} seedUseId=${chainId}`,
       );
     }
   }
   _comparators.set(key, {
+    evidence: prev?.evidence ?? {
+      chainId, seedFrameAtMs: frame.atMs, restoredSeed,
+      escapeReason: riEscapedThisFrame ? 'ring_independent_escape' : escapedThisFrame ? 'seed_escape_recovered' : null,
+    },
     priorMid: mid, priorBid: frame.bid, priorAsk: frame.ask,
     priorLast: frame.last, priorAtMs: frame.atMs, spreads,
     // once validated, STAYS validated for the life of the chain — a later seed starts a new chain
@@ -634,6 +665,8 @@ export type BookStateNow =
       comparatorValidated: boolean | null;
       /** Frames since this comparator was seeded — `null` when there is no comparator. */
       comparatorFramesSinceSeed: number | null;
+      /** The exact chain the predicate read before the engine advances or clears it. */
+      comparatorEvidence: BookStateChainEvidence | null;
     }
   | { ok: false; reason: 'no_tick' | 'knobs_missing' | 'disabled'; cfg?: BookStateConfig; error?: string };
 
@@ -673,6 +706,7 @@ export function assessBookStateNow(symbol: string): BookStateNow {
     ok: true, result, cfg, raw,
     comparatorValidated: cmp ? cmp.validated : null,
     comparatorFramesSinceSeed: cmp ? cmp.framesSinceSeed : null,
+    comparatorEvidence: cmp?.evidence ?? null,
   };
 }
 
@@ -738,7 +772,7 @@ export function restoreRetainedRings(entries: readonly RestoredRingSnapshotEntry
     if (_retainedSpreads.has(key)) continue;
     _retainedSpreads.set(key, {
       spreads: [...e.spreads], seedBasis: e.seedBasis, writtenAtMs: e.writtenAtMs, restored: true,
-      persistedAtMs: e.persistedAtMs, persistedSource: e.source,
+      restoreId: randomUUID(), persistedAtMs: e.persistedAtMs, persistedSource: e.source,
     });
     loaded.push(key);
   }

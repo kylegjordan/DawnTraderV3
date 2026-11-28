@@ -123,6 +123,7 @@ vi.mock('../../services/trailing-exit-controller.js', async (orig) => ({
 }));
 
 import { ActiveExecutionEngine } from '../../services/active-execution-engine.js';
+import { snapshotExitRefusal } from '../../services/exit-refusal-tally.js';
 import { VenueQuietState } from '../../services/venue-quiet-alerting.js';
 import { priceCache } from '../../services/price-cache';
 import { livePricingAdapter } from '../../services/live-pricing-adapter';
@@ -403,7 +404,8 @@ beforeEach(() => {
   h.markObserved = undefined;
   h.spreadBlownEnabled = true;
   h.guardEnabled = true;
-  h.getActiveOpenPositions.mockImplementation(async () => [makePosition()]);
+  const position = makePosition();
+  h.getActiveOpenPositions.mockImplementation(async () => [position]);
   warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
   logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
   errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -484,7 +486,7 @@ async function replayRecovery(tape: RecoveryEvent[], requireMovement: boolean, h
   } else {
     const yielded = await blowoutToYield(eng);
     expect(movementGateOwner(yielded.bookEvents, has(yielded.warns, WIDE_CLEAR))).toBe(makePosition().id);
-    const rings = snapshotRetainableRings();
+    const rings = snapshotRetainableRings().map(ring => ({ ...ring, persistedAtMs: Date.now() }));
     expect(rings.map(ring => ring.symbol)).toEqual([SYMBOL]);
     _resetBookStateComparatorsForTest();
     expect(restoreRetainedRings(rings)).toEqual([SYMBOL]);
@@ -684,6 +686,145 @@ describe('#1199 P2 — paired post-hold decisions with the real guard', () => {
     expect(candidate.coverage).toBe('replayed');
     expect(candidate.steps).toHaveLength(3);
     expect(candidate.steps[2]).toMatchObject({ evaluation: 3, elapsedMs: 8_500, moves: 2, admitted: true, closeReason: 'stop_hit' });
+  });
+});
+
+describe('retained-ring evidence through the real exit loop', () => {
+  function restoreFixture() {
+    const persistedAtMs = Date.now() - 30_000;
+    const writtenAtMs = Date.now() - 60_000;
+    restoreRetainedRings([{
+      symbol: SYMBOL, spreads: [0.002], seedBasis: 'judged', source: 'live', writtenAtMs, persistedAtMs,
+    }]);
+    return { persistedAtMs, writtenAtMs };
+  }
+
+  it('attributes only the evaluated chain and grades the release of that position episode', async () => {
+    const eng = makeEngine();
+    const { persistedAtMs, writtenAtMs } = restoreFixture();
+    const first = await tick(eng, RECOVER[0]);
+    expectRefused(first, 'unknown');
+    expect(has(first.warns, /RESTORED_RING_CONSUMED/)).toBe(true);
+    expect(has(first.warns, /RESTORED_RING_REFUSAL/)).toBe(false);
+    const seed = readBookStateComparator(SYMBOL)!.evidence;
+    expect(seed.restoredSeed).toMatchObject({ removed: true, persistedAtMs, writtenAtMs, persistedSource: 'live' });
+
+    vi.setSystemTime(Date.now() + 1_500);
+    const second = await tick(eng, RECOVER[1]);
+    expectRefused(second, 'two_sided');
+    expect(second.warns.find(line => /RESTORED_RING_REFUSAL/.test(line))).toContain(seed.chainId);
+
+    vi.setSystemTime(Date.now() + 1_500);
+    const release = await tick(eng, RECOVER[2]);
+    expectEvaluated(release, RECOVER[2], 'y');
+    expect(release.closes).toHaveLength(1);
+    const proof = snapshotExitRefusal(eng._exitRefusalTally.get(makePosition().id));
+    expect(proof.restoredRing).toMatchObject({
+      positionId: makePosition().id,
+      matchedTicks: 1, unmatchedTicks: 1, distinctSeedUses: 1, removedSeedUses: 1,
+      releaseDirections: { atOrBelowStop: 1, aboveStop: 0, unpriced: 0 },
+      firstMatchedRelease: {
+        episode: 1, direction: 'atOrBelowStop', bid: RECOVER[2].bid, stop: STOP,
+        firstUse: { seedUseId: seed.chainId, feedAgeAtSeedMs: 60_000, persistenceAgeAtEvaluationMs: 31_500 },
+        evaluation: { chain: { chainId: seed.chainId } },
+      },
+    });
+    expect(proof.restoredRing?.firstMatchedRelease?.evaluation.id)
+      .not.toBe(proof.restoredRing?.firstMatchedRelease?.firstUse.evaluationId);
+    expect(release.warns.filter(line => /RESTORED_RING_RELEASE/.test(line))).toHaveLength(1);
+  });
+
+  it.each([false, true])('does not release the old episode on position rollover (shared ID %s)', async (sameId) => {
+    const eng = makeEngine();
+    const original = makePosition();
+    h.getActiveOpenPositions.mockResolvedValue([original]);
+    restoreFixture();
+    expectRefused(await tick(eng, RECOVER[0]), 'unknown');
+    expectRefused(await tick(eng, RECOVER[1]), 'two_sided');
+    const originalTally = eng._exitRefusalTally.get(original.id);
+    expect(snapshotExitRefusal(originalTally).restoredRing?.openUse).not.toBeNull();
+
+    const next = { ...original, id: sameId ? original.id : 'replacement', openedAt: new Date(Date.now()) };
+    h.getActiveOpenPositions.mockResolvedValue([next]);
+    const decided = await tick(eng, RECOVER[2]);
+    expectEvaluated(decided, RECOVER[2], 'y');
+    expect(decided.closes).toHaveLength(1);
+    expect(has(decided.warns, /RESTORED_RING_RELEASE/)).toBe(false);
+    expect(originalTally.releases).toBe(0);
+  });
+
+  it('keeps an escape evaluation on its old chain and counts the reseed only once evaluated', async () => {
+    const eng = makeEngine();
+    restoreFixture();
+    expectRefused(await tick(eng, { bid: 398.4, ask: 401.6, last: 400 }), 'unknown');
+    const old = readBookStateComparator(SYMBOL)!.evidence;
+    expect(old.restoredSeed).toMatchObject({ verdict: 'implausible', removed: false });
+
+    const positionId = makePosition().id;
+    for (const frame of WARM) {
+      vi.setSystemTime(Date.now() + 1_500);
+      const output = await tick(eng, frame);
+      const current = readBookStateComparator(SYMBOL)!.evidence;
+      if (current.chainId === old.chainId) continue;
+
+      expectRefused(output, 'two_sided');
+      expect(current.escapeReason).toBe('seed_escape_recovered');
+      expect(current.restoredSeed).toMatchObject({ restoreId: old.restoredSeed?.restoreId, removed: true });
+      expect(snapshotExitRefusal(eng._exitRefusalTally.get(positionId)).restoredRing).toMatchObject({
+        distinctSeedUses: 1, openUse: { last: { seedUseId: old.chainId } },
+      });
+
+      vi.setSystemTime(Date.now() + 1_500);
+      expectRefused(await tick(eng, WARM[5]), 'two_sided');
+      expect(snapshotExitRefusal(eng._exitRefusalTally.get(positionId)).restoredRing).toMatchObject({
+        distinctSeedUses: 2, distinctRestoredRings: 1, repeatedSeedUses: 1, retainedSeedUses: 1, removedSeedUses: 1,
+        openUse: { first: { seedUseId: old.chainId }, last: { seedUseId: current.chainId } },
+      });
+      return;
+    }
+    throw new Error('The recovery fixture never reseeded');
+  });
+
+  it('keeps sibling episodes separate and preserves the decisions and close prices', async () => {
+    async function run(captureEvidence: boolean) {
+      _resetBookStateComparatorsForTest();
+      vi.setSystemTime(new Date('2026-10-14T15:00:00Z'));
+      const first = makePosition();
+      const sibling = { ...first, id: 'restored-ring-sibling' };
+      h.getActiveOpenPositions.mockResolvedValue([first, sibling]);
+      const eng = makeEngine();
+      if (!captureEvidence) {
+        const capture = eng._exitRefusalEvaluation.bind(eng);
+        eng._exitRefusalEvaluation = (...args: unknown[]) => ({ ...capture(...args), chain: null });
+      }
+      restoreFixture();
+      const steps = [];
+      for (const frame of RECOVER.slice(0, 2)) {
+        vi.setSystemTime(Date.now() + 1_500);
+        const output = await tick(eng, frame);
+        steps.push({
+          frames: output.warns.filter(line => XS_FRAME.test(line)),
+          skips: output.priceSkips,
+          closes: output.closes.map(([id, price, decision]) => ({ id, price, reason: (decision as { type: string }).type })),
+        });
+      }
+      return {
+        steps,
+        firstEvidence: snapshotExitRefusal(eng._exitRefusalTally.get(first.id)).restoredRing,
+        siblingEvidence: snapshotExitRefusal(eng._exitRefusalTally.get(sibling.id)).restoredRing,
+      };
+    }
+
+    const captured = await run(true);
+    const control = await run(false);
+    expect(captured.steps).toEqual(control.steps);
+    expect(captured.steps.flatMap(step => step.closes).map(row => row.id)).toEqual([makePosition().id, 'restored-ring-sibling']);
+    expect(captured.firstEvidence).toMatchObject({ matchedTicks: 0, unmatchedTicks: 1, unmatchedReleases: 1 });
+    expect(captured.siblingEvidence).toMatchObject({
+      positionId: 'restored-ring-sibling', matchedTicks: 1,
+      firstMatchedRelease: { episode: 1, direction: 'atOrBelowStop' },
+    });
+    expect(control.siblingEvidence?.firstMatchedRelease).toBeNull();
   });
 });
 

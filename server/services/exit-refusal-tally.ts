@@ -1,3 +1,5 @@
+import type { BookStateChainEvidence, RestoredRingSeedEvidence } from '../asset_classes/xstock_spot/book-state-tracker.js';
+
 /**
  * B-XSTOCK-BID-TRIGGER-RELAND increment A, P5 (objective 2) — THE REFUSAL-DURATION TALLY, per open position.
  *
@@ -24,6 +26,48 @@ export const EPISODE_GAP_MS = 60_000;
 
 export type ExitRefusalKind = 'hollow_skip' | 'yield_refused' | 'unvalidated';
 
+export interface ExitRefusalEvaluation {
+  id: string;
+  frameAtMs: number;
+  evaluatedAtMs: number;
+  chain: BookStateChainEvidence | null;
+}
+
+interface MatchedRingUse {
+  evaluationId: string;
+  evaluationFrameAtMs: number;
+  evaluatedAtMs: number;
+  seedUseId: string;
+  seedFrameAtMs: number;
+  escapeReason: BookStateChainEvidence['escapeReason'];
+  feedAgeAtSeedMs: number;
+  persistenceAgeAtEvaluationMs: number;
+  seed: RestoredRingSeedEvidence;
+}
+
+interface MatchedRingRelease {
+  episode: number;
+  firstUse: MatchedRingUse;
+  lastUse: MatchedRingUse;
+  evaluation: ExitRefusalEvaluation;
+  bid: number | null;
+  stop: number | null;
+  direction: 'atOrBelowStop' | 'aboveStop' | 'unpriced';
+}
+
+interface RestoredRingRefusalEvidence {
+  matchedTicks: number;
+  unmatchedTicks: number;
+  seedUseIds: Set<string>;
+  restoreIds: Set<string>;
+  removedSeedUses: number;
+  unmatchedReleases: number;
+  openUse: { first: MatchedRingUse; last: MatchedRingUse; seedUseIds: Set<string> } | null;
+  releaseDirections: Record<MatchedRingRelease['direction'], number>;
+  firstMatchedRelease: MatchedRingRelease | null;
+  lastMatchedRelease: MatchedRingRelease | null;
+}
+
 export interface ExitRefusalTally {
   /** True when the position was opened before this engine instance started: the tally covers only the time since. */
   sinceRestart: boolean;
@@ -48,16 +92,19 @@ export interface ExitRefusalTally {
   /** Internal: the open episode, if any. */
   episodeStartMs: number | null;
   lastRefuseAtMs: number | null;
+  /** Internal: protects a position rollover from releasing the previous lifecycle's episode. */
+  position: { id: string; openedAtMs: number | null } | null;
+  restoredRing: RestoredRingRefusalEvidence | null;
 }
 
-export function newExitRefusalTally(sinceRestart: boolean): ExitRefusalTally {
+export function newExitRefusalTally(sinceRestart: boolean, position: ExitRefusalTally['position'] = null): ExitRefusalTally {
   return {
     sinceRestart, refusedTicks: 0, refusedMs: 0, episodes: 0, longestEpisodeMs: 0,
     byKind: { hollow_skip: 0, yield_refused: 0, unvalidated: 0 },
     spreadBlownTicks: 0,
     spreadBlownFirstStopRefusedBid: null, spreadBlownStopHeldMs: 0, stopHoldStartMs: null,
     releases: 0, lastReleaseBidToStopPct: null, minReleaseBidToStopPct: null,
-    episodeStartMs: null, lastRefuseAtMs: null,
+    episodeStartMs: null, lastRefuseAtMs: null, position, restoredRing: null,
   };
 }
 
@@ -65,7 +112,8 @@ export function newExitRefusalTally(sinceRestart: boolean): ExitRefusalTally {
 export function noteRefusal(
   t: ExitRefusalTally, kind: ExitRefusalKind, nowMs: number,
   spreadBlown = false, bid: number | null = null, stop: number | null = null,
-): void {
+  evaluation?: ExitRefusalEvaluation,
+): MatchedRingUse | null {
   t.refusedTicks++;
   t.byKind[kind]++;
   if (spreadBlown) {
@@ -80,26 +128,75 @@ export function noteRefusal(
   if (t.episodeStartMs === null || gap > EPISODE_GAP_MS) {
     t.episodes++;
     t.episodeStartMs = nowMs;
+    if (t.restoredRing) t.restoredRing.openUse = null;
   } else {
     t.refusedMs += Math.max(0, gap);
   }
   t.lastRefuseAtMs = nowMs;
   t.longestEpisodeMs = Math.max(t.longestEpisodeMs, nowMs - t.episodeStartMs);
+  if (!evaluation) return null;
+
+  const rings = t.restoredRing ??= {
+    matchedTicks: 0, unmatchedTicks: 0, seedUseIds: new Set(), restoreIds: new Set(), removedSeedUses: 0, unmatchedReleases: 0,
+    openUse: null, releaseDirections: { atOrBelowStop: 0, aboveStop: 0, unpriced: 0 },
+    firstMatchedRelease: null, lastMatchedRelease: null,
+  };
+  const chain = evaluation.chain;
+  const seed = chain?.restoredSeed;
+  if (!chain || !seed) {
+    rings.unmatchedTicks++;
+    return null;
+  }
+  const use: MatchedRingUse = {
+    evaluationId: evaluation.id, evaluationFrameAtMs: evaluation.frameAtMs, evaluatedAtMs: evaluation.evaluatedAtMs,
+    seedUseId: chain.chainId, seedFrameAtMs: chain.seedFrameAtMs, escapeReason: chain.escapeReason,
+    feedAgeAtSeedMs: chain.seedFrameAtMs - seed.writtenAtMs,
+    persistenceAgeAtEvaluationMs: evaluation.evaluatedAtMs - seed.persistedAtMs, seed,
+  };
+  rings.matchedTicks++;
+  if (!rings.seedUseIds.has(use.seedUseId)) {
+    rings.seedUseIds.add(use.seedUseId);
+    rings.restoreIds.add(seed.restoreId);
+    if (seed.removed) rings.removedSeedUses++;
+  }
+  const open = rings.openUse ??= { first: use, last: use, seedUseIds: new Set() };
+  open.last = use;
+  if (open.seedUseIds.has(use.seedUseId)) return null;
+  open.seedUseIds.add(use.seedUseId);
+  return use;
 }
 
 /**
  * The first DECIDED tick after an episode. `bid` and `stop` may be absent (no transactable bid, no stop) — the release
  * still counts, and the distance stays null rather than being invented. Returns true when it closed an open episode.
  */
-export function noteRelease(t: ExitRefusalTally, bid: number | null, stop: number | null, nowMs?: number): boolean {
+export function noteRelease(t: ExitRefusalTally, bid: number | null, stop: number | null, nowMs?: number,
+  evaluation?: ExitRefusalEvaluation,
+): boolean {
   if (t.episodeStartMs === null) return false;
   t.releases++;
   t.episodeStartMs = null;
   closeStopHold(t, nowMs);
-  if (bid !== null && stop !== null && Number.isFinite(bid) && Number.isFinite(stop) && stop > 0) {
+  const priced = bid !== null && stop !== null && Number.isFinite(bid) && Number.isFinite(stop) && stop > 0;
+  if (priced) {
     const pct = ((bid - stop) / stop) * 100;
     t.lastReleaseBidToStopPct = pct;
     t.minReleaseBidToStopPct = t.minReleaseBidToStopPct === null ? pct : Math.min(t.minReleaseBidToStopPct, pct);
+  }
+  const rings = t.restoredRing;
+  const matched = rings?.openUse;
+  if (rings) rings.openUse = null;
+  if (rings && matched && evaluation?.chain) {
+    const direction = priced ? bid <= stop ? 'atOrBelowStop' : 'aboveStop' : 'unpriced';
+    const release: MatchedRingRelease = {
+      episode: t.episodes, firstUse: matched.first, lastUse: matched.last, evaluation,
+      bid: Number.isFinite(bid) ? bid : null, stop: Number.isFinite(stop) ? stop : null, direction,
+    };
+    rings.releaseDirections[direction]++;
+    rings.firstMatchedRelease ??= release;
+    rings.lastMatchedRelease = release;
+  } else if (rings) {
+    rings.unmatchedReleases++;
   }
   return true;
 }
@@ -113,8 +210,21 @@ function closeStopHold(t: ExitRefusalTally, nowMs?: number): void {
 }
 
 /** The durable record (no internal fields). `nowMs` = the close: an open stop hold is counted up to it. */
-export function snapshotExitRefusal(t: ExitRefusalTally, nowMs?: number): Omit<ExitRefusalTally, 'episodeStartMs' | 'lastRefuseAtMs' | 'stopHoldStartMs'> & { open: boolean } {
+export function snapshotExitRefusal(t: ExitRefusalTally, nowMs?: number) {
   closeStopHold(t, nowMs);
-  const { episodeStartMs, lastRefuseAtMs: _l, stopHoldStartMs: _s, ...rest } = t;
-  return { ...rest, byKind: { ...rest.byKind }, open: episodeStartMs !== null };
+  const { episodeStartMs, lastRefuseAtMs: _l, stopHoldStartMs: _s, position, restoredRing: rings, ...rest } = t;
+  return {
+    ...rest, byKind: { ...rest.byKind }, open: episodeStartMs !== null,
+    ...(rings ? { restoredRing: {
+      positionId: position?.id ?? null, positionOpenedAtMs: position?.openedAtMs ?? null,
+      matchedTicks: rings.matchedTicks, unmatchedTicks: rings.unmatchedTicks,
+      unmatchedReleases: rings.unmatchedReleases,
+      distinctSeedUses: rings.seedUseIds.size, distinctRestoredRings: rings.restoreIds.size,
+      repeatedSeedUses: rings.seedUseIds.size - rings.restoreIds.size,
+      removedSeedUses: rings.removedSeedUses, retainedSeedUses: rings.seedUseIds.size - rings.removedSeedUses,
+      openUse: rings.openUse ? { episode: t.episodes, first: rings.openUse.first, last: rings.openUse.last } : null,
+      releaseDirections: { ...rings.releaseDirections }, firstMatchedRelease: rings.firstMatchedRelease,
+      lastMatchedRelease: rings.lastMatchedRelease,
+    } } : {}),
+  };
 }

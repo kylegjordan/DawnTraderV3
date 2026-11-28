@@ -23,7 +23,7 @@ import {
 } from '../../asset_classes/xstock_spot/book-state-tracker';
 import { judgeEntrySpread, resolveEntryYardstick } from '../../asset_classes/xstock_spot/entry-spread-plausibility';
 import { getDepthSnapshot } from '../../services/execution/depth-source';
-import { newExitRefusalTally, noteRefusal, noteRelease, snapshotExitRefusal, EPISODE_GAP_MS } from '../../services/exit-refusal-tally';
+import { newExitRefusalTally, noteRefusal, noteRelease, snapshotExitRefusal, EPISODE_GAP_MS, type ExitRefusalEvaluation } from '../../services/exit-refusal-tally';
 
 const SYM = 'HUT/USD';
 const K_REL = 3;
@@ -288,6 +288,36 @@ describe('P5 — the refusal-duration tally', () => {
     noteRefusal(tl, 'unvalidated', 0);
     expect(noteRelease(tl, null, 100)).toBe(true);
     expect(tl.lastReleaseBidToStopPct).toBeNull();
+  });
+
+  it('grades opposite first matched releases independently of the identical legacy summaries', () => {
+    const evaluated: ExitRefusalEvaluation = {
+      id: 'refused-evaluation', frameAtMs: 500, evaluatedAtMs: 1_000,
+      chain: {
+        chainId: 'refused-chain', seedFrameAtMs: 300, escapeReason: null,
+        restoredSeed: {
+          restoreId: 'boot-ring', writtenAtMs: 100, persistedAtMs: 200, persistedSource: 'retained',
+          seedBasis: 'judged', verdict: 'implausible', removed: false,
+        },
+      },
+    };
+    const snapshots = [{ first: 99, second: null }, { first: 101, second: 99 }].map(({ first, second }) => {
+      const tally = newExitRefusalTally(true);
+      noteRefusal(tally, 'yield_refused', 1_000, true, 98, 100, evaluated);
+      noteRelease(tally, first, 100, 2_000, {
+        id: 'release-evaluation', frameAtMs: 1_500, evaluatedAtMs: 2_000,
+        chain: { chainId: 'recovery-chain', seedFrameAtMs: 1_200, escapeReason: 'ring_independent_escape', restoredSeed: null },
+      });
+      noteRefusal(tally, 'unvalidated', 3_000);
+      noteRelease(tally, second, 100, 4_000);
+      return snapshotExitRefusal(tally);
+    });
+    const [{ restoredRing: below, ...baselineBelow }, { restoredRing: above, ...baselineAbove }] = snapshots;
+    expect(baselineBelow).toEqual(baselineAbove);
+    expect(below?.firstMatchedRelease).toMatchObject({ direction: 'atOrBelowStop', bid: 99, stop: 100 });
+    expect(above?.firstMatchedRelease).toMatchObject({ direction: 'aboveStop', bid: 101, stop: 100 });
+    expect(above?.firstMatchedRelease?.evaluation.chain?.escapeReason).toBe('ring_independent_escape');
+    expect(above?.unmatchedReleases).toBe(1);
   });
 });
 
