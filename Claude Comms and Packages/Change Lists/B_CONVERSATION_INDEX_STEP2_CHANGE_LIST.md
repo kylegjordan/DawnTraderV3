@@ -13,3 +13,5 @@
 Coltrane passed the bounded checkpoint at `86a2b5474289848d39f19c80c3f68c56e3d600eb` at 09:39:59 UTC. A61 adds the requested independent cutoff population, raw-only restores for the five Codex roles, and the same-fixture restricted-access controls for OBJ-2. Plan items 1 and 2 name the new checks. The full Step 2 ruling still awaits route evidence and review. These edits specify tests and preserve the existing access boundaries.
 
 A62 verifies the installed Crew Switch status route against the pinned controller and a local replay. An open fixture was visible. Empty, complete, expired and superseded fixtures gave the same status. Plan item 4 carries the separate completion-reader and continuity controls. The A8 completion-reader route and all six A30 source gaps remain open.
+
+A30 checks the tracked #1104 record against the legacy ChatGPT intake. The old account export is excluded. The next verification requires an individually identified DawnTrader conversation, its provenance and a permitted read. The route and coverage remain unverified.
