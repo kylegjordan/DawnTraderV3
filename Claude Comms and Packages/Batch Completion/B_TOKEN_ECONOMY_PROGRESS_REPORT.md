@@ -1,6 +1,6 @@
 # B-TOKEN-ECONOMY — PROGRESS REPORT
 
-**OPEN — waiting on the crew rollout of the 250k window (OBJ-2), the Codex canary (OBJ-3) and the alert-delta shadow reaching 50 verified deltas (P6).**
+**OPEN — verify the reviewed PM follow-up in operation, review the separate alert-delta activation, complete the Claude resume check, and reconcile the amendment.**
 
 Owner: PM Claude · Kyle KD-103 · change-class `non_architecture` · sprint plan stage 0 row 1 · written 2026-11-19.
 Scope `Scope Files/B_TOKEN_ECONOMY_SCOPE.md` · pre-audit `Scope Files/B_TOKEN_ECONOMY_PRE_AUDIT.md` · change list `Change Lists/B_TOKEN_ECONOMY_CHANGE_LIST.md`.
@@ -49,11 +49,25 @@ The agent was spawned as `general-purpose` with no `model`. `advisorModel` shows
 
 Window shape: **quantity** (50 verified deltas) for P6; **event** (crew resume, first Codex session) for OBJ-2 and OBJ-3. The batch closes when the data is in **and** the decision is recorded (flip or not, rollout done or not).
 
+### PM-only continuation on 2026-11-24
+
+- **OBJ-3 evidence passed independent review.** Coltrane ruled PROCEED at `43ab8679d` at 2026-11-23T22:44:30Z. The canary record in `Change Lists/B_TOKEN_ECONOMY_CANARY.md`, Observation 6, is on the pushed closeout branch at `44c63d2ab`. It records a strict configuration read in all five DawnTrader Codex folders and an isolated low-threshold run that compacted and continued. The 250k threshold was checked by configuration and precedence. The original trial did not force a 250k crossing. This integration carries forward the reviewed record. Keep the Workflow Improve OBJ-8 step-file reading leg distinct.
+- **PM-owned alert follow-up (KD-115 follow-on, amendment P8).** Coltrane ruled PROCEED at exact ref `74350c6e74de636c306136eafc3018d02c1ae733` at 2026-11-25T09:49:44Z. The hourly check in that ref recognizes `CC-PM` receipt records and `PM Claude` action posts. Four seeded cases caught the old behavior, including a critical alert with no receipt and a builder's post that must not count as PM action. Coltrane observed 21/21 and 17/21 after removing only the PM mapping. PM reran the offline self-test on November 28, with 21/21 passing, and confirmed all four jobs green in CI `45587967724` for its descendant `44c63d2ab`, which carries the same script. This integration carries the reviewed script unchanged. Runtime verification remains open.
+- **P6 has two separate evidence sets.** The parent's 50 verified deltas are the gate for shortening the injected alert list. The amendment's alert-owner routing observation is documented in `Change Lists/B_TOKEN_ECONOMY_AMD1_P6_STEP7_VERIFY.md`. Its day-3 read (`6fcc5d572`) found no routing events while Langston was off and contributes no agreement evidence.
+- **Remaining amendment closeout:** P10 consolidates measured Claude/Codex parity by leg, including the amendment's separate routing observation. P11 reconciles the governance records. KD-118 adds the required Audit Aids section in applicable pre-audits, the reviewer return rule, and the warn-only governance check. Keep these items explicit in the final reconciliation.
+
+### Parent P6 disposition and remaining gates, 2026-11-28
+
+- **Observation passed, switch pending review.** PM reran `node scripts/crew-tooling/alert-delta.mjs --verify` against the laptop shadow log using verifier 1.1 (`63cacfea0`). The command returned PASS, exit 0. The log contained 882 rows across 11 Claude sessions over 4.24 days, with 363 full controls and 519 verified deltas. Mismatches, check failures, unanchored rows, and unparsed rows were all zero. This is the same historical population PM measured on November 25. Coltrane accepted it as PM-observed at 2026-11-25T09:51:13Z. Shared still emits the full list.
+- **Activation exit criterion.** Coltrane authorized preparing a separate switch. Preserve full output on session start, resume, compaction, and state failure. Keep queue read failure visible without advancing state. Preserve ownership, critical priority, the existing global cap, overflow instructions and lost-routing notices in every output branch. Cover the active path and the five specified mutation controls in CI. Obtain review of the exact switch and then verify full followed by unchanged on one mapped non-PM Claude clone before a wider rollout. The existing Codex manual read continues.
+- **Claude rollout exit criterion (OBJ-2).** Capture each of OLD, NEW, ANALYST and INFRA reading the configured 250k window after actual Claude resume and restart. Preserve this as an event gate. The record can be prepared while Codex is on duty.
+- **Closeout exit criterion.** Integrate reviewed pieces independently of the Claude resume event. At reconciliation, record the evidence and disposition of every remaining leg. Any proposal to defer a leg needs its own owner, trigger and reviewer ruling.
+
 ## 4. Unproven, stated as unproven
 
-- Whether the shorter alert list saves what the shadow predicts: only 10 verified deltas so far, from one session.
+- Whether active delivery of the shorter alert list produces the savings predicted in shadow. The shadow observation has passed, and active delivery is still pending review.
 - That the general-purpose override survives a Claude Code version change (feature-watch row tells the daily check to re-test).
-- The overall token saving across the crew: the crew has been stopped since 2026-11-16, so no post-change week exists yet.
+- The overall token saving across the crew. A comparable full-week measurement is still unproved.
 
 ## 5. Governance files changed so far
 

@@ -35,8 +35,15 @@ const LOG = join(REPO, '1-system-manual', 'pm', 'SESSION_LOG.md');
 const STAGING = process.env.DT_ALERT_HOST || 'root@188.245.193.8';
 const HELSINKI = 'root@204.168.141.77';
 const STATE_DIR = process.env.CC_WAKE_STATE_DIR || join(homedir(), '.claude', 'cc-wake-state');
-const SESSIONS = ['CC-A', 'CC-B', 'CC-C', 'CC-INFRA'];
-const SENDER_TO_ALIAS = { 'OLD Claude': 'CC-A', 'NEW Claude': 'CC-B', 'ANALYST Claude': 'CC-C', 'Infra Claude': 'CC-INFRA' };
+const PM_ALIAS = 'CC-PM';
+const SENDER_TO_ALIAS = {
+  'OLD Claude': 'CC-A',
+  'NEW Claude': 'CC-B',
+  'ANALYST Claude': 'CC-C',
+  'Infra Claude': 'CC-INFRA',
+  'PM Claude': PM_ALIAS,
+};
+const SESSIONS = Object.values(SENDER_TO_ALIAS);
 const DAY = 86400000;
 const GOV = /^gov-(openmaxage|staleopen)/;
 export const EVENT_WAIT = /never ack|held (to|until)\b|keep the emit|event[- ]wait|wait(s|ing)? (on|for) (the |an? )?(event|market|window|session)/i;
@@ -187,10 +194,13 @@ function run(record) {
   console.log(`COUNT|${parsed.due}|${parsed.total}|${follow.length}${notes.length ? `|${notes.join('; ')}` : ''}`);
   const stamp = new Date(now).toISOString().replace(/\.\d+Z$/, 'Z');
   for (const f of follow) {
-    console.log(`FOLLOWUP|${f.owner}|${f.id}|${f.why}|${ASK_TEXT[f.ask]}|${f.title}`);
+    const isPM = f.owner === PM_ALIAS;
+    const ask = isPM ? `PM owns this alert — check ${f.ask === 'received' ? 'receipt' : 'action'} directly` : ASK_TEXT[f.ask];
+    console.log(`FOLLOWUP|${f.owner}|${f.id}|${f.why}|${ask}|${f.title}`);
     if (record) {
       const cell = (s) => String(s).replace(/\|/g, '/');
-      appendFileSync(LOG, `| ${stamp} | PM Claude | ${cell(f.owner)} | alert-followup ${f.id.slice(0, 8)} | ${cell(f.title)} | ${f.why}; ask: ${f.ask} | message the owner: received first, acting second | ${VERSION}; full id ${f.id} |\r\n`, 'utf8');
+      const next = isPM ? 'PM checks its own receipt or action' : 'message the owner: received first, acting second';
+      appendFileSync(LOG, `| ${stamp} | PM Claude | ${cell(f.owner)} | alert-followup ${f.id.slice(0, 8)} | ${cell(f.title)} | ${f.why}; ask: ${f.ask} | ${next} | ${VERSION}; full id ${f.id} |\r\n`, 'utf8');
     }
   }
 }
@@ -219,6 +229,21 @@ function selfTest() {
     decide({ ...base, alerts: [stale], records: rec, posts: [{ id, sender: 'ANALYST Claude' }] }).length === 0);
   t('a post by ANOTHER session does not count as the owner acting',
     decide({ ...base, alerts: [stale], records: rec, posts: [{ id, sender: 'NEW Claude' }] }).length === 1);
+  const pmRecords = { ...base.records, 'CC-PM': { [id]: { owner: 'CC-PM', ts: old } } };
+  const pmMarker = { [id]: { owner: 'CC-PM', action: '' } };
+  f = decide({ ...base, alerts: [stale], markers: pmMarker });
+  t('a PM-owned marker without a wake record stays routed to PM and needs receipt checked',
+    f.length === 1 && f[0].owner === 'CC-PM' && f[0].ask === 'received');
+  f = decide({ ...base, alerts: [stale], records: pmRecords, posts: [{ id, sender: 'NEW Claude' }] });
+  t('the PM wake record supplies the owner without a marker, and a builder post does not count as PM action',
+    f.length === 1 && f[0].owner === 'CC-PM' && f[0].ask === 'acting');
+  t('a PM Claude post plus its wake record suppresses repeat follow-up on that alert',
+    decide({ ...base, alerts: [stale], records: pmRecords, posts: [{ id, sender: 'PM Claude' }] }).length === 0);
+  t('a critical PM-owned marker still calls for follow-up when receipt is missing',
+    (() => {
+      const follow = decide({ ...base, alerts: [{ ...stale, sev: 'critical', dueAt: fresh }], markers: pmMarker });
+      return follow.length === 1 && follow[0].owner === 'CC-PM' && follow[0].ask === 'received';
+    })());
   t('a commit citing the prefix counts as acting', decide({ ...base, alerts: [stale], records: rec, commitText: `fix ${id.slice(0, 8)} done` }).length === 0);
   t('a fresh (under 24 h) warning: no follow-up', decide({ ...base, alerts: [{ ...stale, dueAt: fresh }], records: rec }).length === 0);
   t('a fresh critical alert with no owner: one follow-up, unrouted', (() => { const r = decide({ ...base, alerts: [{ ...stale, sev: 'critical', dueAt: fresh }] }); return r.length === 1 && r[0].ask === 'unrouted' && r[0].why === 'critical'; })());
