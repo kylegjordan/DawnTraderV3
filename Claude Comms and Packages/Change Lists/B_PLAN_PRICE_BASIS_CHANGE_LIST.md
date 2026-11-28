@@ -38,3 +38,9 @@
 ### Absorbed #1221(a) offline audit
 
 - A10 audits the direct Defensive Hedge BTC call against the separate active and VTS pattern and hybrid routes. Six offline controls reproduced the direct missing-input stop, the matched VTS correlation pass and refusal, and the lack of timestamp discrimination in the positional comparison. Two existing hybrid confluence suites passed 30/30. Require a proved time-aligned active BTC carrier before advancing the wiring plan. Strategy reach in service and the other three #1221 input checks remain open.
+
+### A11 synthetic integrated reader
+
+- The Pre-Implementation Audit and Implementation Plan and [A11 fixture artifact](../Scope%20Files/B_PLAN_PRICE_BASIS_A11_FIXTURES.mjs) record 35 passing cases through one reader. Each arm retains the offered denominator and separately grades bar, plan ask, booked-state, booking, registration, active freshness, handoff, Entry Gate and fill receipts. ORB adds its pinned detector clock.
+- The independent read exposed a handoff identity error in the initial fixture reconciliation. The corrected reader distinguishes a linked handoff contradicting the proved refusal from an unrelated receipt with the same opportunity and arm. The test changes only the handoff receipt ID and holds the later eligible tick fixed.
+- Source mapping and the authorized real-decision trace, the dated pilot, the reviewed Price Feed Coverage M3/M8 bounds and full Step 2 sign-off remain open.
