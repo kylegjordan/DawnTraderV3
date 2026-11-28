@@ -430,3 +430,8 @@ review of a candidate. The owner-family table and installed routing are outside 
 separate seven-day observation remains UNPROVEN. Days 3–7 of the original window were NOT RUN. INFRA returns to
 the active-window registration after reviewer approval and authorization for Langston to be on duty. The independent
 Conversation Index return is Step 2 at `90feb6ef372dd48c67f59482ad4d3ec5db079d9c`.
+
+**Independent review, 11:49:56 UTC.** Coltrane accepted the policy and controls at exact `98258392a9ffe1eb6434deef8baa5bacde380dee`
+in response to Discord `1576202539769139234`. He returned the documentation checkpoint for the pinned KD-129
+row in `DECISIONS.md` and its cited provenance pack. PM owns that record under the KD-34 decision protocol.
+The next review action is to verify both sources at PM's published ref and add their exact citations.
