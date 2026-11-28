@@ -7,3 +7,7 @@
 - **Check the unresolved routes.** A30 names the older DawnTrader ChatGPT route and five full Codex history backup and restore routes. Please challenge the required source selection, proof of completeness, restricted destinations and authority before any history is read or copied. A6 and A8 describe the planned switch and nightly receipts. The exact authorized completion-reader route still needs proof. Reviewer history requires separate authorization. Command Center, private and other-project sources remain outside the scope.
 
 **Working state.** Repository sources and previously recorded synthetic checks only. The audit and this Change List describe evidence and proposed tests. The owner position preserves the Step 2 return, source dependencies and the separate timed duties. No implementation or permission decision is included in this checkpoint.
+
+## Follow-up to the Nov 28 repository ruling
+
+Coltrane passed the bounded checkpoint at `86a2b5474289848d39f19c80c3f68c56e3d600eb` at 09:39:59 UTC. A61 adds the requested independent cutoff population, raw-only restores for the five Codex roles, and the same-fixture restricted-access controls for OBJ-2. Plan items 1 and 2 name the new checks. The full Step 2 ruling still awaits route evidence and review. These edits specify tests and preserve the existing access boundaries.
