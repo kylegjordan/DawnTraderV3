@@ -140,7 +140,7 @@ due 25; all three installed lane files equal the ref.
 He re-derived at `984ae80bb` from ref copies: self-test 27/0/exit 0; M8, M10, M11 exit 1 by assertion; F-1 683 markers
 before 01:39:16Z and 144 in the 7 days, 0 unjoined in both, by his own join; F-4 both pinned commits carry table blob
 `a9f00990f721`, read at the mirror; (v) all three installed lane files equal their ref blobs; the lane-chose regexes
-match the emitters verbatim at `alert_lane.py:459` (rule form) and `:479` (fallback form), and
+match the emitters verbatim at `alert_lane.py:459` (fallback form) and `:479` (rule form), and
 `discord_common.py:146-147` supplies the `%Y-%m-%d %H:%M:%S` prefix they anchor on. The bridge `log()` call that
 writes them is `:1435` (`:1434` is the loop).
 
@@ -298,4 +298,63 @@ November 25 UTC had zero lane markers, escalations, or journal batches to grade.
 partial UTC day through 00:14:03Z was empty and remains ungraded. The one earlier ownership change remains the
 day-1 event named above. All three installed lane files matched the ref. The due queue held 24 alerts across all
 owners. The last staging deploy record remained `e3a96a8126f0280a9568bb1823b9210783f0afe0` at
-`2026-11-24T00:03:08Z`, claimed by `codex-b`. Day 6 remains scheduled.
+`2026-11-24T00:03:08Z`, claimed by `codex-b`.
+
+## Days 6 and 7 and the scheduled window close — Step 9, INFRA Codex, 2026-11-28
+
+The 00:13:44 UTC read recorded in the INFRA POSITION was reproduced on Helsinki against both the registered
+end (`2026-11-28T00:13:33Z`, exclusive) and the saved read cutoff (`00:13:44Z`, exclusive). The start was
+`2026-11-21T00:13:33Z`. Both cutoffs gave the same observation counts. Helsinki reported `Timezone=Etc/UTC`.
+The bridge was inactive and disabled at reproduction. The reader came from `a6d32759535fbebd0d13b0ef34f83b10a95a6c74`
+and recomputed each marker at its own logged pin. All 27 self-tests passed. The complete staging alert stream had
+4,663 lines and 9,222,317 bytes. Source and received SHA-256 matched
+`54a495f5fd7c1fff8e2a7773399ad8ea3ea2b6c2f76ef638ea25e5f1dab3c6dc`. Both reads exited 0.
+
+| UTC bucket | Lane markers | Agree | Journal batches / escalations | Disposition |
+| --- | ---: | ---: | ---: | --- |
+| Nov 21, day 1 from install | 25 | 24 | 19 / 7 | Active, F-3 and ownership churn below |
+| Nov 22, day 2 | 17 | 17 | 13 / 2 | Active, positive control for the empty days |
+| Nov 23–25, days 3–5 | 0 each | — | 0 / 0 each | NOT RUN, off shift |
+| Nov 26, day 6 | 0 | — | 0 / 0 | NOT RUN, off shift |
+| Nov 27, day 7 | 0 | — | 0 / 0 | NOT RUN, off shift |
+| Nov 28, midnight to the registered cutoff | 0 | — | 0 / 0 | Partial boundary bucket, no activity |
+
+The window contains 42 marker observations, with 41 agreements, one reader-classified fallback-to-precedent
+observation, zero `OWNER DIFFERS` and zero unjoined. Day 1's earlier 33/34 read already included nine of the
+17 Nov 22 markers. The two latest UTC day buckets and the partial boundary had no groups, pins or F-3 notes to grade.
+The `fallback-to-precedent` aggregate bucket alone cannot identify the exact F-3 case. The reader's lane-post
+escalation counter parses raw `ESCALATE` tags. The bridge publishes the handoff in prose, and the journal shows
+actual escalations. The component counts therefore leave the seven-day interleave-rate objective unproven.
+
+**Environment (R2-9).** The staging checkout reflog has Phase A `5ecd7ee24fb7a741e8e015e0e6a262a464e7d016`
+at Nov 26 02:31:50 UTC, current through the Nov 27 bucket and the closing cutoff. The next checkout, R3
+`8f97c294ed705fab920245762183632eec7bad71`, was Nov 28 02:35:07 UTC, outside the window. At reproduction all
+three installed lane files matched both the reader ref and the prior reviewed KD-115 installation
+`bb141c1244af02a398355be80fe1f8bd8e3d03f9` byte for byte. KD-115's installation receipt was Nov 22 21:24:16 UTC
+and is recorded in `ac5461854`. The reader counted 235 due staging alerts across all owners at reproduction.
+Contemporaneous due-count snapshots for days 6 and 7 were unavailable, so those two R2-9 daily legs remain unproven.
+
+### F-3 evidence and Step 10 disposition for review
+
+- The one journal F-3 note was Nov 21 05:10:14 UTC for critical `a3b1bc1e-dd42-429a-b5ea-6cd53896fd2d`
+  (`ohlc-writer-shed-crypto_perp`). It explicitly logged no matched rule and no precedent. The lane proposed CC-B
+  by domain and requested critical escalation. The bridge applied generic fallback CC-INFRA to the marker and kept
+  the escalation. Discord `1573566186925596673` records the provisional proposal. Langston routed to CC-A at
+  05:14:06 UTC (`1573567156816314489`). The 07:10 repeat `1573596383112466473` cites the new precedent. The staging
+  ledger shows resolution at 07:19:04.719 UTC. The one measured churn case was CC-INFRA to CC-A.
+- The fallback branch at install ref `39a3849c2` rewrites the marker and retains its separately requested escalation.
+  A matched rule with a conflicting established precedent takes a separate escalation path. Day 1's journal counted
+  three unmatched table candidates before enforcement. The reader also counted two explicit fallback markers and one
+  fallback-to-precedent observation. Coltrane should rule on the R2-5 daily threshold and any warranted owner-table row
+  using the final routes and governing precedent. A single provisional proposal gives no authority to add an owner rule.
+- **Disposition proposed for review:** INFRA owns the outstanding proof in the existing amendment 1 P6 verification
+  lane. The seven-day pass stays open. Step 10 carries the F-3 policy question and the R2-5 tally to the KD-34 decision
+  path with the owning session and reviewers. Close the observation objective on a reviewer-approved active window
+  that gives the registered daily alert comparisons and environmental evidence, or record an explicitly approved
+  unproven disposition with the retained evidence. The proof fails on an empty or unreadable day, a missing pin or
+  required snapshot, or a breached approved threshold. Close the F-3 decision when the agreed policy names the
+  effective owner and the escalation behavior for the no-rule, no-precedent critical case. If a change is agreed,
+  reproduce that case and the matched-rule and established-precedent controls before any change is proposed for install.
+  Keep the policy item open if evidence cannot establish those branches or the owners have no agreed disposition.
+
+`REVIEWER: claim-only · F-3 branch and seven-day criteria · distinct fallback and named-rule paths, incomplete window · re-derived y`
