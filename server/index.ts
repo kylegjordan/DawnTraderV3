@@ -508,7 +508,7 @@ app.use((req, res, next) => {
   // trailing-state load at the B79.TEC block further down runs AFTER the engines, which is homed on plan
   // row 3n.c as a hypothesis). The module config cache is warm (B72 warmup above). restoreRingsAtBoot()
   // never throws and never fails closed: on a whole-store failure the guard runs as it did before 3n.q8
-  // and an alert is raised. Snapshots (every 30 s + the shutdown flush) start here too.
+  // and an alert is raised. Snapshots (every 30 s + the shutdown flush) require a proved writer claim.
   try {
     const { restoreRingsAtBoot, startRingSnapshots } = await import('./asset_classes/xstock_spot/book-state-ring-store.js');
     await restoreRingsAtBoot();

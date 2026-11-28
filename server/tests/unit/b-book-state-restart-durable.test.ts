@@ -15,12 +15,14 @@
  *   7. the whole-store failure path: falls back to empty maps and raises the resolve-never-ack alert;
  *   8. the snapshot write: ONE upsert statement for every ring, and NO delete path at all (Step-4 r3);
  *   9. failures alert: an all-invalid store fails the restore; repeated snapshot failures raise their own
- *      alert once per streak; after a failed restore a snapshot still cannot delete anything.
+ *      alert once per streak; after a failed restore snapshots cannot write.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 const execute = vi.fn();
-vi.mock('../../db', () => ({ db: { execute: (...a: unknown[]) => execute(...a) } })); // the store issues single statements, no transaction
+vi.mock('../../db', () => ({ db: { execute: (...a: unknown[]) => execute(...a) } }));
+const claim = vi.fn();
+vi.mock('../../asset_classes/xstock_spot/book-state-ring-boot', () => ({ claimAndRestoreRings: () => claim() }));
 const addAlert = vi.fn();
 vi.mock('../../services/system-alerts', () => ({ addAlert: (...a: unknown[]) => addAlert(...a) }));
 let configImpl: () => { trailingSpreadWindowSnaps: number } = () => ({ trailingSpreadWindowSnaps: 20 });
@@ -44,6 +46,8 @@ import {
   restoreRingsAtBoot,
   persistRingSnapshot,
   snapshotTick,
+  startRingSnapshots,
+  flushRingSnapshotOnShutdown,
   _resetRingStoreForTest,
   RING_RESTORE_ALERT_KEY,
   RING_SNAPSHOT_ALERT_KEY,
@@ -58,11 +62,17 @@ beforeEach(() => {
   _resetBookStateComparatorsForTest();
   _resetRingStoreForTest();
   execute.mockReset();
+  claim.mockReset();
+  claimedRows([]);
   addAlert.mockReset();
   configImpl = () => ({ trailingSpreadWindowSnaps: 20 });
   warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
   vi.spyOn(console, 'log').mockImplementation(() => {});
 });
+
+function claimedRows(rows: Record<string, unknown>[]): void {
+  claim.mockResolvedValueOnce({ rows, authority: { generation: '1', bootId: 'bcdd1077-8633-4aa3-8080-d39bd9f3ed05' } });
+}
 
 /** A live, MOVING, healthy book (spread ≈0.40%): the chain a clear retains. */
 function movingHealthyChain(sym: string, atMs = 1_000, frames = 5): void {
@@ -300,20 +310,24 @@ describe('7 — the whole-store failure path: fall back, alert, never throw', ()
   it('unreadable guard config ⇒ 0 loaded, maps empty, the resolve-never-ack alert', async () => {
     configImpl = () => { throw new Error('knobs missing'); };
     await expect(restoreRingsAtBoot()).resolves.toBe(0);
-    expect(addAlert).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(addAlert).toHaveBeenCalledTimes(1));
     const a = addAlert.mock.calls[0][0] as { dedupe_key: string; body: string };
     expect(a.dedupe_key).toBe(RING_RESTORE_ALERT_KEY);
     expect(a.body).toMatch(/RESOLVE this row .* do not ACK it/);
-    expect(execute).not.toHaveBeenCalled();
+    expect(claim).not.toHaveBeenCalled();
   });
   it('unreadable store ⇒ 0 loaded and the alert', async () => {
-    execute.mockRejectedValueOnce(new Error('relation does not exist'));
+    claim.mockReset().mockRejectedValueOnce(new Error('relation does not exist'));
     await expect(restoreRingsAtBoot()).resolves.toBe(0);
-    expect(addAlert).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(addAlert).toHaveBeenCalledTimes(1));
   });
   it('a healthy store ⇒ rows loaded, no alert', async () => {
-    execute.mockResolvedValueOnce({ rows: [{ symbol: 'OK/USD', spreads: [0.004], seed_basis: 'judged', source: 'retained', written_at: new Date(1), persisted_at: new Date(2) }] });
-    await expect(restoreRingsAtBoot()).resolves.toBe(1);
+    claim.mockReset();
+    claimedRows([{ symbol: 'OK/USD', spreads: [0.004], seed_basis: 'judged', source: 'retained', written_at: new Date(1), persisted_at: new Date(2) }]);
+    const restore = restoreRingsAtBoot();
+    expect(restoreRingsAtBoot()).toBe(restore);
+    await expect(restore).resolves.toBe(1);
+    expect(claim).toHaveBeenCalledTimes(1);
     expect(addAlert).not.toHaveBeenCalled();
     expect(_peekRetainedRingForTest('OK/USD')).toMatchObject({ restored: true });
   });
@@ -331,23 +345,28 @@ function recordStatements(result: unknown = { rows: [], rowCount: 0 }): string[]
 
 describe('8 — the snapshot write: ONE upsert statement for every ring, and NO delete path at all', () => {
   it('two rings ⇒ exactly one statement, an upsert through jsonb_to_recordset, never a DELETE', async () => {
+    await restoreRingsAtBoot();
     movingHealthyChain('W1/USD');
     movingHealthyChain('W2/USD');
-    const sqls = recordStatements();
+    const sqls = recordStatements({ rows: [], rowCount: 2 });
     const r = await persistRingSnapshot(9_000);
     expect(sqls).toHaveLength(1); // one upsert for every ring, not one per symbol
     expect(sqls[0]).toContain('jsonb_to_recordset');
     expect(sqls[0]).toContain('ON CONFLICT (symbol) DO UPDATE');
+    expect(sqls[0]).toContain('writer_sequence');
+    expect(sqls[0]).toContain('ORDER BY x.symbol');
     expect(sqls.some((s) => s.includes('DELETE'))).toBe(false);
     expect(r).toMatchObject({ written: 2 });
   });
   it('an empty tracker ⇒ no statement at all (nothing to upsert, nothing ever deleted)', async () => {
+    await restoreRingsAtBoot();
     const sqls = recordStatements();
     const r = await persistRingSnapshot(9_000);
     expect(sqls).toHaveLength(0);
     expect(r).toMatchObject({ written: 0 });
   });
   it('a consumed ring is NOT deleted: after the plausible seed consumes it, the snapshot simply stops writing it', async () => {
+    await restoreRingsAtBoot();
     movingHealthyChain('CNS/USD');
     clearBookStateComparator('CNS/USD', 'yield');
     movingHealthyChain('CNS/USD', 200_000, 1); // one frame: a plausible seed consumes the ring, no movement yet
@@ -359,35 +378,42 @@ describe('8 — the snapshot write: ONE upsert statement for every ring, and NO 
 
 describe('9 — ⛔ Step-4 r3: failures alert, and nothing can wipe the store', () => {
   it('condition 1: EVERY stored row invalid ⇒ a whole-store failure: 0 loaded and the restore alert', async () => {
-    execute.mockResolvedValueOnce({ rows: [
+    claim.mockReset();
+    claimedRows([
       { symbol: '', spreads: [0.004], seed_basis: 'judged', source: 'retained', written_at: new Date(1), persisted_at: new Date(2) },
       { symbol: 'B/USD', spreads: [], seed_basis: 'judged', source: 'retained', written_at: new Date(1), persisted_at: new Date(2) },
-    ] });
+    ]);
     await expect(restoreRingsAtBoot()).resolves.toBe(0);
-    expect(addAlert).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(addAlert).toHaveBeenCalledTimes(1));
     expect((addAlert.mock.calls[0][0] as { dedupe_key: string }).dedupe_key).toBe(RING_RESTORE_ALERT_KEY);
   });
   it('an EMPTY store is not a failure: 0 loaded, no alert', async () => {
-    execute.mockResolvedValueOnce({ rows: [] });
     await expect(restoreRingsAtBoot()).resolves.toBe(0);
     expect(addAlert).not.toHaveBeenCalled();
   });
   it('the tracker refusing the restore (the boot-only fence) is a restore failure with the alert', async () => {
     movingHealthyChain('LIVE2/USD');
-    execute.mockResolvedValueOnce({ rows: [{ symbol: 'X/USD', spreads: [0.004], seed_basis: 'judged', source: 'retained', written_at: new Date(1), persisted_at: new Date(2) }] });
+    claim.mockReset();
+    claimedRows([{ symbol: 'X/USD', spreads: [0.004], seed_basis: 'judged', source: 'retained', written_at: new Date(1), persisted_at: new Date(2) }]);
     await expect(restoreRingsAtBoot()).resolves.toBe(0);
-    expect(addAlert).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(addAlert).toHaveBeenCalledTimes(1));
   });
-  it('after a FAILED restore, the next snapshot still issues no DELETE (the BLOCKER-1 shape cannot occur)', async () => {
-    configImpl = () => { throw new Error('knobs missing'); };
+  it('after a FAILED claim, snapshots and shutdown issue no SQL and a second restore cannot re-claim', async () => {
+    claim.mockReset().mockRejectedValueOnce(new Error('commit could not be proved'));
     await restoreRingsAtBoot();
     movingHealthyChain('U1/USD');
     const sqls = recordStatements();
+    startRingSnapshots();
     await snapshotTick();
-    expect(sqls).toHaveLength(1);
-    expect(sqls.some((s) => s.includes('DELETE'))).toBe(false);
+    await flushRingSnapshotOnShutdown();
+    await expect(persistRingSnapshot()).resolves.toMatchObject({ written: 0 });
+    expect(sqls).toHaveLength(0);
+    await expect(restoreRingsAtBoot()).resolves.toBe(0);
+    expect(claim).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(addAlert).toHaveBeenCalledTimes(1));
   });
   it(`condition 2: ${RING_SNAPSHOT_FAIL_ALERT_AFTER} consecutive snapshot failures raise the write-failure alert ONCE per streak; a success resets it`, async () => {
+    await restoreRingsAtBoot();
     movingHealthyChain('F1/USD');
     execute.mockRejectedValue(new Error('pool exhausted'));
     for (let i = 1; i < RING_SNAPSHOT_FAIL_ALERT_AFTER; i++) await snapshotTick();

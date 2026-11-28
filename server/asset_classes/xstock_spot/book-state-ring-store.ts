@@ -53,7 +53,7 @@
  *     `ringCap` values (mirroring the tracker's own `spreads.shift()`), never skipped.
  *   - The WHOLE store unreadable — the query fails, the guard's config cannot be read, the tracker's boot-only
  *     fence refuses, or EVERY stored row is invalid — ⇒ empty maps (exactly today's behaviour) PLUS the alert
- *     `book-state-ring-restore-failed`, RESOLVED never ACKED.
+ *     `book-state-ring-restore-failed`, RESOLVED never ACKED. This process cannot snapshot without a proved restore.
  *   - A SNAPSHOT that keeps failing raises `book-state-ring-snapshot-failing` after
  *     `RING_SNAPSHOT_FAIL_ALERT_AFTER` consecutive failures (once per failure streak): the steady-state write
  *     failure is what silently rots the store between restarts, so it must not live only in a log.
@@ -67,6 +67,7 @@ import { db } from '../../db.js';
 import { snapshotRetainableRings, restoreRetainedRings, type RingSnapshotEntry, type RestoredRingSnapshotEntry } from './book-state-tracker.js';
 import { resolveBookStateConfigSync } from './book-state-config.js';
 import { medianOf } from './book-state.js';
+import { claimAndRestoreRings, type RingWriterAuthority } from './book-state-ring-boot.js';
 
 /** Step-2 Q2 (Langston): the crash-loss bound. A persistence cadence, not a trading setting. */
 export const RING_SNAPSHOT_INTERVAL_MS = 30_000;
@@ -79,6 +80,9 @@ export const RING_SNAPSHOT_ALERT_KEY = 'book-state-ring-snapshot-failing';
 
 let _timer: ReturnType<typeof setInterval> | null = null;
 let _firstSnapshotLogged = false;
+let bootRestore: Promise<number> | undefined;
+let writerAuthority: RingWriterAuthority | undefined;
+let writerSequence = 0n;
 /** Read by `snapshotTick` to decide the write-failure alert; reset on any success. */
 let _consecutiveSnapshotFailures = 0;
 let _snapshotAlertRaisedThisStreak = false;
@@ -87,6 +91,9 @@ let _snapshotAlertRaisedThisStreak = false;
 export function _resetRingStoreForTest(): void {
   if (_timer) { clearInterval(_timer); _timer = null; }
   _firstSnapshotLogged = false;
+  bootRestore = undefined;
+  writerAuthority = undefined;
+  writerSequence = 0n;
   _consecutiveSnapshotFailures = 0;
   _snapshotAlertRaisedThisStreak = false;
 }
@@ -97,23 +104,30 @@ export function _resetRingStoreForTest(): void {
  */
 export async function persistRingSnapshot(nowMs: number = Date.now()): Promise<{ written: number; durationMs: number }> {
   const t0 = Date.now();
+  const authority = writerAuthority;
+  if (!authority) return { written: 0, durationMs: Date.now() - t0 };
+  const sequence = (++writerSequence).toString();
   const entries: RingSnapshotEntry[] = snapshotRetainableRings();
-  if (entries.length > 0) {
-    const payload = JSON.stringify(entries.map((e) => ({
-      symbol: e.symbol, spreads: e.spreads, seed_basis: e.seedBasis, source: e.source, written_at_ms: e.writtenAtMs,
-    })));
-    await db.execute(sql`
-      INSERT INTO xstock_book_state_rings (symbol, spreads, seed_basis, source, written_at, persisted_at)
-      SELECT x.symbol, x.spreads, x.seed_basis, x.source,
-             to_timestamp(x.written_at_ms / 1000.0), to_timestamp(${nowMs}::double precision / 1000.0)
-      FROM jsonb_to_recordset(${payload}::jsonb)
-           AS x(symbol text, spreads jsonb, seed_basis text, source text, written_at_ms double precision)
-      ON CONFLICT (symbol) DO UPDATE SET
-        spreads = EXCLUDED.spreads, seed_basis = EXCLUDED.seed_basis, source = EXCLUDED.source,
-        written_at = EXCLUDED.written_at, persisted_at = EXCLUDED.persisted_at
-    `);
-  }
-  return { written: entries.length, durationMs: Date.now() - t0 };
+  if (entries.length === 0) return { written: 0, durationMs: Date.now() - t0 };
+  const payload = JSON.stringify(entries.map((e) => ({
+    symbol: e.symbol, spreads: e.spreads, seed_basis: e.seedBasis, source: e.source, written_at_ms: e.writtenAtMs,
+  })));
+  const result = await db.execute(sql`
+    INSERT INTO xstock_book_state_rings
+      (symbol, spreads, seed_basis, source, written_at, persisted_at, writer_generation, writer_boot_id, writer_sequence)
+    SELECT x.symbol, x.spreads, x.seed_basis, x.source,
+           to_timestamp(x.written_at_ms / 1000.0), to_timestamp(${nowMs}::double precision / 1000.0),
+           ${authority.generation}::bigint, ${authority.bootId}::uuid, ${sequence}::bigint
+    FROM jsonb_to_recordset(${payload}::jsonb)
+         AS x(symbol text, spreads jsonb, seed_basis text, source text, written_at_ms double precision)
+    ORDER BY x.symbol COLLATE "C"
+    ON CONFLICT (symbol) DO UPDATE SET
+      spreads = EXCLUDED.spreads, seed_basis = EXCLUDED.seed_basis, source = EXCLUDED.source,
+      written_at = EXCLUDED.written_at, persisted_at = EXCLUDED.persisted_at,
+      writer_generation = EXCLUDED.writer_generation, writer_boot_id = EXCLUDED.writer_boot_id,
+      writer_sequence = EXCLUDED.writer_sequence
+  `);
+  return { written: result.rowCount ?? 0, durationMs: Date.now() - t0 };
 }
 
 async function raiseSnapshotFailingAlert(failures: number, lastError: string): Promise<void> {
@@ -138,6 +152,7 @@ async function raiseSnapshotFailingAlert(failures: number, lastError: string): P
 
 /** One snapshot tick. Exported for tests; production calls it from the 30 s timer. Never throws. */
 export async function snapshotTick(): Promise<void> {
+  if (!writerAuthority) return;
   try {
     const r = await persistRingSnapshot();
     _consecutiveSnapshotFailures = 0;
@@ -161,7 +176,7 @@ export async function snapshotTick(): Promise<void> {
 
 /** Start the 30 s snapshot. Idempotent. `unref` so it never holds the process open on its own. */
 export function startRingSnapshots(): void {
-  if (_timer) return;
+  if (_timer || !writerAuthority) return;
   _timer = setInterval(() => { void snapshotTick(); }, RING_SNAPSHOT_INTERVAL_MS);
   _timer.unref();
   console.warn(`[3n.q8][RING_STORE] snapshots started every ${RING_SNAPSHOT_INTERVAL_MS} ms (upsert-only)`);
@@ -170,6 +185,7 @@ export function startRingSnapshots(): void {
 /** Graceful-shutdown flush, bounded so it can never hold the exit. Never throws. */
 export async function flushRingSnapshotOnShutdown(): Promise<void> {
   if (_timer) { clearInterval(_timer); _timer = null; }
+  if (!writerAuthority) return;
   const timeout = new Promise<'timeout'>((resolve) => {
     const t = setTimeout(() => resolve('timeout'), RING_SHUTDOWN_FLUSH_TIMEOUT_MS);
     t.unref();
@@ -275,8 +291,8 @@ async function raiseRestoreFailedAlert(reason: string): Promise<void> {
       body:
         `The durable store of the xStock book-state guard's retained spread rings could not be used at boot (${reason}). ` +
         `The guard is running exactly as it did before 3n.q8: every first frame after this restart seeds without a judgement, ` +
-        `which is the permissive direction (#1066). The store is upsert-only and never deletes, so the rings already stored ` +
-        `are kept for the next boot. ` +
+        `which is the permissive direction (#1066). This process will not write periodic or shutdown snapshots. ` +
+        `The rings already stored are kept for the next boot. ` +
         `DISPOSITION: RESOLVE this row with evidence, do not ACK it — an ack silences this key and every future boot failure with it.`,
       dedupe_key: RING_RESTORE_ALERT_KEY,
     });
@@ -285,9 +301,9 @@ async function raiseRestoreFailedAlert(reason: string): Promise<void> {
   }
 }
 
-async function restoreFailed(reason: string): Promise<0> {
+function restoreFailed(reason: string): 0 {
   console.warn(`[3n.q8][BOOK_STATE] RING_RESTORE_FAILED ${reason}`);
-  await raiseRestoreFailedAlert(reason);
+  void raiseRestoreFailedAlert(reason);
   return 0;
 }
 
@@ -295,20 +311,24 @@ async function restoreFailed(reason: string): Promise<0> {
  * ⭐ The boot restore. Called from `server/index.ts` BEFORE `resumeActiveEngines()`. Never throws, never fails
  * closed. Returns the number of rings loaded (0 on a whole-store failure).
  */
-export async function restoreRingsAtBoot(): Promise<number> {
+export function restoreRingsAtBoot(): Promise<number> {
+  return bootRestore ??= restoreFromClaim();
+}
+
+async function restoreFromClaim(): Promise<number> {
   let ringCap: number;
   try {
     ringCap = Math.max(5, resolveBookStateConfigSync().trailingSpreadWindowSnaps);
   } catch (err) {
     return restoreFailed(`guard config unreadable: ${err instanceof Error ? err.message : String(err)}`);
   }
-  let rows: RingStoreRow[];
+  let restored: Awaited<ReturnType<typeof claimAndRestoreRings>>;
   try {
-    const res = await db.execute(sql`SELECT symbol, spreads, seed_basis, source, written_at, persisted_at FROM xstock_book_state_rings`);
-    rows = res.rows;
+    restored = await claimAndRestoreRings();
   } catch (err) {
     return restoreFailed(`store unreadable: ${err instanceof Error ? err.message : String(err)}`);
   }
+  const { authority, rows } = restored;
   const v = validateRingRows(rows, ringCap);
   // ⛔ Step-4 r3 condition 1: a store with rows the reader could not parse AT ALL is a whole-store failure, not an
   // empty store — it must alert, not read as "nothing to restore".
@@ -316,7 +336,9 @@ export async function restoreRingsAtBoot(): Promise<number> {
     return restoreFailed(`every stored row is invalid (${rows.length} rows; reasons ${JSON.stringify(v.skipReasons)})`);
   }
   try {
-    return applyRestoredRings(v);
+    const loaded = applyRestoredRings(v);
+    writerAuthority = authority;
+    return loaded;
   } catch (err) {
     // The tracker's boot-only fence (live chains already exist) — a caller error, not a store fault.
     return restoreFailed(`restore refused by the tracker: ${err instanceof Error ? err.message : String(err)}`);

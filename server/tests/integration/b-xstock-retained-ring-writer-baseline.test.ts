@@ -5,31 +5,33 @@
  */
 import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { drizzle } from 'drizzle-orm/node-postgres';
 import type { PoolClient } from 'pg';
 import { describe, expect, it, vi } from 'vitest';
 
-const { activeDb, capture, load } = vi.hoisted(() => ({
-  activeDb: { current: null as ReturnType<typeof drizzle> | null },
-  capture: vi.fn(),
-  load: vi.fn(),
-}));
-vi.mock('../../db.js', async (importOriginal) => ({
-  ...await importOriginal<typeof import('../../db.js')>(),
-  db: { execute: (query: Parameters<ReturnType<typeof drizzle>['execute']>[0]) => activeDb.current!.execute(query) },
-}));
+const { load } = vi.hoisted(() => ({ load: vi.fn() }));
 vi.mock('../../asset_classes/xstock_spot/book-state-tracker.js', () => ({
-  snapshotRetainableRings: capture,
   restoreRetainedRings: load,
-}));
-vi.mock('../../asset_classes/xstock_spot/book-state-config.js', () => ({
-  resolveBookStateConfigSync: () => ({ trailingSpreadWindowSnaps: 10 }),
 }));
 
 import { pool } from '../../db.js';
 import {
-  flushRingSnapshotOnShutdown, persistRingSnapshot, restoreRingsAtBoot,
+  applyRestoredRings, validateRingRows, RING_SHUTDOWN_FLUSH_TIMEOUT_MS,
 } from '../../asset_classes/xstock_spot/book-state-ring-store.js';
+
+// Freeze the pre-guard SQL so this baseline still demonstrates the original
+// late-write effect after the production entry point switches to guarded boot.
+function legacySnapshot(client: PoolClient, payload: string, submittedAt: number) {
+  return client.query(`
+    INSERT INTO xstock_book_state_rings (symbol, spreads, seed_basis, source, written_at, persisted_at)
+    SELECT x.symbol, x.spreads, x.seed_basis, x.source,
+           to_timestamp(x.written_at_ms / 1000.0), to_timestamp($1::double precision / 1000.0)
+    FROM jsonb_to_recordset($2::jsonb)
+         AS x(symbol text, spreads jsonb, seed_basis text, source text, written_at_ms double precision)
+    ON CONFLICT (symbol) DO UPDATE SET
+      spreads = EXCLUDED.spreads, seed_basis = EXCLUDED.seed_basis, source = EXCLUDED.source,
+      written_at = EXCLUDED.written_at, persisted_at = EXCLUDED.persisted_at
+  `, [submittedAt, payload]);
+}
 
 // Reuse the enrolled application pool. Refuse before checkout unless its
 // configured target is the disposable database provided by the test runner.
@@ -49,7 +51,10 @@ describe.skipIf(!localTestDb)('retained-ring D1: current PostgreSQL writer', () 
     const symbol = 'D1-UNTOUCHED/USD';
     const ring = { symbol, spreads: [0.01], seedBasis: 'judged', source: 'retained', writtenAtMs: 1_000 };
     const laterPayload = { ...ring, spreads: [0.04], writtenAtMs: 2_000 };
-    const warnings = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const payload = (entry: typeof ring) => JSON.stringify([{
+      symbol: entry.symbol, spreads: entry.spreads, seed_basis: entry.seedBasis,
+      source: entry.source, written_at_ms: entry.writtenAtMs,
+    }]);
     let reader: PoolClient | undefined;
     let blocker: PoolClient | undefined;
     let schemaCreated = false;
@@ -77,31 +82,32 @@ describe.skipIf(!localTestDb)('retained-ring D1: current PostgreSQL writer', () 
       const [{ pid: oldPid }] = (await oldWriter.query('SELECT pg_backend_pid() AS pid')).rows;
       const [{ pid: blockerPid }] = (await blocker.query('SELECT pg_backend_pid() AS pid')).rows;
 
-      activeDb.current = drizzle(reader);
-      capture.mockReturnValue([ring]);
-      expect((await persistRingSnapshot(3_000)).written).toBe(1);
+      expect((await legacySnapshot(reader, payload(ring), 3_000)).rowCount).toBe(1);
       await blocker.query('BEGIN');
       await blocker.query('SELECT symbol FROM xstock_book_state_rings WHERE symbol = $1 FOR UPDATE', [symbol]);
 
-      activeDb.current = drizzle(oldWriter);
-      capture.mockReturnValue([laterPayload]);
       const submittedAt = Date.now();
-      const flush = flushRingSnapshotOnShutdown();
+      const flush = legacySnapshot(oldWriter, payload(laterPayload), submittedAt);
+      void flush.catch(() => {});
       const submittedBy = Date.now();
-      await flush;
-      expect(warnings).toHaveBeenCalledWith(expect.stringContaining('SHUTDOWN_FLUSH_TIMEOUT'));
+      const timeout = new Promise<'timeout'>(resolve => {
+        setTimeout(() => resolve('timeout'), RING_SHUTDOWN_FLUSH_TIMEOUT_MS).unref();
+      });
+      expect(await Promise.race([flush, timeout])).toBe('timeout');
       const blockers = await reader.query('SELECT pg_blocking_pids($1) AS pids', [oldPid]);
       expect(blockers.rows[0].pids).toContain(blockerPid);
 
-      activeDb.current = drizzle(replacement);
       load.mockImplementation((rows: Array<{ symbol: string }>) => rows.map(r => r.symbol));
-      expect(await restoreRingsAtBoot()).toBe(1);
+      const { rows } = await replacement.query(
+        'SELECT symbol, spreads, seed_basis, source, written_at, persisted_at FROM xstock_book_state_rings',
+      );
+      expect(applyRestoredRings(validateRingRows(rows, 10))).toBe(1);
       expect(load).toHaveBeenCalledWith([{ ...ring, persistedAtMs: 3_000 }]);
 
       // No write from the replacement is involved. Release the old request,
       // and read independently after the old connection's queued barrier.
       await blocker.query('COMMIT');
-      await oldWriter.query('SELECT 1');
+      expect((await flush).rowCount).toBe(1);
       const surviving = await reader.query(
         'SELECT spreads, written_at, persisted_at FROM xstock_book_state_rings WHERE symbol = $1', [symbol],
       );
@@ -118,8 +124,6 @@ describe.skipIf(!localTestDb)('retained-ring D1: current PostgreSQL writer', () 
       } finally {
         for (const client of clients) client.release(true);
         await pool.end();
-        activeDb.current = null;
-        warnings.mockRestore();
         vi.clearAllMocks();
       }
     }
