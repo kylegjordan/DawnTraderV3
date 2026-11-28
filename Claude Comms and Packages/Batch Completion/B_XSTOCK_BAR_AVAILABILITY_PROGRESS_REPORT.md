@@ -11,19 +11,27 @@
 
 Kraken's xStock OHLC payload carries a vendor `interval_begin` label that reaches DawnTrader roughly 15–16 minutes later. The original capture design intentionally preserved that label, and the later live design intentionally consumed a forming bar; neither decision established that the vendor label was the time at which the exact revision was locally readable.
 
-This batch makes those clocks explicit end to end. It preserves the vendor label as identity, records receipt and committed reader-visible availability separately, carries exact source-revision availability through 15/60-minute aggregates, snapshots and caches, applies a no-look-ahead eligibility rule to live decisions and exact replay, records the decision window in provenance, and stops the archive-health display from comparing unlike clocks as though they were one measure.
+This batch makes those clocks explicit. The capture phase preserves the vendor label as identity, records receipt and committed reader-visible availability separately, and distinguishes those clocks on the archive-health display. The cutover plan carries exact source revisions to the scanner and RTB, applies the no-look-ahead rule to their decisions and records the evidence each decision used.
 
 ## 2. What shipped
 
 - The one-minute writer retains append-only xStock revision events with receipt, persistence and reader-visible sequencing rather than relying only on the final upserted row.
-- The 15-minute and 60-minute aggregation, snapshot and cache paths carry the exact contributing revision set and the latest trustworthy availability among those revisions.
-- The scanner and independent regime-refresh consumer use the same availability-aware bar contract; decision provenance records the exact evidence window at the decision.
-- Exact replay can reconstruct post-cutover decisions from revisions that were reader-visible by the decision time. Legacy or overwritten-revision periods remain explicitly unknown rather than being upgraded from receipt time or a fabricated constant offset.
+- The deployed build includes availability-aware 15-minute and 60-minute aggregation, snapshot and cache code. The ordered settled-window manifest and forming-revision handoff were verified through focused controls.
+- The scanner and independent RTB regime refresh still use their pre-cutover bar reads. Switching both together and recording their exact decision receipts are the agreed P8/P9 work after the capacity and quality gate.
+- The replay contract requires a recorded decision receipt and the revisions that were reader-visible at that decision. Legacy or overwritten-revision periods remain explicitly unknown.
 - The passive-archive status surface reports vendor-label, receipt and reader-visible measures separately.
 - Dormant and historical readers are fenced from making exact decision-availability claims under the old label-only shape.
 - A self-running capacity verdict, durable stored result and retention-sweep hold protect the registered observation from another missed handoff or premature partition sweep.
 
 The deployed aggregate is exact ref `e3a96a8126f0280a9568bb1823b9210783f0afe0`, live since 2026-11-24T00:03:08Z. The governed R2prime start read back as `2026-11-30T01:00:00Z` under `b-xstock-bar-availability-r2prime`.
+
+### Plan Price Basis A14 serving receipt, 2026-11-28
+
+**UNPROVED.** Coltrane's 13:05:58Z ruling at `c0cd401d58ee72c050cd6abe62e2f78f83eaaf91` accepted the method for separate authorization once the carrier is identified and held execution. At the reported deployment, comparison ref `2b74f5dd2693c5af6ab8b581b59cf1cbc244aed2`, R3 `8f97c294ed705fab920245762183632eec7bad71` and shared `7e1d838047a797ddf402266f0b40eb71024d1af2`, `scanner.ts:595` serves the 15-minute legacy cache. Its warm read can return in-process values, and the cold read merges snapshot and live values (`xstock-ohlc-cache.ts:283–297,335–359`). The certified builder's exact and refusal tests (`b-xstock-bar-availability-aggregate.test.ts:179,258`) prove the handoff fields in isolation. The actual scanner call has no forming revision ID, ordered settled manifest or certified read time/sequence. This matches the Step 3 Change List's capture-only decision and independent Step 8 read.
+
+Evaluation provenance preserves forming OHLCV and a hash of settled values (`signal-eval-archiver.ts:192–245`). Equal values can come from different revisions. VTS reads MCE separately (`eval-cycle.ts:411–426`). MCE can return a cached context before the pair-scan capture branch (`market-context-engine.ts:1241–1247,1524–1576`), so the archive corroborates symbol and context without identifying the context actually used by NEW's boot-scoped opportunity. NEW received the exact owner disposition in Discord `1576223520588046389`. A qualifying retained export must bind the actual scanner receipt and independently selected MCE context to that opportunity and build/boot. Collection, staging and the separate joint observation remain gated.
+
+`REVIEWER: claim-only · does any existing read establish one boot-scoped serving receipt? · HIT: MCE cache hits can bypass the archive's computation event · re-derived y (cache return precedes the pair-scan call; eval-cycle reads the returned context)`
 
 ## 3. Workflow evidence through Step 10
 
@@ -35,8 +43,8 @@ The deployed aggregate is exact ref `e3a96a8126f0280a9568bb1823b9210783f0afe0`, 
 | 4 — review | Coltrane/Langston reviewed the initial implementation and each Step-9 repair. R2prime round 2 was approved after moving the Sunday session start to the venue-live minute and keeping the 60-second gap test unchanged. |
 | 5 — CI | The implementation and later reliability increments each passed all four required jobs at their reviewed refs; the final deploy bundle was independently approved at review ref `3087bb7c98727a82a48e89d32a2b268a90cb635e`. |
 | 6 — deploy | Initial runtime landed in `f1f332946`; Step-9 reliability increments landed across the later reviewed deploys; R2prime is live in exact aggregate `e3a96a8126f0280a9568bb1823b9210783f0afe0`. |
-| 7 — staging verification | Exact revision/aggregate/snapshot/manifest evidence, microsecond timestamp preservation and decision-window handoff were proven on staging. R7d's self-running and archival-health checks passed after deploy `c21c1502a`. |
-| 8 — independent verification | The reviewer independently verified the live paths and Step-9 instrumentation at their exact pushed refs; the R2prime design and deploy bundle received PROCEED. |
+| 7 — staging verification | Capture and certification were checked on staging. Focused controls covered exact aggregate/snapshot/manifest identity, microseconds and the decision-window handoff. R7d's self-running and archival-health checks passed after deploy `c21c1502a`. |
+| 8 — independent verification | The reviewer independently verified additive capture and the Step-9 instrumentation at their exact pushed refs. The R2prime design and deploy bundle received PROCEED. |
 | 9 — objective/capacity verification | The capacity reader completed its four heavy legs over 8.3 days in 471,843 ms of a 1,200,000 ms budget. This was a timing proof, not a grade; the first complete end-to-end grade remains R2prime. |
 | 10 — governance | This progress report and the Tier ledger below record the open observation state in every applicable governance home. |
 
