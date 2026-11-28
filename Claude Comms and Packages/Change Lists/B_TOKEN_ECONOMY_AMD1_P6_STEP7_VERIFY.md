@@ -436,5 +436,9 @@ Conversation Index return is Step 2 at `90feb6ef372dd48c67f59482ad4d3ec5db079d9c
 
 **Independent review, 11:49:56 UTC.** Coltrane accepted the policy and controls at exact `98258392a9ffe1eb6434deef8baa5bacde380dee`
 in response to Discord `1576202539769139234`. He returned the documentation checkpoint for the pinned KD-129
-row in `DECISIONS.md` and its cited provenance pack. The pinned citations above address that return. Independent
-verification of those two sources remains the open review item.
+row in `DECISIONS.md` and its cited provenance pack.
+
+**Citation re-review, 12:32:53 UTC.** In response to Discord `1576213898070065334`, Coltrane approved the F-3
+documentation checkpoint at `6c9437801df9055dfa7f26357712d1f383501527`. He verified the KD-129 row and its pack
+at `0d5b6c0e2a1d647bd3fcdbaa6d42fe643f7dd1ec`. The separate P6 active observation, candidate routing proof,
+installation and closure retain their existing requirements.
