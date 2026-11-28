@@ -10,3 +10,9 @@
 
 - Coltrane's 2026-11-27 08:58:47 UTC ruling on `7c2900f44ae1e3bf36e662ca96faf6c8834c6a99` identified two corrections. The scope now registers the cohort before VTS booking gates, reconciles pre-dispatch stops separately from active Entry Gate outcomes, and pins both readers' quotes and clocks. The two-case control changes the VTS ask while holding the later active quote available.
 - The decision packet now requires derived, versioned and reviewed Price Feed Coverage bounds for the candidate basis and clock. Admission uses the bound at the changed plan distance and refuses unsupported cells, which the comparison retains as unassessable.
+
+## Step 2 — Offline replay evidence
+
+- [Pre-Implementation Audit and Implementation Plan](../Scope%20Files/B_PLAN_PRICE_BASIS_PRE_AUDIT.md) A5 records the exact joins and limits for the pre-VTS opportunity roster, bar revisions, VTS booking quote, and active price observation. It carries the A6 booking and dispatch controls and separately accounts for a VTS registration failure that still reaches active dispatch.
+- All 21 tests in the three existing provenance, xStock aggregate and xStock cache unit suites passed locally. The controls exercise value equality, changed settled values, certified read ordering and whole-revision replacement. They do not grade an historical population.
+- Formal Step 2 review still requires a replay registration with the roster, exact opportunity-to-revision and price receipts, session boundaries and minimum usable coverage, or a reviewed prospective route. Reviewed Price Feed Coverage bounds are required before grading admission or making a basis choice.
