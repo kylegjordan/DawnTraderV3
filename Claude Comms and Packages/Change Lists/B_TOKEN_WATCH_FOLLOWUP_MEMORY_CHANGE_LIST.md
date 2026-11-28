@@ -928,6 +928,8 @@ OLD Claude's off-schedule cold audit (B-DISK-FILE-TIERING 3d, 12:5xZ) raised `3e
 
 **Status:** Evidence recorded. INFRA's scoped hold stands. The following is a proposal for one future named literal Phase A return slot, subject to Coltrane's ruling and the existing owner clearances. OLD canceled the 06:10–06:35 UTC slot unused in Discord `1576119114940813323`; the readback in `1576119195165397164` kept exact R3 `8f97c294ed705fab920245762183632eec7bad71`, PID 1778615, restart 717.
 
+**Revision 2.** Coltrane's 06:59:18 UTC CHANGES ruling at `07addda921a6cf3241f7c58dcda875c0545ffb82` reproduced a symlink-root escape in the first check and called for a clock bound, owned delivery deadlines and expiry. The revised measurement and proposal below carry those conditions and the independent dry-run result. The live slot and its fresh receipts remain future work.
+
 ### Provenance and limits
 
 - At 06:00:03.679 UTC, the scheduled storage watch hit its own 134,217,728-byte `MemoryMax` (kernel record: usage 131,072 KiB, limit 131,072 KiB). The kernel killed Node child 1892961 in the storage unit's cgroup. Its recorded anonymous/file RSS was 89,892/44,032 KiB. An independent 06:00:05 UTC read counted 6,684,330,684 file bytes, above 6 GiB and below 8 GiB. Five preceding daily runs (Nov 23–27) succeeded below the warning line, without exercising warning minting. At 06:00:09.399 UTC the backup failure notifier exited nonzero after the ledger's 50 × 100 ms wait. The 06:01 ledger read had prior storage-warning and summary-failure controls and no new storage warning or failure row. At 06:13:15.266 UTC the natural feed watch completed successfully and recorded 6,694,416,454 bytes, in the warning band.
@@ -936,52 +938,103 @@ OLD Claude's off-schedule cold audit (B-DISK-FILE-TIERING 3d, 12:5xZ) raised `3e
 
 ### Proposed manual check for one authorized return window
 
-1. INFRA covers the full named window through the required post-return readback. Before OLD can issue GO, take a fresh sample within five minutes of the decision and post the UTC interval, file count, file bytes, band, walk status and current free space to OLD and PM over the established direct notification route. Verify the receipt and mention the existing failed warning path. The sample uses the same regular-file byte population as the storage warning, with the stricter behavior below. The natural feed journal is corroboration at its own timestamp.
-2. Refresh the same sample at least every five minutes while the window is active, and at the required readback. At 6 GiB or higher, explicitly relay the warning band and the direction from the prior sample. The 8 GiB cap still binds. An absent/incomplete read, missed receipt, unavailable INFRA observer or measurement at or above 8 GiB requires HOLD before GO. If any occurs after GO, immediately invoke OLD's separately approved stop or recovery decision path. A direct delivery failure itself fails clearance. Preserve all existing named observations, app authorization and owner preflights.
-3. End the substitution on OLD's verified return or cancellation of the one named slot. Keep the automated services/timers, study records and alert ledger intact. This is scoped manual coverage for that slot only. A later slot needs a fresh approved disposition, and automated recovery requires real delivery evidence.
+1. The slot packet names the absolute UTC start, pre-GO sample and receipt deadline, five-minute sample and receipt deadlines through the required readback, absolute UTC cutoff, and the two operators. INFRA Codex runs the sample. PM Codex is the proposed independent deadline watcher and confirms coverage in the slot packet. OLD retains the GO, stop and recovery decisions. ANALYST alone executes and reads back any separately authorized app action. The proposal is dormant until a future named slot has owner, reviewer and staging clearance.
+2. INFRA Codex posts the fresh pre-GO sample, including UTC interval, file count, bytes, classification, filesystem free bytes and walk status, through Helsinki `cc-send` as an explicit message to OLD Codex and PM Codex. This route reaches the crew directly without the staging alert ledger. Attach the notification ID and require separate visible timestamped receipts from OLD and PM. The sample and both receipts must be within five minutes of GO. Name the failed automated path. The natural feed journal is separate corroboration at its own timestamp.
+3. INFRA Codex takes the same sample and posts the same evidence for each five-minute deadline and for the required readback. Both recipients reply visibly by each deadline. PM Codex watches the deadlines independently of INFRA's posts. From **6,442,450,944 bytes** up to the cap, call out WARN and the byte delta from the previous sample. At **8,589,934,592 bytes** and above the threshold result is HOLD. A missing, late, incomplete or failed read, absent or late receipt, unavailable observer or delivery route, timeout or cap breach is HOLD before GO. After GO it requires immediate escalation to OLD for his approved stop or recovery decision. The independent watcher escalates if INFRA cannot report.
+4. End on OLD's verified readback or cancellation of the named slot. If the cutoff arrives without either, escalate to OLD immediately and end the substitute's authority at that cutoff. A later slot needs a fresh ruling and clearances. Preserve the existing observations, automated services and timers, study records and alert ledger. Automated recovery requires real delivery evidence.
 
-**Exact measurement for review:** Run as root with `python3 -B - /var/lib/token-watch`, passing the following body on stdin. It emits aggregate metadata only. Nonzero exit, incomplete output or an unexpected entry type is a failed sample. This is a timed walk of live file metadata, so concurrent growth can move bytes between reads. It creates no filesystem snapshot.
+**Exact measurement for review:** Run as root with `timeout --kill-after=2s 12s python3 -B -`, passing the following body on stdin. The exact staging host, mount and directory inode were read from the live staging access path at 07:00:37 UTC. The walk checks host, mount, canonical path and inode before counting file metadata. An unreadable source, changed identity or nested different filesystem fails. Any nonzero exit, timeout, incomplete output or missing receipt makes the sample unusable. This is a timed live walk, so concurrent growth can move bytes between reads.
 
 ```python
 import json
 import os
+import socket
 import stat
+import subprocess
 import sys
 from datetime import datetime, timezone
 
-root = sys.argv[1]
-files = total = errors = special = 0
+ROOT = "/var/lib/token-watch"
+HOST = "dawntrader-staging"
+MOUNT = "/ 8:1 ext4 5e6f1593-c3dd-45e2-bf7a-27b3cd9ef023"
+ROOT_ID = (os.makedev(8, 1), 638747)
+WARN_BYTES = 6_442_450_944
+CAP_BYTES = 8_589_934_592
 
-def count_error(_):
-    global errors
-    errors += 1
+def band(total):
+    if total >= CAP_BYTES:
+        return "hold"
+    if total >= WARN_BYTES:
+        return "warn"
+    return "ok"
 
-started = datetime.now(timezone.utc)
-for directory, dirs, names in os.walk(root, onerror=count_error, followlinks=False):
-    for entries, expect_directory in ((dirs, True), (names, False)):
-        for name in entries:
-            try:
-                item = os.stat(os.path.join(directory, name), follow_symlinks=False)
-            except OSError as error:
-                count_error(error)
-                continue
-            if expect_directory and stat.S_ISDIR(item.st_mode):
-                continue
-            if not expect_directory and stat.S_ISREG(item.st_mode):
-                files += 1
-                total += item.st_size
-            else:
-                special += 1
+def measure(root, expected_root, expected_id):
+    started = datetime.now(timezone.utc)
+    if root != expected_root or os.path.realpath(root, strict=True) != expected_root:
+        raise ValueError("root path is wrong or contains a symlink")
+    before = os.stat(root, follow_symlinks=False)
+    if not stat.S_ISDIR(before.st_mode) or (before.st_dev, before.st_ino) != expected_id:
+        raise ValueError("root or filesystem identity changed")
+    files = total = errors = unexpected = 0
 
-complete = files > 0 and errors == 0 and special == 0
-print(json.dumps({"started": started.isoformat(timespec="milliseconds"),
-                  "finished": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
-                  "files": files, "file_bytes": total,
-                  "errors": errors, "special": special, "complete": complete}))
-sys.exit(0 if complete else 2)
+    def count_error(_):
+        nonlocal errors
+        errors += 1
+
+    for directory, dirs, names, dfd in os.fwalk(root, onerror=count_error, follow_symlinks=False):
+        if os.fstat(dfd).st_dev != before.st_dev:
+            raise ValueError("walk reached a different filesystem")
+        for entries, expect_directory in ((dirs, True), (names, False)):
+            for name in entries:
+                try:
+                    item = os.stat(name, dir_fd=dfd, follow_symlinks=False)
+                except OSError as error:
+                    count_error(error)
+                    continue
+                if item.st_dev != before.st_dev:
+                    raise ValueError("walk reached a different filesystem")
+                if expect_directory and stat.S_ISDIR(item.st_mode):
+                    continue
+                if not expect_directory and stat.S_ISREG(item.st_mode):
+                    files += 1
+                    total += item.st_size
+                else:
+                    unexpected += 1
+    after = os.stat(root, follow_symlinks=False)
+    if (after.st_dev, after.st_ino) != expected_id:
+        raise ValueError("root changed during walk")
+    if files == 0 or errors or unexpected:
+        raise ValueError("empty or incomplete walk: files=%d errors=%d unexpected=%d" %
+                         (files, errors, unexpected))
+    disk = os.statvfs(root)
+    return {"started": started.isoformat(timespec="milliseconds"),
+            "finished": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
+            "files": files, "file_bytes": total, "band": band(total),
+            "filesystem_free_bytes": disk.f_bavail * disk.f_frsize,
+            "errors": errors, "unexpected": unexpected, "complete": True}
+
+def main():
+    try:
+        if socket.gethostname() != HOST:
+            raise ValueError("unexpected host")
+        mount = subprocess.run(
+            ["/usr/bin/findmnt", "-n", "-o", "TARGET,MAJ:MIN,FSTYPE,UUID", "--target", ROOT],
+            check=True, capture_output=True, text=True, timeout=3)
+        if " ".join(mount.stdout.split()) != MOUNT:
+            raise ValueError("unexpected staging mount")
+        print(json.dumps(measure(ROOT, ROOT, ROOT_ID)))
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
+        print(json.dumps({"complete": False, "error_class": type(error).__name__}), file=sys.stderr)
+        return 2
+    return 0
+
+if __name__ == "__main__":
+    sys.exit(main())
 ```
 
-**Discriminating controls on staging:** At 06:38:30.643–.653 UTC, the exact walk read 2,170 regular files, 6,712,291,072 bytes, no traversal/stat errors or unexpected entries, exit 0. A deliberately absent path produced one traversal error and exit 2 at 06:38:30.660 UTC. The 06:13 natural reading above is a distinct successful control. Neither control asserts that the alert path delivered. Under this proposal the next fresh warning-band sample must reach both owners before clearance.
+**Discriminating controls on staging.** At 07:01:35.434–.444 UTC, the revised walk read 2,171 regular files, 6,723,439,703 bytes, with 46,988,066,816 bytes free on the same filesystem. The return was WARN, zero errors or unexpected entries, exit 0. An isolated scratch directory under `/tmp` accepted its known three-byte control file, rejected a symlink root, a wrong root and a wrong filesystem identity, and passed all six threshold edges. It was removed within the same Python call. A stalled scratch command was killed by the timeout wrapper and returned 124. The earlier natural 06:13 feed reading corroborates the size band only.
+
+**Delivery exercise.** Dry run marker `TW-STORE-R2-0702`, Discord `1576130978282479677`, carries the fresh warning-band sample and a 07:06:35 UTC receipt deadline. PM independently read Discord at 07:06:42 UTC, saw the sample and no visible receipt from either owner by cutoff, and reported HOLD. PM had written a reply to its outbox at 07:06:30 UTC. That local write did not establish Discord delivery by cutoff. The sender's 07:06:46 UTC read agreed. INFRA posted the parallel simulated after-GO escalation to OLD in `1576132273181294683`. PM confirmed OLD owns that stop or recovery choice. The exercise establishes the response to a missing receipt. A named live slot still needs both timely receipt witnesses and independent watch coverage.
 
 ## P10 observation-window follow-through — 2026-11-28 UTC
 
