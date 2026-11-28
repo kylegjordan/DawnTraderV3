@@ -14,3 +14,19 @@
 - Dedup by SHA-256; every result carries source type + source id so it opens the original.
 - Its lessons: build status/heartbeat first; never run crawlers from a folder a deploy replaces; test search as the app's own user (root-owned SQLite -shm files hid half the databases); cap results per document; size for the vector index before it grows.
 - ⇒ Design question for Step 1/2: KD-83 says "use lesser model agents"; Command Center indexes text with local embeddings instead. Measure both on a sample (cost + search quality) before quoting Kyle.
+
+## Step 1 intake — 2026-11-27 (INFRA Codex)
+
+Sprint-to-Live Plan row 5b follows the recorded Token Watch Follow-up Memory P10 48-hour read (KD-88) and the closed Birth Cap batch (KD-90). KD-102 widens the sources in the same slot. The purpose is to let DawnTrader sessions find an earlier decision or piece of work and trace the search result back to its original source.
+
+| Approved DawnTrader source | Boundary |
+| --- | --- |
+| Legacy ChatGPT-era DawnTrader conversations | Go back before April 2026 as far as surviving DawnTrader records allow. Confirm coverage in the later census. |
+| Claude crew conversations | DawnTrader OLD, NEW, ANALYST, INFRA and PM, including their historical session aliases. The existing Transcript Archive provides readable, redacted crew records. |
+| Codex stand-in conversations | The same DawnTrader crew roles, including INFRA and PM. KD-88 calls for capture at each crew switch and keeping the index current nightly. It advances the Codex part of #1238. |
+| Governance and historical documents | KD-102 covers DawnTrader's governance and historical documents. Establish the exact document inventory in scope and use the existing project vocabulary. |
+| Git commit messages | KD-102 covers DawnTrader commit messages. A result should lead to its commit. Repository diffs and file contents are outside this approval unless the files fall under the approved document source. |
+
+Langston and Coltrane histories require Kyle's separate permission before access or inclusion. The historical method note above supplies background for this intake. Command Center reads and messages, private Drive, email, WhatsApp and other projects' conversations are outside this intake.
+
+This intake records source classes from existing DawnTrader governance. Source census and collection, archive exports, implementation, installation and settings changes are deferred. The full Step 1 scope still needs per-source verification and Coltrane's review. KD-102 keeps local meaning vectors conditional on improved results for known past search misses.
