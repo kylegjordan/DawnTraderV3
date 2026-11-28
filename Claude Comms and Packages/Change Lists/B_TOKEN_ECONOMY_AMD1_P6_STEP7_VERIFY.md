@@ -389,3 +389,44 @@ pre-audit P6 and R2-4 through R2-6, the installed `39a3849c2` fallback and escal
 Discord receipts above. The owning session and reviewers settle the policy and PM records the decision. If the
 decision changes the behavior, replay the exact critical case and the matched-rule and established-precedent controls
 before seeking any install approval. The policy remains open pending that record.
+
+## Step 10 checkpoint — F-3 policy disposition (KD-129, 2026-11-28 UTC)
+
+PM reported recording KD-129 after the INFRA and Coltrane policy round. The provenance starts with Coltrane’s
+10:04:53 UTC Step 9 ruling in response to Discord `1576176283015192679` and his 10:44:33 UTC policy reply to
+PM’s Discord `1576186160244588574`. INFRA concurred in the INFRA Codex chat. This checkpoint records the governed
+policy and the proof required of a proposed change. The fallback path under review is pinned at `39a3849c2`.
+The Step 9 environment record separately identifies the later KD-115 installation.
+
+**Observed evidence.** R2-5 grades distinct final fallback IDs by UTC `created_at`: Nov 21 had two, the seed
+`fd4f5779-994f-403b-a57d-52a12ef7b3bf` and critical `a3b1bc1e-dd42-429a-b5ea-6cd53896fd2d`. The three pre-enforcement
+candidates measure a different population. Two meet the daily cap, so the ruling adds no owner-family row. For the
+critical ID, the 05:10:14 journal records a provisional CC-B proposal, INFRA fallback and escalation. The reviewer
+assigned CC-A at 05:14:06, 3 minutes 52 seconds later. The 07:10 repeat used that assignment and still described the
+alert as unclaimed. The retained record establishes assignment, and same-ID acceptance is unverified. The ledger
+records resolution at 07:19:04.719. The Nov 21 case predates KD-129 and supplies the replay control.
+
+**KD-129.** For a critical alert with neither a matching rule nor established precedent, CC-INFRA is the immediate
+first responder and escalates immediately to the on-duty reviewer. The provisional domain suggestion travels as
+context. From first triage, the reviewer must record a named assignee within five minutes, and that assignee must
+confirm acceptance on the same alert ID within ten minutes from that same starting point. INFRA owns the alert until
+acceptance or resolution. If the reviewer route fails or is unavailable, or either deadline is missed, PM steps in
+immediately to secure a named backup and verify receipt. A repeat keeps the first-triage clock. The critical escalation
+must also work when the lane escalation tag is missing. A routing marker establishes assignment. The receiving
+assignee’s attributable same-ID confirmation establishes acceptance. Preserve the distinct R2-4 failed-read route.
+
+| Required review control | Evidence to require before proposing installation |
+| --- | --- |
+| Exact critical ID `a3b1bc1e` | INFRA first response and reviewer escalation with provisional CC-B as context. Record named assignment and same-ID acceptance independently at the registered deadlines. |
+| Matched rule | The existing rule retains its governed owner and escalation behavior. |
+| Established precedent | The existing precedent path retains its governed owner and escalation behavior. |
+| Missing lane escalation tag | The same critical no-rule, no-precedent input still produces reviewer escalation and INFRA ownership. |
+| Failed or unavailable reviewer delivery | PM receives the immediate backup escalation. Record the named backup and evidence that the backup received it. |
+| Missed assignment or acceptance | Exercise both deadlines. An assignment alone or a confirmation for another ID leaves INFRA responsible and invokes PM backup when due. A repeat preserves the original deadlines. |
+| R2-4 failed rules read | A failed or unreadable routing input follows the approved failed-read escalation, separate from a successful lookup with zero matches. |
+
+**Disposition.** The F-3 policy is recorded for this checkpoint. Keep the proof above open pending the governed
+review of a candidate. The owner-family table and installed routing are outside this documentation change. P6’s
+separate seven-day observation remains UNPROVEN. Days 3–7 of the original window were NOT RUN. INFRA returns to
+the active-window registration after reviewer approval and authorization for Langston to be on duty. The independent
+Conversation Index return is Step 2 at `90feb6ef372dd48c67f59482ad4d3ec5db079d9c`.
