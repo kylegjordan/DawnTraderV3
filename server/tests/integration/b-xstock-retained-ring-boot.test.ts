@@ -28,7 +28,10 @@ if (process.env.CI && !localTestDb) throw new Error('Retained-ring boot requires
 afterAll(() => pool.end());
 
 describe.skipIf(!localTestDb)('guarded startup with real PostgreSQL', () => {
-  it.for(['normal', 'lost after commit', 'lost before commit', 'silent after commit', 'different boot at same generation'] as const)(
+  it.for([
+    'normal', 'lost after commit', 'lost before commit', 'silent after commit', 'different boot at same generation',
+    'overlap with older write first', 'overlap with newer write first',
+  ] as const)(
     '%s', async (mode, ctx) => {
       _resetRingStoreForTest();
       vi.resetAllMocks();
@@ -44,6 +47,7 @@ describe.skipIf(!localTestDb)('guarded startup with real PostgreSQL', () => {
       const source = { symbol, spreads: [0.01], seedBasis: 'judged', source: 'retained', writtenAtMs: 1_000 };
       const otherBootId = 'bcdd1077-8633-4aa3-8080-d39bd9f3ed05';
       const unproved = mode === 'lost before commit' || mode === 'different boot at same generation';
+      const loseReply = unproved || mode === 'lost after commit' || mode === 'silent after commit';
       const commands: string[][] = [];
       const pids: number[] = [];
       let created = false;
@@ -81,7 +85,7 @@ describe.skipIf(!localTestDb)('guarded startup with real PostgreSQL', () => {
               if (statement === 'COMMIT') {
                 expect(load).not.toHaveBeenCalled();
                 expect(write).not.toHaveBeenCalled();
-                if (attempt === 1 && mode !== 'normal') {
+                if (attempt === 1 && loseReply) {
                   await client.query(unproved ? 'ROLLBACK' : 'COMMIT');
                   if (mode === 'different boot at same generation') {
                     const takeover = await witness.query(
@@ -115,7 +119,7 @@ describe.skipIf(!localTestDb)('guarded startup with real PostgreSQL', () => {
           'SELECT generation::text, boot_id FROM xstock_book_state_ring_writer_guard',
         )).rows;
 
-        if (mode === 'normal') {
+        if (!loseReply) {
           expect(commands).toHaveLength(1);
         } else {
           expect(pids).toHaveLength(2);
@@ -155,6 +159,58 @@ describe.skipIf(!localTestDb)('guarded startup with real PostgreSQL', () => {
           spreads: [0.02], written_at: new Date(3_000), persisted_at: new Date(4_000),
           writer_generation: '1', writer_boot_id: boot_id, writer_sequence: '1',
         }]);
+
+        if (mode === 'overlap with older write first' || mode === 'overlap with newer write first') {
+          const olderFirst = mode === 'overlap with older write first';
+          const writers: PoolClient[] = [];
+          try {
+            for (let i = 0; i < 2; i++) {
+              const client = await pool.connect();
+              writers.push(client);
+              await client.query(`SET search_path TO ${schema}`);
+            }
+            const older = { ...source, spreads: [0.03], writtenAtMs: 6_000 };
+            const newer = { ...source, spreads: [0.04], writtenAtMs: 5_000 };
+            capture.mockReturnValueOnce([older]).mockReturnValueOnce([newer]);
+            let unblock!: () => void;
+            const held = new Promise<void>(resolve => { unblock = resolve; });
+            write.mockReset().mockImplementationOnce(async query => {
+              if (!olderFirst) await held;
+              return drizzle(writers[0]).execute(query);
+            }).mockImplementationOnce(async query => {
+              if (olderFirst) await held;
+              return drizzle(writers[1]).execute(query);
+            });
+            // Exercise a wall-clock regression as well as both submission orders.
+            // The application captures the older invocation first in both cases.
+            const olderWrite = persistRingSnapshot(8_000);
+            const newerWrite = persistRingSnapshot(7_000);
+            const allResults = Promise.allSettled([olderWrite, newerWrite]);
+            const durable = async () => (await witness.query(
+              'SELECT spreads, written_at, persisted_at, writer_generation, writer_boot_id, writer_sequence FROM xstock_book_state_rings WHERE symbol = $1',
+              [symbol],
+            )).rows;
+            const expectedNewer = [{
+              spreads: [0.04], written_at: new Date(5_000), persisted_at: new Date(7_000),
+              writer_generation: '1', writer_boot_id: boot_id, writer_sequence: '3',
+            }];
+            try {
+              expect(await (olderFirst ? olderWrite : newerWrite)).toMatchObject({ written: 1 });
+              expect(await durable()).toEqual(olderFirst ? [{
+                spreads: [0.03], written_at: new Date(6_000), persisted_at: new Date(8_000),
+                writer_generation: '1', writer_boot_id: boot_id, writer_sequence: '2',
+              }] : expectedNewer);
+            } finally {
+              unblock();
+              await allResults;
+            }
+            expect(await olderWrite).toMatchObject({ written: olderFirst ? 1 : 0 });
+            expect(await newerWrite).toMatchObject({ written: 1 });
+            expect(await durable()).toEqual(expectedNewer);
+          } finally {
+            for (const writer of writers) writer.release(true);
+          }
+        }
       } finally {
         try {
           if (created) await witness.query(`DROP SCHEMA ${schema} CASCADE`);
