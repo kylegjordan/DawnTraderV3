@@ -62,6 +62,20 @@
 - ~~After tonight's 01:00Z shutdown: section 3's row for 11-14~~ — done 01:10Z (open at shutdown); the still-open-at-restart cell after Monday's restart.
 - **NEW asked for it:** after the Monday 01:00Z restart, this weekend's crypto capacity refusals (`MAX_TOTAL_EXPOSURE`) by class and hour from the logs, with the weekend's crypto entries beside them (reminder alert `fe5b5abd`, 11-16 01:30Z).
 
+## 7. November 28 handoff from INFRA to NEW
+
+INFRA published its bounded comparison of the newest three completed paper weekends at 08:01:13 UTC on November 28, Discord `1576145933282844724`. Its saved records extend the November 7–9 refusal read across the scheduled weekend. The 99 lines in §4 came from the last 6.7 hours of retained app logs.
+
+| Paper weekend | Actual crypto fills | Distinct crypto signals first refused at shared exposure | xStock positions held |
+| --- | ---: | ---: | ---: |
+| November 21–23 | 21 | 0 recorded | 4 through reopening |
+| November 14–16 | 18 | 0 recorded | 8, after seven long-held xStocks were manually closed on Friday under KD-77 |
+| November 7–9 | 5 | 1,024 across 14 symbols | 18 |
+
+In the November 7–9 replay, INFRA checked each refused signal separately while holding the rest of the account fixed. The 11:00 ET and 12:00 ET entry cutoffs each cleared the exposure check for 0 of 1,024 signals. Adding 15:45 ET xStock exits supported by saved bid size cleared that one check for 1,024 of 1,024 in each arm. Only 52 of those signals had a saved two-sided crypto quote within two seconds. Additional maker fills and their profit or loss remain unproved. The November 13 Friday results cover a separate population.
+
+Use the three-weekend comparison as evidence for queued sprint row 166b. The replay measured a counterfactual exposure check for one historical weekend. The two later weekends recorded no such refusals. The review of actual cutoff and exit policy belongs to the scheduled scope for row 166b.
+
 ---
 *Queries: `w166b.sql` (sections 0-4 plus the symbol→class map), `w166b_logs.py` (log scan). Run on staging as deploy through a read-only psql session whose password stays in the environment, never in argv.*
 
