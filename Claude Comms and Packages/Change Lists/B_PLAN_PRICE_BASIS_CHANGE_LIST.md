@@ -60,3 +60,8 @@
 - The Pre-Implementation Audit and Implementation Plan now pins the source and missing decision links for candidate plan construction, VTS booking and active dispatch at R3 `8f97c294e` and shared `2b74f5dd2`. It adds the receipt requirements to the plan for the separately authorized preflight.
 - Four synthetic cases passed at each source ref, including a replay that changed the quote while dispatch accepted the age from an earlier genuine update. All 64 tests in the three existing staleness, dispatch and socket-lineage unit suites passed locally. The raw frame identity in the shared archiver still needs its own link to the accepted active decision.
 - The candidate source and bound, actual selected VTS row, and active genuine-update and raw-frame joins remain due on a separately authorized real decision. The dated pilot, Price Feed Coverage M3/M8 bounds and full Step 2 sign-off are still open.
+
+### A14 one-decision preflight review packet
+
+- The pre-audit records why the retained evaluation, bar and quote evidence cannot yet establish one exact opportunity. It asks ANALYST to identify the actual Bar Availability decision receipt and names the prerequisite retained-export route.
+- The proposal limits a future read to one preselected scanner-cycle slice using the existing PM2 status/log and KD-96/KD-100 `dt-sql` paths, with exact receipt keys and positive and negative controls. Coltrane reviews the method. Kyle owns new trace authorization unless explicitly delegated, PM coordinates the release, and NEW owns execution. The joint ANALYST observation, OLD restart release, Price Feed Coverage bounds and pilot retain their own gates.
